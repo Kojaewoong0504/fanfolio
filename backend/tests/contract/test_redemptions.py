@@ -24,6 +24,9 @@ def test_valid_qr_code_issues_official_card_and_updates_collection(
     assert collection["cards"][0]["userCardId"] == redeemed["userCardId"]
     assert collection["cards"][0]["isOfficial"] is True
 
+    detail = assert_success(fan.get(f"/api/me/cards/{redeemed['userCardId']}"))
+    assert detail["acquisitionSource"] == "qr"
+
     notifications = assert_success(fan.get("/api/notifications"))
     event = next(item for item in notifications["items"] if item["kind"] == "card_redeemed")
     assert event["title"] == "카드를 컬렉션에 추가했어요"
@@ -46,6 +49,8 @@ def test_redeeming_same_code_twice_returns_conflict_without_extra_card(
 
     collection = assert_success(fan.get("/api/me/collection"))
     assert collection["summary"]["ownedCount"] == 1
+    detail = assert_success(fan.get(f"/api/me/cards/{collection['cards'][0]['userCardId']}"))
+    assert detail["acquisitionSource"] == "manual"
 
 
 def test_invalid_code_does_not_change_collection(

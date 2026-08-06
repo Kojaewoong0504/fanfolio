@@ -123,6 +123,7 @@ class UserCard(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     card_id: Mapped[str] = mapped_column(ForeignKey("cards.id"))
     serial_number: Mapped[int] = mapped_column(Integer)
+    acquisition_source: Mapped[str] = mapped_column(String, default="redeem_code")
     acquired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 

@@ -79,7 +79,7 @@ def test_card_detail_is_available_only_to_its_owner(
     assert detail["card"]["artistName"] == "드림스케이프"
     assert detail["card"]["memberName"] == "유나"
     assert detail["serialNumber"] == 1
-    assert detail["acquisitionSource"] == "redeem_code"
+    assert detail["acquisitionSource"] == "qr"
 
     other_fan = TestClient(app)
     other_fan.cookies.set("fanfolio_session", seeded["sessions"]["otherFan"])

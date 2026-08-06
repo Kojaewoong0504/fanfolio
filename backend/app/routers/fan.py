@@ -50,7 +50,7 @@ async def create_redemption(
 ) -> dict:
     client_host = request.client.host if request.client else "unknown"
     await enforce_rate_limit(f"redemption:{user.id}:{client_host}", limit=10, window_seconds=60)
-    return {"ok": True, "data": await redeem(session, user, payload.code)}
+    return {"ok": True, "data": await redeem(session, user, payload.code, payload.source)}
 
 
 @router.get("/me/collection")
@@ -193,7 +193,7 @@ async def card_detail(user_card_id: str, user: FanUser, session: DbSession) -> d
         "data": {
             "userCardId": uc.id,
             "serialNumber": uc.serial_number,
-            "acquisitionSource": "redeem_code",
+            "acquisitionSource": uc.acquisition_source,
             "card": {
                 "id": card.id,
                 "name": card.name,

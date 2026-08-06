@@ -238,7 +238,7 @@ Fanfolio의 회원가입과 로그인은 이메일 매직링크를 같은 흐름
   "data": {
     "userCardId": "uc_123",
     "serialNumber": 1,
-    "acquisitionSource": "redeem_code",
+    "acquisitionSource": "qr",
     "card": {
       "id": "card_published",
       "name": "컴백 기념 사인 카드",
@@ -249,6 +249,10 @@ Fanfolio의 회원가입과 로그인은 이메일 매직링크를 같은 흐름
   }
 }
 ```
+
+`acquisitionSource`는 카드 등록 요청의 `source`를 그대로 저장하며 `qr` 또는
+`manual`입니다. 기존 데이터에는 마이그레이션 기본값으로 `redeem_code`가 적용됩니다.
+원시 redeem code는 카드 상세 응답에 포함하지 않습니다.
 
 다른 팬이 요청하면 `404 USER_CARD_NOT_FOUND`를 반환한다.
 

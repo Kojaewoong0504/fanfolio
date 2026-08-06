@@ -38,6 +38,10 @@ def test_alembic_upgrade_creates_the_current_schema(tmp_path: Path) -> None:
         assert "disabled_at" in redeem_code_columns
         card_columns = {row[1] for row in connection.execute("PRAGMA table_info(cards)").fetchall()}
         assert "voice_asset_id" in card_columns
+        user_card_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(user_cards)").fetchall()
+        }
+        assert "acquisition_source" in user_card_columns
         assert connection.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='audit_logs'"
         ).fetchone()

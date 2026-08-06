@@ -323,7 +323,9 @@ async def verify_magic_link(session: AsyncSession, *, token: str) -> dict:
     return result
 
 
-async def redeem(session: AsyncSession, user: User, code_value: str) -> dict:
+async def redeem(
+    session: AsyncSession, user: User, code_value: str, acquisition_source: str = "redeem_code"
+) -> dict:
     # Lock the redeem row so concurrent requests cannot both consume the same code.
     # Authentication performed a read first, which starts SQLAlchemy's autobegin
     # transaction. Close that read-only boundary before this service owns its write
@@ -370,10 +372,11 @@ async def redeem(session: AsyncSession, user: User, code_value: str) -> dict:
             user_id=user_id,
             card_id=card.id,
             serial_number=serial,
+            acquisition_source=acquisition_source,
             acquired_at=now(),
         )
         session.add(user_card)
-        record_details = {"cardId": card.id, "source": "redeem_code"}
+        record_details = {"cardId": card.id, "source": acquisition_source}
         await record_audit(
             session,
             actor_user_id=user_id,
