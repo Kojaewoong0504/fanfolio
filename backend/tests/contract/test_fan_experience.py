@@ -84,6 +84,15 @@ def test_owned_card_detail_exposes_handwriting_and_voice_entitlements(
         f"/api/uploads/{seeded['ids']['handwritingAssetId']}/content", content=b"handwriting"
     )
     assert handwriting.status_code == 204, handwriting.text
+    voice_asset = assert_success(
+        artist.post(
+            "/api/uploads/presign",
+            json={"fileName": "voice.mp3", "contentType": "audio/mpeg", "purpose": "voice"},
+        ),
+        201,
+    )
+    voice = artist.put(voice_asset["uploadUrl"], content=b"voice")
+    assert voice.status_code == 204, voice.text
 
     card = assert_success(
         admin.post(
@@ -93,6 +102,7 @@ def test_owned_card_detail_exposes_handwriting_and_voice_entitlements(
                 "memberId": "member_yuna",
                 "ownerArtistId": "artist",
                 "handwritingAssetId": seeded["ids"]["handwritingAssetId"],
+                "voiceAssetId": voice_asset["assetId"],
                 "hasVoice": True,
             },
         ),
@@ -128,6 +138,11 @@ def test_owned_card_detail_exposes_handwriting_and_voice_entitlements(
     image = fan.get(handwriting_url)
     assert image.status_code == 200
     assert image.content == b"handwriting"
+    voice_url = detail["card"]["voiceAudioUrl"]
+    assert voice_url == f"/api/me/cards/{redeemed['userCardId']}/voice"
+    audio = fan.get(voice_url)
+    assert audio.status_code == 200
+    assert audio.content == b"voice"
 
 
 def test_catalog_returns_only_published_cards_to_fans(actors: dict[str, TestClient]) -> None:

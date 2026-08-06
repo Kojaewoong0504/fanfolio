@@ -4,7 +4,7 @@ const app = document.querySelector('#app');
 const state = {
   authenticated: Boolean(SESSION_TOKEN), loginError: '', loginEmail: '', magicLinkRequested: false, step: 1, cardId: null, assetId: null,
   cardName: '', jobId: null, preview: null, previewImageSrc: '', signature: '', cards: [],
-  form: { name: '드림 스페셜 카드 #5', memberId: 'member_yuna', seasonName: '2025 봄', templateId: 'template_signature_v1', rarity: 'R', signatureText: '항상 고마워요, 우리 함께해요!', hasVoice: true, issueLimit: 3000 },
+  form: { name: '드림 스페셜 카드 #5', memberId: 'member_yuna', seasonName: '2025 봄', templateId: 'template_signature_v1', rarity: 'R', signatureText: '항상 고마워요, 우리 함께해요!', hasVoice: true, voiceAssetId: null, issueLimit: 3000 },
 };
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
 
@@ -15,6 +15,23 @@ function shell(content) {
   app.innerHTML = `<div class="shell"><aside class="side"><div class="logo">Fanfolio <span>✦</span><small>아티스트 스튜디오</small></div><nav class="nav"><button class="active">⌂　스튜디오 홈</button><button>▦　카드 만들기</button><button>◇　내 카드</button><button>♡　팬 반응</button><button>⚙　설정</button></div><div class="profile"><span class="avatar">A</span><div><strong>아티스트</strong>ARTIST</div></aside><main class="workspace"><header class="top"><div><p class="kicker">Fanfolio Artist Studio</p><h1 class="title">${state.step === 1 ? '카드 만들기' : state.step === 2 ? '손글씨 추가' : state.step === 3 ? '카드 미리보기' : '검수 요청 완료'}</h1></div><div class="top-actions"><span class="save-state">● API 연결됨</span><button class="secondary" id="session-config">세션 설정</button><button class="secondary" id="logout">로그아웃</button></div></header>${content}</main></div><div class="toast" id="toast"></div>`;
   bindCommon();
 }
+function ensureVoiceUploadField() {
+  const form = document.querySelector('#card-form');
+  if (!form || form.querySelector('#voice-file')) return;
+  const issueField = form.querySelector('input[name="issueLimit"]')?.closest('.field');
+  if (!issueField) return;
+  const label = document.createElement('label');
+  label.className = 'field';
+  label.innerHTML = '보이스 파일 <input id="voice-file" type="file" accept="audio/mpeg,audio/mp4" /><span class="hint">보이스 카드를 켠 경우 MP3 또는 MP4 음성을 업로드하세요.</span>';
+  issueField.before(label);
+  label.querySelector('input')?.addEventListener('change', (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    void uploadVoiceAsset(file);
+  });
+}
+const voiceFieldObserver = new MutationObserver(ensureVoiceUploadField);
+voiceFieldObserver.observe(app, { childList: true, subtree: true });
 function steps() { return `<div class="stepper"><div class="step ${state.step > 1 ? 'done' : 'current'}"><i>1</i> 기본 입력</div><div class="step-line"></div><div class="step ${state.step === 2 ? 'current' : state.step > 2 ? 'done' : ''}"><i>2</i> 손글씨</div><div class="step-line"></div><div class="step ${state.step === 3 ? 'current' : state.step > 3 ? 'done' : ''}"><i>3</i> 미리보기</div><div class="step-line"></div><div class="step ${state.step === 4 ? 'current' : ''}"><i>4</i> 검수·공개</div></div>`; }
 function cardPreview(name = state.cardName || state.form.name, imageUrl = state.preview?.previewImageUrl) { const image = imageUrl ? `<img class="card-preview-image" src="${esc(absoluteApiUrl(imageUrl))}" alt="${esc(name)} 미리보기" />` : '<div class="card-figure"></div><div class="card-glow"></div>'; return `<div class="card-preview">${image}<div class="card-text"><strong>${esc(name || '새 특별 카드')}</strong><span>Fanfolio Special Card</span></div></div>`; }
 function renderCardForm() {
@@ -34,6 +51,7 @@ async function logoutArtist() { try { await api('/auth/logout', { method: 'POST'
 function initCanvas() { const canvas = document.querySelector('#signature-pad'); const context = canvas.getContext('2d'); context.strokeStyle = '#29234f'; context.lineWidth = 5; context.lineCap = 'round'; let drawing = false; const point = (event) => { const box = canvas.getBoundingClientRect(); return { x: (event.clientX - box.left) * canvas.width / box.width, y: (event.clientY - box.top) * canvas.height / box.height }; }; canvas.addEventListener('pointerdown', (event) => { drawing = true; canvas.setPointerCapture?.(event.pointerId); const p = point(event); context.beginPath(); context.moveTo(p.x, p.y); }); canvas.addEventListener('pointermove', (event) => { if (!drawing) return; const p = point(event); context.lineTo(p.x, p.y); context.stroke(); updateSignature(); }); canvas.addEventListener('pointerup', () => { drawing = false; }); document.querySelector('#clear-pad').addEventListener('click', () => { context.clearRect(0, 0, canvas.width, canvas.height); state.signature = ''; updateSignature(); }); document.querySelector('#signature-file').addEventListener('change', (event) => { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { const image = new Image(); image.onload = () => { context.clearRect(0, 0, canvas.width, canvas.height); context.drawImage(image, 80, 60, 600, 300); updateSignature(); }; image.src = reader.result; }; reader.readAsDataURL(file); }); document.querySelector('#remove-bg').addEventListener('click', requestBackgroundRemoval); document.querySelector('#back-card').addEventListener('click', () => { state.step = 1; render(); }); document.querySelector('#next-review').addEventListener('click', loadPreview); }
 function updateSignature() { const canvas = document.querySelector('#signature-pad'); state.signature = canvas.toDataURL('image/png'); document.querySelector('#signature-result').innerHTML = `<img src="${esc(state.signature)}" alt="입력한 손글씨 미리보기" />`; }
 async function uploadAsset(file, purpose) { const presigned = await api('/uploads/presign', { method: 'POST', body: JSON.stringify({ fileName: file.name, contentType: file.type, purpose }) }); const upload = await fetch(absoluteApiUrl(presigned.data.uploadUrl), { method: 'PUT', body: file, credentials: 'include', headers: { 'Content-Type': file.type, 'X-Fanfolio-Client': 'artist', ...(SESSION_TOKEN ? { 'X-Fanfolio-Session': SESSION_TOKEN } : {}) } }); if (!upload.ok) throw new Error(`UPLOAD ${upload.status}`); return presigned.data.assetId; }
+async function uploadVoiceAsset(file) { try { state.form.voiceAssetId = await uploadAsset(file, 'voice'); toast('보이스 파일을 업로드했습니다. 카드를 저장하면 연결됩니다.'); if (state.cardId) await api(`/artist/cards/${state.cardId}`, { method: 'PATCH', body: JSON.stringify({ voiceAssetId: state.form.voiceAssetId, hasVoice: true }) }); } catch { toast('보이스 파일 업로드에 실패했습니다. MP3 또는 MP4를 확인해 주세요.'); } }
 async function requestBackgroundRemoval() { const area = document.querySelector('#job-area'); area.innerHTML = '<div class="job"><span class="spinner"></span> 손글씨를 업로드하고 배경 제거를 요청하는 중...</div>'; try { const blob = await new Promise((resolve) => document.querySelector('#signature-pad').toBlob(resolve, 'image/png')); state.assetId = await uploadAsset(new File([blob], 'handwriting.png', { type: 'image/png' }), 'handwriting'); const result = await api(`/assets/${state.assetId}/background-removal`, { method: 'POST' }); state.jobId = result.data.jobId; await api(`/artist/cards/${state.cardId}`, { method: 'PATCH', body: JSON.stringify({ signatureText: state.form.signatureText, handwritingAssetId: state.assetId, handwritingTransform: { x: 68, y: 724, width: 402, rotation: -3 } }) }); area.innerHTML = `<div class="job"><span class="ok">✓</span> 작업이 등록되었습니다 · ${esc(result.data.status)}</div>`; pollBackgroundRemoval(); } catch { area.innerHTML = '<div class="notice">업로드 또는 배경 제거 요청에 실패했습니다. 아티스트 세션과 API 서버를 확인해 주세요.</div>'; } }
 async function pollBackgroundRemoval() { for (let attempt = 0; attempt < 10; attempt += 1) { await new Promise((resolve) => setTimeout(resolve, 1000)); try { const result = await api(`/background-removal-jobs/${state.jobId}`); if (result.data.status === 'completed') { document.querySelector('#job-area').innerHTML = '<div class="job"><span class="ok">✓</span> 투명 손글씨가 준비되었습니다.</div>'; return; } if (result.data.status === 'failed') { document.querySelector('#job-area').innerHTML = '<div class="notice">손글씨 배경 제거에 실패했습니다. 다른 이미지를 사용해 주세요.</div>'; return; } } catch { return; } } }
 async function loadPreview() { if (!state.cardId) { toast('먼저 카드 정보를 저장해 주세요.'); return; } try { const result = await api(`/artist/cards/${state.cardId}/preview`, { method: 'POST' }); state.preview = result.data; if (state.previewImageSrc) URL.revokeObjectURL(state.previewImageSrc); state.previewImageSrc = ''; if (result.data.previewImageUrl) { const image = await fetch(absoluteApiUrl(result.data.previewImageUrl), { credentials: 'include', headers: { 'X-Fanfolio-Client': 'artist', ...(SESSION_TOKEN ? { 'X-Fanfolio-Session': SESSION_TOKEN } : {}) } }); if (!image.ok) throw new Error(`PREVIEW_IMAGE ${image.status}`); state.previewImageSrc = URL.createObjectURL(await image.blob()); } state.step = 3; render(); } catch { toast('카드 미리보기를 불러오지 못했습니다.'); } }
@@ -144,6 +162,7 @@ function beginCardEdit(cardId) {
   state.cardName = card.name;
   state.form = { ...state.form, imageAssetId: card.imageAssetId, name: card.name, memberId: card.memberId || '', seasonName: card.seasonName || '', templateId: card.templateId || state.form.templateId, rarity: card.rarity || state.form.rarity, signatureText: card.signatureText || '', hasVoice: Boolean(card.hasVoice), issueLimit: card.issueLimit || state.form.issueLimit };
   state.handwritingTransform = card.handwritingTransform || { x: 68, y: 724, width: 402, rotation: -3 };
+  state.form.voiceAssetId = card.voiceAssetId || null;
   state.view = 'create';
   state.step = 1;
   render();
@@ -263,3 +282,20 @@ loadPreview = handleLoadPreview;
 render();
 if (state.authenticated) loadStudio();
 restoreArtistSession();
+
+async function attachVoiceToCardWhenReady() {
+  if (!state.form.voiceAssetId) return;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (state.cardId) {
+      try {
+        await api(`/artist/cards/${state.cardId}`, { method: 'PATCH', body: JSON.stringify({ voiceAssetId: state.form.voiceAssetId, hasVoice: true }) });
+      } catch { /* The existing save handler reports its own failure. */ }
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+}
+
+document.addEventListener('submit', (event) => {
+  if (event.target.id === 'card-form' && state.form.voiceAssetId) void attachVoiceToCardWhenReady();
+});

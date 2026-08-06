@@ -145,6 +145,11 @@ async def card_detail(user_card_id: str, user: FanUser, session: DbSession) -> d
             handwriting_asset.processed_storage_path or handwriting_asset.storage_path
         ):
             handwriting_image_url = f"/api/me/cards/{uc.id}/handwriting"
+    voice_audio_url = None
+    if card.voice_asset_id:
+        voice_asset = await session.get(Asset, card.voice_asset_id)
+        if voice_asset and (voice_asset.processed_storage_path or voice_asset.storage_path):
+            voice_audio_url = f"/api/me/cards/{uc.id}/voice"
     return {
         "ok": True,
         "data": {
@@ -161,7 +166,8 @@ async def card_detail(user_card_id: str, user: FanUser, session: DbSession) -> d
                 "memberId": member.id if member else card.member_id,
                 "memberName": member.name if member else None,
                 "handwritingImageUrl": handwriting_image_url,
-                "hasVoice": card.has_voice,
+                "hasVoice": card.has_voice and voice_audio_url is not None,
+                "voiceAudioUrl": voice_audio_url,
             },
         },
     }
@@ -183,6 +189,24 @@ async def card_handwriting(user_card_id: str, user: FanUser, session: DbSession)
     if not path:
         raise AppError(404, "HANDWRITING_NOT_READY", "손글씨 특전이 아직 준비되지 않았습니다.")
     return FileResponse(path, media_type=asset.content_type or "image/png")
+
+
+@router.get("/me/cards/{user_card_id}/voice")
+async def card_voice(user_card_id: str, user: FanUser, session: DbSession) -> FileResponse:
+    """Serve a voice asset only after verifying the fan owns the card."""
+    row = await session.execute(
+        select(UserCard, Card)
+        .join(Card, UserCard.card_id == Card.id)
+        .where(UserCard.id == user_card_id, UserCard.user_id == user.id)
+    )
+    user_card, card = row.one_or_none() or (None, None)
+    if not user_card or not card or not card.voice_asset_id:
+        raise AppError(404, "VOICE_NOT_FOUND", "보이스 특전을 찾을 수 없습니다.")
+    asset = await session.get(Asset, card.voice_asset_id)
+    path = asset.processed_storage_path or asset.storage_path if asset else None
+    if not path:
+        raise AppError(404, "VOICE_NOT_READY", "보이스 특전이 아직 준비되지 않았습니다.")
+    return FileResponse(path, media_type=asset.content_type or "audio/mpeg")
 
 
 @router.get("/cards/{card_id}/image")

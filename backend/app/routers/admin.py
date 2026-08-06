@@ -130,6 +130,7 @@ def admin_card_data(card: Card) -> dict:
         "memberId": card.member_id,
         "signatureText": card.signature_text,
         "handwritingAssetId": card.handwriting_asset_id,
+        "voiceAssetId": card.voice_asset_id,
         "handwritingTransform": card.handwriting_transform,
         "hasVoice": card.has_voice,
         "previewImageUrl": (
@@ -139,7 +140,7 @@ def admin_card_data(card: Card) -> dict:
 
 
 async def validate_admin_assets(values: dict, session: DbSession) -> None:
-    for field in ("image_asset_id", "handwriting_asset_id"):
+    for field in ("image_asset_id", "handwriting_asset_id", "voice_asset_id"):
         asset_id = values.get(field)
         if asset_id and not await session.get(Asset, asset_id):
             raise AppError(404, "ASSET_NOT_FOUND", "카드 자산을 찾을 수 없습니다.")

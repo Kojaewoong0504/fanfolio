@@ -70,6 +70,7 @@ async def create_card(payload: ArtistCardRequest, user: ArtistUser, session: DbS
         rarity=payload.rarity,
         image_asset_id=payload.image_asset_id,
         signature_text=payload.signature_text,
+        voice_asset_id=payload.voice_asset_id,
         has_voice=payload.has_voice,
         issue_limit=payload.issue_limit,
     )
@@ -98,6 +99,7 @@ def card_data(card: Card) -> dict:
         "memberId": card.member_id,
         "signatureText": card.signature_text,
         "handwritingAssetId": card.handwriting_asset_id,
+        "voiceAssetId": card.voice_asset_id,
         "handwritingTransform": card.handwriting_transform,
         "hasVoice": card.has_voice,
         "issueLimit": card.issue_limit,
@@ -132,7 +134,7 @@ async def update_card(
     if card.status not in {"draft", "changes_requested"}:
         raise AppError(409, "INVALID_CARD_STATUS", "현재 상태에서는 카드를 수정할 수 없습니다.")
     values = payload.model_dump(exclude_unset=True, by_alias=False)
-    for asset_field in ("image_asset_id", "handwriting_asset_id"):
+    for asset_field in ("image_asset_id", "handwriting_asset_id", "voice_asset_id"):
         asset_id = values.get(asset_field)
         if asset_id is not None:
             await owned_asset(asset_id, user, session)

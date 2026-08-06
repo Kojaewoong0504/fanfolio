@@ -75,6 +75,7 @@ class Card(Base):
     image_asset_id: Mapped[str | None] = mapped_column(String, nullable=True)
     signature_text: Mapped[str | None] = mapped_column(String, nullable=True)
     handwriting_asset_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    voice_asset_id: Mapped[str | None] = mapped_column(String, nullable=True)
     handwriting_transform: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     has_voice: Mapped[bool] = mapped_column(Boolean, default=False)
     issue_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)

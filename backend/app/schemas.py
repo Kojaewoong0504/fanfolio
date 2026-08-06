@@ -99,6 +99,7 @@ class AdminCardCreate(BaseModel):
     member_id: str | None = Field(default=None, alias="memberId")
     signature_text: str | None = Field(default=None, alias="signatureText", max_length=200)
     handwriting_asset_id: str | None = Field(default=None, alias="handwritingAssetId")
+    voice_asset_id: str | None = Field(default=None, alias="voiceAssetId")
     handwriting_transform: dict[str, float] | None = Field(
         default=None, alias="handwritingTransform"
     )
@@ -117,6 +118,7 @@ class AdminCardUpdate(BaseModel):
     member_id: str | None = Field(default=None, alias="memberId")
     signature_text: str | None = Field(default=None, alias="signatureText", max_length=200)
     handwriting_asset_id: str | None = Field(default=None, alias="handwritingAssetId")
+    voice_asset_id: str | None = Field(default=None, alias="voiceAssetId")
     handwriting_transform: dict[str, float] | None = Field(
         default=None, alias="handwritingTransform"
     )
@@ -146,6 +148,7 @@ class ArtistCardRequest(BaseModel):
     image_asset_id: str = Field(alias="imageAssetId")
     member_id: str | None = Field(default=None, alias="memberId")
     signature_text: str | None = Field(default=None, alias="signatureText", max_length=200)
+    voice_asset_id: str | None = Field(default=None, alias="voiceAssetId")
     has_voice: bool = Field(default=False, alias="hasVoice")
     issue_limit: int = Field(alias="issueLimit", gt=0)
     model_config = ConfigDict(populate_by_name=True)
@@ -160,6 +163,7 @@ class ArtistCardUpdate(BaseModel):
     member_id: str | None = Field(default=None, alias="memberId")
     signature_text: str | None = Field(default=None, alias="signatureText", max_length=200)
     handwriting_asset_id: str | None = Field(default=None, alias="handwritingAssetId")
+    voice_asset_id: str | None = Field(default=None, alias="voiceAssetId")
     handwriting_transform: dict[str, float] | None = Field(
         default=None, alias="handwritingTransform"
     )
