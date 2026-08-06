@@ -216,6 +216,9 @@ npm run build
 코드 발행, 팬 로그인·최초 설정·코드 등록·카드 상세 확인, 그리고 세 앱의 브라우저 세션
 분리를 확인합니다.
 
+GitHub Actions의 `Fanfolio CI`는 이 검사를 백엔드 계약 테스트·프론트 빌드·Docker 기반
+PostgreSQL/Redis/Mailpit/Celery 통합 테스트로 나누어 push와 pull request마다 실행합니다.
+
 ### 운영 배포 전 설정 점검
 
 운영 서버를 시작하기 전에 `backend/.env` 또는 환경변수를 로드한 상태에서 실행합니다.
