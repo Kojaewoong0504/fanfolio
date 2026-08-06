@@ -14,6 +14,7 @@ async def reset(session: DbSession) -> Response:
     # TestClient is intentionally created without `with`, so its lifespan isn't run.
     # The test-only router owns this setup rather than weakening production startup rules.
     async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.drop_all)
         await connection.run_sync(Base.metadata.create_all)
     await reset_database(session)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

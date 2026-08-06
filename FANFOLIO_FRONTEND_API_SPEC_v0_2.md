@@ -240,6 +240,26 @@ Base URL: `/api`
 }
 ```
 
+`POST /artist/cards/{cardId}/preview`는 저장된 카드 레이어를 다시 조합할 때 사용할 미리보기 계약을 반환한다. 현재 개발 서버는 렌더링 입력과 접근 경로를 반환하고, 실제 이미지 합성 워커는 다음 단계에서 연결한다.
+
+```json
+{
+  "ok": true,
+  "data": {
+    "cardId": "card_123",
+    "previewUrl": "/api/artist/cards/card_123/preview",
+    "layers": {
+      "base": { "assetId": "asset_card_01" },
+      "handwriting": {
+        "assetId": "asset_handwriting_01",
+        "text": "오래 기다려 줘서 고마워요.",
+        "transform": { "x": 68, "y": 724, "width": 402, "rotation": -3 }
+      }
+    }
+  }
+}
+```
+
 카드 상태: `draft → pending_review → approved → published` 또는 `changes_requested`.
 
 - Artist는 `draft`를 만들고 `pending_review`로 제출한다.

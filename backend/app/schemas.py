@@ -71,6 +71,22 @@ class ArtistCardRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class ArtistCardUpdate(BaseModel):
+    template_id: str | None = Field(default=None, alias="templateId")
+    name: str | None = None
+    season_name: str | None = Field(default=None, alias="seasonName")
+    rarity: str | None = None
+    image_asset_id: str | None = Field(default=None, alias="imageAssetId")
+    signature_text: str | None = Field(default=None, alias="signatureText", max_length=200)
+    handwriting_asset_id: str | None = Field(default=None, alias="handwritingAssetId")
+    handwriting_transform: dict[str, float] | None = Field(
+        default=None, alias="handwritingTransform"
+    )
+    has_voice: bool | None = Field(default=None, alias="hasVoice")
+    issue_limit: int | None = Field(default=None, alias="issueLimit", gt=0)
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class UploadPresignRequest(BaseModel):
     file_name: str = Field(alias="fileName", min_length=1, max_length=255)
     content_type: Literal["image/png", "image/jpeg", "image/webp", "audio/mpeg", "audio/mp4"] = (
