@@ -234,7 +234,11 @@ async def process_background_removal(job_id: str) -> None:
             job.transparent_image_url = f"/api/assets/{asset.id}/transparent"
             job.preview_url = job.transparent_image_url
             await session.commit()
-        except (OSError, ValueError):
+        except Exception:
+            # Storage providers can raise provider-specific exceptions (for
+            # example botocore ClientError), so a job must be marked failed
+            # instead of being left in `processing` indefinitely.
+            logger.exception("Background removal failed for job %s", job_id)
             job.status = "failed"
             await session.commit()
 
@@ -253,8 +257,14 @@ async def cleanup_expired_uploads() -> int:
         storage = configured_asset_storage()
         cleaned = 0
         for asset in assets:
-            if asset.storage_path:
-                storage.delete(asset.storage_path)
+            try:
+                if asset.storage_path:
+                    storage.delete(asset.storage_path)
+            except Exception:
+                # Keep the path so the next Beat run can retry a transient
+                # object-store failure without losing the cleanup target.
+                logger.exception("Could not delete expired upload %s", asset.id)
+                continue
             asset.storage_path = None
             cleaned += 1
         await session.commit()
