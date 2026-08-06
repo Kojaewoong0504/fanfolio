@@ -145,7 +145,7 @@ run_code "await page.getByRole('button', {name: '컬렉션으로 이동'}).click
 assert_page_contains "콘텐츠 코드"
 
 echo "[5/5] scoped browser sessions remain available across apps"
-run_code "const statuses = await page.evaluate(async () => { const requests = [['/api/admin/dashboard', 'admin'], ['/api/artist/cards', 'artist'], ['/api/me/collection', 'fan']].map(async ([path, client]) => (await fetch('http://localhost:8000' + path, {credentials: 'include', headers: {'X-Fanfolio-Client': client}})).status); return Promise.all(requests); }); if (statuses.join(',') !== '200,200,200') throw new Error('Scoped sessions failed: ' + statuses.join(','));"
+run_code "await page.goto('http://localhost:4174'); await page.getByRole('heading', {name: '대시보드'}).waitFor(); await page.goto('http://localhost:4175'); await page.getByRole('heading', {name: '카드 만들기'}).waitFor(); await page.goto('http://localhost:5173'); await page.getByRole('heading', {name: '내 컬렉션'}).waitFor(); await page.getByRole('button', {name: '카드 이미지 #001 유나'}).click(); await page.getByRole('heading', {name: 'E2E 공식 특별 카드'}).waitFor();"
 assert_page_contains "E2E 공식 특별 카드"
 
 echo "Fanfolio browser smoke test passed."
