@@ -307,6 +307,7 @@ Fanfolio의 회원가입과 로그인은 이메일 매직링크를 같은 흐름
 
 코드 배치 export CSV에는 `qr_image_url` 열도 포함한다. 관리자는 각 코드의
 `GET /api/admin/redeem-codes/{codeId}/qr`에서 인쇄용 PNG를 내려받을 수 있다.
+배치 전체는 `GET /api/admin/redeem-code-batches/{batchId}/qr.zip`에서 한 번에 받을 수 있다.
 QR payload는 redeem code 문자열 자체이며, 팬 앱은 QR 결과를 기존 코드 등록 API로 전달한다.
 
 ## 7. 아티스트 스튜디오 API

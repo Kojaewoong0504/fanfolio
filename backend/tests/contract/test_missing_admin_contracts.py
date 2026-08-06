@@ -102,6 +102,10 @@ def test_admin_can_list_batches_and_disable_a_code(
     assert qr.status_code == 200
     assert qr.headers["content-type"].startswith("image/png")
     assert qr.content.startswith(b"\x89PNG\r\n\x1a\n")
+    qr_zip = actors["admin"].get(f"/api/admin/redeem-code-batches/{batch['id']}/qr.zip")
+    assert qr_zip.status_code == 200
+    assert qr_zip.headers["content-type"].startswith("application/zip")
+    assert qr_zip.content.startswith(b"PK\x03\x04")
     disabled = assert_success(
         actors["admin"].patch(
             f"/api/admin/redeem-codes/{code_value}",

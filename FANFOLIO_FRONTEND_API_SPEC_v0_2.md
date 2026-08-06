@@ -283,6 +283,7 @@ Base URL: `/api`
 | POST | `/admin/redeem-code-batches` | 일회용 코드 일괄 생성 |
 | GET | `/admin/redeem-code-batches/{batchId}/export` | CSV 다운로드 |
 | GET | `/admin/redeem-codes/{codeId}/qr` | 개별 코드 인쇄용 QR PNG 다운로드 |
+| GET | `/admin/redeem-code-batches/{batchId}/qr.zip` | 배치 전체 QR PNG ZIP 다운로드 |
 | PATCH | `/admin/redeem-codes/{codeId}` | 만료/비활성화/상태 수정 |
 | GET | `/admin/users` | 사용자/역할 목록 |
 | GET | `/admin/audit-logs` | 관리자·아티스트·발급 감사 로그 |

@@ -2,6 +2,7 @@ import csv
 from datetime import UTC, datetime
 from io import BytesIO, StringIO
 from uuid import uuid4
+from zipfile import ZIP_DEFLATED, ZipFile
 
 import qrcode
 from fastapi import APIRouter, Query, status
@@ -35,6 +36,13 @@ def drop_data(drop: Drop) -> dict:
         "startsAt": drop.starts_at.isoformat() if drop.starts_at else None,
         "endsAt": drop.ends_at.isoformat() if drop.ends_at else None,
     }
+
+
+def qr_png_bytes(code: str) -> bytes:
+    image = qrcode.make(code)
+    output = BytesIO()
+    image.save(output, format="PNG")
+    return output.getvalue()
 
 
 @router.get("/dashboard")
@@ -423,6 +431,7 @@ async def code_batch(payload: CodeBatchRequest, _: AdminUser, session: DbSession
             "quantity": payload.quantity,
             "maxUsesPerCode": payload.max_uses_per_code,
             "csvExportUrl": f"/api/admin/redeem-code-batches/{batch_id}/export",
+            "qrZipUrl": f"/api/admin/redeem-code-batches/{batch_id}/qr.zip",
         },
     }
 
@@ -458,6 +467,7 @@ async def list_code_batches(_: AdminUser, session: DbSession) -> dict:
                     "expiresAt": batch.expires_at,
                     "prefix": batch.prefix,
                     "csvExportUrl": f"/api/admin/redeem-code-batches/{batch.id}/export",
+                    "qrZipUrl": f"/api/admin/redeem-code-batches/{batch.id}/qr.zip",
                 }
                 for batch in batches
             ]
@@ -504,13 +514,33 @@ async def redeem_code_qr(code_id: str, _: AdminUser, session: DbSession) -> Resp
     code = await session.get(RedeemCode, code_id)
     if not code:
         raise AppError(404, "REDEEM_CODE_NOT_FOUND", "코드를 찾을 수 없습니다.")
-    image = qrcode.make(code.code)
-    output = BytesIO()
-    image.save(output, format="PNG")
     return Response(
-        content=output.getvalue(),
+        content=qr_png_bytes(code.code),
         media_type="image/png",
         headers={"Cache-Control": "private, no-store"},
+    )
+
+
+@router.get("/redeem-code-batches/{batch_id}/qr.zip")
+async def redeem_code_batch_qr_zip(batch_id: str, _: AdminUser, session: DbSession) -> Response:
+    """Package a batch's printable QR PNGs for production fulfillment."""
+    batch = await session.get(RedeemCodeBatch, batch_id)
+    if not batch:
+        raise AppError(404, "BATCH_NOT_FOUND", "코드 배치를 찾을 수 없습니다.")
+    codes = await session.scalars(
+        select(RedeemCode).where(RedeemCode.batch_id == batch_id).order_by(RedeemCode.code)
+    )
+    output = BytesIO()
+    with ZipFile(output, mode="w", compression=ZIP_DEFLATED) as archive:
+        for code in codes:
+            archive.writestr(f"{code.code}.png", qr_png_bytes(code.code))
+    return Response(
+        content=output.getvalue(),
+        media_type="application/zip",
+        headers={
+            "Cache-Control": "private, no-store",
+            "Content-Disposition": f'attachment; filename="{batch_id}-qr.zip"',
+        },
     )
 
 
