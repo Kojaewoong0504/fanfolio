@@ -30,6 +30,7 @@ function App() {
   const [collectionCards, setCollectionCards] = useState<Card[]>(cards)
   const [apiConnected, setApiConnected] = useState(false)
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
+  const [showOnboarding, setShowOnboarding] = useState(false)
 
   const refreshCollection = async () => {
     try {
@@ -43,6 +44,13 @@ function App() {
   }
 
   useEffect(() => { void refreshCollection() }, [])
+
+  useEffect(() => {
+    if (!signedIn) return
+    void apiFetch<{ ok: true, data: { onboardingCompleted: boolean } }>('/me')
+      .then(result => setShowOnboarding(!result.data.onboardingCompleted))
+      .catch(() => setShowOnboarding(false))
+  }, [signedIn])
 
   useEffect(() => {
     void apiFetch<{ ok: true, data: { items: NotificationItem[] } }>('/notifications')
@@ -68,6 +76,10 @@ function App() {
 
   if (!signedIn) {
     return <Login onLogin={() => setSignedIn(true)} />
+  }
+
+  if (showOnboarding) {
+    return <Onboarding onComplete={() => { setShowOnboarding(false); void refreshCollection() }} />
   }
 
   return (
@@ -143,6 +155,26 @@ function Login({ onLogin }: { onLogin: () => void }) {
   }
 
   return <main className="login-screen"><span className="brand-mark">F</span><p className="eyebrow">FANFOLIO</p><h1>내 손안의<br />팬 컬렉션</h1><p className="muted">좋아하는 아티스트의 순간을<br />디지털 카드로 간직하세요.</p><label className="field-label">이메일</label><input value={email} onChange={e => setEmail(e.target.value)} placeholder="이메일을 입력하세요" type="email" disabled={requested} />{!requested ? <button className="primary" onClick={() => void requestLink()} disabled={!email.includes('@') || busy}>{busy ? '보내는 중...' : '로그인 링크 받기'}</button> : <><label className="field-label">로그인 토큰</label><input value={token} onChange={e => setToken(e.target.value)} placeholder="이메일의 로그인 토큰을 입력하세요" /><button className="primary" onClick={() => void verifyLink()} disabled={!token || busy}>{busy ? '확인 중...' : '로그인하기'}</button></>}<p className={message.includes('실패') ? 'form-message error-message' : 'form-message'}>{message}</p><p className="login-note">비밀번호 없이 이메일 링크로 안전하게 로그인합니다.</p></main>
+}
+
+function Onboarding({ onComplete }: { onComplete: () => void }) {
+  const [group, setGroup] = useState('드림스케이프')
+  const [member, setMember] = useState('민호')
+  const [nickname, setNickname] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  const members = ['민호', '제이', '유준', '하린', '도현']
+  const save = async () => {
+    setBusy(true)
+    setMessage('')
+    try {
+      await apiFetch('/me/profile', { method: 'PATCH', body: JSON.stringify({ nickname, favoriteArtistIds: [group], favoriteMemberIds: [member] }) })
+      onComplete()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '최초 설정을 저장하지 못했습니다.')
+    } finally { setBusy(false) }
+  }
+  return <main className="onboarding-screen"><div className="onboarding-top"><span>‹</span><b>최초 설정</b><small>1 / 1</small></div><div className="progress"><span /></div><p className="eyebrow">WELCOME TO FANFOLIO</p><h1>좋아하는 아티스트를<br />선택해 주세요</h1><p className="muted">관심 있는 카드를 가장 먼저 알려드릴게요.</p><label className="field-label">좋아하는 그룹</label><div className="choice-row"><button className={group === '드림스케이프' ? 'choice selected' : 'choice'} onClick={() => setGroup('드림스케이프')}>드림스케이프</button><button className={group === '루나리스' ? 'choice selected' : 'choice'} onClick={() => setGroup('루나리스')}>루나리스</button><button className={group === '네온필즈' ? 'choice selected' : 'choice'} onClick={() => setGroup('네온필즈')}>네온필즈</button></div><label className="field-label">좋아하는 멤버</label><div className="member-row">{members.map(item => <button className={member === item ? 'member selected' : 'member'} key={item} onClick={() => setMember(item)}>{item}</button>)}</div><label className="field-label">닉네임</label><input value={nickname} onChange={e => setNickname(e.target.value)} placeholder="닉네임을 입력하세요" maxLength={40} /><button className="primary" onClick={() => void save()} disabled={!nickname.trim() || busy}>{busy ? '저장 중...' : '시작하기'}</button>{message && <p className="form-message error-message">{message}</p>}</main>
 }
 
 function Collection({ cards: collectionCards, onSelect, onRedeem }: { cards: Card[], onSelect: (card: Card) => void, onRedeem: () => void }) {

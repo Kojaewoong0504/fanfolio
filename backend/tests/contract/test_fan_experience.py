@@ -5,6 +5,15 @@ from fastapi.testclient import TestClient
 from tests.conftest import assert_error, assert_success
 
 
+def test_authenticated_fan_can_read_current_user_state(actors: dict[str, TestClient]) -> None:
+    me = assert_success(actors["fan"].get("/api/me"))
+
+    assert me["id"] == "fan"
+    assert me["email"] == "fan@example.com"
+    assert me["role"] == "fan"
+    assert me["onboardingCompleted"] is False
+
+
 def test_authenticated_fan_can_complete_onboarding(actors: dict[str, TestClient]) -> None:
     fan = actors["fan"]
     profile = assert_success(

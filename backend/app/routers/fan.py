@@ -12,6 +12,22 @@ from app.services import redeem
 router = APIRouter(prefix="/api", tags=["fan"])
 
 
+@router.get("/me")
+async def me(user: FanUser) -> dict:
+    return {
+        "ok": True,
+        "data": {
+            "id": user.id,
+            "email": user.email,
+            "role": user.role.value,
+            "nickname": user.nickname,
+            "favoriteArtistIds": user.favorite_artist_ids,
+            "favoriteMemberIds": user.favorite_member_ids,
+            "onboardingCompleted": user.onboarding_completed,
+        },
+    }
+
+
 @router.post("/redemptions", status_code=status.HTTP_201_CREATED)
 async def create_redemption(payload: RedemptionRequest, user: FanUser, session: DbSession) -> dict:
     return {"ok": True, "data": await redeem(session, user, payload.code)}
