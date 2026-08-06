@@ -1,3 +1,4 @@
+import asyncio
 import csv
 from datetime import UTC, datetime
 from io import BytesIO, StringIO
@@ -42,6 +43,14 @@ def qr_png_bytes(code: str) -> bytes:
     image = qrcode.make(code)
     output = BytesIO()
     image.save(output, format="PNG")
+    return output.getvalue()
+
+
+def qr_zip_bytes(codes: list[str]) -> bytes:
+    output = BytesIO()
+    with ZipFile(output, mode="w", compression=ZIP_DEFLATED) as archive:
+        for code in codes:
+            archive.writestr(f"{code}.png", qr_png_bytes(code))
     return output.getvalue()
 
 
@@ -515,7 +524,7 @@ async def redeem_code_qr(code_id: str, _: AdminUser, session: DbSession) -> Resp
     if not code:
         raise AppError(404, "REDEEM_CODE_NOT_FOUND", "코드를 찾을 수 없습니다.")
     return Response(
-        content=qr_png_bytes(code.code),
+        content=await asyncio.to_thread(qr_png_bytes, code.code),
         media_type="image/png",
         headers={"Cache-Control": "private, no-store"},
     )
@@ -530,12 +539,10 @@ async def redeem_code_batch_qr_zip(batch_id: str, _: AdminUser, session: DbSessi
     codes = await session.scalars(
         select(RedeemCode).where(RedeemCode.batch_id == batch_id).order_by(RedeemCode.code)
     )
-    output = BytesIO()
-    with ZipFile(output, mode="w", compression=ZIP_DEFLATED) as archive:
-        for code in codes:
-            archive.writestr(f"{code.code}.png", qr_png_bytes(code.code))
+    code_values = [code.code for code in codes]
+    archive = await asyncio.to_thread(qr_zip_bytes, code_values)
     return Response(
-        content=output.getvalue(),
+        content=archive,
         media_type="application/zip",
         headers={
             "Cache-Control": "private, no-store",
