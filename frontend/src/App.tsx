@@ -248,13 +248,35 @@ function Login({ onLogin }: { onLogin: () => void }) {
 }
 
 function Onboarding({ onComplete }: { onComplete: () => void }) {
-  const [group, setGroup] = useState('드림스케이프')
-  const [member, setMember] = useState('민호')
+  const [group, setGroup] = useState('')
+  const [member, setMember] = useState('')
   const [nickname, setNickname] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
-  const members = ['민호', '제이', '유준', '하린', '도현']
+  const [artists, setArtists] = useState<CatalogArtist[]>([])
+  const [members, setMembers] = useState<CatalogMember[]>([])
+
+  useEffect(() => {
+    void apiFetch<{ ok: true, data: { items: CatalogArtist[] } }>('/catalog/artists')
+      .then(result => {
+        setArtists(result.data.items)
+        setGroup(result.data.items[0]?.id ?? '')
+      })
+      .catch(() => setMessage('아티스트 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'))
+  }, [])
+
+  useEffect(() => {
+    if (!group) { setMembers([]); setMember(''); return }
+    void apiFetch<{ ok: true, data: { items: CatalogMember[] } }>(`/catalog/members?artistId=${encodeURIComponent(group)}`)
+      .then(result => {
+        setMembers(result.data.items)
+        setMember(result.data.items[0]?.id ?? '')
+      })
+      .catch(() => setMessage('멤버 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'))
+  }, [group])
+
   const save = async () => {
+    if (!group || !member) { setMessage('아티스트와 멤버를 선택해 주세요.'); return }
     setBusy(true)
     setMessage('')
     try {
@@ -264,7 +286,7 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
       setMessage(error instanceof Error ? error.message : '최초 설정을 저장하지 못했습니다.')
     } finally { setBusy(false) }
   }
-  return <main className="onboarding-screen"><div className="onboarding-top"><span>‹</span><b>최초 설정</b><small>1 / 1</small></div><div className="progress"><span /></div><p className="eyebrow">WELCOME TO FANFOLIO</p><h1>좋아하는 아티스트를<br />선택해 주세요</h1><p className="muted">관심 있는 카드를 가장 먼저 알려드릴게요.</p><label className="field-label">좋아하는 그룹</label><div className="choice-row"><button className={group === '드림스케이프' ? 'choice selected' : 'choice'} onClick={() => setGroup('드림스케이프')}>드림스케이프</button><button className={group === '루나리스' ? 'choice selected' : 'choice'} onClick={() => setGroup('루나리스')}>루나리스</button><button className={group === '네온필즈' ? 'choice selected' : 'choice'} onClick={() => setGroup('네온필즈')}>네온필즈</button></div><label className="field-label">좋아하는 멤버</label><div className="member-row">{members.map(item => <button className={member === item ? 'member selected' : 'member'} key={item} onClick={() => setMember(item)}>{item}</button>)}</div><label className="field-label">닉네임</label><input value={nickname} onChange={e => setNickname(e.target.value)} placeholder="닉네임을 입력하세요" maxLength={40} /><button className="primary" onClick={() => void save()} disabled={!nickname.trim() || busy}>{busy ? '저장 중...' : '시작하기'}</button>{message && <p className="form-message error-message">{message}</p>}</main>
+  return <main className="onboarding-screen"><div className="onboarding-top"><span>‹</span><b>최초 설정</b><small>1 / 1</small></div><div className="progress"><span /></div><p className="eyebrow">WELCOME TO FANFOLIO</p><h1>좋아하는 아티스트를<br />선택해 주세요</h1><p className="muted">관심 있는 카드를 가장 먼저 알려드릴게요.</p><label className="field-label">좋아하는 그룹</label><div className="choice-row">{artists.map(artist => <button className={group === artist.id ? 'choice selected' : 'choice'} key={artist.id} onClick={() => setGroup(artist.id)}>{artist.name}</button>)}</div><label className="field-label">좋아하는 멤버</label><div className="member-row">{members.map(item => <button className={member === item.id ? 'member selected' : 'member'} key={item.id} onClick={() => setMember(item.id)}>{item.name}</button>)}</div><label className="field-label">닉네임</label><input value={nickname} onChange={e => setNickname(e.target.value)} placeholder="닉네임을 입력하세요" maxLength={40} /><button className="primary" onClick={() => void save()} disabled={!nickname.trim() || !group || !member || busy}>{busy ? '저장 중...' : '시작하기'}</button>{message && <p className="form-message error-message">{message}</p>}</main>
 }
 
 function Collection({ cards: collectionCards, summary, onSelect, onRedeem }: { cards: Card[], summary: CollectionSummary, onSelect: (card: Card) => void, onRedeem: () => void }) {
