@@ -287,6 +287,7 @@ Base URL: `/api`
 | GET/PATCH | `/admin/drops/{dropId}` | 드롭 조회/수정 |
 | GET | `/admin/redeem-code-batches` | 코드 배치 목록 |
 | POST | `/admin/redeem-code-batches` | 일회용 코드 일괄 생성 |
+| GET | `/admin/redeem-code-batches/{batchId}/codes` | 배치 내 개별 코드와 상태 조회 |
 | GET | `/admin/redeem-code-batches/{batchId}/export` | CSV 다운로드 |
 | GET | `/admin/redeem-codes/{codeId}/qr` | 개별 코드 인쇄용 QR PNG 다운로드 |
 | GET | `/admin/redeem-code-batches/{batchId}/qr.zip` | 배치 전체 QR PNG ZIP 다운로드 |

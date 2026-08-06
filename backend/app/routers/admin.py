@@ -614,6 +614,61 @@ async def export_code_batch(batch_id: str, _: AdminUser, session: DbSession) -> 
     )
 
 
+@router.get("/redeem-code-batches/{batch_id}/codes")
+async def list_redeem_codes(
+    batch_id: str,
+    _: AdminUser,
+    session: DbSession,
+    code_status: str | None = Query(default=None, alias="status"),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> dict:
+    """Return an operator-facing page of codes so individual codes can be disabled.
+
+    The CSV remains the bulk-fulfillment format. This small paginated view is for
+    operational exceptions such as a damaged or leaked physical card. Raw codes
+    are intentionally available only behind the admin role, just like the CSV.
+    """
+    batch = await session.get(RedeemCodeBatch, batch_id)
+    if not batch:
+        raise AppError(404, "BATCH_NOT_FOUND", "코드 배치를 찾을 수 없습니다.")
+    if code_status not in {None, "active", "disabled", "expired", "exhausted"}:
+        raise AppError(422, "INVALID_CODE_STATUS", "코드 상태가 올바르지 않습니다.")
+
+    codes = await session.scalars(
+        select(RedeemCode).where(RedeemCode.batch_id == batch_id).order_by(RedeemCode.code)
+    )
+    filtered = [
+        code for code in codes if code_status is None or redeem_code_status(code) == code_status
+    ]
+    page = filtered[offset : offset + limit]
+    return {
+        "ok": True,
+        "data": {
+            "items": [
+                {
+                    "code": code.code,
+                    "status": redeem_code_status(code),
+                    "usedCount": code.used_count,
+                    "maxUses": code.max_uses,
+                    "expiresAt": (
+                        code.expires_at.replace(tzinfo=UTC).isoformat()
+                        if code.expires_at and code.expires_at.tzinfo is None
+                        else code.expires_at.isoformat()
+                        if code.expires_at
+                        else None
+                    ),
+                    "qrUrl": f"/api/admin/redeem-codes/{code.code}/qr",
+                }
+                for code in page
+            ],
+            "total": len(filtered),
+            "limit": limit,
+            "offset": offset,
+        },
+    }
+
+
 @router.get("/redeem-codes/{code_id}/qr")
 async def redeem_code_qr(code_id: str, _: AdminUser, session: DbSession) -> Response:
     """Render a printable QR whose payload is the redeem code itself."""

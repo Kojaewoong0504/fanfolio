@@ -373,6 +373,45 @@ QR payload는 redeem code 문자열 자체이며, 팬 앱은 QR 결과를 기존
 성공 응답의 각 배치 항목에는 `quantity`, `codeCount`, `usedCount`, `expiresAt`와
 CSV/QR ZIP 다운로드 URL이 포함된다. `usedCount`는 해당 배치 코드들의 실제 누적 사용량이다.
 
+### GET /api/admin/redeem-code-batches/{batchId}/codes
+
+권한: Admin
+
+배치 내 개별 코드의 운영 상태를 페이지 단위로 조회한다. 원시 코드는 관리자만
+확인할 수 있으며, `status`로 `active`, `disabled`, `expired`, `exhausted`를 필터링할 수 있다.
+
+쿼리 파라미터:
+
+```text
+status=active&limit=100&offset=0
+```
+
+성공 `200`:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "items": [
+      {
+        "code": "NOVA-TEST-ABC123",
+        "status": "active",
+        "usedCount": 0,
+        "maxUses": 1,
+        "expiresAt": "2026-12-31T23:59:59+00:00",
+        "qrUrl": "/api/admin/redeem-codes/NOVA-TEST-ABC123/qr"
+      }
+    ],
+    "total": 1,
+    "limit": 100,
+    "offset": 0
+  }
+}
+```
+
+운영자는 이 목록에서 유출되거나 훼손된 코드를 선택해
+`PATCH /api/admin/redeem-codes/{codeId}`에 `{"status":"disabled"}`를 보내 비활성화한다.
+
 ## 7. 관리자·아티스트 카탈로그 연결
 
 `GET /api/admin/catalog`는 관리자 카드 등록 화면에 사용할 그룹과 멤버 목록을

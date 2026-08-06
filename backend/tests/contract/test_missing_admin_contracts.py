@@ -145,6 +145,30 @@ def test_admin_can_list_batches_and_disable_a_code(
     export = actors["admin"].get(batch["csvExportUrl"])
     assert export.status_code == 200
     code_value = export.text.splitlines()[1].split(",", 1)[0]
+    codes = assert_success(
+        actors["admin"].get(f"/api/admin/redeem-code-batches/{batch['id']}/codes")
+    )
+    assert codes["total"] == 1
+    assert codes["items"] == [
+        {
+            "code": code_value,
+            "status": "active",
+            "usedCount": 0,
+            "maxUses": 1,
+            "expiresAt": "2026-12-31T23:59:59+00:00",
+            "qrUrl": f"/api/admin/redeem-codes/{code_value}/qr",
+        }
+    ]
+    assert_error(
+        actors["admin"].get(f"/api/admin/redeem-code-batches/{batch['id']}/codes?status=unknown"),
+        422,
+        "INVALID_CODE_STATUS",
+    )
+    assert_error(
+        actors["fan"].get(f"/api/admin/redeem-code-batches/{batch['id']}/codes"),
+        403,
+        "FORBIDDEN",
+    )
     qr = actors["admin"].get(f"/api/admin/redeem-codes/{code_value}/qr")
     assert qr.status_code == 200
     assert qr.headers["content-type"].startswith("image/png")
