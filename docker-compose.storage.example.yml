@@ -1,0 +1,30 @@
+services:
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: fanfolio-local
+      MINIO_ROOT_PASSWORD: fanfolio-local-secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - fanfolio-minio:/data
+
+  clamav:
+    image: clamav/clamav:latest
+    ports:
+      - "3310:3310"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/3310'"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  fanfolio-minio:
