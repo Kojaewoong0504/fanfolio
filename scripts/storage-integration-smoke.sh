@@ -108,9 +108,10 @@ PY
 
 echo "Starting MinIO and ClamAV with ${COMPOSE[0]}"
 export MINIO_API_HOST_PORT MINIO_CONSOLE_HOST_PORT CLAMAV_HOST_PORT
-compose up -d
+compose up -d minio clamav
 wait_for_tcp "$MINIO_API_HOST_PORT"
 wait_for_minio
+compose run --rm --no-deps minio-init
 wait_for_tcp "$CLAMAV_HOST_PORT"
 wait_for_clamav
 

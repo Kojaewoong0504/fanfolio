@@ -16,6 +16,22 @@ services:
     volumes:
       - fanfolio-minio:/data
 
+  minio-init:
+    image: ${MINIO_MC_IMAGE:-minio/mc:latest}
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: fanfolio-local
+      MINIO_ROOT_PASSWORD: fanfolio-local-secret
+    volumes:
+      - ./docker/minio/cors.xml:/etc/minio/cors.xml:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command: >-
+      "mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" &&
+      mc mb --ignore-existing local/fanfolio-test &&
+      mc cors set local/fanfolio-test /etc/minio/cors.xml"
+
   clamav:
     # Pin a current official multi-architecture Debian image. The floating
     # `latest` tag may resolve to a manifest without linux/arm64.

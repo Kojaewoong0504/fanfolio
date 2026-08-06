@@ -214,9 +214,11 @@ docker compose -f docker-compose.stack.yml logs -f api worker beat
 docker compose -f docker-compose.stack.yml down -v
 ```
 
-S3·ClamAV 통합 검증은 별도 스택으로 실행합니다. ClamAV 이미지는 Apple Silicon을 포함한
-멀티아키텍처 태그로 고정되어 있으며, 포트가 이미 사용 중이면 환경 변수로 외부 포트를
-바꿀 수 있습니다.
+S3·ClamAV 통합 검증은 별도 스택으로 실행합니다. 스택은 테스트용 MinIO 버킷을 만들고
+로컬 팬/아티스트 프론트엔드에서 presigned PUT을 사용할 수 있도록 버킷 CORS도 설정합니다.
+ClamAV 이미지는 Apple Silicon을 포함한 멀티아키텍처 태그로 고정되어 있으며, 포트가 이미
+사용 중이면 환경 변수로 외부 포트를 바꿀 수 있습니다. 운영 S3에서는 `localhost` origin을
+그대로 사용하지 말고 실제 HTTPS 프론트엔드 origin만 버킷 CORS에 등록하세요.
 
 ```bash
 docker compose -f docker-compose.storage.example.yml up -d

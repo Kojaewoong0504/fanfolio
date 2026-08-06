@@ -52,10 +52,14 @@ def test_s3_storage_round_trip_and_presign() -> None:
             upload_url,
             data=direct_content,
             method="PUT",
-            headers={"Content-Type": "application/octet-stream"},
+            headers={
+                "Content-Type": "application/octet-stream",
+                "Origin": "http://localhost:5173",
+            },
         )
         with urlopen(request, timeout=10) as response:
             assert response.status in {200, 204}
+            assert response.headers.get("Access-Control-Allow-Origin") == "http://localhost:5173"
 
         direct_path = storage.asset_path(direct_asset_id, ".bin")
         assert storage.exists(direct_path)
