@@ -74,6 +74,62 @@ def test_card_detail_is_available_only_to_its_owner(
     )
 
 
+def test_owned_card_detail_exposes_handwriting_and_voice_entitlements(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    artist = actors["artist"]
+    admin = actors["admin"]
+    fan = actors["fan"]
+    handwriting = artist.put(
+        f"/api/uploads/{seeded['ids']['handwritingAssetId']}/content", content=b"handwriting"
+    )
+    assert handwriting.status_code == 204, handwriting.text
+
+    card = assert_success(
+        admin.post(
+            "/api/admin/cards",
+            json={
+                "name": "손글씨 보이스 카드",
+                "memberId": "member_yuna",
+                "ownerArtistId": "artist",
+                "handwritingAssetId": seeded["ids"]["handwritingAssetId"],
+                "hasVoice": True,
+            },
+        ),
+        201,
+    )
+    assert_success(admin.post(f"/api/admin/cards/{card['id']}/publish"))
+    batch = assert_success(
+        admin.post(
+            "/api/admin/redeem-code-batches",
+            json={
+                "dropId": "drop_live",
+                "cardId": card["id"],
+                "quantity": 1,
+                "maxUsesPerCode": 1,
+                "expiresAt": "2030-12-31T23:59:59Z",
+                "prefix": "DETAIL",
+            },
+        ),
+        201,
+    )
+    exported = admin.get(batch["csvExportUrl"])
+    assert exported.status_code == 200, exported.text
+    code = exported.text.splitlines()[1].split(",")[0].strip('"')
+
+    redeemed = assert_success(
+        fan.post("/api/redemptions", json={"code": code, "source": "qr"}), 201
+    )
+    detail = assert_success(fan.get(f"/api/me/cards/{redeemed['userCardId']}"))
+
+    assert detail["card"]["hasVoice"] is True
+    handwriting_url = detail["card"]["handwritingImageUrl"]
+    assert handwriting_url == f"/api/me/cards/{redeemed['userCardId']}/handwriting"
+    image = fan.get(handwriting_url)
+    assert image.status_code == 200
+    assert image.content == b"handwriting"
+
+
 def test_catalog_returns_only_published_cards_to_fans(actors: dict[str, TestClient]) -> None:
     catalog = assert_success(
         actors["fan"].get("/api/catalog/cards", params={"artistId": "artist_nova3"})

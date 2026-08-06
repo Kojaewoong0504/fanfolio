@@ -138,6 +138,13 @@ async def card_detail(user_card_id: str, user: FanUser, session: DbSession) -> d
     if not row:
         raise AppError(404, "USER_CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
     uc, card, artist, member = row
+    handwriting_image_url = None
+    if card.handwriting_asset_id:
+        handwriting_asset = await session.get(Asset, card.handwriting_asset_id)
+        if handwriting_asset and (
+            handwriting_asset.processed_storage_path or handwriting_asset.storage_path
+        ):
+            handwriting_image_url = f"/api/me/cards/{uc.id}/handwriting"
     return {
         "ok": True,
         "data": {
@@ -153,11 +160,29 @@ async def card_detail(user_card_id: str, user: FanUser, session: DbSession) -> d
                 "artistName": artist.name if artist else None,
                 "memberId": member.id if member else card.member_id,
                 "memberName": member.name if member else None,
-                "handwritingImageUrl": None,
-                "hasVoice": False,
+                "handwritingImageUrl": handwriting_image_url,
+                "hasVoice": card.has_voice,
             },
         },
     }
+
+
+@router.get("/me/cards/{user_card_id}/handwriting")
+async def card_handwriting(user_card_id: str, user: FanUser, session: DbSession) -> FileResponse:
+    """Serve only the handwriting asset attached to a card the fan owns."""
+    row = await session.execute(
+        select(UserCard, Card)
+        .join(Card, UserCard.card_id == Card.id)
+        .where(UserCard.id == user_card_id, UserCard.user_id == user.id)
+    )
+    user_card, card = row.one_or_none() or (None, None)
+    if not user_card or not card or not card.handwriting_asset_id:
+        raise AppError(404, "HANDWRITING_NOT_FOUND", "손글씨 특전을 찾을 수 없습니다.")
+    asset = await session.get(Asset, card.handwriting_asset_id)
+    path = asset.processed_storage_path or asset.storage_path if asset else None
+    if not path:
+        raise AppError(404, "HANDWRITING_NOT_READY", "손글씨 특전이 아직 준비되지 않았습니다.")
+    return FileResponse(path, media_type=asset.content_type or "image/png")
 
 
 @router.get("/cards/{card_id}/image")
