@@ -72,6 +72,34 @@ jobs:
           exit 1
       - name: Verify the Celery worker
         run: docker compose -f docker-compose.stack.yml exec -T worker celery -A app.tasks:celery_app inspect ping --timeout=5
+      - name: Verify SMTP delivery through Mailpit
+        run: |
+          curl -fsS -X POST http://localhost:8000/api/auth/magic-link/request \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"container@example.com","purpose":"login"}'
+          for attempt in {1..30}; do
+            if curl -fsS http://localhost:8025/api/v1/messages | grep -Fq 'container@example.com'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker compose -f docker-compose.stack.yml logs api mailpit
+          exit 1
+      - name: Verify Redis-backed rate limiting
+        run: |
+          email="container-rate-limit@example.com"
+          for attempt in {1..5}; do
+            status_code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+              http://localhost:8000/api/auth/magic-link/request \
+              -H 'Content-Type: application/json' \
+              -d "{\"email\":\"$email\",\"purpose\":\"login\"}")"
+            test "$status_code" = "202"
+          done
+          status_code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+            http://localhost:8000/api/auth/magic-link/request \
+            -H 'Content-Type: application/json' \
+            -d "{\"email\":\"$email\",\"purpose\":\"login\"}")"
+          test "$status_code" = "429"
       - name: Verify the API is non-root
         run: |
           uid="$(docker compose -f docker-compose.stack.yml exec -T api id -u | tr -d '\r\n')"

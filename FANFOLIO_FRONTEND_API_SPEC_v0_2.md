@@ -234,6 +234,8 @@ Base URL: `/api`
   "seasonName": "2026 SPRING",
   "rarity": "Special",
   "imageAssetId": "asset_card_01",
+  "artistId": "artist_nova3",
+  "memberId": "member_yuna",
   "signatureText": "오래 기다려 줘서 고마워요.",
   "handwritingAssetId": "asset_handwriting_01",
   "handwritingTransform": { "x": 68, "y": 724, "width": 402, "rotation": -3 },

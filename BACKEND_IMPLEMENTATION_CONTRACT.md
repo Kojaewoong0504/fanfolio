@@ -325,11 +325,17 @@ QR payload는 redeem code 문자열 자체이며, 팬 앱은 QR 결과를 기존
   "seasonName": "2026 SPRING",
   "rarity": "Special",
   "imageAssetId": "asset_card_image",
+  "artistId": "artist_nova3",
+  "memberId": "member_yuna",
   "issueLimit": 3000
 }
 ```
 
-성공 `201`: `data.id`, `data.status: "draft"`.
+`artistId`는 선택한 그룹, `memberId`는 선택한 멤버다. 기존 클라이언트가
+`artistId`를 생략하면 서버가 멤버의 그룹을 자동으로 추론한다. 멤버가 그룹에
+속하지 않거나 존재하지 않으면 저장하지 않고 오류를 반환한다.
+
+성공 `201`: `data.id`, `data.status: "draft"`, `data.artistId`, `data.memberId`.
 
 ### POST /api/artist/cards/{cardId}/submit-review
 
