@@ -34,6 +34,10 @@ def test_admin_can_create_list_and_activate_a_drop(
     )
     assert activated == {"id": created["id"], "status": "live"}
 
+    notifications = assert_success(actors["fan"].get("/api/notifications"))
+    event = next(item for item in notifications["items"] if item["kind"] == "drop_started")
+    assert event["title"] == "새 드롭이 시작되었어요"
+
 
 def test_fan_cannot_manage_drops(actors: dict[str, TestClient]) -> None:
     assert_error(actors["fan"].get("/api/admin/drops"), 403, "FORBIDDEN")
@@ -50,6 +54,9 @@ def test_admin_can_list_users_and_change_a_user_role(
         actors["admin"].patch("/api/admin/users/fan/role", json={"role": "artist"})
     )
     assert updated == {"id": "fan", "role": "artist"}
+    logs = assert_success(actors["admin"].get("/api/admin/audit-logs"))
+    role_log = next(item for item in logs["items"] if item["action"] == "user.role_changed")
+    assert role_log["entityId"] == "fan"
 
 
 def test_admin_cannot_change_own_role_or_fan_manage_users(
@@ -61,6 +68,22 @@ def test_admin_cannot_change_own_role_or_fan_manage_users(
         "CANNOT_CHANGE_OWN_ROLE",
     )
     assert_error(actors["fan"].get("/api/admin/users"), 403, "FORBIDDEN")
+
+
+def test_publishing_a_card_creates_audit_log_and_fan_notification(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    published = assert_success(actors["admin"].post("/api/admin/cards/card_draft/publish"))
+    assert published["status"] == "published"
+
+    notifications = assert_success(actors["fan"].get("/api/notifications"))
+    event = next(item for item in notifications["items"] if item["kind"] == "card_published")
+    assert event["title"] == "새 카드가 공개되었어요"
+
+    logs = assert_success(actors["admin"].get("/api/admin/audit-logs"))
+    log = next(item for item in logs["items"] if item["action"] == "card.published")
+    assert log["actorId"] == "admin"
+    assert log["entityId"] == "card_draft"
 
 
 def test_admin_dashboard_and_card_list_are_backed_by_database(

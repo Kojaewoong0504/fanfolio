@@ -24,6 +24,13 @@ def test_alembic_upgrade_creates_the_current_schema(tmp_path: Path) -> None:
     with sqlite3.connect(database_path) as connection:
         columns = {row[1] for row in connection.execute("PRAGMA table_info(drops)").fetchall()}
         assert {"id", "name", "status", "starts_at", "ends_at"} <= columns
+        notification_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(notifications)").fetchall()
+        }
+        assert {"kind", "title", "body", "created_at"} <= notification_columns
+        assert connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='audit_logs'"
+        ).fetchone()
 
 
 def test_alembic_upgrade_adds_drop_metadata_to_a_legacy_database(tmp_path: Path) -> None:

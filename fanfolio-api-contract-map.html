@@ -25,7 +25,7 @@
     <div class="meta"><span class="chip">MVP · v0.2</span><span class="chip">정본: BACKEND_IMPLEMENTATION_CONTRACT.md</span><span class="chip">테스트: backend/tests/contract</span></div>
   </header>
   <main>
-    <div class="notice"><b>현재 상태:</b> 맵의 24개 HTTP 경로는 계약 테스트로 구현·검증됩니다. <code>Health → Fixture → Auth → Fan → Admin → Artist</code> 순서로 테스트를 읽으면 각 기능 경계를 따라갈 수 있습니다.</div>
+    <div class="notice"><b>현재 상태:</b> 맵의 25개 HTTP 경로는 계약 테스트로 구현·검증됩니다. <code>Health → Fixture → Auth → Fan → Admin → Artist</code> 순서로 테스트를 읽으면 각 기능 경계를 따라갈 수 있습니다.</div>
     <h2>구현 순서</h2>
     <div class="steps" id="steps"></div>
     <div class="layout">
@@ -59,6 +59,7 @@
       {stage:'Admin', role:'Admin', method:'GET', path:'/api/admin/dashboard', auth:'Admin', request:null, success:'200', response:{metrics:{redeemedCount:1,activeDrops:1}}, errors:['401 AUTH_REQUIRED','403 FORBIDDEN'], test:'tests/contract/test_admin_and_artist.py', note:'팬·아티스트는 접근할 수 없는 운영 지표입니다.'},
       {stage:'Admin', role:'Admin', method:'GET', path:'/api/admin/users', auth:'Admin', request:{q:'fan@example.com',role:'fan'}, success:'200', response:{items:[{id:'fan',email:'fan@example.com',role:'fan'}]}, errors:['401 AUTH_REQUIRED','403 FORBIDDEN'], test:'tests/contract/test_admin_management.py', note:'관리자가 사용자와 현재 역할·온보딩 상태를 확인합니다.'},
       {stage:'Admin', role:'Admin', method:'PATCH', path:'/api/admin/users/{userId}/role', auth:'Admin', request:{role:'artist'}, success:'200', response:{id:'fan',role:'artist'}, errors:['401 AUTH_REQUIRED','403 FORBIDDEN','404 USER_NOT_FOUND','409 CANNOT_CHANGE_OWN_ROLE','409 LAST_ADMIN_REQUIRED'], test:'tests/contract/test_admin_management.py', note:'운영자가 팬·아티스트·관리자 역할을 변경하며 마지막 관리자는 보호합니다.'},
+      {stage:'Admin', role:'Admin', method:'GET', path:'/api/admin/audit-logs', auth:'Admin', request:{action:'card.published',limit:50}, success:'200', response:{items:[{action:'card.published',entityType:'card',entityId:'card_123'}]}, errors:['401 AUTH_REQUIRED','403 FORBIDDEN'], test:'tests/contract/test_admin_management.py', note:'역할 변경·카드 게시·드롭 시작·카드 등록 이벤트를 운영 감사 로그로 조회합니다.'},
       {stage:'Admin', role:'Admin', method:'GET', path:'/api/admin/drops', auth:'Admin', request:null, success:'200', response:{items:[{id:'drop_123',name:'2026 봄 컴백',status:'draft'}]}, errors:['401 AUTH_REQUIRED','403 FORBIDDEN'], test:'tests/contract/test_admin_management.py', note:'운영자가 관리하는 드롭 목록을 읽습니다.'},
       {stage:'Admin', role:'Admin', method:'POST', path:'/api/admin/drops', auth:'Admin', request:{name:'2026 봄 컴백',startsAt:'2026-03-01T00:00:00Z',endsAt:'2026-03-31T23:59:59Z'}, success:'201', response:{id:'drop_123',status:'draft'}, errors:['401 AUTH_REQUIRED','403 FORBIDDEN','422 INVALID_DROP_WINDOW'], test:'tests/contract/test_admin_management.py', note:'코드 배치와 카드를 연결할 운영 드롭을 생성합니다.'},
       {stage:'Admin', role:'Admin', method:'PATCH', path:'/api/admin/drops/{dropId}/status', auth:'Admin', request:{status:'live'}, success:'200', response:{id:'drop_123',status:'live'}, errors:['401 AUTH_REQUIRED','403 FORBIDDEN','404 DROP_NOT_FOUND','422 VALIDATION_ERROR'], test:'tests/contract/test_admin_management.py', note:'드롭 공개 상태를 운영자가 명시적으로 전환합니다.'},

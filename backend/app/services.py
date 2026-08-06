@@ -12,6 +12,7 @@ from app.errors import AppError
 from app.image_processing import remove_light_background
 from app.models import (
     Asset,
+    AuditLog,
     BackgroundRemovalJob,
     Card,
     Drop,
@@ -39,6 +40,7 @@ async def reset_database(session: AsyncSession) -> None:
     for model in (
         BackgroundRemovalJob,
         Asset,
+        AuditLog,
         Notification,
         UserCard,
         RedeemCode,
@@ -124,7 +126,13 @@ async def seed_core(session: AsyncSession) -> dict:
     )
     session.add_all(
         [
-            Notification(id="notification_1", user_id="fan"),
+            Notification(
+                id="notification_1",
+                user_id="fan",
+                kind="system",
+                title="Fanfolio에 오신 것을 환영해요",
+                body="새로운 공식 카드 소식을 알려드릴게요.",
+            ),
             Asset(id="asset_card_image", owner_id="artist"),
             Asset(id="asset_handwriting", owner_id="artist"),
         ]
@@ -184,6 +192,41 @@ async def process_background_removal(job_id: str) -> None:
         except (OSError, ValueError):
             job.status = "failed"
             await session.commit()
+
+
+async def record_audit(
+    session: AsyncSession,
+    *,
+    actor_user_id: str | None,
+    action: str,
+    entity_type: str,
+    entity_id: str,
+    details: dict | None = None,
+) -> None:
+    session.add(
+        AuditLog(
+            id=f"audit_{uuid4().hex[:12]}",
+            actor_user_id=actor_user_id,
+            action=action,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            details=details or {},
+        )
+    )
+
+
+async def notify_fans(session: AsyncSession, *, kind: str, title: str, body: str) -> None:
+    fans = await session.scalars(select(User).where(User.role == Role.FAN))
+    for fan in fans:
+        session.add(
+            Notification(
+                id=f"notification_{uuid4().hex[:12]}",
+                user_id=fan.id,
+                kind=kind,
+                title=title,
+                body=body,
+            )
+        )
 
 
 async def request_magic_link(session: AsyncSession, *, email: str, purpose: str) -> str:
@@ -276,6 +319,24 @@ async def redeem(session: AsyncSession, user: User, code_value: str) -> dict:
             acquired_at=now(),
         )
         session.add(user_card)
+        record_details = {"cardId": card.id, "source": "redeem_code"}
+        await record_audit(
+            session,
+            actor_user_id=user_id,
+            action="redemption.created",
+            entity_type="user_card",
+            entity_id=user_card.id,
+            details=record_details,
+        )
+        session.add(
+            Notification(
+                id=f"notification_{uuid4().hex[:12]}",
+                user_id=user_id,
+                kind="card_redeemed",
+                title="카드를 컬렉션에 추가했어요",
+                body=f"{card.name} 카드가 내 컬렉션에 추가되었습니다.",
+            )
+        )
     return {
         "userCardId": user_card.id,
         "cardId": card.id,

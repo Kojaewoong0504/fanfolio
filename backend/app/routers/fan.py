@@ -152,8 +152,12 @@ async def notifications(user: FanUser, session: DbSession) -> dict:
             "items": [
                 {
                     "id": n.id,
+                    "kind": n.kind,
+                    "title": n.title,
+                    "body": n.body,
                     "isRead": n.is_read,
                     "readAt": n.read_at.isoformat() if n.read_at else None,
+                    "createdAt": n.created_at.isoformat(),
                 }
                 for n in items
             ]

@@ -12,8 +12,12 @@ export type CollectionCard = {
 
 export type NotificationItem = {
   id: string
+  kind: string
+  title: string
+  body: string | null
   isRead: boolean
   readAt: string | null
+  createdAt: string
 }
 
 export type UserCardDetail = {

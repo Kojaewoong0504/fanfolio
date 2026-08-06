@@ -9,8 +9,9 @@ from sqlalchemy import func, select
 
 from app.dependencies import AdminUser, DbSession
 from app.errors import AppError
-from app.models import Card, Drop, RedeemCode, RedeemCodeBatch, Role, User
+from app.models import AuditLog, Card, Drop, RedeemCode, RedeemCodeBatch, Role, User
 from app.schemas import AdminUserRoleUpdate, CodeBatchRequest, DropCreateRequest, DropStatusUpdate
+from app.services import notify_fans, record_audit
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -115,12 +116,28 @@ async def create_drop(payload: DropCreateRequest, _: AdminUser, session: DbSessi
 
 @router.patch("/drops/{drop_id}/status")
 async def update_drop_status(
-    drop_id: str, payload: DropStatusUpdate, _: AdminUser, session: DbSession
+    drop_id: str, payload: DropStatusUpdate, admin: AdminUser, session: DbSession
 ) -> dict:
     drop = await session.get(Drop, drop_id)
     if not drop:
         raise AppError(404, "DROP_NOT_FOUND", "드롭을 찾을 수 없습니다.")
+    previous_status = drop.status
     drop.status = payload.status
+    if previous_status != "live" and payload.status == "live":
+        await record_audit(
+            session,
+            actor_user_id=admin.id,
+            action="drop.started",
+            entity_type="drop",
+            entity_id=drop.id,
+            details={"previousStatus": previous_status},
+        )
+        await notify_fans(
+            session,
+            kind="drop_started",
+            title="새 드롭이 시작되었어요",
+            body=f"{drop.name}에서 새로운 공식 카드를 만나보세요.",
+        )
     await session.commit()
     return {"ok": True, "data": {"id": drop.id, "status": drop.status}}
 
@@ -176,7 +193,16 @@ async def update_user_role(
         )
         if admin_count == 1:
             raise AppError(409, "LAST_ADMIN_REQUIRED", "최소 한 명의 관리자가 필요합니다.")
+    previous_role = user.role.value
     user.role = new_role
+    await record_audit(
+        session,
+        actor_user_id=admin.id,
+        action="user.role_changed",
+        entity_type="user",
+        entity_id=user.id,
+        details={"previousRole": previous_role, "newRole": new_role.value},
+    )
     await session.commit()
     return {"ok": True, "data": {"id": user.id, "role": user.role.value}}
 
@@ -257,11 +283,60 @@ async def export_code_batch(batch_id: str, _: AdminUser, session: DbSession) -> 
     )
 
 
+@router.get("/audit-logs")
+async def audit_logs(
+    _: AdminUser,
+    session: DbSession,
+    action: str | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
+) -> dict:
+    filters = [AuditLog.action == action] if action else []
+    logs = await session.scalars(
+        select(AuditLog)
+        .where(*filters)
+        .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+        .limit(limit)
+    )
+    return {
+        "ok": True,
+        "data": {
+            "items": [
+                {
+                    "id": log.id,
+                    "actorId": log.actor_user_id,
+                    "action": log.action,
+                    "entityType": log.entity_type,
+                    "entityId": log.entity_id,
+                    "metadata": log.details,
+                    "createdAt": log.created_at.isoformat(),
+                }
+                for log in logs
+            ]
+        },
+    }
+
+
 @router.post("/cards/{card_id}/publish")
-async def publish(card_id: str, _: AdminUser, session: DbSession) -> dict:
+async def publish(card_id: str, admin: AdminUser, session: DbSession) -> dict:
     card = await session.get(Card, card_id)
     if not card:
         raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
+    previous_status = card.status
     card.status = "published"
+    if previous_status != "published":
+        await record_audit(
+            session,
+            actor_user_id=admin.id,
+            action="card.published",
+            entity_type="card",
+            entity_id=card.id,
+            details={"previousStatus": previous_status},
+        )
+        await notify_fans(
+            session,
+            kind="card_published",
+            title="새 카드가 공개되었어요",
+            body=f"{card.name} 카드를 확인해보세요.",
+        )
     await session.commit()
     return {"ok": True, "data": {"id": card.id, "status": card.status}}

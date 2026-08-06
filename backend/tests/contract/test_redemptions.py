@@ -24,6 +24,12 @@ def test_valid_qr_code_issues_official_card_and_updates_collection(
     assert collection["cards"][0]["userCardId"] == redeemed["userCardId"]
     assert collection["cards"][0]["isOfficial"] is True
 
+    notifications = assert_success(fan.get("/api/notifications"))
+    event = next(item for item in notifications["items"] if item["kind"] == "card_redeemed")
+    assert event["title"] == "카드를 컬렉션에 추가했어요"
+    logs = assert_success(actors["admin"].get("/api/admin/audit-logs"))
+    assert any(log["action"] == "redemption.created" for log in logs["items"])
+
 
 def test_redeeming_same_code_twice_returns_conflict_without_extra_card(
     actors: dict[str, TestClient], seeded: dict[str, Any]
