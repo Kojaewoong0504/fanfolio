@@ -20,7 +20,10 @@ cleanup() {
   if [[ "${STOP_SERVICES:-0}" == "1" ]]; then
     compose down
   fi
-  trash "$LOG_DIR" >/dev/null 2>&1 || true
+  # LOG_DIR is an explicit mktemp directory owned by this run. `rm` keeps the
+  # script portable across macOS, Linux, and CI images without requiring a
+  # desktop trash utility.
+  rm -rf -- "$LOG_DIR"
 }
 trap cleanup EXIT
 

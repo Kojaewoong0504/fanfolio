@@ -27,7 +27,8 @@ cleanup() {
   [[ -n "$ADMIN_PID" ]] && kill "$ADMIN_PID" 2>/dev/null || true
   [[ -n "$BUILDER_PID" ]] && kill "$BUILDER_PID" 2>/dev/null || true
   "$PWCLI" --session "$PW_SESSION" close >/dev/null 2>&1 || true
-  trash "$E2E_TMP" >/dev/null 2>&1 || true
+  # E2E_TMP is an explicit mktemp directory created by this run.
+  rm -rf -- "$E2E_TMP"
 }
 trap cleanup EXIT
 
