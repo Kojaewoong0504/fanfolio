@@ -137,6 +137,7 @@ if [[ ! "$REDEEM_CODE" =~ ^E2E-[A-Z0-9]+$ ]]; then
   echo "Could not extract the generated redeem code: $REDEEM_CODE" >&2
   exit 1
 fi
+run_code "await page.evaluate(async code => { const response = await fetch('http://localhost:8000/api/admin/redeem-codes/' + code + '/qr', {credentials: 'include', headers: {'X-Fanfolio-Client': 'admin'}}); if (!response.ok || !(response.headers.get('content-type') || '').startsWith('image/png')) throw new Error('admin QR PNG endpoint failed'); }, '${REDEEM_CODE}')"
 
 echo "[4/5] fan redeems the published card and opens its detail"
 run_code "await page.goto('http://localhost:5173/?token=test-magic-link-fan'); await page.getByRole('heading', {name: '좋아하는 아티스트를 선택해 주세요'}).waitFor();"
