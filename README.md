@@ -171,6 +171,12 @@ SMTP Mailpit 수신까지 확인합니다. 컨테이너는 기본적으로 계�
 STOP_SERVICES=1 ./scripts/integration-smoke.sh
 ```
 
+Podman을 사용할 때 기본 연결이 여러 개라면 연결 이름을 명시할 수 있습니다.
+
+```bash
+COMPOSE_PROVIDER=podman PODMAN_CONNECTION=fanfolio-machine ./scripts/integration-smoke.sh
+```
+
 API와 Celery까지 컨테이너로 실행하려면 별도의 전체 스택 compose 파일을 사용합니다.
 이 구성은 로컬 검증용이며, 운영에서는 비밀번호·도메인·TLS 설정을 반드시 교체하세요.
 

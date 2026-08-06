@@ -10,6 +10,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="$ROOT_DIR/docker-compose.local.yml"
 BACKEND_DIR="$ROOT_DIR/backend"
 LOG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/fanfolio-integration.XXXXXX")"
+COMPOSE_PROVIDER="${COMPOSE_PROVIDER:-auto}"
+PODMAN_CONNECTION="${PODMAN_CONNECTION:-}"
 API_PID=""
 CELERY_PID=""
 COMPOSE=()
@@ -35,14 +37,28 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+podman_args=()
+if [[ -n "$PODMAN_CONNECTION" ]]; then
+  podman_args=(--connection "$PODMAN_CONNECTION")
+fi
+
+if [[ "$COMPOSE_PROVIDER" != "podman" ]] && command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
   COMPOSE=(docker compose)
-elif command -v podman >/dev/null 2>&1 && podman compose version >/dev/null 2>&1; then
-  COMPOSE=(podman compose)
+elif [[ "$COMPOSE_PROVIDER" != "docker" ]] && command -v podman >/dev/null 2>&1 && podman "${podman_args[@]}" compose version >/dev/null 2>&1; then
+  COMPOSE=(podman "${podman_args[@]}" compose)
 else
   echo "Docker Compose 또는 Podman Compose가 필요합니다." >&2
+  if [[ "$COMPOSE_PROVIDER" == "podman" ]] || {
+    ! command -v docker >/dev/null 2>&1 && command -v podman >/dev/null 2>&1;
+  }; then
+    echo "Podman 연결이 필요하면 PODMAN_CONNECTION=<connection-name>을 지정하세요." >&2
+    podman machine list 2>&1 || true
+    podman system connection list 2>&1 || true
+  fi
   exit 2
 fi
+
+echo "Using ${COMPOSE[0]} compose${PODMAN_CONNECTION:+ via $PODMAN_CONNECTION}"
 
 compose() {
   "${COMPOSE[@]}" -f "$COMPOSE_FILE" -p fanfolio-integration "$@"
