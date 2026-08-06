@@ -14,6 +14,7 @@ COMPOSE_PROVIDER="${COMPOSE_PROVIDER:-auto}"
 PODMAN_CONNECTION="${PODMAN_CONNECTION:-}"
 API_PID=""
 CELERY_PID=""
+BEAT_PID=""
 COMPOSE=()
 REDEEM_USER_A=""
 REDEEM_USER_B=""
@@ -32,6 +33,7 @@ cleanup() {
   set +e
   [[ -n "$API_PID" ]] && kill "$API_PID" 2>/dev/null || true
   [[ -n "$CELERY_PID" ]] && kill "$CELERY_PID" 2>/dev/null || true
+  [[ -n "$BEAT_PID" ]] && kill "$BEAT_PID" 2>/dev/null || true
   if [[ "${STOP_SERVICES:-0}" == "1" && "${#COMPOSE[@]}" -gt 0 ]]; then
     compose down
   fi
@@ -126,6 +128,7 @@ export SMTP_HOST=localhost
 export SMTP_PORT="$SMTP_HOST_PORT"
 export SMTP_USE_TLS=false
 export TASK_QUEUE_MODE=celery
+export UPLOAD_CLEANUP_INTERVAL_SECONDS="${UPLOAD_CLEANUP_INTERVAL_SECONDS:-1}"
 export CELERY_BROKER_URL="redis://localhost:${REDIS_HOST_PORT}/0"
 export CELERY_RESULT_BACKEND="redis://localhost:${REDIS_HOST_PORT}/0"
 export RATE_LIMIT_BACKEND=redis
@@ -172,6 +175,48 @@ if ! grep -F "pong" <<<"$ping_output" >/dev/null; then
   echo "Celery worker did not answer inspect ping." >&2
   printf '%s\n' "$ping_output" >&2
   cat "$LOG_DIR/celery.log" >&2
+  exit 1
+fi
+
+echo "[3b/5] starting and checking Celery Beat"
+(
+  cd "$BACKEND_DIR"
+  # Keep the scheduler database inside this run's temporary directory so the
+  # smoke test never leaves a persistent schedule artifact in the repository.
+  exec .venv/bin/celery -A app.tasks:celery_app beat --loglevel=INFO \
+    --schedule "$LOG_DIR/celerybeat-schedule"
+) >"$LOG_DIR/beat.log" 2>&1 &
+BEAT_PID=$!
+for _ in {1..30}; do
+  if grep -F "beat: Starting" "$LOG_DIR/beat.log" >/dev/null 2>&1; then
+    break
+  fi
+  if ! kill -0 "$BEAT_PID" 2>/dev/null; then
+    echo "Celery Beat exited before responding." >&2
+    cat "$LOG_DIR/beat.log" >&2
+    exit 1
+  fi
+  sleep 1
+done
+if ! grep -F "beat: Starting" "$LOG_DIR/beat.log" >/dev/null 2>&1; then
+  echo "Timed out waiting for Celery Beat to become ready." >&2
+  cat "$LOG_DIR/beat.log" >&2
+  exit 1
+fi
+for _ in {1..30}; do
+  if grep -F "Sending due task cleanup-expired-uploads" "$LOG_DIR/beat.log" >/dev/null 2>&1; then
+    break
+  fi
+  if ! kill -0 "$BEAT_PID" 2>/dev/null; then
+    echo "Celery Beat exited before publishing its cleanup schedule." >&2
+    cat "$LOG_DIR/beat.log" >&2
+    exit 1
+  fi
+  sleep 1
+done
+if ! grep -F "Sending due task cleanup-expired-uploads" "$LOG_DIR/beat.log" >/dev/null 2>&1; then
+  echo "Celery Beat did not publish the cleanup schedule." >&2
+  cat "$LOG_DIR/beat.log" >&2
   exit 1
 fi
 
