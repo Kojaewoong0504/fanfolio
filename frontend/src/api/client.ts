@@ -88,10 +88,15 @@ export class ApiError extends Error {
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const { headers: customHeaders, ...requestInit } = init ?? {}
   const response = await fetch(`${apiBaseUrl}${path}`, {
+    ...requestInit,
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', 'X-Fanfolio-Client': 'fan', ...init?.headers },
-    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Fanfolio-Client': 'fan',
+      ...customHeaders,
+    },
   })
 
   if (!response.ok) {
