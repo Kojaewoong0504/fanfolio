@@ -4,8 +4,9 @@ from typing import Any
 from fastapi.testclient import TestClient
 from starlette.background import BackgroundTasks
 
-from app import tasks
+from app import tasks, upload_safety
 from app.core.config import get_settings
+from app.errors import AppError
 from tests.conftest import assert_error, assert_success
 
 PNG_1X1 = base64.b64decode(
@@ -102,6 +103,29 @@ def test_upload_rejects_obvious_executable_content(
         actors["artist"].put(asset["uploadUrl"], content=b"MZ\x90\x00fake executable"),
         422,
         "UNSAFE_UPLOAD",
+    )
+
+
+def test_upload_fails_closed_when_clamav_is_unavailable(
+    actors: dict[str, TestClient], monkeypatch: Any
+) -> None:
+    async def unavailable(_: bytes) -> None:
+        raise AppError(503, "UPLOAD_SCAN_UNAVAILABLE", "scanner unavailable")
+
+    monkeypatch.setattr(get_settings(), "asset_scan_mode", "clamav")
+    monkeypatch.setattr(upload_safety, "_scan_with_clamav", unavailable)
+    asset = assert_success(
+        actors["artist"].post(
+            "/api/uploads/presign",
+            json={"fileName": "needs-scan.png", "contentType": "image/png", "purpose": "card"},
+        ),
+        201,
+    )
+
+    assert_error(
+        actors["artist"].put(asset["uploadUrl"], content=b"safe bytes"),
+        503,
+        "UPLOAD_SCAN_UNAVAILABLE",
     )
 
 

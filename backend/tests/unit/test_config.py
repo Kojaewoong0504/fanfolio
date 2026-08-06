@@ -36,6 +36,7 @@ def test_valid_production_settings_pass_runtime_validation() -> None:
         auto_create_schema=False,
         rate_limit_backend="redis",
         download_signing_secret="production-secret-from-environment",
+        asset_scan_mode="clamav",
     )
 
     settings.validate_runtime()
@@ -132,7 +133,7 @@ def test_production_settings_require_asset_scanning() -> None:
         auto_create_schema=False,
         rate_limit_backend="redis",
         download_signing_secret="production-secret-from-environment",
-        asset_scan_mode="disabled",
+        asset_scan_mode="basic",
     )
 
     try:

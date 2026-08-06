@@ -75,7 +75,7 @@ async def upload_asset_content(
         raise AppError(422, "EMPTY_UPLOAD", "업로드할 파일이 없습니다.")
     if len(content) > get_settings().max_upload_bytes:
         raise AppError(413, "UPLOAD_TOO_LARGE", "업로드 파일이 너무 큽니다.")
-    scan_uploaded_content(
+    await scan_uploaded_content(
         content_type=asset.content_type,
         purpose=asset.purpose,
         content=content,

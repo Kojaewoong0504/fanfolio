@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     max_upload_bytes: int = 10 * 1024 * 1024
     upload_url_ttl_seconds: int = 15 * 60
     asset_scan_mode: str = "basic"
+    clamav_host: str = "localhost"
+    clamav_port: int = 3310
+    clamav_timeout_seconds: float = 5.0
     download_signing_secret: str = "dev-only-change-me"
     download_url_ttl_seconds: int = 5 * 60
     frontend_origins: str = (
@@ -76,8 +79,10 @@ class Settings(BaseSettings):
             raise ValueError("RATE_LIMIT_REDIS_URL is required in production")
         if self.download_signing_secret == "dev-only-change-me":
             raise ValueError("DOWNLOAD_SIGNING_SECRET must be changed in production")
-        if self.asset_scan_mode == "disabled":
-            raise ValueError("ASSET_SCAN_MODE cannot be disabled in production")
+        if self.asset_scan_mode != "clamav":
+            raise ValueError("ASSET_SCAN_MODE must be clamav in production")
+        if not self.clamav_host:
+            raise ValueError("CLAMAV_HOST is required when ASSET_SCAN_MODE is clamav")
 
 
 @lru_cache
