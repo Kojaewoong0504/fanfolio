@@ -61,6 +61,7 @@ class Card(Base):
     handwriting_transform: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     has_voice: Mapped[bool] = mapped_column(Boolean, default=False)
     issue_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    preview_storage_path: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class Drop(Base):
@@ -100,6 +101,11 @@ class Asset(Base):
     __tablename__ = "assets"
     id: Mapped[str] = mapped_column(String, primary_key=True)
     owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    file_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    content_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    purpose: Mapped[str | None] = mapped_column(String, nullable=True)
+    storage_path: Mapped[str | None] = mapped_column(String, nullable=True)
+    processed_storage_path: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class BackgroundRemovalJob(Base):
@@ -107,3 +113,5 @@ class BackgroundRemovalJob(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     asset_id: Mapped[str] = mapped_column(ForeignKey("assets.id"))
     status: Mapped[str] = mapped_column(String, default="queued")
+    transparent_image_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    preview_url: Mapped[str | None] = mapped_column(String, nullable=True)

@@ -2,9 +2,12 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from fastapi import APIRouter, Request, Response, status
+from fastapi.responses import FileResponse
 
+from app.core.config import get_settings
 from app.dependencies import CurrentUser, DbSession
 from app.errors import AppError
+from app.image_processing import save_uploaded_bytes
 from app.models import Asset, Role
 from app.schemas import UploadPresignRequest
 
@@ -29,6 +32,9 @@ async def presign_upload(
     asset = Asset(
         id=f"asset_{uuid4().hex[:10]}",
         owner_id=user.id,
+        file_name=payload.file_name,
+        content_type=payload.content_type,
+        purpose=payload.purpose,
     )
     session.add(asset)
     await session.commit()
@@ -52,6 +58,20 @@ async def upload_asset_content(
     asset = await session.get(Asset, asset_id)
     if not asset or asset.owner_id != user.id:
         raise AppError(404, "ASSET_NOT_FOUND", "자산을 찾을 수 없습니다.")
-    if not await request.body():
+    content = await request.body()
+    if not content:
         raise AppError(422, "EMPTY_UPLOAD", "업로드할 파일이 없습니다.")
+    asset.storage_path = save_uploaded_bytes(get_settings().storage_dir, asset.id, content)
+    await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/assets/{asset_id}/transparent")
+async def get_transparent_asset(
+    asset_id: str, user: CurrentUser, session: DbSession
+) -> FileResponse:
+    require_upload_role(user)
+    asset = await session.get(Asset, asset_id)
+    if not asset or asset.owner_id != user.id or not asset.processed_storage_path:
+        raise AppError(404, "ASSET_NOT_FOUND", "처리된 자산을 찾을 수 없습니다.")
+    return FileResponse(asset.processed_storage_path, media_type="image/png")

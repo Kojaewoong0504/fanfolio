@@ -6,7 +6,10 @@ from uuid import uuid4
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
+from app.db.session import SessionLocal
 from app.errors import AppError
+from app.image_processing import remove_light_background
 from app.models import (
     Asset,
     BackgroundRemovalJob,
@@ -152,6 +155,33 @@ async def seed_core(session: AsyncSession) -> dict:
             "exhausted": "NOVA-EXHAUSTED-01",
         },
     }
+
+
+async def process_background_removal(job_id: str) -> None:
+    """Process one local image job; replace this function with a Celery task in production."""
+    async with SessionLocal() as session:
+        job = await session.get(BackgroundRemovalJob, job_id)
+        if not job:
+            return
+        asset = await session.get(Asset, job.asset_id)
+        if not asset or not asset.storage_path:
+            job.status = "failed"
+            await session.commit()
+            return
+        try:
+            job.status = "processing"
+            await session.commit()
+            output_path = remove_light_background(
+                get_settings().storage_dir, asset.id, asset.storage_path
+            )
+            asset.processed_storage_path = output_path
+            job.status = "completed"
+            job.transparent_image_url = f"/api/assets/{asset.id}/transparent"
+            job.preview_url = job.transparent_image_url
+            await session.commit()
+        except (OSError, ValueError):
+            job.status = "failed"
+            await session.commit()
 
 
 async def request_magic_link(session: AsyncSession, *, email: str, purpose: str) -> str:

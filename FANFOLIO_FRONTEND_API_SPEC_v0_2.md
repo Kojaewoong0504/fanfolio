@@ -211,6 +211,8 @@ Base URL: `/api`
 
 완료 상태에서는 `transparentImageUrl`과 `previewUrl`을 반환한다. 원본 이미지는 삭제하지 않고 접근 제어된 저장소에 유지한다.
 
+개발 환경에서는 업로드된 PNG/JPEG를 로컬 저장소에 보관하고, 손글씨의 밝은 배경을 투명 처리한 PNG를 생성한다. `transparentImageUrl`은 처리 결과를 반환하는 이미지 URL이다.
+
 ### 4.4 Artist: 특별 카드 스튜디오
 
 | Method | Endpoint | 설명 |
@@ -240,7 +242,7 @@ Base URL: `/api`
 }
 ```
 
-`POST /artist/cards/{cardId}/preview`는 저장된 카드 레이어를 다시 조합할 때 사용할 미리보기 계약을 반환한다. 현재 개발 서버는 렌더링 입력과 접근 경로를 반환하고, 실제 이미지 합성 워커는 다음 단계에서 연결한다.
+`POST /artist/cards/{cardId}/preview`는 저장된 카드 레이어를 실제 PNG로 조합하고 미리보기 접근 경로를 반환한다. 개발 환경은 요청 시 로컬 Pillow compositor를 사용하며, 운영 환경에서는 이 처리 함수를 Celery 이미지 워커로 교체한다.
 
 ```json
 {

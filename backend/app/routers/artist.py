@@ -1,12 +1,16 @@
 from uuid import uuid4
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, BackgroundTasks, status
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 
+from app.core.config import get_settings
 from app.dependencies import ArtistUser, DbSession
 from app.errors import AppError
+from app.image_processing import compose_card_preview
 from app.models import Asset, BackgroundRemovalJob, Card
 from app.schemas import ArtistCardRequest, ArtistCardUpdate
+from app.services import process_background_removal
 
 router = APIRouter(prefix="/api", tags=["artist"])
 
@@ -87,8 +91,8 @@ async def update_card(
     return {"ok": True, "data": card_data(card)}
 
 
-def preview_data(card: Card) -> dict:
-    return {
+def preview_data(card: Card, *, preview_image_url: str | None = None) -> dict:
+    data = {
         "cardId": card.id,
         "previewUrl": f"/api/artist/cards/{card.id}/preview",
         "metadata": card_data(card),
@@ -101,18 +105,59 @@ def preview_data(card: Card) -> dict:
             },
         },
     }
+    if preview_image_url:
+        data["previewImageUrl"] = preview_image_url
+    return data
+
+
+async def render_preview(card: Card, user: ArtistUser, session: DbSession) -> dict:
+    base_asset = (
+        await owned_asset(card.image_asset_id, user, session) if card.image_asset_id else None
+    )
+    handwriting_asset = (
+        await owned_asset(card.handwriting_asset_id, user, session)
+        if card.handwriting_asset_id
+        else None
+    )
+    preview_image_url = None
+    if base_asset and base_asset.storage_path:
+        handwriting_path = (
+            handwriting_asset.processed_storage_path or handwriting_asset.storage_path
+            if handwriting_asset
+            else None
+        )
+        card.preview_storage_path = compose_card_preview(
+            get_settings().storage_dir,
+            card.id,
+            base_asset.storage_path,
+            handwriting_path,
+            card.handwriting_transform,
+        )
+        await session.commit()
+        preview_image_url = f"/api/artist/cards/{card.id}/preview/image"
+    return preview_data(card, preview_image_url=preview_image_url)
 
 
 @router.post("/artist/cards/{card_id}/preview")
 async def create_preview(card_id: str, user: ArtistUser, session: DbSession) -> dict:
     card = await owned_card(card_id, user, session)
-    return {"ok": True, "data": preview_data(card)}
+    return {"ok": True, "data": await render_preview(card, user, session)}
 
 
 @router.get("/artist/cards/{card_id}/preview")
 async def get_preview(card_id: str, user: ArtistUser, session: DbSession) -> dict:
     card = await owned_card(card_id, user, session)
-    return {"ok": True, "data": preview_data(card)}
+    return {"ok": True, "data": await render_preview(card, user, session)}
+
+
+@router.get("/artist/cards/{card_id}/preview/image")
+async def get_preview_image(card_id: str, user: ArtistUser, session: DbSession) -> FileResponse:
+    card = await owned_card(card_id, user, session)
+    if not card.preview_storage_path:
+        await render_preview(card, user, session)
+    if not card.preview_storage_path:
+        raise AppError(404, "PREVIEW_NOT_READY", "카드 미리보기가 아직 준비되지 않았습니다.")
+    return FileResponse(card.preview_storage_path, media_type="image/png")
 
 
 @router.post("/artist/cards/{card_id}/submit-review")
@@ -128,7 +173,12 @@ async def submit_review(card_id: str, user: ArtistUser, session: DbSession) -> d
 
 
 @router.post("/assets/{asset_id}/background-removal", status_code=status.HTTP_202_ACCEPTED)
-async def remove_background(asset_id: str, user: ArtistUser, session: DbSession) -> dict:
+async def remove_background(
+    asset_id: str,
+    background_tasks: BackgroundTasks,
+    user: ArtistUser,
+    session: DbSession,
+) -> dict:
     asset = await session.get(Asset, asset_id)
     if not asset or asset.owner_id != user.id:
         raise AppError(404, "ASSET_NOT_FOUND", "자산을 찾을 수 없습니다.")
@@ -136,6 +186,7 @@ async def remove_background(asset_id: str, user: ArtistUser, session: DbSession)
     job = BackgroundRemovalJob(id=f"job_{uuid4().hex[:10]}", asset_id=asset.id, status="queued")
     session.add(job)
     await session.commit()
+    background_tasks.add_task(process_background_removal, job.id)
     return {"ok": True, "data": {"jobId": job.id, "status": job.status}}
 
 
@@ -149,4 +200,8 @@ async def get_background_removal_job(job_id: str, user: ArtistUser, session: DbS
     if not job:
         raise AppError(404, "JOB_NOT_FOUND", "배경 제거 작업을 찾을 수 없습니다.")
     data = {"jobId": job.id, "status": job.status}
+    if job.status == "completed":
+        data.update(
+            {"transparentImageUrl": job.transparent_image_url, "previewUrl": job.preview_url}
+        )
     return {"ok": True, "data": data}
