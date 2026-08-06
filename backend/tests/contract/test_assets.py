@@ -52,6 +52,11 @@ def test_artist_can_presign_and_upload_an_asset(
         asset["uploadUrl"], content=b"fake-png", headers={"Content-Type": "image/png"}
     )
     assert uploaded.status_code == 204, uploaded.text
+    completed = assert_success(
+        actors["artist"].post(f"/api/uploads/{asset['assetId']}/complete"), 200
+    )
+    assert completed["assetId"] == asset["assetId"]
+    assert completed["status"] == "ready"
 
 
 def test_upload_rejects_expired_urls_and_oversized_content(

@@ -27,6 +27,11 @@ class FakeS3Client:
     def get_object(self, *, Bucket: str, Key: str) -> dict[str, FakeBody]:
         return {"Body": FakeBody(self.objects[(Bucket, Key)])}
 
+    def generate_presigned_url(
+        self, operation: str, *, Params: dict[str, str], ExpiresIn: int
+    ) -> str:
+        return f"https://storage.test/{Params['Key']}?expires={ExpiresIn}&operation={operation}"
+
 
 def test_local_asset_storage_writes_assets_under_the_configured_root(tmp_path: Path) -> None:
     storage = LocalAssetStorage(str(tmp_path))
@@ -58,3 +63,6 @@ def test_s3_asset_storage_uses_object_keys_and_reads_objects() -> None:
 
     assert storage.read_bytes(derived) == b"png bytes"
     assert storage.read_bytes(preview) == b"preview bytes"
+    assert storage.presigned_upload_url(
+        "asset_next", content_type="image/png", expires_in=900
+    ).startswith("https://storage.test/")

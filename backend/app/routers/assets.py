@@ -24,13 +24,11 @@ def require_upload_role(user: CurrentUser) -> None:
 async def presign_upload(
     payload: UploadPresignRequest, user: CurrentUser, session: DbSession
 ) -> dict:
-    """Create an owned asset and return a short-lived development upload URL.
-
-    Production should replace the internal PUT URL with an object-store presigned URL.
-    The asset record and ownership check stay the same in both environments.
-    """
+    """Create an owned asset and return a short-lived upload URL."""
     require_upload_role(user)
-    expires_at = datetime.now(UTC) + timedelta(seconds=get_settings().upload_url_ttl_seconds)
+    settings = get_settings()
+    expires_at = datetime.now(UTC) + timedelta(seconds=settings.upload_url_ttl_seconds)
+    storage = configured_asset_storage()
     asset = Asset(
         id=f"asset_{uuid4().hex[:10]}",
         owner_id=user.id,
@@ -39,15 +37,29 @@ async def presign_upload(
         purpose=payload.purpose,
         upload_expires_at=expires_at,
     )
+    upload_url = f"/api/uploads/{asset.id}/content"
+    upload_mode = "api"
+    complete_url = None
+    if settings.storage_backend == "s3":
+        asset.storage_path = storage.asset_path(asset.id, ".bin")
+        upload_url = storage.presigned_upload_url(
+            asset.id,
+            content_type=payload.content_type,
+            expires_in=settings.upload_url_ttl_seconds,
+        )
+        upload_mode = "direct"
+        complete_url = f"/api/uploads/{asset.id}/complete"
     session.add(asset)
     await session.commit()
     return {
         "ok": True,
         "data": {
             "assetId": asset.id,
-            "uploadUrl": f"/api/uploads/{asset.id}/content",
+            "uploadUrl": upload_url,
+            "uploadMode": upload_mode,
+            "completeUrl": complete_url,
             "expiresAt": expires_at.isoformat(),
-            "maxUploadBytes": get_settings().max_upload_bytes,
+            "maxUploadBytes": settings.max_upload_bytes,
         },
     }
 
@@ -83,6 +95,40 @@ async def upload_asset_content(
     asset.storage_path = configured_asset_storage().save_bytes(asset.id, content)
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/uploads/{asset_id}/complete")
+async def complete_asset_upload(asset_id: str, user: CurrentUser, session: DbSession) -> dict:
+    """Finalize a direct object-store upload after server-side safety checks."""
+    require_upload_role(user)
+    asset = await session.get(Asset, asset_id)
+    if not asset or asset.owner_id != user.id:
+        raise AppError(404, "ASSET_NOT_FOUND", "자산을 찾을 수 없습니다.")
+    if asset.upload_expires_at and datetime.now(UTC) > asset.upload_expires_at.replace(tzinfo=UTC):
+        raise AppError(410, "UPLOAD_URL_EXPIRED", "업로드 URL이 만료되었습니다.")
+    if not asset.storage_path:
+        raise AppError(409, "UPLOAD_NOT_READY", "업로드된 파일을 찾을 수 없습니다.")
+    storage = configured_asset_storage()
+    if not storage.exists(asset.storage_path):
+        raise AppError(409, "UPLOAD_NOT_READY", "업로드된 파일을 찾을 수 없습니다.")
+    if storage.size_bytes(asset.storage_path) > get_settings().max_upload_bytes:
+        storage.delete(asset.storage_path)
+        asset.storage_path = None
+        await session.commit()
+        raise AppError(413, "UPLOAD_TOO_LARGE", "업로드 파일이 너무 큽니다.")
+    try:
+        await scan_uploaded_content(
+            content_type=asset.content_type,
+            purpose=asset.purpose,
+            content=storage.read_bytes(asset.storage_path),
+        )
+    except AppError:
+        storage.delete(asset.storage_path)
+        asset.storage_path = None
+        await session.commit()
+        raise
+    await session.commit()
+    return {"ok": True, "data": {"assetId": asset.id, "status": "ready"}}
 
 
 @router.get("/assets/{asset_id}/transparent")

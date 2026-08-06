@@ -26,6 +26,12 @@ class AssetStorage(Protocol):
 
     def save_preview_bytes(self, card_id: str, content: bytes) -> str: ...
 
+    def delete(self, storage_path: str) -> None: ...
+
+    def size_bytes(self, storage_path: str) -> int: ...
+
+    def presigned_upload_url(self, asset_id: str, *, content_type: str, expires_in: int) -> str: ...
+
 
 class LocalAssetStorage:
     """Filesystem-backed provider used by local development and tests."""
@@ -56,6 +62,17 @@ class LocalAssetStorage:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content)
         return str(path)
+
+    def delete(self, storage_path: str) -> None:
+        path = Path(storage_path)
+        if path.exists():
+            path.unlink()
+
+    def size_bytes(self, storage_path: str) -> int:
+        return Path(storage_path).stat().st_size
+
+    def presigned_upload_url(self, asset_id: str, *, content_type: str, expires_in: int) -> str:
+        raise ValueError("local storage does not provide presigned URLs")
 
     def save_bytes(self, asset_id: str, content: bytes) -> str:
         path = Path(self.asset_path(asset_id, ".bin"))
@@ -142,6 +159,24 @@ class S3AssetStorage:
         key = f"{self.key_prefix}/previews/{card_id}.png"
         self.client.put_object(Bucket=self.bucket, Key=key, Body=content, ContentType="image/png")
         return self._uri(key)
+
+    def delete(self, storage_path: str) -> None:
+        self.client.delete_object(Bucket=self.bucket, Key=self._key_from_uri(storage_path))
+
+    def size_bytes(self, storage_path: str) -> int:
+        response = self.client.head_object(Bucket=self.bucket, Key=self._key_from_uri(storage_path))
+        return int(response["ContentLength"])
+
+    def presigned_upload_url(self, asset_id: str, *, content_type: str, expires_in: int) -> str:
+        return self.client.generate_presigned_url(
+            "put_object",
+            Params={
+                "Bucket": self.bucket,
+                "Key": self._key(asset_id, ".bin"),
+                "ContentType": content_type,
+            },
+            ExpiresIn=expires_in,
+        )
 
     @classmethod
     def from_settings(cls, settings: object) -> "S3AssetStorage":
