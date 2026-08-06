@@ -260,7 +260,17 @@ function Discover({ onSelect }: { onSelect: (card: Card) => void }) {
   return <><input className="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="카드, 아티스트 검색" /><div className="section-heading"><h2>인기 카드</h2><button>전체 보기</button></div><div className="horizontal-cards">{results.slice(0, 4).map(card => <button key={card.id} onClick={() => onSelect(card)}><img src={card.image} alt="" /><b>{card.member}</b></button>)}</div><div className="section-heading"><h2>새로운 카드</h2><button>전체 보기</button></div><div className="discover-list">{results.map(card => <button key={card.id} onClick={() => onSelect(card)}><img src={card.image} alt="" /><span><b>{card.title}</b><small>{card.artist} · {card.member}</small></span><strong>›</strong></button>)}</div></>
 }
 
-function Alerts({ items, onRead, onReadAll }: { items: NotificationItem[], onRead: (id: string) => Promise<void>, onReadAll: () => Promise<void> }) { const sample = [['새 카드', '발행번호 #021', '새 카드가 공개되었습니다.'], ['컬렉션', '컬렉션이 업데이트되었습니다', '보유 카드가 18장으로 늘었어요.'], ['공지', '서비스 점검 안내', '5월 12일(월) 02:00 - 04:00']] as const; return <><div className="section-heading"><h2>새로운 소식</h2><button onClick={() => void onReadAll()}>모두 읽음</button></div><div className="alert-list">{(items.length ? items.map(item => [item.id, item.kind, item.title, item.body ?? 'Fanfolio의 새로운 소식이 도착했습니다.', item.isRead] as const) : sample.map((item, index) => [`sample-${index}`, ...item, true] as const)).map(([id, tag, title, body, isRead]) => <button className={isRead ? 'alert-card read' : 'alert-card'} key={id} onClick={() => !isRead && void onRead(id)}><span className="tag">{tag}</span><h2>{title}</h2><p>{body}</p><small>{isRead ? '확인함' : '새 알림'}</small></button>)}</div></> }
+function notificationKindLabel(kind: string): string {
+  const labels: Record<string, string> = {
+    system: '공지',
+    card_published: '새 카드',
+    card_redeemed: '컬렉션',
+    drop_started: '새 드롭',
+  }
+  return labels[kind] ?? '알림'
+}
+
+function Alerts({ items, onRead, onReadAll }: { items: NotificationItem[], onRead: (id: string) => Promise<void>, onReadAll: () => Promise<void> }) { const sample = [['새 카드', '발행번호 #021', '새 카드가 공개되었습니다.'], ['컬렉션', '컬렉션이 업데이트되었습니다', '보유 카드가 18장으로 늘었어요.'], ['공지', '서비스 점검 안내', '5월 12일(월) 02:00 - 04:00']] as const; return <><div className="section-heading"><h2>새로운 소식</h2><button onClick={() => void onReadAll()}>모두 읽음</button></div><div className="alert-list">{(items.length ? items.map(item => [item.id, item.kind, item.title, item.body ?? 'Fanfolio의 새로운 소식이 도착했습니다.', item.isRead] as const) : sample.map((item, index) => [`sample-${index}`, ...item, true] as const)).map(([id, tag, title, body, isRead]) => <button className={isRead ? 'alert-card read' : 'alert-card'} key={id} onClick={() => !isRead && void onRead(id)}><span className="tag">{notificationKindLabel(tag)}</span><h2>{title}</h2><p>{body}</p><small>{isRead ? '확인함' : '새 알림'}</small></button>)}</div></> }
 
 function Settings({ onLogout }: { onLogout: () => Promise<void> }) {
   const [busy, setBusy] = useState(false)
