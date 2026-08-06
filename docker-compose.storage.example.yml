@@ -1,13 +1,13 @@
 services:
   minio:
-    image: minio/minio:latest
+    image: ${MINIO_IMAGE:-minio/minio:latest}
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: fanfolio-local
       MINIO_ROOT_PASSWORD: fanfolio-local-secret
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${MINIO_API_HOST_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_HOST_PORT:-9001}:9001"
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 5s
@@ -19,9 +19,9 @@ services:
   clamav:
     # Pin a current official multi-architecture Debian image. The floating
     # `latest` tag may resolve to a manifest without linux/arm64.
-    image: clamav/clamav:1.5.3-debian13-slim
+    image: ${CLAMAV_IMAGE:-clamav/clamav:1.5.3-debian13-slim}
     ports:
-      - "3310:3310"
+      - "${CLAMAV_HOST_PORT:-3310}:3310"
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/3310'"]
       interval: 15s

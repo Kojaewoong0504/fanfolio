@@ -214,6 +214,26 @@ docker compose -f docker-compose.stack.yml logs -f api worker beat
 docker compose -f docker-compose.stack.yml down -v
 ```
 
+S3·ClamAV 통합 검증은 별도 스택으로 실행합니다. ClamAV 이미지는 Apple Silicon을 포함한
+멀티아키텍처 태그로 고정되어 있으며, 포트가 이미 사용 중이면 환경 변수로 외부 포트를
+바꿀 수 있습니다.
+
+```bash
+docker compose -f docker-compose.storage.example.yml up -d
+cd backend
+FANFOLIO_S3_INTEGRATION=1 \
+S3_ENDPOINT_URL=http://localhost:9000 \
+S3_REGION=ap-northeast-2 \
+S3_BUCKET=fanfolio-test \
+S3_ACCESS_KEY_ID=fanfolio-local \
+S3_SECRET_ACCESS_KEY=fanfolio-local-secret \
+.venv/bin/pytest -q tests/integration/test_s3_storage.py
+```
+
+포트를 바꿨다면 `S3_ENDPOINT_URL`도 같은 외부 MinIO 포트로 맞추세요. 검증 후에는
+`docker compose -f docker-compose.storage.example.yml down -v`로 테스트 컨테이너와 볼륨을
+정리합니다.
+
 운영에서는 `AUTO_CREATE_SCHEMA=false`를 유지하고 배포 단계에서 `alembic upgrade head`를
 먼저 실행합니다. 앱이 시작할 때 ORM이 임의로 테이블을 만들지 않도록 하는 설정입니다.
 
