@@ -1,4 +1,6 @@
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
+from secrets import token_urlsafe
 from uuid import uuid4
 
 from sqlalchemy import delete, func, select
@@ -10,6 +12,7 @@ from app.models import (
     BackgroundRemovalJob,
     Card,
     Drop,
+    MagicLink,
     Notification,
     RedeemCode,
     Role,
@@ -23,6 +26,11 @@ def now() -> datetime:
     return datetime.now(UTC)
 
 
+def magic_link_token_hash(token: str) -> str:
+    """Persist a digest so a database leak cannot be used as a login link."""
+    return sha256(token.encode()).hexdigest()
+
+
 async def reset_database(session: AsyncSession) -> None:
     for model in (
         BackgroundRemovalJob,
@@ -32,6 +40,7 @@ async def reset_database(session: AsyncSession) -> None:
         RedeemCode,
         Drop,
         Card,
+        MagicLink,
         Session,
         User,
     ):
@@ -53,6 +62,28 @@ async def seed_core(session: AsyncSession) -> dict:
                 token=f"test-session-{user_id.replace('otherFan', 'other-fan')}", user_id=user_id
             )
         )
+    session.add_all(
+        [
+            MagicLink(
+                token_hash=magic_link_token_hash("test-magic-link-fan"),
+                email="fan@example.com",
+                purpose="login",
+                expires_at=now() + timedelta(minutes=15),
+            ),
+            MagicLink(
+                token_hash=magic_link_token_hash("test-magic-link-new-fan"),
+                email="new-fan@example.com",
+                purpose="signup",
+                expires_at=now() + timedelta(minutes=15),
+            ),
+            MagicLink(
+                token_hash=magic_link_token_hash("test-magic-link-expired"),
+                email="fan@example.com",
+                purpose="login",
+                expires_at=now() - timedelta(minutes=1),
+            ),
+        ]
+    )
     session.add_all(
         [
             Card(
@@ -101,6 +132,11 @@ async def seed_core(session: AsyncSession) -> dict:
             "admin": "test-session-admin",
             "artist": "test-session-artist",
         },
+        "magicLinkTokens": {
+            "fan": "test-magic-link-fan",
+            "newFan": "test-magic-link-new-fan",
+            "expired": "test-magic-link-expired",
+        },
         "ids": {
             "publishedCardId": "card_published",
             "liveDropId": "drop_live",
@@ -116,6 +152,53 @@ async def seed_core(session: AsyncSession) -> dict:
             "exhausted": "NOVA-EXHAUSTED-01",
         },
     }
+
+
+async def request_magic_link(session: AsyncSession, *, email: str, purpose: str) -> str:
+    """Create the one-time proof that a mail provider will deliver later."""
+    token = token_urlsafe(32)
+    session.add(
+        MagicLink(
+            token_hash=magic_link_token_hash(token),
+            email=email.lower(),
+            purpose=purpose,
+            expires_at=now() + timedelta(minutes=15),
+        )
+    )
+    await session.commit()
+    return token
+
+
+async def verify_magic_link(session: AsyncSession, *, token: str) -> dict:
+    """Consume a valid link atomically and issue a new opaque browser session."""
+    async with session.begin():
+        link = await session.get(MagicLink, magic_link_token_hash(token))
+        expires_at = (
+            link.expires_at.replace(tzinfo=UTC)
+            if link and link.expires_at.tzinfo is None
+            else link.expires_at
+            if link
+            else None
+        )
+        if not link or link.consumed_at or (expires_at and expires_at <= now()):
+            raise AppError(401, "MAGIC_LINK_INVALID", "유효하지 않거나 만료된 매직 링크입니다.")
+
+        user = await session.scalar(select(User).where(User.email == link.email))
+        if not user:
+            user = User(id=f"user_{uuid4().hex[:12]}", email=link.email, role=Role.FAN)
+            session.add(user)
+            await session.flush()
+
+        link.consumed_at = now()
+        session_token = token_urlsafe(32)
+        session.add(Session(token=session_token, user_id=user.id))
+
+        result = {
+            "user": {"id": user.id, "email": user.email, "role": user.role.value},
+            "onboardingCompleted": user.onboarding_completed,
+            "sessionToken": session_token,
+        }
+    return result
 
 
 async def redeem(session: AsyncSession, user: User, code_value: str) -> dict:

@@ -348,7 +348,7 @@ Admin만 `POST /api/admin/cards/{cardId}/publish`로 공개할 수 있다. Artis
 
 | 파일 | 검증 범위 |
 | --- | --- |
-| `tests/contract/test_auth.py` | 매직링크 요청과 로그아웃 |
+| `tests/contract/test_auth.py` | 매직링크 요청·검증·재사용/만료 차단과 로그아웃 |
 | `tests/contract/test_health.py` | 앱 실행과 공통 성공 응답 |
 | `tests/contract/test_redemptions.py` | 코드/QR 발급, 중복·만료·드롭·수량 오류 |
 | `tests/contract/test_fan_experience.py` | 온보딩, 컬렉션/상세 소유권, 탐색, 알림 |

@@ -32,6 +32,17 @@ class Session(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
 
 
+class MagicLink(Base):
+    """One-time login proof; only a SHA-256 digest of the emailed token is stored."""
+
+    __tablename__ = "magic_links"
+    token_hash: Mapped[str] = mapped_column(String, primary_key=True)
+    email: Mapped[str] = mapped_column(String)
+    purpose: Mapped[str] = mapped_column(String)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class Card(Base):
     __tablename__ = "cards"
     id: Mapped[str] = mapped_column(String, primary_key=True)

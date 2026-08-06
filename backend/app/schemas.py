@@ -31,6 +31,10 @@ class MagicLinkRequest(BaseModel):
     purpose: Literal["login", "signup"]
 
 
+class MagicLinkVerify(BaseModel):
+    token: str = Field(min_length=1)
+
+
 class RedemptionRequest(BaseModel):
     code: str = Field(min_length=1)
     source: Literal["qr", "manual"]
