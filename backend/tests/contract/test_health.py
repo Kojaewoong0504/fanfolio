@@ -62,6 +62,24 @@ def test_readiness_checks_the_shared_rate_limit_backend(
     assert checked is True
 
 
+def test_readiness_checks_storage_and_upload_scanner(client: TestClient, monkeypatch: Any) -> None:
+    checked = {"storage": False, "scanner": False}
+
+    async def fake_check_storage_backend() -> None:
+        checked["storage"] = True
+
+    async def fake_check_upload_scanner() -> None:
+        checked["scanner"] = True
+
+    monkeypatch.setattr(health, "_check_storage_backend", fake_check_storage_backend)
+    monkeypatch.setattr(health, "_check_upload_scanner", fake_check_upload_scanner)
+
+    data = assert_success(client.get("/api/health/ready"))
+
+    assert data["status"] == "ready"
+    assert checked == {"storage": True, "scanner": True}
+
+
 def test_readiness_returns_service_unavailable_when_rate_limiter_is_down(
     client: TestClient,
     monkeypatch: Any,

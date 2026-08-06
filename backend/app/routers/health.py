@@ -8,6 +8,8 @@ from app.core.config import get_settings
 from app.db.session import engine
 from app.errors import AppError
 from app.rate_limit import check_rate_limit_backend
+from app.storage import configured_asset_storage
+from app.upload_safety import _scan_with_clamav
 
 router = APIRouter(tags=["health"])
 
@@ -29,6 +31,25 @@ async def _check_task_queue() -> None:
         connection.release()
 
 
+async def _check_storage_backend() -> None:
+    """Check that the configured object store can answer a metadata request."""
+    settings = get_settings()
+    if settings.storage_backend == "local":
+        return
+    storage = configured_asset_storage()
+    await asyncio.to_thread(storage.exists, storage.asset_path("__healthcheck__", ".bin"))
+
+
+async def _check_upload_scanner() -> None:
+    """Fail readiness when production's required ClamAV service is unavailable."""
+    if get_settings().asset_scan_mode != "clamav":
+        return
+    try:
+        await _scan_with_clamav(b"fanfolio-healthcheck")
+    except AppError as error:
+        raise OSError(error.message) from error
+
+
 @router.get("/api/health")
 async def health() -> dict:
     return {"ok": True, "data": {"status": "healthy"}}
@@ -41,6 +62,8 @@ async def readiness() -> dict:
         get_settings().validate_runtime()
         async with engine.connect() as connection:
             await connection.execute(text("SELECT 1"))
+        await _check_storage_backend()
+        await _check_upload_scanner()
         await _check_task_queue()
         await check_rate_limit_backend()
     except (OSError, RuntimeError, ValueError, SQLAlchemyError) as error:
