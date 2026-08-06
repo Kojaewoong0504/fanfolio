@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import os
 from importlib import import_module
 from typing import Any
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+
+# VSCode's test runner may not forward python.testing.env consistently.
+# The fixture API is test-only, so the test process must opt into it before
+# importing app.main (which decides whether to register that router).
+os.environ.setdefault("APP_ENV", "test")
 
 
 @pytest.fixture(scope="session")
