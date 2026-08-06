@@ -95,6 +95,67 @@ async def collection(user: FanUser, session: DbSession) -> dict:
     }
 
 
+@router.get("/me/collection/benefits")
+async def collection_benefits(user: FanUser, session: DbSession) -> dict:
+    """Calculate collection-set progress without consuming the fan's cards.
+
+    The first MVP rule groups published official cards by artist and season.
+    Completing every card in a group unlocks a digital bonus preview. The
+    rule is derived from the catalog, so adding a card automatically changes
+    the required set size without a separate write-side configuration table.
+    """
+    catalog_rows = (
+        await session.execute(
+            select(Card, Artist)
+            .select_from(Card)
+            .outerjoin(Artist, Card.artist_id == Artist.id)
+            .where(Card.status == "published", Card.is_official.is_(True))
+            .order_by(Card.artist_id, Card.season_name, Card.id)
+        )
+    ).all()
+    owned_card_ids = set(
+        (await session.scalars(select(UserCard.card_id).where(UserCard.user_id == user.id))).all()
+    )
+    groups: dict[tuple[str, str], dict] = {}
+    for card, artist in catalog_rows:
+        artist_id = card.artist_id or "fanfolio"
+        season_name = card.season_name or "기본 컬렉션"
+        key = (artist_id, season_name)
+        group = groups.setdefault(
+            key,
+            {
+                "artistId": card.artist_id,
+                "artistName": artist.name if artist else "Fanfolio",
+                "seasonName": season_name,
+                "cardIds": [],
+            },
+        )
+        group["cardIds"].append(card.id)
+
+    items = []
+    for group in groups.values():
+        required_count = len(group["cardIds"])
+        owned_count = sum(card_id in owned_card_ids for card_id in group["cardIds"])
+        completed = owned_count == required_count
+        items.append(
+            {
+                "artistId": group["artistId"],
+                "artistName": group["artistName"],
+                "seasonName": group["seasonName"],
+                "requiredCount": required_count,
+                "ownedCount": owned_count,
+                "completionRate": round(owned_count / required_count * 100),
+                "status": "unlocked" if completed else "locked",
+                "benefit": {
+                    "type": "digital_bonus",
+                    "title": f"{group['artistName']} {group['seasonName']} 완성 특전",
+                    "description": "컬렉션을 완성하면 디지털 특전이 해금됩니다.",
+                },
+            }
+        )
+    return {"ok": True, "data": {"items": items}}
+
+
 @router.patch("/me/profile")
 async def update_profile(payload: ProfileUpdate, user: FanUser, session: DbSession) -> dict:
     await validate_favorites(

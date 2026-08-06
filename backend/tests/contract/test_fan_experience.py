@@ -97,6 +97,37 @@ def test_card_detail_is_available_only_to_its_owner(
     )
 
 
+def test_collection_benefit_unlocks_when_a_catalog_set_is_complete(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    fan = actors["fan"]
+    before = assert_success(fan.get("/api/me/collection/benefits"))
+    assert before["items"] == [
+        {
+            "artistId": "artist_nova3",
+            "artistName": "드림스케이프",
+            "seasonName": "2026 SPRING",
+            "requiredCount": 1,
+            "ownedCount": 0,
+            "completionRate": 0,
+            "status": "locked",
+            "benefit": {
+                "type": "digital_bonus",
+                "title": "드림스케이프 2026 SPRING 완성 특전",
+                "description": "컬렉션을 완성하면 디지털 특전이 해금됩니다.",
+            },
+        }
+    ]
+
+    assert_success(
+        fan.post("/api/redemptions", json={"code": seeded["codes"]["valid"], "source": "qr"}),
+        201,
+    )
+    after = assert_success(fan.get("/api/me/collection/benefits"))
+    assert after["items"][0]["ownedCount"] == 1
+    assert after["items"][0]["status"] == "unlocked"
+
+
 def test_owned_card_detail_exposes_handwriting_and_voice_entitlements(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:

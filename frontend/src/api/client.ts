@@ -24,6 +24,17 @@ export type CollectionSummary = {
   completionRate: number
 }
 
+export type CollectionBenefit = {
+  artistId: string | null
+  artistName: string
+  seasonName: string
+  requiredCount: number
+  ownedCount: number
+  completionRate: number
+  status: 'locked' | 'unlocked'
+  benefit: { type: 'digital_bonus'; title: string; description: string }
+}
+
 export type CatalogCard = {
   id: string
   status: string
