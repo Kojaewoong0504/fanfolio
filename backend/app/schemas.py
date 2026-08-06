@@ -63,7 +63,12 @@ class CodeBatchRequest(BaseModel):
     quantity: int = Field(gt=0)
     max_uses_per_code: int = Field(alias="maxUsesPerCode", ge=1)
     expires_at: str = Field(alias="expiresAt")
-    prefix: str
+    prefix: str = Field(
+        min_length=1,
+        max_length=30,
+        pattern=r"^[A-Za-z0-9_-]+$",
+        description="QR/CSV code prefix; path separators and control characters are rejected",
+    )
     model_config = ConfigDict(populate_by_name=True)
 
 

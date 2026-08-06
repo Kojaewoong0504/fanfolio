@@ -230,3 +230,21 @@ def test_admin_code_batch_requires_live_drop_and_published_card(
         409,
         "CARD_NOT_PUBLISHED",
     )
+
+
+def test_admin_code_batch_rejects_unsafe_qr_prefix(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    response = actors["admin"].post(
+        "/api/admin/redeem-code-batches",
+        json={
+            "dropId": seeded["ids"]["liveDropId"],
+            "cardId": seeded["ids"]["publishedCardId"],
+            "quantity": 1,
+            "maxUsesPerCode": 1,
+            "expiresAt": "2026-12-31T23:59:59Z",
+            "prefix": "../unsafe",
+        },
+    )
+
+    assert_error(response, 422, "VALIDATION_ERROR")
