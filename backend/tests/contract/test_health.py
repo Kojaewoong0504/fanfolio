@@ -16,6 +16,14 @@ def test_health_check_returns_common_success_contract(client: TestClient) -> Non
     assert data["status"] == "healthy"
 
 
+def test_readiness_check_verifies_database_and_runtime_configuration(
+    client: TestClient,
+) -> None:
+    data = assert_success(client.get("/api/health/ready"))
+
+    assert data["status"] == "ready"
+
+
 def test_configured_frontend_origin_is_allowed_for_cookie_requests(client: TestClient) -> None:
     response = client.get("/api/health", headers={"Origin": "http://localhost:5173"})
 

@@ -28,6 +28,7 @@ python3 -m uv run uvicorn app.main:app --reload --port 8000
 ```
 
 헬스 체크: `http://localhost:8000/api/health`
+배포 readiness 체크: `http://localhost:8000/api/health/ready` (데이터베이스와 운영 설정을 함께 확인)
 
 ### 3. 프론트엔드 실행
 
