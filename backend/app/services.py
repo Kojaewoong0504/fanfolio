@@ -320,7 +320,7 @@ async def verify_magic_link(session: AsyncSession, *, token: str) -> dict:
 
 
 async def redeem(session: AsyncSession, user: User, code_value: str) -> dict:
-    # One transaction makes duplicate redemption impossible in the normal DB path.
+    # Lock the redeem row so concurrent requests cannot both consume the same code.
     # Authentication performed a read first, which starts SQLAlchemy's autobegin
     # transaction. Close that read-only boundary before this service owns its write
     # transaction; do not let routers accidentally control transaction scope.
@@ -328,7 +328,9 @@ async def redeem(session: AsyncSession, user: User, code_value: str) -> dict:
     if session.in_transaction():
         await session.rollback()
     async with session.begin():
-        code = await session.get(RedeemCode, code_value)
+        code = await session.scalar(
+            select(RedeemCode).where(RedeemCode.code == code_value).with_for_update()
+        )
         if not code:
             raise AppError(404, "REDEEM_CODE_NOT_FOUND", "코드를 찾을 수 없습니다.")
         if code.disabled_at:
@@ -345,7 +347,10 @@ async def redeem(session: AsyncSession, user: User, code_value: str) -> dict:
         )
         if expires_at and expires_at < now():
             raise AppError(409, "REDEEM_CODE_EXPIRED", "만료된 코드입니다.")
-        drop, card = await session.get(Drop, code.drop_id), await session.get(Card, code.card_id)
+        drop = await session.get(Drop, code.drop_id)
+        # The card lock also serializes serial-number allocation when two different
+        # redeem codes issue copies of the same card at the same time.
+        card = await session.scalar(select(Card).where(Card.id == code.card_id).with_for_update())
         if drop.status != "live":
             raise AppError(409, "DROP_NOT_LIVE", "현재 진행 중인 드롭이 아닙니다.")
         if card.status != "published":
