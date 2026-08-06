@@ -124,7 +124,7 @@ run_code "await page.locator('#review-note').fill('E2E 전체 여정 검수 요�
 assert_page_contains "검수 요청을 보냈어요"
 
 echo "[2/5] admin reviews and publishes the card"
-run_code "await page.goto('http://localhost:4174'); await page.getByPlaceholder('admin@fanfolio.com').fill('admin@example.com'); await page.getByRole('button', {name: '로그인 링크 받기'}).click(); await page.locator('#admin-login-token').waitFor(); await page.locator('#admin-login-token').fill('test-magic-link-admin'); await page.getByRole('button', {name: '운영 센터 들어가기'}).click(); await page.getByRole('heading', {name: '대시보드'}).waitFor(); await page.getByRole('button', {name: /카드 관리/}).click(); await page.getByRole('button', {name: '검수하기'}).waitFor();"
+run_code "await page.goto('http://localhost:4174'); await page.getByPlaceholder('admin@fanfolio.com').fill('admin@example.com'); await page.getByRole('button', {name: '로그인 링크 받기'}).click(); await page.locator('#admin-login-token').waitFor(); await page.locator('#admin-login-token').fill('test-magic-link-admin'); await page.getByRole('button', {name: '운영 센터 들어가기'}).click(); await page.getByRole('heading', {name: '대시보드'}).waitFor(); await page.getByRole('button', {name: /카드 관리/}).click(); await page.getByRole('heading', {name: '운영 카드 등록'}).waitFor(); await page.getByRole('button', {name: '검수하기'}).waitFor();"
 run_code "await page.getByRole('button', {name: '검수하기'}).click(); await page.getByRole('heading', {name: 'E2E 공식 특별 카드'}).waitFor(); await page.locator('#review-note').fill('이미지와 손글씨 특전을 확인했습니다.'); await page.getByRole('button', {name: '검수 승인'}).click(); await page.getByText('검수가 승인되었습니다. 공개하기를 누르면 팬에게 카드가 노출됩니다.').waitFor(); await page.locator('button.review-publish').click(); await page.getByText('게시 완료').waitFor();"
 assert_page_contains "게시 완료"
 
