@@ -180,6 +180,8 @@ open http://localhost:8025
 API 컨테이너가 시작될 때 Alembic 마이그레이션을 먼저 적용합니다. 상태와 로그는 다음처럼
 확인할 수 있습니다.
 
+API와 Celery는 컨테이너 내부의 비특권 `fanfolio` 사용자로 실행됩니다.
+
 ```bash
 curl http://localhost:8000/api/health/ready
 docker compose -f docker-compose.stack.yml logs -f api worker
