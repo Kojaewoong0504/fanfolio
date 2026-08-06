@@ -59,6 +59,8 @@ async def create_card(payload: ArtistCardRequest, user: ArtistUser, session: DbS
     image_asset = await session.get(Asset, payload.image_asset_id)
     if not image_asset or image_asset.owner_id != user.id:
         raise AppError(404, "ASSET_NOT_FOUND", "카드 이미지를 찾을 수 없습니다.")
+    if payload.voice_asset_id:
+        await owned_asset(payload.voice_asset_id, user, session)
     card = Card(
         id=f"card_{uuid4().hex[:10]}",
         name=payload.name,
