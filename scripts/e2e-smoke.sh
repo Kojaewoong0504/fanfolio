@@ -164,5 +164,10 @@ assert_page_contains "QR 스캔"
 echo "[5/5] scoped browser sessions remain available across apps"
 run_code "await page.goto('http://localhost:4174'); await page.getByRole('heading', {name: '대시보드'}).waitFor(); await page.goto('http://localhost:4175'); await page.getByRole('heading', {name: '카드 만들기'}).waitFor(); await page.getByRole('button', {name: '내 카드'}).click(); await page.getByText('E2E 공식 특별 카드').waitFor(); const publishedRow = page.locator('.studio-card-row').filter({hasText: 'E2E 공식 특별 카드'}); if (await publishedRow.locator('button.card-edit').count() !== 0) throw new Error('published cards must be read-only in the artist studio'); await page.getByRole('button', {name: '팬 반응'}).click(); await page.getByRole('heading', {name: '팬 반응'}).waitFor(); await page.getByText('전체 수집 수').waitFor(); await page.getByText('E2E 공식 특별 카드').waitFor(); await page.locator('[data-studio-view=settings]').click(); await page.getByRole('heading', {name: '설정'}).waitFor(); await page.locator('input[name=nickname]').fill('E2E 아티스트'); await page.locator('#email-enabled').check(); await page.getByRole('button', {name: '변경사항 저장'}).click(); await page.getByText('설정을 저장했습니다.').waitFor(); await page.goto('http://localhost:5173'); await page.getByRole('heading', {name: '내 컬렉션'}).waitFor(); await page.getByRole('button', {name: '카드 이미지 #001 유나'}).click(); await page.getByRole('heading', {name: 'E2E 공식 특별 카드'}).waitFor();"
 assert_page_contains "E2E 공식 특별 카드"
+run_code "await page.getByRole('button', {name: '닫기'}).click();"
+
+echo "[6/6] fan and admin logout invalidate their sessions"
+run_code "await page.getByRole('button', {name: '설정', exact: true}).click(); await page.getByRole('heading', {name: '설정'}).waitFor(); await page.getByRole('button', {name: '로그아웃'}).click(); await page.getByText('내 손안의', {exact: false}).waitFor();"
+run_code "await page.goto('http://localhost:4174'); await page.getByRole('heading', {name: '대시보드'}).waitFor(); await page.locator('#logout').click(); await page.getByRole('heading', {name: '관리자 로그인'}).waitFor();"
 
 echo "Fanfolio browser smoke test passed."
