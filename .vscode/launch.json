@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Backend: FastAPI",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["app.main:app", "--reload", "--port", "8000"],
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/backend/.env",
+      "env": { "APP_ENV": "development" },
+      "jinja": true
+    },
+    {
+      "name": "Backend: 계약 테스트",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["tests/contract", "-q"],
+      "cwd": "${workspaceFolder}/backend",
+      "env": { "APP_ENV": "test" }
+    }
+  ]
+}

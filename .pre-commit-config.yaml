@@ -4,12 +4,12 @@ repos:
     hooks:
       - id: backend-ruff-format
         name: Backend Ruff format check
-        entry: ruff format --check
+        entry: backend/.venv/bin/ruff format --check
         language: system
         files: ^backend/.*\.py$
       - id: backend-ruff
         name: Backend Ruff lint
-        entry: ruff check
+        entry: backend/.venv/bin/ruff check
         language: system
         files: ^backend/.*\.py$
       - id: frontend-lint

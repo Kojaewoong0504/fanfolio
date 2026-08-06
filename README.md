@@ -19,12 +19,23 @@ cp frontend/.env.example frontend/.env
 cp backend/.env.example backend/.env
 ```
 
+백엔드 가상환경은 저장소에 포함되지 않으므로 최초 한 번만 준비합니다. `uv`가 없다면
+[uv 설치 안내](https://docs.astral.sh/uv/getting-started/installation/)에 따라 설치한 뒤 실행하세요.
+
+```bash
+uv sync --project backend --locked --dev
+```
+
+이후의 실행·검사 명령은 `backend/.venv/bin/` 안의 도구를 직접 사용합니다. 따라서 VS Code의
+Python 인터프리터도 `backend/.venv/bin/python`으로 선택해야 하며, 별도의 `python3 -m uv` 명령은
+사용하지 않습니다.
+
 ### 2. 백엔드 실행
 
 ```bash
 cd backend
-python3 -m uv run alembic upgrade head
-python3 -m uv run uvicorn app.main:app --reload --port 8000
+.venv/bin/alembic upgrade head
+.venv/bin/uvicorn app.main:app --reload --port 8000
 ```
 
 헬스 체크: `http://localhost:8000/api/health`
@@ -69,7 +80,7 @@ CELERY_BROKER_URL=redis://localhost:6379/0
 CELERY_RESULT_BACKEND=redis://localhost:6379/0
 
 cd backend
-python3 -m uv run celery -A app.tasks:celery_app worker --loglevel=INFO
+.venv/bin/celery -A app.tasks:celery_app worker --loglevel=INFO
 ```
 
 운영에서는 요청 제한도 모든 API 인스턴스가 공유해야 하므로 Redis를 사용합니다.
@@ -139,9 +150,9 @@ CELERY_RESULT_BACKEND=redis://localhost:6379/0
 
 ```bash
 cd backend
-python3 -m uv run alembic upgrade head
-python3 -m uv run uvicorn app.main:app --reload --port 8000
-python3 -m uv run celery -A app.tasks:celery_app worker --loglevel=INFO
+.venv/bin/alembic upgrade head
+.venv/bin/uvicorn app.main:app --reload --port 8000
+.venv/bin/celery -A app.tasks:celery_app worker --loglevel=INFO
 ```
 
 `http://localhost:8000/api/health/ready`가 `ready`를 반환하고, `http://localhost:8025`에서
@@ -187,15 +198,15 @@ STOP_SERVICES=1 ./scripts/integration-smoke.sh
 수동 실행:
 
 ```bash
-python3 -m uv run --project backend pre-commit run --all-files
+backend/.venv/bin/pre-commit run --all-files
 ```
 
 ## 품질 확인
 
 ```bash
 cd backend
-python3 -m uv run pytest
-python3 -m uv run ruff check .
+.venv/bin/pytest
+.venv/bin/ruff check app tests alembic
 
 cd ../frontend
 npm run lint
@@ -242,7 +253,7 @@ APP_ENV=production AUTO_CREATE_SCHEMA=false ./scripts/production-preflight.sh
 
 ```bash
 cd backend
-APP_ENV=test python3 -m uv run pytest tests/contract -q
+APP_ENV=test .venv/bin/pytest tests/contract -q
 ```
 
 세부 입력/출력과 테스트 fixture 규약은 [백엔드 구현 계약](BACKEND_IMPLEMENTATION_CONTRACT.md)을 따릅니다.

@@ -1,0 +1,32 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Backend: Ruff 검사",
+      "type": "shell",
+      "command": "backend/.venv/bin/ruff check backend/app backend/tests backend/alembic",
+      "problemMatcher": []
+    },
+    {
+      "label": "Backend: 계약 테스트",
+      "type": "shell",
+      "command": "APP_ENV=test .venv/bin/pytest tests/contract -q",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Frontend: Lint",
+      "type": "shell",
+      "command": "npm run lint",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Frontend: Build",
+      "type": "shell",
+      "command": "npm run build",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "problemMatcher": []
+    }
+  ]
+}
