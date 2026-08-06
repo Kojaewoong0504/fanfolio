@@ -79,3 +79,17 @@ def test_notifications_can_be_marked_as_read(actors: dict[str, TestClient]) -> N
         fan.patch(f"/api/notifications/{notification_id}", json={"read": True})
     )
     assert updated["readAt"] is not None
+
+
+def test_fan_can_read_unread_count_and_mark_all_notifications_as_read(
+    actors: dict[str, TestClient],
+) -> None:
+    fan = actors["fan"]
+    count = assert_success(fan.get("/api/notifications/unread-count"))
+    assert count["unreadCount"] == 1
+
+    cleared = assert_success(fan.patch("/api/notifications/read-all"))
+    assert cleared["updatedCount"] == 1
+
+    count = assert_success(fan.get("/api/notifications/unread-count"))
+    assert count["unreadCount"] == 0

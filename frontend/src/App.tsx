@@ -32,6 +32,7 @@ function App() {
   const [collectionCards, setCollectionCards] = useState<Card[]>(cards)
   const [apiConnected, setApiConnected] = useState(false)
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [revealedCardId, setRevealedCardId] = useState<string | null>(null)
 
@@ -60,10 +61,30 @@ function App() {
   }, [signedIn])
 
   useEffect(() => {
-    void apiFetch<{ ok: true, data: { items: NotificationItem[] } }>('/notifications')
-      .then(result => setNotifications(result.data.items))
-      .catch(() => setNotifications([]))
-  }, [])
+    if (!signedIn) {
+      setNotifications([])
+      setUnreadCount(0)
+      return
+    }
+    let cancelled = false
+    const refreshNotifications = async () => {
+      try {
+        const [list, count] = await Promise.all([
+          apiFetch<{ ok: true, data: { items: NotificationItem[] } }>('/notifications'),
+          apiFetch<{ ok: true, data: { unreadCount: number } }>('/notifications/unread-count'),
+        ])
+        if (!cancelled) {
+          setNotifications(list.data.items)
+          setUnreadCount(count.data.unreadCount)
+        }
+      } catch {
+        if (!cancelled) setNotifications([])
+      }
+    }
+    void refreshNotifications()
+    const interval = window.setInterval(() => void refreshNotifications(), 30_000)
+    return () => { cancelled = true; window.clearInterval(interval) }
+  }, [signedIn])
 
   const logout = async () => {
     try { await apiFetch('/auth/logout', { method: 'POST' }) } finally { setSignedIn(false) }
@@ -76,8 +97,19 @@ function App() {
         body: JSON.stringify({ read: true }),
       })
       setNotifications(items => items.map(item => item.id === id ? result.data : item))
+      setUnreadCount(count => Math.max(0, count - 1))
     } catch {
       // Keep the notification visible if the API is unavailable during UI review.
+    }
+  }
+
+  const markAllNotificationsRead = async () => {
+    try {
+      await apiFetch('/notifications/read-all', { method: 'PATCH' })
+      setNotifications(items => items.map(item => ({ ...item, isRead: true, readAt: new Date().toISOString() })))
+      setUnreadCount(0)
+    } catch {
+      // Keep the current state when the API is temporarily unavailable.
     }
   }
 
@@ -104,14 +136,14 @@ function App() {
       <section className="screen">
         {tab === 'collection' && <Collection cards={collectionCards} onSelect={setSelectedCard} onRedeem={() => setShowRedeem(true)} />}
         {tab === 'discover' && <Discover onSelect={setSelectedCard} />}
-        {tab === 'alerts' && <Alerts items={notifications} onRead={markNotificationRead} />}
+        {tab === 'alerts' && <Alerts items={notifications} onRead={markNotificationRead} onReadAll={markAllNotificationsRead} />}
         {tab === 'settings' && <Settings onLogout={logout} />}
       </section>
 
       <nav className="bottom-nav" aria-label="주요 메뉴">
         <NavItem active={tab === 'collection'} label="컬렉션" onClick={() => setTab('collection')} />
         <NavItem active={tab === 'discover'} label="탐색" onClick={() => setTab('discover')} />
-        <NavItem active={tab === 'alerts'} label="알림" onClick={() => setTab('alerts')} />
+        <NavItem active={tab === 'alerts'} label="알림" badge={unreadCount} onClick={() => setTab('alerts')} />
         <NavItem active={tab === 'settings'} label="설정" onClick={() => setTab('settings')} />
       </nav>
 
@@ -218,7 +250,7 @@ function Discover({ onSelect }: { onSelect: (card: Card) => void }) {
   return <><input className="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="카드, 아티스트 검색" /><div className="section-heading"><h2>인기 카드</h2><button>전체 보기</button></div><div className="horizontal-cards">{results.slice(0, 4).map(card => <button key={card.id} onClick={() => onSelect(card)}><img src={card.image} alt="" /><b>{card.member}</b></button>)}</div><div className="section-heading"><h2>새로운 카드</h2><button>전체 보기</button></div><div className="discover-list">{results.map(card => <button key={card.id} onClick={() => onSelect(card)}><img src={card.image} alt="" /><span><b>{card.title}</b><small>{card.artist} · {card.member}</small></span><strong>›</strong></button>)}</div></>
 }
 
-function Alerts({ items, onRead }: { items: NotificationItem[], onRead: (id: string) => Promise<void> }) { const sample = [['새 카드', '발행번호 #021', '새 카드가 공개되었습니다.'], ['컬렉션', '컬렉션이 업데이트되었습니다', '보유 카드가 18장으로 늘었어요.'], ['공지', '서비스 점검 안내', '5월 12일(월) 02:00 - 04:00']] as const; return <div className="alert-list">{(items.length ? items.map(item => [item.id, item.kind, item.title, item.body ?? 'Fanfolio의 새로운 소식이 도착했습니다.', item.isRead] as const) : sample.map((item, index) => [`sample-${index}`, ...item, true] as const)).map(([id, tag, title, body, isRead]) => <button className={isRead ? 'alert-card read' : 'alert-card'} key={id} onClick={() => !isRead && void onRead(id)}><span className="tag">{tag}</span><h2>{title}</h2><p>{body}</p><small>{isRead ? '확인함' : '새 알림'}</small></button>)}</div> }
+function Alerts({ items, onRead, onReadAll }: { items: NotificationItem[], onRead: (id: string) => Promise<void>, onReadAll: () => Promise<void> }) { const sample = [['새 카드', '발행번호 #021', '새 카드가 공개되었습니다.'], ['컬렉션', '컬렉션이 업데이트되었습니다', '보유 카드가 18장으로 늘었어요.'], ['공지', '서비스 점검 안내', '5월 12일(월) 02:00 - 04:00']] as const; return <><div className="section-heading"><h2>새로운 소식</h2><button onClick={() => void onReadAll()}>모두 읽음</button></div><div className="alert-list">{(items.length ? items.map(item => [item.id, item.kind, item.title, item.body ?? 'Fanfolio의 새로운 소식이 도착했습니다.', item.isRead] as const) : sample.map((item, index) => [`sample-${index}`, ...item, true] as const)).map(([id, tag, title, body, isRead]) => <button className={isRead ? 'alert-card read' : 'alert-card'} key={id} onClick={() => !isRead && void onRead(id)}><span className="tag">{tag}</span><h2>{title}</h2><p>{body}</p><small>{isRead ? '확인함' : '새 알림'}</small></button>)}</div></> }
 
 function Settings({ onLogout }: { onLogout: () => Promise<void> }) { const [busy, setBusy] = useState(false); const logout = async () => { setBusy(true); await onLogout(); setBusy(false) }; return <><div className="profile"><div className="avatar">팬</div><div><b>팬포리오</b><small>fanfolio_1234</small></div><span>›</span></div><div className="settings-list">{['프로필', '계정', '알림 설정', '앱 정보'].map(item => <button key={item}><span>{item}</span><strong>›</strong></button>)}</div><button className="logout" onClick={() => void logout()} disabled={busy}>{busy ? '로그아웃 중...' : '로그아웃'}</button></> }
 
@@ -242,6 +274,6 @@ function RevealCard({ userCardId, onClose }: { userCardId: string, onClose: () =
   return <main className="reveal-screen"><button className="reveal-close" onClick={onClose}>닫기</button><p className="eyebrow">CARD UNLOCKED</p><h1>{revealed ? '새 카드가 컬렉션에 추가됐어요' : '카드가 도착했어요'}</h1><p className="muted">{revealed ? '나만의 디지털 컬렉션에서 확인해 보세요.' : '버튼을 눌러 카드를 공개하세요.'}</p><div className={revealed ? 'reveal-card revealed' : 'reveal-card'}><img src="/src/assets/hero.png" alt="등록된 공식 카드" />{revealed && <span className="official-badge">공식 카드</span>}</div>{revealed && detail && <div className="reveal-meta"><b>{detail.card.name}</b><span>발행번호 #{String(detail.serialNumber).padStart(3, '0')} · {detail.acquisitionSource === 'redeem_code' ? '콘텐츠 코드' : '직접 등록'}</span></div>}{!revealed ? <button className="primary" onClick={() => setRevealed(true)}>카드 공개하기</button> : <button className="primary" onClick={onClose}>컬렉션으로 이동</button>}</main>
 }
 
-function NavItem({ active, label, onClick }: { active: boolean, label: string, onClick: () => void }) { return <button className={active ? 'nav-item active' : 'nav-item'} onClick={onClick}><span className="nav-dot" />{label}</button> }
+function NavItem({ active, label, badge, onClick }: { active: boolean, label: string, badge?: number, onClick: () => void }) { return <button className={active ? 'nav-item active' : 'nav-item'} onClick={onClick}><span className="nav-dot" />{label}{badge ? <b className="nav-badge">{badge > 99 ? '99+' : badge}</b> : null}</button> }
 
 export default App

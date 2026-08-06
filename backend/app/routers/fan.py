@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from app.dependencies import DbSession, FanUser
 from app.errors import AppError
@@ -163,6 +163,27 @@ async def notifications(user: FanUser, session: DbSession) -> dict:
             ]
         },
     }
+
+
+@router.get("/notifications/unread-count")
+async def unread_notification_count(user: FanUser, session: DbSession) -> dict:
+    unread_count = await session.scalar(
+        select(func.count())
+        .select_from(Notification)
+        .where(Notification.user_id == user.id, Notification.is_read.is_(False))
+    )
+    return {"ok": True, "data": {"unreadCount": unread_count or 0}}
+
+
+@router.patch("/notifications/read-all")
+async def read_all_notifications(user: FanUser, session: DbSession) -> dict:
+    result = await session.execute(
+        update(Notification)
+        .where(Notification.user_id == user.id, Notification.is_read.is_(False))
+        .values(is_read=True, read_at=datetime.now(UTC))
+    )
+    await session.commit()
+    return {"ok": True, "data": {"updatedCount": result.rowcount or 0}}
 
 
 @router.patch("/notifications/{notification_id}")

@@ -25,7 +25,7 @@
     <div class="meta"><span class="chip">MVP · v0.2</span><span class="chip">정본: BACKEND_IMPLEMENTATION_CONTRACT.md</span><span class="chip">테스트: backend/tests/contract</span></div>
   </header>
   <main>
-    <div class="notice"><b>현재 상태:</b> 맵의 25개 HTTP 경로는 계약 테스트로 구현·검증됩니다. <code>Health → Fixture → Auth → Fan → Admin → Artist</code> 순서로 테스트를 읽으면 각 기능 경계를 따라갈 수 있습니다.</div>
+    <div class="notice"><b>현재 상태:</b> 맵의 27개 HTTP 경로는 계약 테스트로 구현·검증됩니다. <code>Health → Fixture → Auth → Fan → Admin → Artist</code> 순서로 테스트를 읽으면 각 기능 경계를 따라갈 수 있습니다.</div>
     <h2>구현 순서</h2>
     <div class="steps" id="steps"></div>
     <div class="layout">
@@ -55,6 +55,8 @@
       {stage:'Fan', role:'Fan', method:'PATCH', path:'/api/me/profile', auth:'Fan', request:{nickname:'별빛팬',favoriteArtistIds:['artist_nova3'],favoriteMemberIds:['member_yuna']}, success:'200', response:{nickname:'별빛팬',favoriteArtistIds:['artist_nova3'],favoriteMemberIds:['member_yuna'],onboardingCompleted:true}, errors:['401 AUTH_REQUIRED','422 VALIDATION_ERROR'], test:'tests/contract/test_fan_experience.py', note:'회원가입 뒤 최초 설정을 완료하는 경로입니다.'},
       {stage:'Fan', role:'Fan', method:'GET', path:'/api/catalog/cards', auth:'Fan', request:null, success:'200', response:{items:[{id:'card_published',isOfficial:true,status:'published'}]}, errors:['401 AUTH_REQUIRED'], test:'tests/contract/test_fan_experience.py', note:'팬에게는 official 이면서 published 상태인 카드만 노출합니다.'},
       {stage:'Fan', role:'Fan', method:'GET', path:'/api/notifications', auth:'Fan', request:null, success:'200', response:{items:[{id:'notification_1',isRead:false}]}, errors:['401 AUTH_REQUIRED'], test:'tests/contract/test_fan_experience.py', note:'팬 알림 목록.'},
+      {stage:'Fan', role:'Fan', method:'GET', path:'/api/notifications/unread-count', auth:'Fan', request:null, success:'200', response:{unreadCount:1}, errors:['401 AUTH_REQUIRED'], test:'tests/contract/test_fan_experience.py', note:'하단 알림 탭 배지에 사용하는 읽지 않은 알림 수입니다.'},
+      {stage:'Fan', role:'Fan', method:'PATCH', path:'/api/notifications/read-all', auth:'Fan', request:null, success:'200', response:{updatedCount:1}, errors:['401 AUTH_REQUIRED'], test:'tests/contract/test_fan_experience.py', note:'팬 본인의 읽지 않은 알림을 한 번에 읽음 처리합니다.'},
       {stage:'Fan', role:'Fan', method:'PATCH', path:'/api/notifications/{id}', auth:'Fan', request:{isRead:true}, success:'200', response:{id:'notification_1',isRead:true}, errors:['401 AUTH_REQUIRED','404 NOTIFICATION_NOT_FOUND'], test:'tests/contract/test_fan_experience.py', note:'팬 본인의 알림만 읽음 처리합니다.'},
       {stage:'Admin', role:'Admin', method:'GET', path:'/api/admin/dashboard', auth:'Admin', request:null, success:'200', response:{metrics:{redeemedCount:1,activeDrops:1}}, errors:['401 AUTH_REQUIRED','403 FORBIDDEN'], test:'tests/contract/test_admin_and_artist.py', note:'팬·아티스트는 접근할 수 없는 운영 지표입니다.'},
       {stage:'Admin', role:'Admin', method:'GET', path:'/api/admin/users', auth:'Admin', request:{q:'fan@example.com',role:'fan'}, success:'200', response:{items:[{id:'fan',email:'fan@example.com',role:'fan'}]}, errors:['401 AUTH_REQUIRED','403 FORBIDDEN'], test:'tests/contract/test_admin_management.py', note:'관리자가 사용자와 현재 역할·온보딩 상태를 확인합니다.'},
