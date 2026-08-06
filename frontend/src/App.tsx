@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import './App.css'
 import { apiFetch, notificationStreamUrl, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionCard, type CollectionSummary, type CurrentUser, type NotificationItem, type UserCardDetail } from './api/client'
 import { QrRedeemModal } from './components/QrRedeemModal'
@@ -19,6 +19,13 @@ type Card = {
   member: string
   image: string
 }
+
+// Magic-link tokens are one-time credentials. React StrictMode can mount a
+// component more than once in development, so a component ref is not enough
+// to protect the request. Keep the guard at module scope so remounted Login
+// instances share the same in-flight request and successful token state.
+const autoVerifyInFlight = new Map<string, Promise<boolean>>()
+const autoVerifiedTokens = new Set<string>()
 
 function toCollectionCard(card: CollectionCard): Card {
   return {
@@ -77,7 +84,11 @@ function App() {
   useEffect(() => {
     void refreshUser()
       .then(() => { setSignedIn(true); void refreshCollection() })
-      .catch(() => setSignedIn(false))
+      .catch(() => {
+        // The login screen may complete a magic-link request while this
+        // initial session probe is still in flight. The app starts signed
+        // out, so a late 401 must not overwrite that successful login.
+      })
   }, [])
 
   useEffect(() => {
@@ -199,7 +210,6 @@ function Login({ onLogin }: { onLogin: () => void }) {
   const [requested, setRequested] = useState(false)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
-  const autoVerifyStarted = useRef(false)
 
   const requestLink = async () => {
     setBusy(true)
@@ -218,7 +228,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
     }
   }
 
-  const verifyLink = useCallback(async (tokenOverride?: string) => {
+  const verifyLink = useCallback(async (tokenOverride?: string): Promise<boolean> => {
     const tokenToVerify = tokenOverride ?? token
     setBusy(true)
     setMessage('')
@@ -228,8 +238,10 @@ function Login({ onLogin }: { onLogin: () => void }) {
         body: JSON.stringify({ token: tokenToVerify }),
       })
       onLogin()
+      return true
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '로그인 링크 검증에 실패했습니다.')
+      return false
     } finally {
       setBusy(false)
     }
@@ -237,11 +249,23 @@ function Login({ onLogin }: { onLogin: () => void }) {
 
   useEffect(() => {
     const linkToken = new URLSearchParams(window.location.search).get('token')
-    if (!linkToken || autoVerifyStarted.current) return
-    autoVerifyStarted.current = true
+    if (!linkToken || autoVerifiedTokens.has(linkToken)) return
     setToken(linkToken)
     setRequested(true)
-    void verifyLink(linkToken)
+    // Reserve the one-time token before starting the network request. This
+    // closes the small gap between a fast response and a StrictMode rerender.
+    autoVerifiedTokens.add(linkToken)
+    let request = autoVerifyInFlight.get(linkToken)
+    if (!request) {
+      request = verifyLink(linkToken).then(success => {
+        if (!success) autoVerifiedTokens.delete(linkToken)
+        return success
+      }).finally(() => {
+        autoVerifyInFlight.delete(linkToken)
+      })
+      autoVerifyInFlight.set(linkToken, request)
+    }
+    void request
   }, [verifyLink])
 
   return <main className="login-screen"><span className="brand-mark">F</span><p className="eyebrow">FANFOLIO</p><h1>내 손안의<br />팬 컬렉션</h1><p className="muted">좋아하는 아티스트의 순간을<br />디지털 카드로 간직하세요.</p><label className="field-label">이메일</label><input value={email} onChange={e => setEmail(e.target.value)} placeholder="이메일을 입력하세요" type="email" disabled={requested} />{!requested ? <button className="primary" onClick={() => void requestLink()} disabled={!email.includes('@') || busy}>{busy ? '보내는 중...' : '로그인 링크 받기'}</button> : <><label className="field-label">로그인 토큰</label><input value={token} onChange={e => setToken(e.target.value)} placeholder="이메일의 로그인 토큰을 입력하세요" /><button className="primary" onClick={() => void verifyLink()} disabled={!token || busy}>{busy ? '확인 중...' : '로그인하기'}</button></>}<p className={message.includes('실패') ? 'form-message error-message' : 'form-message'}>{message}</p><p className="login-note">비밀번호 없이 이메일 링크로 안전하게 로그인합니다.</p></main>
