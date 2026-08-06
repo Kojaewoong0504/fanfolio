@@ -170,6 +170,7 @@ Base URL: `/api`
 `GET /me/collection`은 `ownedCount`, `totalSlots`, `completionRate`, 카드 썸네일, 공식 카드 여부, 발행번호, 획득일을 반환한다. 개인 소유 카드만 반환한다.
 
 `GET /catalog/cards`는 공개 카드의 메타데이터만 반환한다. 아직 보유하지 않은 카드는 상세 미리보기용이고 발급/소유 정보는 노출하지 않는다.
+`sort`는 `recommended`(기본값), `name`, `rarity` 중 하나이며, 추천순은 최초 설정에서 선택한 멤버와 그룹을 우선한다.
 
 ### 4.3 파일 업로드와 손글씨 배경 제거
 

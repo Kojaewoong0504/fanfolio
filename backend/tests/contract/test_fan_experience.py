@@ -301,6 +301,46 @@ def test_catalog_can_filter_cards_by_artist_and_member(
     assert filtered["items"][0]["memberName"] == "유나"
 
 
+def test_catalog_recommends_favorite_members_and_supports_explicit_sorting(
+    actors: dict[str, TestClient],
+) -> None:
+    created = assert_success(
+        actors["admin"].post(
+            "/api/admin/cards",
+            json={
+                "name": "민호 정렬 테스트 카드",
+                "artistId": "artist_nova3",
+                "memberId": "member_minho",
+                "rarity": "N",
+            },
+        ),
+        201,
+    )
+    assert_success(actors["admin"].post(f"/api/admin/cards/{created['id']}/publish"))
+    assert_success(
+        actors["fan"].patch(
+            "/api/me/profile",
+            json={
+                "nickname": "추천 테스트 팬",
+                "favoriteArtistIds": ["artist_nova3"],
+                "favoriteMemberIds": ["member_yuna"],
+            },
+        )
+    )
+
+    recommended = assert_success(
+        actors["fan"].get("/api/catalog/cards", params={"sort": "recommended"})
+    )
+    assert recommended["meta"]["sort"] == "recommended"
+    assert recommended["items"][0]["memberId"] == "member_yuna"
+
+    name_sorted = assert_success(actors["fan"].get("/api/catalog/cards", params={"sort": "name"}))
+    assert name_sorted["meta"]["sort"] == "name"
+    assert [item["name"] for item in name_sorted["items"]] == sorted(
+        item["name"] for item in name_sorted["items"]
+    )
+
+
 def test_notifications_can_be_marked_as_read(actors: dict[str, TestClient]) -> None:
     fan = actors["fan"]
     notifications = assert_success(fan.get("/api/notifications"))

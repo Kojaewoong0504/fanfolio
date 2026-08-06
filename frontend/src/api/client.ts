@@ -36,6 +36,8 @@ export type CatalogCard = {
   memberName?: string | null
 }
 
+export type CatalogSort = 'recommended' | 'name' | 'rarity'
+
 export type CatalogArtist = { id: string; name: string; imageUrl: string | null }
 export type CatalogMember = { id: string; artistId: string; name: string }
 

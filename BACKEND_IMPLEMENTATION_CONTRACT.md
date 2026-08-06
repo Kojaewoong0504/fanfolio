@@ -292,8 +292,11 @@ Fanfolio의 회원가입과 로그인은 이메일 매직링크를 같은 흐름
 
 권한: Fan
 
-- query: `artistId`, `memberId`, `q`, `page`, `pageSize`
+- query: `artistId`, `memberId`, `q`, `page`, `pageSize`, `sort`
+- `sort`: `recommended`(기본값), `name`, `rarity`
+- `recommended`는 온보딩에서 선택한 멤버를 가장 먼저, 선택한 그룹을 다음으로 정렬한다.
 - 성공 `200`의 `data.items`에는 `status: "published"`, `isOfficial: true` 카드만 들어간다.
+- `data.meta.sort`에는 실제 적용된 정렬 방식이 포함된다.
 
 ### GET/PATCH /api/notifications
 

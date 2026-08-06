@@ -1,10 +1,11 @@
 import asyncio
 import json
 from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Query, Request, status
 from fastapi.responses import FileResponse, StreamingResponse
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import case, desc, func, or_, select, update
 
 from app.dependencies import DbSession, FanUser
 from app.errors import AppError
@@ -319,6 +320,7 @@ async def catalog(
     q: str | None = None,
     page: int = Query(default=1, ge=1),
     pageSize: int = Query(default=20, ge=1, le=100),
+    sort: Literal["recommended", "name", "rarity"] = "recommended",
 ) -> dict:
     filters = [Card.status == "published", Card.is_official.is_(True)]
     if artistId:
@@ -339,11 +341,30 @@ async def catalog(
     total = await session.scalar(
         select(func.count()).select_from(catalog_from.where(*filters).subquery())
     )
+    recommendation_score = case(
+        (Card.member_id.in_(user.favorite_member_ids), 3),
+        (Card.artist_id.in_(user.favorite_artist_ids), 2),
+        else_=0,
+    )
+    rarity_score = case(
+        (Card.rarity == "Special", 4),
+        (Card.rarity == "SR", 3),
+        (Card.rarity == "R", 2),
+        (Card.rarity == "N", 1),
+        else_=0,
+    )
+    if sort == "name":
+        ordering = (Artist.name, Member.name, Card.name, Card.id)
+    elif sort == "rarity":
+        ordering = (desc(rarity_score), Artist.name, Card.name, Card.id)
+    else:
+        ordering = (desc(recommendation_score), Artist.name, Card.name, Card.id)
     statement = (
         select(Card, Artist, Member)
         .outerjoin(Artist, Card.artist_id == Artist.id)
         .outerjoin(Member, Card.member_id == Member.id)
         .where(*filters)
+        .order_by(*ordering)
         .offset((page - 1) * pageSize)
         .limit(pageSize)
     )
@@ -365,7 +386,10 @@ async def catalog(
                 }
                 for c, artist, member in cards
             ],
-            "meta": {"pagination": {"page": page, "pageSize": pageSize, "total": total}},
+            "meta": {
+                "pagination": {"page": page, "pageSize": pageSize, "total": total},
+                "sort": sort,
+            },
         },
     }
 
