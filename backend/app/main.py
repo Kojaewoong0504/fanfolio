@@ -1,14 +1,44 @@
-"""Fanfolio API entry point.
+"""Application composition: routes are deliberately kept out of this module."""
 
-이 파일에는 FastAPI 앱 뼈대만 있습니다. 라우터, 인증, 데이터 모델과 비즈니스
-로직은 백엔드 담당자가 계약 테스트를 통과시키며 구현합니다.
-"""
+from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
-app = FastAPI(title="Fanfolio API", version="0.2.0")
+from app.core.config import get_settings
+from app.db.session import engine
+from app.errors import AppError
+from app.models import Base
+from app.routers import admin, artist, auth, fan, health, test_support
 
 
-@app.get("/api/health")
-def get_health() -> dict[str, object]:
-    return {"ok": True, "data": {"status": "healthy"}}
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # `lifespan` replaces the older startup/shutdown event decorators.
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    yield
+    await engine.dispose()
+
+
+def create_app() -> FastAPI:
+    app = FastAPI(title="Fanfolio API", version="0.2.0", lifespan=lifespan)
+
+    @app.exception_handler(AppError)
+    async def app_error(_: Request, error: AppError) -> JSONResponse:
+        return JSONResponse(
+            status_code=error.status_code,
+            content={"ok": False, "error": {"code": error.code, "message": error.message}},
+        )
+
+    app.include_router(health.router)
+    app.include_router(auth.router)
+    app.include_router(fan.router)
+    app.include_router(admin.router)
+    app.include_router(artist.router)
+    if get_settings().app_env == "test":
+        app.include_router(test_support.router)
+    return app
+
+
+app = create_app()

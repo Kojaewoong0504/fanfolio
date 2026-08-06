@@ -1,0 +1,169 @@
+from datetime import UTC, datetime, timedelta
+from uuid import uuid4
+
+from sqlalchemy import delete, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.errors import AppError
+from app.models import (
+    Asset,
+    BackgroundRemovalJob,
+    Card,
+    Drop,
+    Notification,
+    RedeemCode,
+    Role,
+    Session,
+    User,
+    UserCard,
+)
+
+
+def now() -> datetime:
+    return datetime.now(UTC)
+
+
+async def reset_database(session: AsyncSession) -> None:
+    for model in (
+        BackgroundRemovalJob,
+        Asset,
+        Notification,
+        UserCard,
+        RedeemCode,
+        Drop,
+        Card,
+        Session,
+        User,
+    ):
+        await session.execute(delete(model))
+    await session.commit()
+
+
+async def seed_core(session: AsyncSession) -> dict:
+    users = [
+        ("fan", Role.FAN),
+        ("otherFan", Role.FAN),
+        ("admin", Role.ADMIN),
+        ("artist", Role.ARTIST),
+    ]
+    for user_id, role in users:
+        session.add(User(id=user_id, email=f"{user_id}@example.com", role=role))
+        session.add(
+            Session(
+                token=f"test-session-{user_id.replace('otherFan', 'other-fan')}", user_id=user_id
+            )
+        )
+    session.add_all(
+        [
+            Card(
+                id="card_published",
+                name="컴백 기념 사인 카드",
+                status="published",
+                artist_id="artist_nova3",
+            ),
+            Card(id="card_draft", name="비공개 카드", status="draft", artist_id="artist_nova3"),
+            Drop(id="drop_live", status="live"),
+            Drop(id="drop_ended", status="ended"),
+        ]
+    )
+    session.add_all(
+        [
+            RedeemCode(code="NOVA-VALID-01", card_id="card_published", drop_id="drop_live"),
+            RedeemCode(
+                code="NOVA-EXPIRED-01",
+                card_id="card_published",
+                drop_id="drop_live",
+                expires_at=now() - timedelta(days=1),
+            ),
+            RedeemCode(code="NOVA-ENDED-01", card_id="card_published", drop_id="drop_ended"),
+            RedeemCode(code="NOVA-DRAFT-01", card_id="card_draft", drop_id="drop_live"),
+            RedeemCode(
+                code="NOVA-EXHAUSTED-01",
+                card_id="card_published",
+                drop_id="drop_live",
+                used_count=0,
+                max_uses=0,
+            ),
+        ]
+    )
+    session.add_all(
+        [
+            Notification(id="notification_1", user_id="fan"),
+            Asset(id="asset_card_image", owner_id="artist"),
+            Asset(id="asset_handwriting", owner_id="artist"),
+        ]
+    )
+    await session.commit()
+    return {
+        "sessions": {
+            "fan": "test-session-fan",
+            "otherFan": "test-session-other-fan",
+            "admin": "test-session-admin",
+            "artist": "test-session-artist",
+        },
+        "ids": {
+            "publishedCardId": "card_published",
+            "liveDropId": "drop_live",
+            "templateId": "template_signature_v1",
+            "imageAssetId": "asset_card_image",
+            "handwritingAssetId": "asset_handwriting",
+        },
+        "codes": {
+            "valid": "NOVA-VALID-01",
+            "expired": "NOVA-EXPIRED-01",
+            "endedDrop": "NOVA-ENDED-01",
+            "unpublished": "NOVA-DRAFT-01",
+            "exhausted": "NOVA-EXHAUSTED-01",
+        },
+    }
+
+
+async def redeem(session: AsyncSession, user: User, code_value: str) -> dict:
+    # One transaction makes duplicate redemption impossible in the normal DB path.
+    # Authentication performed a read first, which starts SQLAlchemy's autobegin
+    # transaction. Close that read-only boundary before this service owns its write
+    # transaction; do not let routers accidentally control transaction scope.
+    user_id = user.id  # rollback expires ORM objects; retain primitive request identity.
+    if session.in_transaction():
+        await session.rollback()
+    async with session.begin():
+        code = await session.get(RedeemCode, code_value)
+        if not code:
+            raise AppError(404, "REDEEM_CODE_NOT_FOUND", "코드를 찾을 수 없습니다.")
+        if code.used_count >= code.max_uses:
+            error_code = (
+                "REDEEM_LIMIT_REACHED" if code.max_uses == 0 else "REDEEM_CODE_ALREADY_USED"
+            )
+            raise AppError(409, error_code, "사용할 수 없는 코드입니다.")
+        expires_at = (
+            code.expires_at.replace(tzinfo=UTC)
+            if code.expires_at and code.expires_at.tzinfo is None
+            else code.expires_at
+        )
+        if expires_at and expires_at < now():
+            raise AppError(409, "REDEEM_CODE_EXPIRED", "만료된 코드입니다.")
+        drop, card = await session.get(Drop, code.drop_id), await session.get(Card, code.card_id)
+        if drop.status != "live":
+            raise AppError(409, "DROP_NOT_LIVE", "현재 진행 중인 드롭이 아닙니다.")
+        if card.status != "published":
+            raise AppError(409, "CARD_NOT_PUBLISHED", "공개되지 않은 카드입니다.")
+        code.used_count += 1
+        serial = (
+            await session.scalar(
+                select(func.count()).select_from(UserCard).where(UserCard.card_id == card.id)
+            )
+        ) + 1
+        user_card = UserCard(
+            id=f"uc_{uuid4().hex[:12]}",
+            user_id=user_id,
+            card_id=card.id,
+            serial_number=serial,
+            acquired_at=now(),
+        )
+        session.add(user_card)
+    return {
+        "userCardId": user_card.id,
+        "cardId": card.id,
+        "serialNumber": serial,
+        "redirectTo": f"/reveal/{user_card.id}",
+    }
