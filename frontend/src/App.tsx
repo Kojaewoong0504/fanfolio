@@ -206,6 +206,7 @@ function App() {
 function tabTitle(tab: Tab) { return { collection: '내 컬렉션', discover: '탐색', alerts: '알림', settings: '설정' }[tab] }
 
 function Login({ onLogin }: { onLogin: () => void }) {
+  const [purpose, setPurpose] = useState<'login' | 'signup'>('login')
   const [email, setEmail] = useState('')
   const [token, setToken] = useState('')
   const [requested, setRequested] = useState(false)
@@ -218,10 +219,10 @@ function Login({ onLogin }: { onLogin: () => void }) {
     try {
       await apiFetch('/auth/magic-link/request', {
         method: 'POST',
-        body: JSON.stringify({ email, purpose: 'login' }),
+        body: JSON.stringify({ email, purpose }),
       })
       setRequested(true)
-      setMessage(`${email}로 로그인 링크를 보냈습니다.`)
+      setMessage(`${email}로 ${purpose === 'signup' ? '가입' : '로그인'} 링크를 보냈습니다.`)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '로그인 링크 요청에 실패했습니다.')
     } finally {
@@ -269,7 +270,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
     void request
   }, [verifyLink])
 
-  return <main className="login-screen"><span className="brand-mark">F</span><p className="eyebrow">FANFOLIO</p><h1>내 손안의<br />팬 컬렉션</h1><p className="muted">좋아하는 아티스트의 순간을<br />디지털 카드로 간직하세요.</p><label className="field-label">이메일</label><input value={email} onChange={e => setEmail(e.target.value)} placeholder="이메일을 입력하세요" type="email" disabled={requested} />{!requested ? <button className="primary" onClick={() => void requestLink()} disabled={!email.includes('@') || busy}>{busy ? '보내는 중...' : '로그인 링크 받기'}</button> : <><label className="field-label">로그인 토큰</label><input value={token} onChange={e => setToken(e.target.value)} placeholder="이메일의 로그인 토큰을 입력하세요" /><button className="primary" onClick={() => void verifyLink()} disabled={!token || busy}>{busy ? '확인 중...' : '로그인하기'}</button></>}<p className={message.includes('실패') ? 'form-message error-message' : 'form-message'}>{message}</p><p className="login-note">비밀번호 없이 이메일 링크로 안전하게 로그인합니다.</p></main>
+  return <main className="login-screen"><span className="brand-mark">F</span><p className="eyebrow">FANFOLIO</p><h1>내 손안의<br />팬 컬렉션</h1><p className="muted">좋아하는 아티스트의 순간을<br />디지털 카드로 간직하세요.</p>{!requested && <div className="auth-mode" role="tablist" aria-label="인증 방식"><button className={purpose === 'login' ? 'active' : ''} role="tab" aria-selected={purpose === 'login'} onClick={() => setPurpose('login')}>로그인</button><button className={purpose === 'signup' ? 'active' : ''} role="tab" aria-selected={purpose === 'signup'} onClick={() => setPurpose('signup')}>회원가입</button></div>}<label className="field-label">이메일</label><input value={email} onChange={e => setEmail(e.target.value)} placeholder="이메일을 입력하세요" type="email" disabled={requested} />{!requested ? <button className="primary" onClick={() => void requestLink()} disabled={!email.includes('@') || busy}>{busy ? '보내는 중...' : purpose === 'signup' ? '회원가입 링크 받기' : '로그인 링크 받기'}</button> : <><label className="field-label">인증 토큰</label><input value={token} onChange={e => setToken(e.target.value)} placeholder="이메일의 인증 토큰을 입력하세요" /><button className="primary" onClick={() => void verifyLink()} disabled={!token || busy}>{busy ? '확인 중...' : purpose === 'signup' ? '회원가입하기' : '로그인하기'}</button></>}<p className={message.includes('실패') ? 'form-message error-message' : 'form-message'}>{message}</p><p className="login-note">비밀번호 없이 이메일 링크로 안전하게 {purpose === 'signup' ? '가입' : '로그인'}합니다.</p></main>
 }
 
 function Onboarding({ onComplete }: { onComplete: () => void }) {
