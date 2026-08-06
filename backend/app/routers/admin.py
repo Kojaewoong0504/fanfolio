@@ -9,8 +9,8 @@ from sqlalchemy import func, select
 
 from app.dependencies import AdminUser, DbSession
 from app.errors import AppError
-from app.models import Card, Drop, RedeemCode, RedeemCodeBatch
-from app.schemas import CodeBatchRequest, DropCreateRequest, DropStatusUpdate
+from app.models import Card, Drop, RedeemCode, RedeemCodeBatch, Role, User
+from app.schemas import AdminUserRoleUpdate, CodeBatchRequest, DropCreateRequest, DropStatusUpdate
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -123,6 +123,62 @@ async def update_drop_status(
     drop.status = payload.status
     await session.commit()
     return {"ok": True, "data": {"id": drop.id, "status": drop.status}}
+
+
+@router.get("/users")
+async def list_users(
+    _: AdminUser,
+    session: DbSession,
+    q: str | None = None,
+    role: Role | None = None,
+) -> dict:
+    filters = []
+    if q:
+        filters.append(User.email.ilike(f"%{q}%"))
+    if role:
+        filters.append(User.role == role)
+    users = await session.scalars(select(User).where(*filters).order_by(User.email))
+    return {
+        "ok": True,
+        "data": {
+            "items": [
+                {
+                    "id": user.id,
+                    "email": user.email,
+                    "role": user.role.value,
+                    "nickname": user.nickname,
+                    "onboardingCompleted": user.onboarding_completed,
+                }
+                for user in users
+            ]
+        },
+    }
+
+
+@router.patch("/users/{user_id}/role")
+async def update_user_role(
+    user_id: str,
+    payload: AdminUserRoleUpdate,
+    admin: AdminUser,
+    session: DbSession,
+) -> dict:
+    if user_id == admin.id:
+        raise AppError(
+            409, "CANNOT_CHANGE_OWN_ROLE", "현재 로그인한 관리자의 역할은 변경할 수 없습니다."
+        )
+    user = await session.get(User, user_id)
+    if not user:
+        raise AppError(404, "USER_NOT_FOUND", "사용자를 찾을 수 없습니다.")
+    new_role = Role(payload.role)
+    if user.role == Role.ADMIN and new_role != Role.ADMIN:
+        admin_count = await session.scalar(
+            select(func.count()).select_from(User).where(User.role == Role.ADMIN)
+        )
+        if admin_count == 1:
+            raise AppError(409, "LAST_ADMIN_REQUIRED", "최소 한 명의 관리자가 필요합니다.")
+    user.role = new_role
+    await session.commit()
+    return {"ok": True, "data": {"id": user.id, "role": user.role.value}}
 
 
 @router.post("/redeem-code-batches", status_code=status.HTTP_201_CREATED)

@@ -73,6 +73,10 @@ class DropStatusUpdate(BaseModel):
     status: Literal["draft", "scheduled", "live", "ended"]
 
 
+class AdminUserRoleUpdate(BaseModel):
+    role: Literal["fan", "artist", "admin"]
+
+
 class ArtistCardRequest(BaseModel):
     template_id: str = Field(alias="templateId")
     name: str

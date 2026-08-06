@@ -39,6 +39,30 @@ def test_fan_cannot_manage_drops(actors: dict[str, TestClient]) -> None:
     assert_error(actors["fan"].get("/api/admin/drops"), 403, "FORBIDDEN")
 
 
+def test_admin_can_list_users_and_change_a_user_role(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    users = assert_success(actors["admin"].get("/api/admin/users"))
+    fan = next(user for user in users["items"] if user["id"] == "fan")
+    assert fan["role"] == "fan"
+
+    updated = assert_success(
+        actors["admin"].patch("/api/admin/users/fan/role", json={"role": "artist"})
+    )
+    assert updated == {"id": "fan", "role": "artist"}
+
+
+def test_admin_cannot_change_own_role_or_fan_manage_users(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    assert_error(
+        actors["admin"].patch("/api/admin/users/admin/role", json={"role": "fan"}),
+        409,
+        "CANNOT_CHANGE_OWN_ROLE",
+    )
+    assert_error(actors["fan"].get("/api/admin/users"), 403, "FORBIDDEN")
+
+
 def test_admin_dashboard_and_card_list_are_backed_by_database(
     actors: dict[str, TestClient],
 ) -> None:
