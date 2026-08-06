@@ -86,6 +86,8 @@ export SMTP_USE_TLS=false
 export TASK_QUEUE_MODE=celery
 export CELERY_BROKER_URL=redis://localhost:6379/0
 export CELERY_RESULT_BACKEND=redis://localhost:6379/0
+export RATE_LIMIT_BACKEND=redis
+export RATE_LIMIT_REDIS_URL=redis://localhost:6379/1
 
 echo "[2/5] applying PostgreSQL migrations"
 (cd "$BACKEND_DIR" && .venv/bin/alembic upgrade head)
@@ -108,6 +110,27 @@ with socket.create_connection(("127.0.0.1", 6379), timeout=3) as connection:
 if response != b"+PONG\r\n":
     raise SystemExit(f"Unexpected Redis response: {response!r}")
 PY
+
+echo "[4b/5] verifying API rate limiting uses Redis"
+rate_limit_email="integration-rate-limit-$(date +%s)@example.com"
+for _ in {1..5}; do
+  status_code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+    http://localhost:8000/api/auth/magic-link/request \
+    -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$rate_limit_email\",\"purpose\":\"login\"}")"
+  [[ "$status_code" == "202" ]] || {
+    echo "Expected the first five requests to succeed, got $status_code" >&2
+    exit 1
+  }
+done
+status_code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+  http://localhost:8000/api/auth/magic-link/request \
+  -H 'Content-Type: application/json' \
+  -d "{\"email\":\"$rate_limit_email\",\"purpose\":\"login\"}")"
+[[ "$status_code" == "429" ]] || {
+  echo "Expected the sixth request to be rate limited, got $status_code" >&2
+  exit 1
+}
 
 echo "[5/5] verifying SMTP delivery through Mailpit"
 curl -fsS -X POST http://localhost:8000/api/auth/magic-link/request \
