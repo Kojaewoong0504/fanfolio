@@ -253,6 +253,11 @@ Fanfolio의 회원가입과 로그인은 이메일 매직링크를 같은 흐름
 }
 ```
 
+서버는 `favoriteArtistIds`와 `favoriteMemberIds`가 실제 카탈로그에 존재하고,
+각 멤버가 선택한 그룹에 속하는지 검증한다. 불일치하거나 존재하지 않는 값은
+`422`와 `INVALID_FAVORITE_ARTIST`, `INVALID_FAVORITE_MEMBER`,
+`FAVORITE_MEMBER_ARTIST_MISMATCH` 중 하나로 거부한다.
+
 성공 `200`의 `data`에는 `nickname`, `favoriteArtistIds`, `favoriteMemberIds`, `onboardingCompleted: true`를 포함한다.
 
 ### GET /api/catalog/cards

@@ -96,6 +96,11 @@ async def collection(user: FanUser, session: DbSession) -> dict:
 
 @router.patch("/me/profile")
 async def update_profile(payload: ProfileUpdate, user: FanUser, session: DbSession) -> dict:
+    await validate_favorites(
+        artist_ids=payload.favorite_artist_ids,
+        member_ids=payload.favorite_member_ids,
+        session=session,
+    )
     user.nickname, user.favorite_artist_ids, user.favorite_member_ids, user.onboarding_completed = (
         payload.nickname,
         payload.favorite_artist_ids,
@@ -112,6 +117,34 @@ async def update_profile(payload: ProfileUpdate, user: FanUser, session: DbSessi
             "onboardingCompleted": True,
         },
     }
+
+
+async def validate_favorites(
+    *, artist_ids: list[str], member_ids: list[str], session: DbSession
+) -> None:
+    """Reject onboarding preferences that cannot describe the catalog.
+
+    The UI loads members after a group is selected, but this check is still
+    required at the API boundary because clients can be stale or manipulated.
+    """
+    if artist_ids:
+        known_artist_ids = set(
+            (await session.scalars(select(Artist.id).where(Artist.id.in_(artist_ids)))).all()
+        )
+        if known_artist_ids != set(artist_ids):
+            raise AppError(422, "INVALID_FAVORITE_ARTIST", "선택한 그룹을 찾을 수 없습니다.")
+    if not member_ids:
+        return
+    members = (
+        await session.execute(select(Member.id, Member.artist_id).where(Member.id.in_(member_ids)))
+    ).all()
+    if len(members) != len(set(member_ids)):
+        raise AppError(422, "INVALID_FAVORITE_MEMBER", "선택한 멤버를 찾을 수 없습니다.")
+    favorite_artist_ids = set(artist_ids)
+    if any(artist_id not in favorite_artist_ids for _, artist_id in members):
+        raise AppError(
+            422, "FAVORITE_MEMBER_ARTIST_MISMATCH", "멤버와 그룹을 올바르게 선택해 주세요."
+        )
 
 
 @router.get("/me/notification-preferences")

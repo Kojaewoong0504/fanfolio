@@ -32,6 +32,20 @@ def test_authenticated_fan_can_complete_onboarding(actors: dict[str, TestClient]
     assert profile["onboardingCompleted"] is True
 
 
+def test_onboarding_rejects_an_unknown_member(
+    actors: dict[str, TestClient],
+) -> None:
+    response = actors["fan"].patch(
+        "/api/me/profile",
+        json={
+            "nickname": "별빛팬",
+            "favoriteArtistIds": ["artist_nova3"],
+            "favoriteMemberIds": ["member_unknown"],
+        },
+    )
+    assert_error(response, 422, "INVALID_FAVORITE_MEMBER")
+
+
 def test_fan_can_read_and_update_notification_email_preferences(
     actors: dict[str, TestClient],
 ) -> None:
