@@ -1,4 +1,5 @@
 import os
+from urllib.request import Request, urlopen
 from uuid import uuid4
 
 import pytest
@@ -33,6 +34,7 @@ def test_s3_storage_round_trip_and_presign() -> None:
     )
     asset_id = f"integration_{uuid4().hex}"
     path = storage.save_bytes(asset_id, b"integration bytes")
+    direct_path: str | None = None
     try:
         assert storage.exists(path)
         assert storage.read_bytes(path) == b"integration bytes"
@@ -40,5 +42,25 @@ def test_s3_storage_round_trip_and_presign() -> None:
         assert storage.presigned_upload_url(
             asset_id, content_type="application/octet-stream", expires_in=60
         ).startswith("http")
+
+        direct_asset_id = f"integration_direct_{uuid4().hex}"
+        direct_content = b"presigned integration bytes"
+        upload_url = storage.presigned_upload_url(
+            direct_asset_id, content_type="application/octet-stream", expires_in=60
+        )
+        request = Request(
+            upload_url,
+            data=direct_content,
+            method="PUT",
+            headers={"Content-Type": "application/octet-stream"},
+        )
+        with urlopen(request, timeout=10) as response:
+            assert response.status in {200, 204}
+
+        direct_path = storage.asset_path(direct_asset_id, ".bin")
+        assert storage.exists(direct_path)
+        assert storage.read_bytes(direct_path) == direct_content
     finally:
         storage.delete(path)
+        if direct_path is not None:
+            storage.delete(direct_path)
