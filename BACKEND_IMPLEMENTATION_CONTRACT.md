@@ -348,6 +348,40 @@ QR payload는 redeem code 문자열 자체이며, 팬 앱은 QR 결과를 기존
 
 성공 `201`: `data.id`, `data.status: "draft"`, `data.artistId`, `data.memberId`.
 
+### GET /api/artist/insights
+
+권한: Artist. 로그인한 아티스트가 소유한 카드만 집계한다. 다른 아티스트의
+카드나 수집 수는 응답에 포함하지 않는다.
+
+성공 `200`:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "summary": {
+      "totalCards": 1,
+      "draftCards": 1,
+      "pendingReviewCards": 0,
+      "publishedCards": 0,
+      "redeemedCount": 0
+    },
+    "items": [
+      {
+        "cardId": "card_123",
+        "name": "특별 카드",
+        "status": "published",
+        "issueLimit": 1000,
+        "redeemedCount": 42
+      }
+    ]
+  }
+}
+```
+
+카드별 `redeemedCount`는 팬이 실제로 수집한 카드 수이며, `summary.redeemedCount`는
+아티스트 소유 카드 전체의 합계다.
+
 ### POST /api/artist/cards/{cardId}/submit-review
 
 권한: Artist. 성공 `200`의 `data.status`는 `pending_review`.

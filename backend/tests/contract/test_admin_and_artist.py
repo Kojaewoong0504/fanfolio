@@ -120,6 +120,45 @@ def test_artist_studio_loads_templates_and_catalog_from_api(
     }
 
 
+def test_artist_can_read_card_collection_insights(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    artist = actors["artist"]
+    draft = assert_success(
+        artist.post(
+            "/api/artist/cards",
+            json={
+                "templateId": seeded["ids"]["templateId"],
+                "name": "인사이트 카드",
+                "seasonName": "2026 SPRING",
+                "rarity": "Special",
+                "imageAssetId": seeded["ids"]["imageAssetId"],
+                "issueLimit": 100,
+            },
+        ),
+        201,
+    )
+
+    insights = assert_success(artist.get("/api/artist/insights"))
+
+    assert insights["summary"] == {
+        "totalCards": 1,
+        "draftCards": 1,
+        "pendingReviewCards": 0,
+        "publishedCards": 0,
+        "redeemedCount": 0,
+    }
+    assert insights["items"] == [
+        {
+            "cardId": draft["id"],
+            "name": "인사이트 카드",
+            "status": "draft",
+            "issueLimit": 100,
+            "redeemedCount": 0,
+        }
+    ]
+
+
 def test_fan_cannot_load_artist_studio_templates(actors: dict[str, TestClient]) -> None:
     assert_error(actors["fan"].get("/api/artist/templates"), 403, "FORBIDDEN")
 

@@ -2,13 +2,13 @@ from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Request, status
 from fastapi.responses import FileResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.core.config import get_settings
 from app.dependencies import ArtistUser, DbSession
 from app.errors import AppError
 from app.image_processing import compose_card_preview
-from app.models import Artist, Asset, BackgroundRemovalJob, Card, Member
+from app.models import Artist, Asset, BackgroundRemovalJob, Card, Member, UserCard
 from app.rate_limit import enforce_rate_limit
 from app.schemas import ArtistCardRequest, ArtistCardUpdate
 from app.tasks import enqueue_background_removal
@@ -92,6 +92,51 @@ async def list_cards(user: ArtistUser, session: DbSession) -> dict:
         select(Card).where(Card.owner_artist_id == user.id).order_by(Card.id.desc())
     )
     return {"ok": True, "data": {"items": [card_data(card) for card in cards]}}
+
+
+@router.get("/artist/insights")
+async def insights(user: ArtistUser, session: DbSession) -> dict:
+    """Return ownership-scoped card and collection metrics for the studio."""
+    cards = (
+        await session.scalars(
+            select(Card).where(Card.owner_artist_id == user.id).order_by(Card.id.desc())
+        )
+    ).all()
+    card_ids = [card.id for card in cards]
+    redemption_counts: dict[str, int] = {}
+    if card_ids:
+        rows = (
+            await session.execute(
+                select(UserCard.card_id, func.count())
+                .where(UserCard.card_id.in_(card_ids))
+                .group_by(UserCard.card_id)
+            )
+        ).all()
+        redemption_counts = {card_id: count for card_id, count in rows}
+
+    items = [
+        {
+            "cardId": card.id,
+            "name": card.name,
+            "status": card.status,
+            "issueLimit": card.issue_limit,
+            "redeemedCount": redemption_counts.get(card.id, 0),
+        }
+        for card in cards
+    ]
+    return {
+        "ok": True,
+        "data": {
+            "summary": {
+                "totalCards": len(cards),
+                "draftCards": sum(card.status == "draft" for card in cards),
+                "pendingReviewCards": sum(card.status == "pending_review" for card in cards),
+                "publishedCards": sum(card.status == "published" for card in cards),
+                "redeemedCount": sum(redemption_counts.values()),
+            },
+            "items": items,
+        },
+    }
 
 
 def card_data(card: Card) -> dict:

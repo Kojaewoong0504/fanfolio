@@ -4,7 +4,7 @@ const app = document.querySelector('#app');
 const state = {
   authenticated: Boolean(SESSION_TOKEN), loginError: '', loginEmail: '', magicLinkRequested: false, step: 1, cardId: null, assetId: null,
   cardName: '', jobId: null, preview: null, previewImageSrc: '', signature: '', cards: [],
-  form: { name: '드림 스페셜 카드 #5', artistId: 'artist_nova3', memberId: 'member_yuna', seasonName: '2025 봄', templateId: 'template_signature_v1', rarity: 'R', signatureText: '항상 고마워요, 우리 함께해요!', hasVoice: true, voiceAssetId: null, issueLimit: 3000 },
+  form: { name: '드림 스페셜 카드 #5', artistId: 'artist_nova3', memberId: 'member_yuna', seasonName: '2025 봄', templateId: 'template_signature_v1', rarity: 'R', signatureText: '항상 고마워요, 우리 함께해요!', hasVoice: true, voiceAssetId: null, issueLimit: 3000 }, insights: null,
 };
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
 
@@ -99,6 +99,23 @@ async function loadStudioWithCatalog() {
   }
 }
 
+async function loadInsights() {
+  try {
+    const result = await api('/artist/insights');
+    state.insights = result.data;
+    if (state.view === 'feedback') shell(insightsView());
+  } catch (error) {
+    if (error.status === 401 || error.status === 403) {
+      state.view = 'create';
+      state.authenticated = false;
+      state.loginError = '아티스트 세션이 만료됐어요. 다시 로그인해 주세요.';
+      render();
+      return;
+    }
+    toast('팬 반응을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
+  }
+}
+
 async function loginArtistWithCatalog(event) {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
@@ -140,9 +157,17 @@ function studioCardsView() {
   return `<div class="panel studio-cards-panel"><div class="studio-list-heading"><div><h2>내 카드</h2><p class="hint">작성 중인 카드와 검수 상태를 확인할 수 있어요.</p></div><button class="primary compact" id="new-card">+ 새 카드 만들기</button></div><div class="studio-card-list">${cards}</div></div>`;
 }
 
+function insightsView() {
+  if (!state.insights) return '<div class="panel studio-empty"><strong>팬 반응을 불러오는 중입니다.</strong><span>카드 수집 현황을 계산하고 있어요.</span></div>';
+  const { summary, items } = state.insights;
+  const statusLabels = { draft: '임시 저장', pending_review: '검수 중', changes_requested: '수정 요청', published: '공개', rejected: '반려' };
+  const rows = items.length ? items.map((item) => `<tr><td><strong>${esc(item.name)}</strong></td><td><span class="studio-status">${esc(statusLabels[item.status] || item.status)}</span></td><td>${item.issueLimit ? `${esc(item.issueLimit)}장` : '-'}</td><td><strong>${esc(item.redeemedCount)}명</strong></td></tr>`).join('') : '<tr><td colspan="4" class="studio-empty">아직 만든 카드가 없습니다.</td></tr>';
+  return `<div class="insights-page"><div class="metrics"><div class="metric"><span class="metric-label">전체 카드</span><div class="metric-value">${summary.totalCards}</div><span class="metric-note">등록한 카드</span></div><div class="metric"><span class="metric-label">공개 카드</span><div class="metric-value">${summary.publishedCards}</div><span class="metric-note">팬에게 노출 중</span></div><div class="metric"><span class="metric-label">검수 중</span><div class="metric-value">${summary.pendingReviewCards}</div><span class="metric-note">운영팀 확인 대기</span></div><div class="metric"><span class="metric-label">전체 수집 수</span><div class="metric-value">${summary.redeemedCount}</div><span class="metric-note">팬이 등록한 카드</span></div></div><div class="panel"><h2>카드별 수집 현황</h2><p class="hint">팬이 실제로 등록한 공식 카드 수를 카드별로 확인할 수 있어요.</p><div class="table-wrap"><table class="table"><thead><tr><th>카드</th><th>상태</th><th>발행 수량</th><th>수집 수</th></tr></thead><tbody>${rows}</tbody></table></div></div></div>`;
+}
+
 function renderShell(content) {
   const view = state.view || 'create';
-  const title = view === 'cards' ? '내 카드' : state.step === 1 ? '카드 만들기' : state.step === 2 ? '손글씨 추가' : state.step === 3 ? '카드 미리보기' : '검수 요청 완료';
+  const title = view === 'cards' ? '내 카드' : view === 'feedback' ? '팬 반응' : state.step === 1 ? '카드 만들기' : state.step === 2 ? '손글씨 추가' : state.step === 3 ? '카드 미리보기' : '검수 요청 완료';
   app.innerHTML = `<div class="shell"><aside class="side"><div class="logo">Fanfolio <span>✦</span><small>아티스트 스튜디오</small></div><nav class="nav"><button data-studio-view="home" class="${view === 'home' ? 'active' : ''}">⌂　스튜디오 홈</button><button data-studio-view="create" class="${view === 'create' ? 'active' : ''}">▦　카드 만들기</button><button data-studio-view="cards" class="${view === 'cards' ? 'active' : ''}">◇　내 카드</button><button data-studio-view="feedback">♡　팬 반응</button><button data-studio-view="settings">⚙　설정</button></nav><div class="profile"><span class="avatar">A</span><div><strong>아티스트</strong>ARTIST</div></div></aside><main class="workspace"><header class="top"><div><p class="kicker">Fanfolio Artist Studio</p><h1 class="title">${title}</h1></div><div class="top-actions"><span class="save-state">● API 연결됨</span><button class="secondary" id="session-config">세션 설정</button><button class="secondary" id="logout">로그아웃</button></div></header>${content}</main></div><div class="toast" id="toast"></div>`;
   bindCommon();
   document.querySelector('#new-card')?.addEventListener('click', () => { state.view = 'create'; state.editingCardId = null; state.cardId = null; state.step = 1; render(); });
@@ -153,8 +178,9 @@ document.addEventListener('click', (event) => {
   if (!button || !state.authenticated) return;
   const view = button.dataset.studioView;
   if (view === 'cards') { state.view = 'cards'; shell(studioCardsView()); }
+  if (view === 'feedback') { state.view = 'feedback'; shell(insightsView()); void loadInsights(); }
   if (view === 'create' || view === 'home') { state.view = 'create'; state.editingCardId = null; state.cardId = null; state.step = 1; render(); }
-  if (view === 'feedback' || view === 'settings') toast('이 메뉴는 다음 단계에서 연결할 예정입니다.');
+  if (view === 'settings') toast('설정 메뉴는 다음 단계에서 연결할 예정입니다.');
 });
 
 function beginCardEdit(cardId) {

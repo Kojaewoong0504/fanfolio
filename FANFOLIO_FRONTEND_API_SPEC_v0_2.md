@@ -224,6 +224,7 @@ Base URL: `/api`
 | PATCH | `/artist/cards/{cardId}` | 카드 내용/자산/손글씨 배치 수정 |
 | POST | `/artist/cards/{cardId}/preview` | 팬 화면용 렌더 미리보기 생성/조회 |
 | POST | `/artist/cards/{cardId}/submit-review` | 공개 검수 요청 |
+| GET | `/artist/insights` | 내 카드별 팬 수집 수와 상태 요약 |
 
 `PATCH /artist/cards/{cardId}` 핵심 본문:
 
