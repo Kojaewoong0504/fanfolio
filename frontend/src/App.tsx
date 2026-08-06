@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import './App.css'
-import { apiFetch, type CollectionCard } from './api/client'
+import { apiFetch, type CollectionCard, type NotificationItem } from './api/client'
 
 type Tab = 'collection' | 'discover' | 'alerts' | 'settings'
 
@@ -29,6 +29,7 @@ function App() {
   const [signedIn, setSignedIn] = useState(true)
   const [collectionCards, setCollectionCards] = useState<Card[]>(cards)
   const [apiConnected, setApiConnected] = useState(false)
+  const [notifications, setNotifications] = useState<NotificationItem[]>([])
 
   const refreshCollection = async () => {
     try {
@@ -42,6 +43,28 @@ function App() {
   }
 
   useEffect(() => { void refreshCollection() }, [])
+
+  useEffect(() => {
+    void apiFetch<{ ok: true, data: { items: NotificationItem[] } }>('/notifications')
+      .then(result => setNotifications(result.data.items))
+      .catch(() => setNotifications([]))
+  }, [])
+
+  const logout = async () => {
+    try { await apiFetch('/auth/logout', { method: 'POST' }) } finally { setSignedIn(false) }
+  }
+
+  const markNotificationRead = async (id: string) => {
+    try {
+      const result = await apiFetch<{ ok: true, data: NotificationItem }>(`/notifications/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ read: true }),
+      })
+      setNotifications(items => items.map(item => item.id === id ? result.data : item))
+    } catch {
+      // Keep the notification visible if the API is unavailable during UI review.
+    }
+  }
 
   if (!signedIn) {
     return <Login onLogin={() => setSignedIn(true)} />
@@ -58,8 +81,8 @@ function App() {
       <section className="screen">
         {tab === 'collection' && <Collection cards={collectionCards} onSelect={setSelectedCard} onRedeem={() => setShowRedeem(true)} />}
         {tab === 'discover' && <Discover onSelect={setSelectedCard} />}
-        {tab === 'alerts' && <Alerts />}
-        {tab === 'settings' && <Settings onLogout={() => setSignedIn(false)} />}
+        {tab === 'alerts' && <Alerts items={notifications} onRead={markNotificationRead} />}
+        {tab === 'settings' && <Settings onLogout={logout} />}
       </section>
 
       <nav className="bottom-nav" aria-label="주요 메뉴">
@@ -128,9 +151,9 @@ function Collection({ cards: collectionCards, onSelect, onRedeem }: { cards: Car
 
 function Discover({ onSelect }: { onSelect: (card: typeof cards[number]) => void }) { return <><input className="search" placeholder="카드, 아티스트 검색" /><div className="section-heading"><h2>인기 카드</h2><button>전체 보기</button></div><div className="horizontal-cards">{cards.map(card => <button key={card.id} onClick={() => onSelect(card)}><img src={card.image} alt="" /><b>{card.member}</b></button>)}</div><div className="section-heading"><h2>새로운 카드</h2><button>전체 보기</button></div><div className="discover-list">{cards.map(card => <button key={card.id} onClick={() => onSelect(card)}><img src={card.image} alt="" /><span><b>{card.title}</b><small>{card.artist} · {card.member}</small></span><strong>›</strong></button>)}</div></> }
 
-function Alerts() { return <div className="alert-list">{[['새 카드', '발행번호 #021', '새 카드가 공개되었습니다.'], ['컬렉션', '컬렉션이 업데이트되었습니다', '보유 카드가 18장으로 늘었어요.'], ['공지', '서비스 점검 안내', '5월 12일(월) 02:00 - 04:00']].map(([tag, title, body]) => <article key={title}><span className="tag">{tag}</span><h2>{title}</h2><p>{body}</p><small>10분 전</small></article>)}</div> }
+function Alerts({ items, onRead }: { items: NotificationItem[], onRead: (id: string) => Promise<void> }) { const sample = [['새 카드', '발행번호 #021', '새 카드가 공개되었습니다.'], ['컬렉션', '컬렉션이 업데이트되었습니다', '보유 카드가 18장으로 늘었어요.'], ['공지', '서비스 점검 안내', '5월 12일(월) 02:00 - 04:00']] as const; return <div className="alert-list">{(items.length ? items.map(item => [item.id, '새 소식', 'Fanfolio의 새로운 소식이 도착했습니다.', item.isRead] as const) : sample.map((item, index) => [`sample-${index}`, ...item, true] as const)).map(([id, tag, title, body, isRead]) => <button className={isRead ? 'alert-card read' : 'alert-card'} key={id} onClick={() => !isRead && void onRead(id)}><span className="tag">{tag}</span><h2>{title}</h2><p>{body}</p><small>{isRead ? '확인함' : '새 알림'}</small></button>)}</div> }
 
-function Settings({ onLogout }: { onLogout: () => void }) { return <><div className="profile"><div className="avatar">팬</div><div><b>팬포리오</b><small>fanfolio_1234</small></div><span>›</span></div><div className="settings-list">{['프로필', '계정', '알림 설정', '앱 정보'].map(item => <button key={item}><span>{item}</span><strong>›</strong></button>)}</div><button className="logout" onClick={onLogout}>로그아웃</button></> }
+function Settings({ onLogout }: { onLogout: () => Promise<void> }) { const [busy, setBusy] = useState(false); const logout = async () => { setBusy(true); await onLogout(); setBusy(false) }; return <><div className="profile"><div className="avatar">팬</div><div><b>팬포리오</b><small>fanfolio_1234</small></div><span>›</span></div><div className="settings-list">{['프로필', '계정', '알림 설정', '앱 정보'].map(item => <button key={item}><span>{item}</span><strong>›</strong></button>)}</div><button className="logout" onClick={() => void logout} disabled={busy}>{busy ? '로그아웃 중...' : '로그아웃'}</button></> }
 
 function CardDetail({ card, onClose }: { card: typeof cards[number], onClose: () => void }) { return <aside className="detail-panel"><button onClick={onClose}>닫기</button><img src={card.image} alt="카드 상세" /><dl><div><dt>아티스트</dt><dd>{card.artist}</dd></div><div><dt>멤버</dt><dd>{card.member}</dd></div><div><dt>발행번호</dt><dd>{card.id}</dd></div><div><dt>획득 경로</dt><dd>콘텐츠 코드 #1</dd></div></dl><button className="primary">컬렉션에 추가</button></aside> }
 

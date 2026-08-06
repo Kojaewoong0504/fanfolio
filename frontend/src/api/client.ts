@@ -10,6 +10,12 @@ export type CollectionCard = {
   acquiredAt: string
 }
 
+export type NotificationItem = {
+  id: string
+  isRead: boolean
+  readAt: string | null
+}
+
 export class ApiError extends Error {
   status: number
 
