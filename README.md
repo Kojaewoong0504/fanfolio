@@ -55,7 +55,20 @@ python3 -m http.server 4175
 ```
 
 스튜디오는 `http://localhost:4175`에서 열 수 있습니다. 카드 생성, 손글씨 캔버스,
-배경 제거 작업 요청, 검수 요청 API를 연결하며 백엔드가 없을 때는 데모 모드로 흐름을 확인할 수 있습니다.
+배경 제거 작업 요청, 검수 요청 API를 연결합니다. 브라우저의 세션 설정에서 아티스트 세션 토큰을 입력할 수 있습니다.
+
+### 6. 선택적 Celery 작업자
+
+기본값은 Redis 없이 실행되는 `TASK_QUEUE_MODE=inline`입니다. Redis를 실행한 뒤 분산 작업 큐를 사용하려면 backend `.env`를 다음처럼 설정하고 Celery worker를 실행합니다.
+
+```bash
+TASK_QUEUE_MODE=celery
+CELERY_BROKER_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/0
+
+cd backend
+python3 -m uv run celery -A app.tasks:celery_app worker --loglevel=INFO
+```
 
 ## VS Code 개발 환경
 

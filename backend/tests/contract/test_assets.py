@@ -2,12 +2,28 @@ import base64
 from typing import Any
 
 from fastapi.testclient import TestClient
+from starlette.background import BackgroundTasks
 
+from app import tasks
 from tests.conftest import assert_error, assert_success
 
 PNG_1X1 = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
 )
+
+
+def test_background_removal_can_dispatch_to_celery(monkeypatch: Any) -> None:
+    dispatched: list[str] = []
+    monkeypatch.setattr(tasks.settings, "task_queue_mode", "celery")
+    monkeypatch.setattr(
+        tasks.process_background_removal_task,
+        "delay",
+        lambda job_id: dispatched.append(job_id),
+    )
+
+    tasks.enqueue_background_removal("job_celery_test", BackgroundTasks())
+
+    assert dispatched == ["job_celery_test"]
 
 
 def test_artist_can_presign_and_upload_an_asset(

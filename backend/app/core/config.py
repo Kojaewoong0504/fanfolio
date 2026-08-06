@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     app_env: str = "development"
     database_url: str = "sqlite+aiosqlite:///./fanfolio.db"
     storage_dir: str = "./storage"
+    task_queue_mode: str = "inline"
+    celery_broker_url: str = "redis://localhost:6379/0"
+    celery_result_backend: str = "redis://localhost:6379/0"
 
     @property
     def async_database_url(self) -> str:

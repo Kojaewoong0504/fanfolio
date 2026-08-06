@@ -10,7 +10,7 @@ from app.errors import AppError
 from app.image_processing import compose_card_preview
 from app.models import Asset, BackgroundRemovalJob, Card
 from app.schemas import ArtistCardRequest, ArtistCardUpdate
-from app.services import process_background_removal
+from app.tasks import enqueue_background_removal
 
 router = APIRouter(prefix="/api", tags=["artist"])
 
@@ -182,11 +182,10 @@ async def remove_background(
     asset = await session.get(Asset, asset_id)
     if not asset or asset.owner_id != user.id:
         raise AppError(404, "ASSET_NOT_FOUND", "자산을 찾을 수 없습니다.")
-    # Later, enqueue this durable job to Celery only after the DB transaction commits.
     job = BackgroundRemovalJob(id=f"job_{uuid4().hex[:10]}", asset_id=asset.id, status="queued")
     session.add(job)
     await session.commit()
-    background_tasks.add_task(process_background_removal, job.id)
+    enqueue_background_removal(job.id, background_tasks)
     return {"ok": True, "data": {"jobId": job.id, "status": job.status}}
 
 
