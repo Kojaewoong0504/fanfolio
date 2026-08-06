@@ -99,6 +99,69 @@ def test_publishing_a_card_creates_audit_log_and_fan_notification(
     ]
 
 
+def test_admin_can_review_an_artist_card_before_publishing(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    draft = assert_success(
+        actors["artist"].post(
+            "/api/artist/cards",
+            json={
+                "templateId": seeded["ids"]["templateId"],
+                "name": "관리자 검수 카드",
+                "seasonName": "2026 SPRING",
+                "rarity": "Special",
+                "imageAssetId": seeded["ids"]["imageAssetId"],
+                "signatureText": "검수 부탁드려요.",
+                "issueLimit": 100,
+            },
+        ),
+        201,
+    )
+    assert_success(actors["artist"].post(f"/api/artist/cards/{draft['id']}/submit-review"))
+
+    detail = assert_success(actors["admin"].get(f"/api/admin/cards/{draft['id']}"))
+    assert detail["signatureText"] == "검수 부탁드려요."
+    assert detail["status"] == "pending_review"
+    assert_error(
+        actors["admin"].post(f"/api/admin/cards/{draft['id']}/publish"),
+        409,
+        "REVIEW_REQUIRED",
+    )
+
+    approved = assert_success(
+        actors["admin"].post(
+            f"/api/admin/cards/{draft['id']}/review",
+            json={"decision": "approve", "note": "이미지와 문구를 확인했습니다."},
+        )
+    )
+    assert approved == {"id": draft["id"], "status": "approved"}
+    published = assert_success(actors["admin"].post(f"/api/admin/cards/{draft['id']}/publish"))
+    assert published["status"] == "published"
+
+    revision = assert_success(
+        actors["artist"].post(
+            "/api/artist/cards",
+            json={
+                "templateId": seeded["ids"]["templateId"],
+                "name": "수정 요청 검증 카드",
+                "seasonName": "2026 SPRING",
+                "rarity": "Special",
+                "imageAssetId": seeded["ids"]["imageAssetId"],
+                "issueLimit": 100,
+            },
+        ),
+        201,
+    )
+    assert_success(actors["artist"].post(f"/api/artist/cards/{revision['id']}/submit-review"))
+    changes_requested = assert_success(
+        actors["admin"].post(
+            f"/api/admin/cards/{revision['id']}/review",
+            json={"decision": "request_changes", "note": "손글씨 위치를 조정해 주세요."},
+        )
+    )
+    assert changes_requested == {"id": revision["id"], "status": "changes_requested"}
+
+
 def test_admin_dashboard_and_card_list_are_backed_by_database(
     actors: dict[str, TestClient],
 ) -> None:

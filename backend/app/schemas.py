@@ -82,6 +82,11 @@ class AdminUserRoleUpdate(BaseModel):
     role: Literal["fan", "artist", "admin"]
 
 
+class AdminCardReviewRequest(BaseModel):
+    decision: Literal["approve", "request_changes"]
+    note: str | None = Field(default=None, max_length=500)
+
+
 class ArtistCardRequest(BaseModel):
     template_id: str = Field(alias="templateId")
     name: str

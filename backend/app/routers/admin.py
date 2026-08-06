@@ -4,13 +4,19 @@ from io import StringIO
 from uuid import uuid4
 
 from fastapi import APIRouter, Query, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import func, select
 
 from app.dependencies import AdminUser, DbSession
 from app.errors import AppError
 from app.models import AuditLog, Card, Drop, RedeemCode, RedeemCodeBatch, Role, User
-from app.schemas import AdminUserRoleUpdate, CodeBatchRequest, DropCreateRequest, DropStatusUpdate
+from app.schemas import (
+    AdminCardReviewRequest,
+    AdminUserRoleUpdate,
+    CodeBatchRequest,
+    DropCreateRequest,
+    DropStatusUpdate,
+)
 from app.services import notify_fans, record_audit
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -96,6 +102,71 @@ async def cards(
 async def list_drops(_: AdminUser, session: DbSession) -> dict:
     drops = await session.scalars(select(Drop).order_by(Drop.id.desc()))
     return {"ok": True, "data": {"items": [drop_data(drop) for drop in drops]}}
+
+
+def admin_card_data(card: Card) -> dict:
+    return {
+        "id": card.id,
+        "name": card.name,
+        "status": card.status,
+        "rarity": card.rarity,
+        "seasonName": card.season_name,
+        "templateId": card.template_id,
+        "issueLimit": card.issue_limit,
+        "imageAssetId": card.image_asset_id,
+        "ownerArtistId": card.owner_artist_id,
+        "memberId": card.member_id,
+        "signatureText": card.signature_text,
+        "handwritingAssetId": card.handwriting_asset_id,
+        "handwritingTransform": card.handwriting_transform,
+        "hasVoice": card.has_voice,
+        "previewImageUrl": (
+            f"/api/admin/cards/{card.id}/preview/image" if card.preview_storage_path else None
+        ),
+    }
+
+
+@router.get("/cards/{card_id}")
+async def card_detail(card_id: str, _: AdminUser, session: DbSession) -> dict:
+    card = await session.get(Card, card_id)
+    if not card:
+        raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
+    return {"ok": True, "data": admin_card_data(card)}
+
+
+@router.get("/cards/{card_id}/preview/image")
+async def card_preview_image(card_id: str, _: AdminUser, session: DbSession) -> FileResponse:
+    card = await session.get(Card, card_id)
+    if not card or not card.preview_storage_path:
+        raise AppError(404, "PREVIEW_NOT_READY", "카드 미리보기가 아직 준비되지 않았습니다.")
+    return FileResponse(card.preview_storage_path, media_type="image/png")
+
+
+@router.post("/cards/{card_id}/review")
+async def review_card(
+    card_id: str,
+    payload: AdminCardReviewRequest,
+    admin: AdminUser,
+    session: DbSession,
+) -> dict:
+    card = await session.get(Card, card_id)
+    if not card:
+        raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
+    if card.status != "pending_review":
+        raise AppError(409, "INVALID_REVIEW_STATUS", "검수 대기 중인 카드만 검수할 수 있습니다.")
+    next_status = "approved" if payload.decision == "approve" else "changes_requested"
+    action = "card.review_approved" if payload.decision == "approve" else "card.changes_requested"
+    card.status = next_status
+    await record_audit(
+        session,
+        actor_user_id=admin.id,
+        action=action,
+        entity_type="card",
+        entity_id=card.id,
+        details={"note": payload.note} if payload.note else {},
+    )
+    await session.commit()
+    return {"ok": True, "data": {"id": card.id, "status": card.status}}
 
 
 @router.post("/drops", status_code=status.HTTP_201_CREATED)
@@ -321,6 +392,8 @@ async def publish(card_id: str, admin: AdminUser, session: DbSession) -> dict:
     card = await session.get(Card, card_id)
     if not card:
         raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
+    if card.status == "pending_review":
+        raise AppError(409, "REVIEW_REQUIRED", "검수 승인 후 카드를 공개할 수 있습니다.")
     previous_status = card.status
     card.status = "published"
     if previous_status != "published":
