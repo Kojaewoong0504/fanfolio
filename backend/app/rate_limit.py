@@ -104,6 +104,12 @@ async def enforce_rate_limit(key: str, *, limit: int, window_seconds: int) -> No
     await _enforce_memory_limit(key, limit=limit, window_seconds=window_seconds)
 
 
+async def check_rate_limit_backend() -> None:
+    """Fail readiness when the configured shared limiter cannot be reached."""
+    if get_settings().rate_limit_backend == "redis":
+        await _get_redis_client().ping()
+
+
 async def reset_rate_limits() -> None:
     """Reset local state and close the optional Redis pool for test isolation."""
     global _redis_client, _redis_url

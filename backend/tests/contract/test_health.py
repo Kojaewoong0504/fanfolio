@@ -45,6 +45,23 @@ def test_readiness_checks_the_task_broker_when_celery_is_enabled(
     assert checked is True
 
 
+def test_readiness_checks_the_shared_rate_limit_backend(
+    client: TestClient, monkeypatch: Any
+) -> None:
+    checked = False
+
+    async def fake_check_rate_limit_backend() -> None:
+        nonlocal checked
+        checked = True
+
+    monkeypatch.setattr(health, "check_rate_limit_backend", fake_check_rate_limit_backend)
+
+    data = assert_success(client.get("/api/health/ready"))
+
+    assert data["status"] == "ready"
+    assert checked is True
+
+
 def test_readiness_returns_service_unavailable_when_task_broker_is_down(
     client: TestClient,
     monkeypatch: Any,

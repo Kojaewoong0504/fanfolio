@@ -7,6 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.core.config import get_settings
 from app.db.session import engine
 from app.errors import AppError
+from app.rate_limit import check_rate_limit_backend
 
 router = APIRouter(tags=["health"])
 
@@ -41,6 +42,7 @@ async def readiness() -> dict:
         async with engine.connect() as connection:
             await connection.execute(text("SELECT 1"))
         await _check_task_queue()
+        await check_rate_limit_backend()
     except (OSError, RuntimeError, ValueError, SQLAlchemyError) as error:
         raise AppError(
             status.HTTP_503_SERVICE_UNAVAILABLE,
