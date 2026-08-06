@@ -143,7 +143,7 @@ function App() {
 
   const markAllNotificationsRead = async () => {
     try {
-      await apiFetch('/notifications/read-all', { method: 'PATCH' })
+      await apiFetch('/notifications/read-all', { method: 'POST' })
       setNotifications(items => items.map(item => ({ ...item, isRead: true, readAt: new Date().toISOString() })))
       setUnreadCount(0)
     } catch {

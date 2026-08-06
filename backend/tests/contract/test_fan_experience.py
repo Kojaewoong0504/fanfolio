@@ -214,11 +214,21 @@ def test_fan_can_read_unread_count_and_mark_all_notifications_as_read(
     count = assert_success(fan.get("/api/notifications/unread-count"))
     assert count["unreadCount"] == 1
 
-    cleared = assert_success(fan.patch("/api/notifications/read-all"))
+    cleared = assert_success(fan.post("/api/notifications/read-all"))
     assert cleared["updatedCount"] == 1
 
     count = assert_success(fan.get("/api/notifications/unread-count"))
     assert count["unreadCount"] == 0
+
+
+def test_legacy_patch_read_all_notifications_remains_compatible(
+    actors: dict[str, TestClient],
+) -> None:
+    fan = actors["fan"]
+
+    response = fan.patch("/api/notifications/read-all")
+
+    assert response.status_code == 200
 
 
 @pytest.mark.anyio

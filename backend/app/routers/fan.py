@@ -339,8 +339,7 @@ async def unread_notification_count(user: FanUser, session: DbSession) -> dict:
     return {"ok": True, "data": {"unreadCount": unread_count or 0}}
 
 
-@router.patch("/notifications/read-all")
-async def read_all_notifications(user: FanUser, session: DbSession) -> dict:
+async def _read_all_notifications(user: FanUser, session: DbSession) -> dict:
     result = await session.execute(
         update(Notification)
         .where(Notification.user_id == user.id, Notification.is_read.is_(False))
@@ -348,6 +347,18 @@ async def read_all_notifications(user: FanUser, session: DbSession) -> dict:
     )
     await session.commit()
     return {"ok": True, "data": {"updatedCount": result.rowcount or 0}}
+
+
+@router.post("/notifications/read-all")
+async def read_all_notifications(user: FanUser, session: DbSession) -> dict:
+    """Mark every unread notification as read per the frontend contract."""
+    return await _read_all_notifications(user, session)
+
+
+@router.patch("/notifications/read-all")
+async def read_all_notifications_legacy(user: FanUser, session: DbSession) -> dict:
+    """Keep the original PATCH route for already-released clients."""
+    return await _read_all_notifications(user, session)
 
 
 @router.patch("/notifications/{notification_id}")
