@@ -5,6 +5,7 @@ const state = {
   authenticated: Boolean(SESSION_TOKEN), loginError: '', loginEmail: '', magicLinkRequested: false, step: 1, cardId: null, assetId: null,
   cardName: '', jobId: null, preview: null, previewImageSrc: '', signature: '', cards: [],
   form: { name: '드림 스페셜 카드 #5', artistId: 'artist_nova3', memberId: 'member_yuna', seasonName: '2025 봄', templateId: 'template_signature_v1', rarity: 'R', signatureText: '항상 고마워요, 우리 함께해요!', hasVoice: true, voiceAssetId: null, issueLimit: 3000 }, insights: null, profile: null,
+  catalog: null, catalogLoaded: false, apiConnected: false, catalogError: '',
 };
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
 
@@ -12,7 +13,8 @@ function absoluteApiUrl(path) { if (!path) return ''; if (/^(https?:|blob:|data:
 function loginView() { const step = state.magicLinkRequested ? '<label class="field">로그인 토큰<input name="token" type="password" autocomplete="one-time-code" placeholder="이메일의 로그인 토큰" required /></label><button class="primary" type="submit">스튜디오 입장</button>' : '<label class="field">아티스트 이메일<input name="email" type="email" autocomplete="email" placeholder="artist@fanfolio.com" required /></label><button class="primary" type="submit">로그인 링크 받기</button>'; return `<main class="login-page"><div class="login-card"><p class="kicker">Fanfolio Artist Studio</p><div class="login-mark">✦</div><h1>아티스트 스튜디오 로그인</h1><p class="hint">아티스트 이메일로 받은 로그인 링크를 사용합니다.</p><form id="login-form" class="login-form">${step}</form>${state.loginError ? `<p class="login-error" role="alert">${esc(state.loginError)}</p>` : ''}</div></main>`; }
 
 function shell(content) {
-  app.innerHTML = `<div class="shell"><aside class="side"><div class="logo">Fanfolio <span>✦</span><small>아티스트 스튜디오</small></div><nav class="nav"><button class="active">⌂　스튜디오 홈</button><button>▦　카드 만들기</button><button>◇　내 카드</button><button>♡　팬 반응</button><button>⚙　설정</button></div><div class="profile"><span class="avatar">A</span><div><strong>아티스트</strong>ARTIST</div></aside><main class="workspace"><header class="top"><div><p class="kicker">Fanfolio Artist Studio</p><h1 class="title">${state.step === 1 ? '카드 만들기' : state.step === 2 ? '손글씨 추가' : state.step === 3 ? '카드 미리보기' : '검수 요청 완료'}</h1></div><div class="top-actions"><span class="save-state">● API 연결됨</span><button class="secondary" id="session-config">세션 설정</button><button class="secondary" id="logout">로그아웃</button></div></header>${content}</main></div><div class="toast" id="toast"></div>`;
+  const connectionLabel = state.apiConnected ? '● API 연결됨' : '○ API 연결 대기';
+  app.innerHTML = `<div class="shell"><aside class="side"><div class="logo">Fanfolio <span>✦</span><small>아티스트 스튜디오</small></div><nav class="nav"><button class="active">⌂　스튜디오 홈</button><button>▦　카드 만들기</button><button>◇　내 카드</button><button>♡　팬 반응</button><button>⚙　설정</button></div><div class="profile"><span class="avatar">A</span><div><strong>아티스트</strong>ARTIST</div></aside><main class="workspace"><header class="top"><div><p class="kicker">Fanfolio Artist Studio</p><h1 class="title">${state.step === 1 ? '카드 만들기' : state.step === 2 ? '손글씨 추가' : state.step === 3 ? '카드 미리보기' : '검수 요청 완료'}</h1></div><div class="top-actions"><span class="save-state">${connectionLabel}</span><button class="secondary" id="session-config">세션 설정</button><button class="secondary" id="logout">로그아웃</button></div></header>${content}</main></div><div class="toast" id="toast"></div>`;
   bindCommon();
 }
 function ensureVoiceUploadField() {
@@ -58,21 +60,18 @@ async function loadPreview() { if (!state.cardId) { toast('먼저 카드 정보�
 document.addEventListener('change', (event) => { if (event.target.matches('select[name="group"]')) { state.form.artistId = event.target.value; state.form.memberId = ''; render(); } });
 document.addEventListener('submit', async (event) => { if (event.target.id !== 'card-form') return; event.preventDefault(); const form = new FormData(event.target); const imageFile = form.get('cardImage'); state.form = { ...state.form, artistId: form.get('group'), name: form.get('name'), memberId: form.get('memberId'), seasonName: form.get('seasonName'), templateId: form.get('templateId'), rarity: form.get('rarity'), signatureText: form.get('signatureText'), issueLimit: Number(form.get('issueLimit')) }; try { const imageAssetId = await uploadAsset(imageFile, 'card'); const result = await api('/artist/cards', { method: 'POST', body: JSON.stringify({ templateId: state.form.templateId, name: state.form.name, seasonName: state.form.seasonName, rarity: state.form.rarity, imageAssetId, artistId: state.form.artistId, memberId: state.form.memberId, signatureText: state.form.signatureText, hasVoice: state.form.hasVoice, issueLimit: state.form.issueLimit }) }); state.cardId = result.data.id; state.cardName = result.data.name; state.cards = [result.data, ...state.cards.filter((card) => card.id !== result.data.id)]; toast('카드를 임시 저장했습니다.'); state.step = 2; render(); } catch { toast('카드 이미지 업로드 또는 저장에 실패했습니다. 아티스트 세션과 API 서버를 확인해 주세요.'); } });
 document.addEventListener('click', async (event) => { if (event.target.id === 'save-draft') toast('카드 정보는 다음 단계로 이동할 때 API에 저장됩니다.'); if (event.target.id === 'submit-review') { if (!state.cardId) { toast('먼저 카드 정보를 저장해 주세요.'); return; } try { await api(`/artist/cards/${state.cardId}/submit-review`, { method: 'POST' }); state.step = 4; render(); } catch { toast('검수 요청에 실패했습니다. 아티스트 세션과 API 서버를 확인해 주세요.'); } } if (event.target.id === 'back-signature') { state.step = 2; render(); } });
-// API에서 받은 카탈로그를 카드 생성 폼에 반영합니다. 기존 목업 옵션을
-// fallback으로 남겨 두어 API가 아직 준비되지 않은 로컬 화면도 깨지지 않습니다.
+// 카드 생성에 필요한 카탈로그와 템플릿은 API 응답만 사용합니다.
+// API가 준비되지 않으면 저장 가능한 것처럼 보이는 목업 옵션을 표시하지 않습니다.
 function cardForm() {
+  if (!state.catalogLoaded) {
+    const message = state.catalogError || '아티스트 카탈로그와 카드 템플릿을 불러오는 중입니다.';
+    return `<div class="panel studio-empty"><strong>${esc(message)}</strong><span>API 연결이 완료되면 카드 제작을 시작할 수 있어요.</span></div>`;
+  }
   const f = state.form;
   const catalog = state.catalog || {};
-  const artists = catalog.artists || [{ id: 'artist_nova3', name: '드림스케이프' }];
-  const members = catalog.members || [
-    { id: 'member_yuna', name: '유나', artistId: 'artist_nova3' },
-    { id: 'member_minho', name: '민호', artistId: 'artist_nova3' },
-    { id: 'member_jei', name: '제이', artistId: 'artist_nova3' },
-  ];
-  const templates = catalog.items || [
-    { id: 'template_signature_v1', name: '스페셜' },
-    { id: 'template_basic_v1', name: '일반' },
-  ];
+  const artists = catalog.artists || [];
+  const members = catalog.members || [];
+  const templates = catalog.items || [];
   const selectedArtistId = f.artistId || artists[0]?.id;
   const artistOptions = artists.map((artist) => `<option value="${esc(artist.id)}" ${artist.id === selectedArtistId ? 'selected' : ''}>${esc(artist.name)}</option>`).join('');
   const availableMembers = members.filter((member) => !selectedArtistId || member.artistId === selectedArtistId);
@@ -83,10 +82,15 @@ function cardForm() {
 }
 
 async function loadStudioWithCatalog() {
+  state.catalogLoaded = false;
+  state.apiConnected = false;
+  state.catalogError = '';
   try {
     const [catalogResult, cardsResult] = await Promise.all([api('/artist/templates'), api('/artist/cards')]);
     state.catalog = catalogResult.data;
     state.cards = cardsResult.data.items;
+    state.catalogLoaded = true;
+    state.apiConnected = true;
     render();
   } catch (error) {
     if (error.status === 401 || error.status === 403) {
@@ -94,6 +98,9 @@ async function loadStudioWithCatalog() {
       localStorage.removeItem('fanfolio_session');
       state.authenticated = false;
       state.loginError = error.status === 403 ? '아티스트 계정만 스튜디오에 입장할 수 있어요.' : '세션이 만료됐어요. 다시 로그인해 주세요.';
+      render();
+    } else {
+      state.catalogError = '아티스트 카탈로그를 불러오지 못했습니다. API 서버 상태를 확인해 주세요.';
       render();
     }
   }
@@ -192,7 +199,8 @@ function settingsView() {
 function renderShell(content) {
   const view = state.view || 'create';
   const title = view === 'cards' ? '내 카드' : view === 'feedback' ? '팬 반응' : view === 'settings' ? '설정' : state.step === 1 ? '카드 만들기' : state.step === 2 ? '손글씨 추가' : state.step === 3 ? '카드 미리보기' : '검수 요청 완료';
-  app.innerHTML = `<div class="shell"><aside class="side"><div class="logo">Fanfolio <span>✦</span><small>아티스트 스튜디오</small></div><nav class="nav"><button data-studio-view="home" class="${view === 'home' ? 'active' : ''}">⌂　스튜디오 홈</button><button data-studio-view="create" class="${view === 'create' ? 'active' : ''}">▦　카드 만들기</button><button data-studio-view="cards" class="${view === 'cards' ? 'active' : ''}">◇　내 카드</button><button data-studio-view="feedback" class="${view === 'feedback' ? 'active' : ''}">♡　팬 반응</button><button data-studio-view="settings" class="${view === 'settings' ? 'active' : ''}">⚙　설정</button></nav><div class="profile"><span class="avatar">A</span><div><strong>${esc(state.profile?.nickname || '아티스트')}</strong>ARTIST</div></div></aside><main class="workspace"><header class="top"><div><p class="kicker">Fanfolio Artist Studio</p><h1 class="title">${title}</h1></div><div class="top-actions"><span class="save-state">● API 연결됨</span><button class="secondary" id="session-config">세션 설정</button><button class="secondary" id="logout">로그아웃</button></div></header>${content}</main></div><div class="toast" id="toast"></div>`;
+  const connectionLabel = state.apiConnected ? '● API 연결됨' : '○ API 연결 대기';
+  app.innerHTML = `<div class="shell"><aside class="side"><div class="logo">Fanfolio <span>✦</span><small>아티스트 스튜디오</small></div><nav class="nav"><button data-studio-view="home" class="${view === 'home' ? 'active' : ''}">⌂　스튜디오 홈</button><button data-studio-view="create" class="${view === 'create' ? 'active' : ''}">▦　카드 만들기</button><button data-studio-view="cards" class="${view === 'cards' ? 'active' : ''}">◇　내 카드</button><button data-studio-view="feedback" class="${view === 'feedback' ? 'active' : ''}">♡　팬 반응</button><button data-studio-view="settings" class="${view === 'settings' ? 'active' : ''}">⚙　설정</button></nav><div class="profile"><span class="avatar">A</span><div><strong>${esc(state.profile?.nickname || '아티스트')}</strong>ARTIST</div></div></aside><main class="workspace"><header class="top"><div><p class="kicker">Fanfolio Artist Studio</p><h1 class="title">${title}</h1></div><div class="top-actions"><span class="save-state">${connectionLabel}</span><button class="secondary" id="session-config">세션 설정</button><button class="secondary" id="logout">로그아웃</button></div></header>${content}</main></div><div class="toast" id="toast"></div>`;
   bindCommon();
   document.querySelector('#new-card')?.addEventListener('click', () => { state.view = 'create'; state.editingCardId = null; state.cardId = null; state.step = 1; render(); });
 }
@@ -325,7 +333,13 @@ async function restoreArtistSession() {
     state.authenticated = true;
     await loadStudio();
   } catch {
-    // A missing or expired cookie simply keeps the login screen visible.
+    // A missing or expired cookie must not leave an API-loading screen stuck.
+    if (state.authenticated) {
+      state.authenticated = false;
+      state.catalogLoaded = false;
+      state.apiConnected = false;
+      render();
+    }
   }
 }
 
