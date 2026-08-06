@@ -72,6 +72,10 @@ jobs:
           exit 1
       - name: Verify the Celery worker
         run: docker compose -f docker-compose.stack.yml exec -T worker celery -A app.tasks:celery_app inspect ping --timeout=5
+      - name: Verify the API is non-root
+        run: |
+          uid="$(docker compose -f docker-compose.stack.yml exec -T api id -u | tr -d '\r\n')"
+          test "$uid" != "0"
       - name: Stop the application stack
         if: always()
         run: docker compose -f docker-compose.stack.yml down -v
