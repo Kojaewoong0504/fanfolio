@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     storage_dir: str = "./storage"
     max_upload_bytes: int = 10 * 1024 * 1024
     upload_url_ttl_seconds: int = 15 * 60
+    download_signing_secret: str = "dev-only-change-me"
+    download_url_ttl_seconds: int = 5 * 60
     frontend_origins: str = (
         "http://localhost:4174,http://localhost:4175,http://localhost:5173,"
         "http://127.0.0.1:4174,http://127.0.0.1:4175,http://127.0.0.1:5173"
@@ -71,6 +73,8 @@ class Settings(BaseSettings):
             raise ValueError("RATE_LIMIT_BACKEND must be redis in production")
         if not self.rate_limit_redis_url:
             raise ValueError("RATE_LIMIT_REDIS_URL is required in production")
+        if self.download_signing_secret == "dev-only-change-me":
+            raise ValueError("DOWNLOAD_SIGNING_SECRET must be changed in production")
 
 
 @lru_cache

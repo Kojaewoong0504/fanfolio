@@ -173,7 +173,7 @@ def test_collection_benefits_use_active_admin_campaign_rules(
 
 
 def test_fan_can_claim_a_completed_collection_benefit_once(
-    actors: dict[str, TestClient], seeded: dict[str, Any]
+    app: Any, actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:
     asset = assert_success(
         actors["admin"].post(
@@ -221,10 +221,21 @@ def test_fan_can_claim_a_completed_collection_benefit_once(
     assert claim["claimId"].startswith("claim_")
     assert claim["benefit"]["title"] == "디지털 사인 포토"
     assert claim["claimedAt"]
-    assert claim["downloadUrl"] == f"/api/me/collection/benefits/{campaign['id']}/download"
+    assert claim["downloadUrl"].startswith(
+        f"/api/me/collection/benefits/{campaign['id']}/download?token="
+    )
     download = actors["fan"].get(claim["downloadUrl"])
     assert download.status_code == 200
     assert download.content == b"fanfolio bonus"
+    signed_link_client = TestClient(app)
+    anonymous_download = signed_link_client.get(claim["downloadUrl"])
+    assert anonymous_download.status_code == 200
+    assert anonymous_download.content == b"fanfolio bonus"
+    assert_error(
+        signed_link_client.get(claim["downloadUrl"] + "-tampered"),
+        401,
+        "SIGNED_URL_INVALID",
+    )
     logs = assert_success(actors["admin"].get("/api/admin/audit-logs"))
     download_log = next(
         item for item in logs["items"] if item["action"] == "collection_benefit.downloaded"

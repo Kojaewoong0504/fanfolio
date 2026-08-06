@@ -139,7 +139,7 @@ Base URL: `/api`
 | GET | `/me/collection` | 보유 카드 컬렉션과 요약 |
 | GET | `/me/collection/benefits` | 아티스트·시즌별 카드 조합 진행률과 디지털 특전 해금 상태, 클레임 후 다운로드 URL |
 | POST | `/me/collection/benefits/{campaignId}/claim` | 완성된 활성 캠페인의 디지털 특전을 팬 계정에 1회 지급 |
-| GET | `/me/collection/benefits/{campaignId}/download` | 클레임한 캠페인의 디지털 특전 파일 다운로드 |
+| GET | `/me/collection/benefits/{campaignId}/download` | 클레임 시 발급된 짧은 수명의 signed URL로 디지털 특전 파일 다운로드 |
 | GET | `/me/cards/{userCardId}` | 보유 카드 상세 |
 | GET | `/catalog/cards` | 공개 카드 탐색/검색 |
 | GET | `/catalog/artists` | 그룹/아티스트 탐색 목록 |

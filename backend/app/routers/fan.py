@@ -10,7 +10,8 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import case, desc, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
-from app.dependencies import DbSession, FanUser
+from app.dependencies import DbSession, FanUser, OptionalCurrentUser
+from app.download_signing import download_url, verify_download_token
 from app.errors import AppError
 from app.models import (
     Artist,
@@ -176,7 +177,11 @@ async def collection_benefits(user: FanUser, session: DbSession) -> dict:
                             and campaign.id not in claim_by_campaign
                         ),
                         "downloadUrl": (
-                            f"/api/me/collection/benefits/{campaign.id}/download"
+                            download_url(
+                                user_id=user.id,
+                                campaign_id=campaign.id,
+                                asset_id=campaign.benefit_asset_id,
+                            )
                             if campaign.id in claim_by_campaign and campaign.benefit_asset_id
                             else None
                         ),
@@ -294,7 +299,11 @@ async def claim_collection_benefit(campaign_id: str, user: FanUser, session: DbS
             "claimId": claim.id,
             "claimedAt": claim.claimed_at.isoformat(),
             "downloadUrl": (
-                f"/api/me/collection/benefits/{campaign.id}/download"
+                download_url(
+                    user_id=user.id,
+                    campaign_id=campaign.id,
+                    asset_id=campaign.benefit_asset_id,
+                )
                 if campaign.benefit_asset_id
                 else None
             ),
@@ -309,14 +318,27 @@ async def claim_collection_benefit(campaign_id: str, user: FanUser, session: DbS
 
 @router.get("/me/collection/benefits/{campaign_id}/download")
 async def download_collection_benefit(
-    campaign_id: str, user: FanUser, session: DbSession
+    campaign_id: str,
+    user: OptionalCurrentUser,
+    session: DbSession,
+    token: str | None = Query(default=None),
 ) -> FileResponse:
+    token_data = verify_download_token(token) if token else None
+    if token_data and not token_data.get("campaignId") == campaign_id:
+        raise AppError(401, "SIGNED_URL_INVALID", "유효하지 않은 다운로드 링크입니다.")
+    effective_user_id = token_data.get("userId") if token_data else user.id if user else None
+    if not effective_user_id:
+        raise AppError(401, "AUTH_REQUIRED", "로그인이 필요합니다.")
+    if user and user.id != effective_user_id:
+        raise AppError(403, "SIGNED_URL_USER_MISMATCH", "이 다운로드 링크를 사용할 수 없습니다.")
     campaign = await session.get(CollectionCampaign, campaign_id)
     if campaign is None:
         raise AppError(404, "CAMPAIGN_NOT_FOUND", "컬렉션 캠페인을 찾을 수 없습니다.")
+    if token_data and token_data.get("assetId") != campaign.benefit_asset_id:
+        raise AppError(401, "SIGNED_URL_INVALID", "유효하지 않은 다운로드 링크입니다.")
     claim = await session.scalar(
         select(CollectionBenefitClaim).where(
-            CollectionBenefitClaim.user_id == user.id,
+            CollectionBenefitClaim.user_id == effective_user_id,
             CollectionBenefitClaim.campaign_id == campaign.id,
         )
     )
@@ -329,7 +351,7 @@ async def download_collection_benefit(
         raise AppError(404, "BENEFIT_ASSET_NOT_READY", "특전 파일이 아직 준비되지 않았습니다.")
     await record_audit(
         session,
-        actor_user_id=user.id,
+        actor_user_id=effective_user_id,
         action="collection_benefit.downloaded",
         entity_type="collection_campaign",
         entity_id=campaign.id,

@@ -35,6 +35,7 @@ def test_valid_production_settings_pass_runtime_validation() -> None:
         smtp_host="smtp.example.com",
         auto_create_schema=False,
         rate_limit_backend="redis",
+        download_signing_secret="production-secret-from-environment",
     )
 
     settings.validate_runtime()

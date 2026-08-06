@@ -71,3 +71,31 @@ FanUser = Annotated[User, Depends(fan_user)]
 AdminUser = Annotated[User, Depends(admin_user)]
 ArtistUser = Annotated[User, Depends(artist_user)]
 CurrentUser = Annotated[User, Depends(current_user)]
+
+
+async def optional_current_user(
+    session: DbSession,
+    fanfolio_session: str | None = Cookie(default=None),
+    fanfolio_fan_session: str | None = Cookie(default=None),
+    fanfolio_admin_session: str | None = Cookie(default=None),
+    fanfolio_artist_session: str | None = Cookie(default=None),
+    client_header: str | None = Header(default=None, alias="X-Fanfolio-Client"),
+    client_query: str | None = Query(default=None, alias="client"),
+    session_header: str | None = Header(default=None, alias="X-Fanfolio-Session"),
+) -> User | None:
+    """Resolve a session when present, without rejecting signed-link requests."""
+    client = client_header or client_query
+    scoped_token = {
+        "fan": fanfolio_fan_session,
+        "admin": fanfolio_admin_session,
+        "artist": fanfolio_artist_session,
+    }.get(client or "")
+    token = scoped_token or fanfolio_session or session_header
+    if not token:
+        return None
+    return await session.scalar(
+        select(User).join(Session, Session.user_id == User.id).where(Session.token == token)
+    )
+
+
+OptionalCurrentUser = Annotated[User | None, Depends(optional_current_user)]
