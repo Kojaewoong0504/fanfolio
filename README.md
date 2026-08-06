@@ -70,6 +70,25 @@ cd backend
 python3 -m uv run celery -A app.tasks:celery_app worker --loglevel=INFO
 ```
 
+### 7. 매직 링크 이메일 발송
+
+기본 `MAIL_DELIVERY_MODE=console`에서는 실제 메일 대신 백엔드 로그에 로그인 URL을 남깁니다.
+운영 SMTP를 사용하려면 `backend/.env`에 다음 값을 설정합니다. 비밀번호는 저장소에 커밋하지 마세요.
+
+```bash
+MAIL_DELIVERY_MODE=smtp
+FRONTEND_URL=https://app.fanfolio.example
+MAIL_FROM=Fanfolio <no-reply@fanfolio.example>
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USERNAME=mailer-user
+SMTP_PASSWORD=replace-me
+SMTP_USE_TLS=true
+```
+
+사용자가 메일의 링크를 클릭하면 프론트가 `token` 쿼리 파라미터를 자동으로 검증하고 로그인합니다.
+SMTP 연결에 실패하면 API는 `503 MAGIC_LINK_DELIVERY_FAILED`를 반환합니다.
+
 ## VS Code 개발 환경
 
 프로젝트 루트 폴더를 VS Code로 열면 추천 확장 설치 알림이 표시됩니다. 다음 확장을 설치하세요.

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
 import { apiFetch, type CollectionCard, type NotificationItem, type UserCardDetail } from './api/client'
 import { QrRedeemModal } from './components/QrRedeemModal'
@@ -131,6 +131,7 @@ function Login({ onLogin }: { onLogin: () => void }) {
   const [requested, setRequested] = useState(false)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
+  const autoVerifyStarted = useRef(false)
 
   const requestLink = async () => {
     setBusy(true)
@@ -149,13 +150,14 @@ function Login({ onLogin }: { onLogin: () => void }) {
     }
   }
 
-  const verifyLink = async () => {
+  const verifyLink = useCallback(async (tokenOverride?: string) => {
+    const tokenToVerify = tokenOverride ?? token
     setBusy(true)
     setMessage('')
     try {
       await apiFetch('/auth/magic-link/verify', {
         method: 'POST',
-        body: JSON.stringify({ token }),
+        body: JSON.stringify({ token: tokenToVerify }),
       })
       onLogin()
     } catch (error) {
@@ -163,7 +165,16 @@ function Login({ onLogin }: { onLogin: () => void }) {
     } finally {
       setBusy(false)
     }
-  }
+  }, [onLogin, token])
+
+  useEffect(() => {
+    const linkToken = new URLSearchParams(window.location.search).get('token')
+    if (!linkToken || autoVerifyStarted.current) return
+    autoVerifyStarted.current = true
+    setToken(linkToken)
+    setRequested(true)
+    void verifyLink(linkToken)
+  }, [verifyLink])
 
   return <main className="login-screen"><span className="brand-mark">F</span><p className="eyebrow">FANFOLIO</p><h1>내 손안의<br />팬 컬렉션</h1><p className="muted">좋아하는 아티스트의 순간을<br />디지털 카드로 간직하세요.</p><label className="field-label">이메일</label><input value={email} onChange={e => setEmail(e.target.value)} placeholder="이메일을 입력하세요" type="email" disabled={requested} />{!requested ? <button className="primary" onClick={() => void requestLink()} disabled={!email.includes('@') || busy}>{busy ? '보내는 중...' : '로그인 링크 받기'}</button> : <><label className="field-label">로그인 토큰</label><input value={token} onChange={e => setToken(e.target.value)} placeholder="이메일의 로그인 토큰을 입력하세요" /><button className="primary" onClick={() => void verifyLink()} disabled={!token || busy}>{busy ? '확인 중...' : '로그인하기'}</button></>}<p className={message.includes('실패') ? 'form-message error-message' : 'form-message'}>{message}</p><p className="login-note">비밀번호 없이 이메일 링크로 안전하게 로그인합니다.</p></main>
 }

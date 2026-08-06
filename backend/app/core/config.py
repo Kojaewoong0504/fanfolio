@@ -10,6 +10,14 @@ class Settings(BaseSettings):
     app_env: str = "development"
     database_url: str = "sqlite+aiosqlite:///./fanfolio.db"
     storage_dir: str = "./storage"
+    frontend_url: str = "http://localhost:5173"
+    mail_delivery_mode: str = "console"
+    mail_from: str = "Fanfolio <no-reply@localhost>"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_use_tls: bool = True
     task_queue_mode: str = "inline"
     celery_broker_url: str = "redis://localhost:6379/0"
     celery_result_backend: str = "redis://localhost:6379/0"

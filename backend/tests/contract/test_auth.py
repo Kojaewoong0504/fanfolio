@@ -3,12 +3,19 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.mailer import MailDeliveryError
 from tests.conftest import assert_error, assert_success
 
 
-def test_magic_link_request_accepts_signup_or_login_email(
-    client: TestClient, seeded: dict[str, object]
+def test_magic_link_request_delivers_the_created_token(
+    client: TestClient, seeded: dict[str, object], monkeypatch: Any
 ) -> None:
+    delivered: list[tuple[str, str, str]] = []
+
+    async def fake_deliver(email: str, token: str, purpose: str) -> None:
+        delivered.append((email, token, purpose))
+
+    monkeypatch.setattr("app.routers.auth.deliver_magic_link", fake_deliver)
     response = client.post(
         "/api/auth/magic-link/request",
         json={"email": "fan@example.com", "purpose": "login"},
@@ -16,6 +23,25 @@ def test_magic_link_request_accepts_signup_or_login_email(
     data = assert_success(response, 202)
 
     assert data["delivery"] == "queued"
+    assert delivered[0][0] == "fan@example.com"
+    assert delivered[0][2] == "login"
+    assert delivered[0][1]
+
+
+def test_magic_link_request_returns_a_delivery_error_when_provider_fails(
+    client: TestClient, seeded: dict[str, object], monkeypatch: Any
+) -> None:
+    async def failing_deliver(_: str, __: str, ___: str) -> None:
+        raise MailDeliveryError("provider unavailable")
+
+    monkeypatch.setattr("app.routers.auth.deliver_magic_link", failing_deliver)
+
+    response = client.post(
+        "/api/auth/magic-link/request",
+        json={"email": "fan@example.com", "purpose": "login"},
+    )
+
+    assert_error(response, 503, "MAGIC_LINK_DELIVERY_FAILED")
 
 
 def test_magic_link_verify_rejects_an_unknown_token(

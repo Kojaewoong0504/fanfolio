@@ -2,6 +2,8 @@ from fastapi import APIRouter, Cookie, Response, status
 from sqlalchemy import delete
 
 from app.dependencies import CurrentUser, DbSession
+from app.errors import AppError
+from app.mailer import MailDeliveryError, deliver_magic_link
 from app.models import Session
 from app.schemas import MagicLinkRequest, MagicLinkVerify
 from app.services import request_magic_link as create_magic_link
@@ -12,8 +14,16 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 @router.post("/magic-link/request", status_code=status.HTTP_202_ACCEPTED)
 async def request_magic_link(payload: MagicLinkRequest, session: DbSession) -> dict:
-    # The mail provider receives this token in a later integration step.
-    await create_magic_link(session, email=str(payload.email), purpose=payload.purpose)
+    email = str(payload.email).lower()
+    token = await create_magic_link(session, email=email, purpose=payload.purpose)
+    try:
+        await deliver_magic_link(email, token, payload.purpose)
+    except MailDeliveryError as error:
+        raise AppError(
+            503,
+            "MAGIC_LINK_DELIVERY_FAILED",
+            "로그인 링크를 보내지 못했습니다. 잠시 후 다시 시도해 주세요.",
+        ) from error
     return {"ok": True, "data": {"delivery": "queued"}}
 
 
