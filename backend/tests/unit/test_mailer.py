@@ -86,3 +86,14 @@ def test_smtp_mailer_sends_a_notification_message(monkeypatch: Any) -> None:
     assert sent[0]["To"] == "fan@example.com"
     assert sent[0]["Subject"] == "Fanfolio 알림: 새 카드가 공개되었어요"
     assert "좋아하는 아티스트의 새 카드를 확인해 보세요." in sent[0].get_content()
+
+
+def test_console_mailer_is_rejected_in_production() -> None:
+    settings = Settings(app_env="production", mail_delivery_mode="console")
+
+    try:
+        mailer._mailer(settings)
+    except mailer.MailDeliveryError as error:
+        assert "not allowed" in str(error)
+    else:
+        raise AssertionError("production must not fall back to console mail delivery")

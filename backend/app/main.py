@@ -24,17 +24,11 @@ async def lifespan(_: FastAPI):
 
 
 def create_app() -> FastAPI:
+    settings = get_settings()
     app = FastAPI(title="Fanfolio API", version="0.2.0", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:4174",
-            "http://localhost:4175",
-            "http://localhost:5173",
-            "http://127.0.0.1:4174",
-            "http://127.0.0.1:4175",
-            "http://127.0.0.1:5173",
-        ],
+        allow_origins=settings.allowed_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

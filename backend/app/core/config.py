@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     database_url: str = "sqlite+aiosqlite:///./fanfolio.db"
     storage_dir: str = "./storage"
+    frontend_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     frontend_url: str = "http://localhost:5173"
     mail_delivery_mode: str = "console"
     mail_from: str = "Fanfolio <no-reply@localhost>"
@@ -21,6 +22,11 @@ class Settings(BaseSettings):
     task_queue_mode: str = "inline"
     celery_broker_url: str = "redis://localhost:6379/0"
     celery_result_backend: str = "redis://localhost:6379/0"
+
+    @property
+    def allowed_origins(self) -> list[str]:
+        """Parse the comma-separated browser origins used by CORS."""
+        return [origin.strip() for origin in self.frontend_origins.split(",") if origin.strip()]
 
     @property
     def async_database_url(self) -> str:

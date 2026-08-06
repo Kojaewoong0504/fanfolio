@@ -14,3 +14,10 @@ def test_health_check_returns_common_success_contract(client: TestClient) -> Non
     data = assert_success(client.get("/api/health"))
 
     assert data["status"] == "healthy"
+
+
+def test_configured_frontend_origin_is_allowed_for_cookie_requests(client: TestClient) -> None:
+    response = client.get("/api/health", headers={"Origin": "http://localhost:5173"})
+
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert response.headers["access-control-allow-credentials"] == "true"

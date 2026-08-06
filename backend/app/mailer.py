@@ -100,7 +100,9 @@ def _mailer(settings: Settings) -> ConsoleMailer | SMTPMailer:
         if not settings.smtp_host or not settings.mail_from:
             raise MailDeliveryError("SMTP mail settings are incomplete")
         return SMTPMailer(settings)
-    return ConsoleMailer()
+    if settings.mail_delivery_mode == "console" and settings.app_env in {"development", "test"}:
+        return ConsoleMailer()
+    raise MailDeliveryError("Mail delivery mode is not allowed for this environment")
 
 
 async def deliver_magic_link(email: str, token: str, purpose: str) -> None:
