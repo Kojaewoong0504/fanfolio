@@ -41,14 +41,17 @@ def test_alembic_upgrade_creates_the_current_schema(tmp_path: Path) -> None:
         user_card_columns = {
             row[1] for row in connection.execute("PRAGMA table_info(user_cards)").fetchall()
         }
-        assert {"acquisition_source", "drop_id"} <= user_card_columns
+        assert {"acquisition_source", "drop_id", "redeem_code_id"} <= user_card_columns
         assert connection.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='audit_logs'"
         ).fetchone()
         user_card_indexes = {
             row[1] for row in connection.execute("PRAGMA index_list(user_cards)").fetchall()
         }
-        assert "uq_user_cards_card_serial" in user_card_indexes
+        assert {
+            "uq_user_cards_card_serial",
+            "uq_user_cards_user_redeem_code",
+        } <= user_card_indexes
 
 
 def test_alembic_upgrade_adds_drop_metadata_to_a_legacy_database(tmp_path: Path) -> None:

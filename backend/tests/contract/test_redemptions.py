@@ -189,6 +189,46 @@ def test_failed_expired_code_does_not_create_card_or_increment_usage(
     assert collection["summary"]["ownedCount"] == 0
 
 
+def test_multi_use_code_can_be_redeemed_once_per_fan(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    admin = actors["admin"]
+    fan = actors["fan"]
+    other_fan = actors["otherFan"]
+    batch = assert_success(
+        admin.post(
+            "/api/admin/redeem-code-batches",
+            json={
+                "dropId": seeded["ids"]["liveDropId"],
+                "cardId": seeded["ids"]["publishedCardId"],
+                "quantity": 1,
+                "maxUsesPerCode": 2,
+                "expiresAt": "2026-12-31T23:59:59Z",
+                "prefix": "MULTI",
+            },
+        ),
+        201,
+    )
+    exported = admin.get(batch["csvExportUrl"])
+    assert exported.status_code == 200, exported.text
+    code = exported.text.splitlines()[1].split(",", 1)[0]
+
+    assert_success(fan.post("/api/redemptions", json={"code": code, "source": "manual"}), 201)
+    assert_error(
+        fan.post("/api/redemptions", json={"code": code, "source": "manual"}),
+        409,
+        "REDEEM_CODE_ALREADY_USED",
+    )
+    assert_success(other_fan.post("/api/redemptions", json={"code": code, "source": "manual"}), 201)
+
+    listed_batch = next(
+        item
+        for item in assert_success(admin.get("/api/admin/redeem-code-batches"))["items"]
+        if item["id"] == batch["id"]
+    )
+    assert listed_batch["usedCount"] == 2
+
+
 def test_invalid_code_does_not_change_collection(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:

@@ -385,6 +385,14 @@ async def redeem(
                 "REDEEM_LIMIT_REACHED" if code.max_uses == 0 else "REDEEM_CODE_ALREADY_USED"
             )
             raise AppError(409, error_code, "사용할 수 없는 코드입니다.")
+        already_owned = await session.scalar(
+            select(UserCard.id).where(
+                UserCard.user_id == user_id,
+                UserCard.redeem_code_id == code.code,
+            )
+        )
+        if already_owned:
+            raise AppError(409, "REDEEM_CODE_ALREADY_USED", "이미 사용한 코드입니다.")
         expires_at = (
             code.expires_at.replace(tzinfo=UTC)
             if code.expires_at and code.expires_at.tzinfo is None
@@ -410,6 +418,7 @@ async def redeem(
             id=f"uc_{uuid4().hex[:12]}",
             user_id=user_id,
             card_id=card.id,
+            redeem_code_id=code.code,
             drop_id=code.drop_id,
             serial_number=serial,
             acquisition_source=acquisition_source,

@@ -118,10 +118,16 @@ class RedeemCode(Base):
 
 class UserCard(Base):
     __tablename__ = "user_cards"
-    __table_args__ = (Index("uq_user_cards_card_serial", "card_id", "serial_number", unique=True),)
+    __table_args__ = (
+        Index("uq_user_cards_card_serial", "card_id", "serial_number", unique=True),
+        Index("uq_user_cards_user_redeem_code", "user_id", "redeem_code_id", unique=True),
+    )
     id: Mapped[str] = mapped_column(String, primary_key=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     card_id: Mapped[str] = mapped_column(ForeignKey("cards.id"))
+    redeem_code_id: Mapped[str | None] = mapped_column(
+        ForeignKey("redeem_codes.code"), nullable=True
+    )
     drop_id: Mapped[str | None] = mapped_column(ForeignKey("drops.id"), nullable=True)
     serial_number: Mapped[int] = mapped_column(Integer)
     acquisition_source: Mapped[str] = mapped_column(String, default="redeem_code")
