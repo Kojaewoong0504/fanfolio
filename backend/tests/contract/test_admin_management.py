@@ -47,8 +47,21 @@ def test_admin_can_list_users_and_change_a_user_role(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:
     users = assert_success(actors["admin"].get("/api/admin/users"))
+    assert users["meta"]["pagination"] == {"page": 1, "pageSize": 20, "total": 4}
+    admin_user = next(user for user in users["items"] if user["id"] == "admin")
+    assert admin_user["isCurrentUser"] is True
     fan = next(user for user in users["items"] if user["id"] == "fan")
     assert fan["role"] == "fan"
+    assert fan["isCurrentUser"] is False
+
+    filtered = assert_success(
+        actors["admin"].get(
+            "/api/admin/users",
+            params={"q": "fan@example.com", "role": "fan", "page": 1, "pageSize": 1},
+        )
+    )
+    assert filtered["meta"]["pagination"] == {"page": 1, "pageSize": 1, "total": 2}
+    assert [user["email"] for user in filtered["items"]] == ["fan@example.com"]
 
     updated = assert_success(
         actors["admin"].patch("/api/admin/users/fan/role", json={"role": "artist"})

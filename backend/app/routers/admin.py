@@ -411,17 +411,26 @@ async def update_drop(
 
 @router.get("/users")
 async def list_users(
-    _: AdminUser,
+    admin: AdminUser,
     session: DbSession,
     q: str | None = None,
     role: Role | None = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, alias="pageSize", ge=1, le=100),
 ) -> dict:
     filters = []
     if q:
         filters.append(User.email.ilike(f"%{q}%"))
     if role:
         filters.append(User.role == role)
-    users = await session.scalars(select(User).where(*filters).order_by(User.email))
+    total = await session.scalar(select(func.count()).select_from(User).where(*filters))
+    users = await session.scalars(
+        select(User)
+        .where(*filters)
+        .order_by(User.email)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
     return {
         "ok": True,
         "data": {
@@ -432,9 +441,17 @@ async def list_users(
                     "role": user.role.value,
                     "nickname": user.nickname,
                     "onboardingCompleted": user.onboarding_completed,
+                    "isCurrentUser": user.id == admin.id,
                 }
                 for user in users
-            ]
+            ],
+            "meta": {
+                "pagination": {
+                    "page": page,
+                    "pageSize": page_size,
+                    "total": total or 0,
+                }
+            },
         },
     }
 
