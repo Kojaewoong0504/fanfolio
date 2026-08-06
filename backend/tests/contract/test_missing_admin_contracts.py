@@ -13,12 +13,16 @@ def test_admin_can_create_update_and_read_a_card(actors: dict[str, TestClient]) 
                 "name": "운영 등록 카드",
                 "seasonName": "2026 SUMMER",
                 "rarity": "SR",
+                "artistId": "artist_nova3",
+                "memberId": "member_yuna",
                 "issueLimit": 500,
             },
         ),
         201,
     )
     assert created["status"] == "draft"
+    assert created["artistId"] == "artist_nova3"
+    assert created["memberId"] == "member_yuna"
 
     updated = assert_success(
         actors["admin"].patch(
@@ -31,6 +35,16 @@ def test_admin_can_create_update_and_read_a_card(actors: dict[str, TestClient]) 
 
     detail = assert_success(actors["admin"].get(f"/api/admin/cards/{created['id']}"))
     assert detail["name"] == "운영 등록 카드 수정"
+
+
+def test_admin_can_load_catalog_for_card_registration(actors: dict[str, TestClient]) -> None:
+    catalog = assert_success(actors["admin"].get("/api/admin/catalog"))
+    assert catalog["artists"][0]["id"] == "artist_nova3"
+    assert {member["id"] for member in catalog["members"]} >= {
+        "member_yuna",
+        "member_minho",
+        "member_jei",
+    }
 
 
 def test_admin_can_read_and_update_drop_metadata(

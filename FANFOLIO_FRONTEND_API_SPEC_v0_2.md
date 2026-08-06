@@ -275,6 +275,7 @@ Base URL: `/api`
 | Method | Endpoint | 설명 |
 | --- | --- | --- |
 | GET | `/admin/dashboard` | 운영 요약, 오류, 최근 활동 |
+| GET | `/admin/catalog` | 관리자 카드 등록용 그룹/멤버 목록 |
 | GET/POST | `/admin/cards` | 카드 목록/생성 |
 | GET/PATCH | `/admin/cards/{cardId}` | 카드 조회/수정 |
 | POST | `/admin/cards/{cardId}/approve` | 검수 승인 |

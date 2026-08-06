@@ -315,7 +315,13 @@ Fanfolio의 회원가입과 로그인은 이메일 매직링크를 같은 흐름
 배치 전체는 `GET /api/admin/redeem-code-batches/{batchId}/qr.zip`에서 한 번에 받을 수 있다.
 QR payload는 redeem code 문자열 자체이며, 팬 앱은 QR 결과를 기존 코드 등록 API로 전달한다.
 
-## 7. 아티스트 스튜디오 API
+## 7. 관리자·아티스트 카탈로그 연결
+
+`GET /api/admin/catalog`는 관리자 카드 등록 화면에 사용할 그룹과 멤버 목록을
+반환한다. `POST/PATCH /api/admin/cards`의 `artistId`와 `memberId`는 같은
+카탈로그 관계 규칙을 따르며, 멤버만 보내면 그룹을 자동 추론한다.
+
+## 8. 아티스트 스튜디오 API
 
 ### POST /api/artist/cards
 
@@ -360,7 +366,7 @@ QR payload는 redeem code 문자열 자체이며, 팬 앱은 QR 결과를 기존
 
 Admin만 `POST /api/admin/cards/{cardId}/publish`로 공개할 수 있다. Artist가 호출하면 `403 FORBIDDEN`.
 
-## 8. 테스트 파일
+## 9. 테스트 파일
 
 | 파일 | 검증 범위 |
 | --- | --- |

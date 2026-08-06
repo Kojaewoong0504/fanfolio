@@ -12,7 +12,18 @@ from sqlalchemy import func, select
 
 from app.dependencies import AdminUser, DbSession
 from app.errors import AppError
-from app.models import Asset, AuditLog, Card, Drop, RedeemCode, RedeemCodeBatch, Role, User
+from app.models import (
+    Artist,
+    Asset,
+    AuditLog,
+    Card,
+    Drop,
+    Member,
+    RedeemCode,
+    RedeemCodeBatch,
+    Role,
+    User,
+)
 from app.schemas import (
     AdminCardCreate,
     AdminCardReviewRequest,
@@ -145,6 +156,7 @@ def admin_card_data(card: Card) -> dict:
         "issueLimit": card.issue_limit,
         "imageAssetId": card.image_asset_id,
         "ownerArtistId": card.owner_artist_id,
+        "artistId": card.artist_id,
         "memberId": card.member_id,
         "signatureText": card.signature_text,
         "handwritingAssetId": card.handwriting_asset_id,
@@ -164,10 +176,45 @@ async def validate_admin_assets(values: dict, session: DbSession) -> None:
             raise AppError(404, "ASSET_NOT_FOUND", "카드 자산을 찾을 수 없습니다.")
 
 
+async def resolve_admin_catalog_ids(
+    *, artist_id: str | None, member_id: str | None, session: DbSession
+) -> str | None:
+    """Validate the catalog association for cards created by operations."""
+    if artist_id is not None and not await session.get(Artist, artist_id):
+        raise AppError(404, "ARTIST_NOT_FOUND", "선택한 그룹을 찾을 수 없습니다.")
+    if member_id is None:
+        return artist_id
+    member = await session.get(Member, member_id)
+    if not member:
+        raise AppError(404, "MEMBER_NOT_FOUND", "선택한 멤버를 찾을 수 없습니다.")
+    if artist_id is not None and artist_id != member.artist_id:
+        raise AppError(422, "MEMBER_ARTIST_MISMATCH", "멤버와 그룹을 올바르게 선택해 주세요.")
+    return member.artist_id
+
+
+@router.get("/catalog")
+async def admin_catalog(_: AdminUser, session: DbSession) -> dict:
+    artists = (await session.scalars(select(Artist).order_by(Artist.name))).all()
+    members = (await session.scalars(select(Member).order_by(Member.name))).all()
+    return {
+        "ok": True,
+        "data": {
+            "artists": [{"id": item.id, "name": item.name} for item in artists],
+            "members": [
+                {"id": item.id, "artistId": item.artist_id, "name": item.name} for item in members
+            ],
+        },
+    }
+
+
 @router.post("/cards", status_code=status.HTTP_201_CREATED)
 async def create_admin_card(payload: AdminCardCreate, admin: AdminUser, session: DbSession) -> dict:
     values = payload.model_dump(exclude_unset=True, by_alias=False)
     await validate_admin_assets(values, session)
+    if "artist_id" in values or "member_id" in values:
+        values["artist_id"] = await resolve_admin_catalog_ids(
+            artist_id=values.get("artist_id"), member_id=values.get("member_id"), session=session
+        )
     card = Card(id=f"card_{uuid4().hex[:10]}", **values)
     session.add(card)
     await record_audit(
@@ -205,6 +252,12 @@ async def update_admin_card(
         )
     values = payload.model_dump(exclude_unset=True, by_alias=False)
     await validate_admin_assets(values, session)
+    if "artist_id" in values or "member_id" in values:
+        values["artist_id"] = await resolve_admin_catalog_ids(
+            artist_id=values.get("artist_id", card.artist_id),
+            member_id=values.get("member_id", card.member_id),
+            session=session,
+        )
     for field, value in values.items():
         setattr(card, field, value)
     await record_audit(
