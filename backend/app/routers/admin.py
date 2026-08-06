@@ -177,6 +177,7 @@ def admin_card_data(card: Card) -> dict:
         "voiceAssetId": card.voice_asset_id,
         "handwritingTransform": card.handwriting_transform,
         "hasVoice": card.has_voice,
+        "sourceImageUrl": f"/api/admin/cards/{card.id}/image" if card.image_asset_id else None,
         "previewImageUrl": (
             f"/api/admin/cards/{card.id}/preview/image" if card.preview_storage_path else None
         ),
@@ -292,6 +293,18 @@ async def card_preview_image(card_id: str, _: AdminUser, session: DbSession) -> 
     if not card or not card.preview_storage_path:
         raise AppError(404, "PREVIEW_NOT_READY", "카드 미리보기가 아직 준비되지 않았습니다.")
     return FileResponse(card.preview_storage_path, media_type="image/png")
+
+
+@router.get("/cards/{card_id}/image")
+async def card_source_image(card_id: str, _: AdminUser, session: DbSession) -> FileResponse:
+    """Serve the uploaded source image to operators during card review."""
+    card = await session.get(Card, card_id)
+    if not card or not card.image_asset_id:
+        raise AppError(404, "CARD_IMAGE_NOT_FOUND", "카드 원본 이미지를 찾을 수 없습니다.")
+    asset = await session.get(Asset, card.image_asset_id)
+    if not asset or not asset.storage_path:
+        raise AppError(404, "CARD_IMAGE_NOT_READY", "카드 원본 이미지가 아직 준비되지 않았습니다.")
+    return FileResponse(asset.storage_path, media_type=asset.content_type or "image/png")
 
 
 @router.post("/cards/{card_id}/review")

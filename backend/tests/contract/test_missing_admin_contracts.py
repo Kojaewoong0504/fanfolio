@@ -47,6 +47,36 @@ def test_admin_can_load_catalog_for_card_registration(actors: dict[str, TestClie
     }
 
 
+def test_admin_can_preview_the_uploaded_source_image_for_a_card(
+    actors: dict[str, TestClient],
+) -> None:
+    asset = assert_success(
+        actors["admin"].post(
+            "/api/uploads/presign",
+            json={
+                "fileName": "operator-card.png",
+                "contentType": "image/png",
+                "purpose": "card",
+            },
+        ),
+        201,
+    )
+    assert actors["admin"].put(asset["uploadUrl"], content=b"fake-png").status_code == 204
+
+    card = assert_success(
+        actors["admin"].post(
+            "/api/admin/cards",
+            json={"name": "원본 이미지 검수 카드", "imageAssetId": asset["assetId"]},
+        ),
+        201,
+    )
+
+    image = actors["admin"].get(f"/api/admin/cards/{card['id']}/image")
+    assert image.status_code == 200
+    assert image.headers["content-type"] == "image/png"
+    assert image.content == b"fake-png"
+
+
 def test_admin_can_read_and_update_drop_metadata(
     actors: dict[str, TestClient],
 ) -> None:
