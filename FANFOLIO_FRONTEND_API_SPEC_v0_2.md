@@ -225,6 +225,8 @@ Base URL: `/api`
 | POST | `/artist/cards/{cardId}/preview` | 팬 화면용 렌더 미리보기 생성/조회 |
 | POST | `/artist/cards/{cardId}/submit-review` | 공개 검수 요청 |
 | GET | `/artist/insights` | 내 카드별 팬 수집 수와 상태 요약 |
+| GET | `/artist/profile` | 아티스트 계정 설정 조회 |
+| PATCH | `/artist/profile` | 표시 이름·운영 알림 이메일 설정 수정 |
 
 `PATCH /artist/cards/{cardId}` 핵심 본문:
 

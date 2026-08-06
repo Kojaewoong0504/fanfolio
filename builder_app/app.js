@@ -4,7 +4,7 @@ const app = document.querySelector('#app');
 const state = {
   authenticated: Boolean(SESSION_TOKEN), loginError: '', loginEmail: '', magicLinkRequested: false, step: 1, cardId: null, assetId: null,
   cardName: '', jobId: null, preview: null, previewImageSrc: '', signature: '', cards: [],
-  form: { name: '드림 스페셜 카드 #5', artistId: 'artist_nova3', memberId: 'member_yuna', seasonName: '2025 봄', templateId: 'template_signature_v1', rarity: 'R', signatureText: '항상 고마워요, 우리 함께해요!', hasVoice: true, voiceAssetId: null, issueLimit: 3000 }, insights: null,
+  form: { name: '드림 스페셜 카드 #5', artistId: 'artist_nova3', memberId: 'member_yuna', seasonName: '2025 봄', templateId: 'template_signature_v1', rarity: 'R', signatureText: '항상 고마워요, 우리 함께해요!', hasVoice: true, voiceAssetId: null, issueLimit: 3000 }, insights: null, profile: null,
 };
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
 
@@ -116,6 +116,24 @@ async function loadInsights() {
   }
 }
 
+async function loadProfile() {
+  try {
+    const result = await api('/artist/profile');
+    state.profile = result.data;
+    if (state.view === 'settings') shell(settingsView());
+  } catch (error) {
+    if (error.status === 401 || error.status === 403) {
+      SESSION_TOKEN = '';
+      localStorage.removeItem('fanfolio_session');
+      state.authenticated = false;
+      state.loginError = '아티스트 세션이 만료됐어요. 다시 로그인해 주세요.';
+      render();
+      return;
+    }
+    toast('설정을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
+  }
+}
+
 async function loginArtistWithCatalog(event) {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
@@ -165,10 +183,16 @@ function insightsView() {
   return `<div class="insights-page"><div class="metrics"><div class="metric"><span class="metric-label">전체 카드</span><div class="metric-value">${summary.totalCards}</div><span class="metric-note">등록한 카드</span></div><div class="metric"><span class="metric-label">공개 카드</span><div class="metric-value">${summary.publishedCards}</div><span class="metric-note">팬에게 노출 중</span></div><div class="metric"><span class="metric-label">검수 중</span><div class="metric-value">${summary.pendingReviewCards}</div><span class="metric-note">운영팀 확인 대기</span></div><div class="metric"><span class="metric-label">전체 수집 수</span><div class="metric-value">${summary.redeemedCount}</div><span class="metric-note">팬이 등록한 카드</span></div></div><div class="panel"><h2>카드별 수집 현황</h2><p class="hint">팬이 실제로 등록한 공식 카드 수를 카드별로 확인할 수 있어요.</p><div class="table-wrap"><table class="table"><thead><tr><th>카드</th><th>상태</th><th>발행 수량</th><th>수집 수</th></tr></thead><tbody>${rows}</tbody></table></div></div></div>`;
 }
 
+function settingsView() {
+  if (!state.profile) return '<div class="panel studio-empty"><strong>설정을 불러오는 중입니다.</strong><span>계정 정보를 확인하고 있어요.</span></div>';
+  const profile = state.profile;
+  return `<div class="settings-page"><form class="panel settings-form" id="profile-form"><div><h2>계정 설정</h2><p class="hint">스튜디오에 표시되는 아티스트 계정 정보를 관리할 수 있어요.</p></div><label class="field">이메일 주소<input value="${esc(profile.email)}" readonly /><span class="hint">로그인 이메일은 운영자 확인 후 변경할 수 있습니다.</span></label><label class="field">표시 이름<input name="nickname" value="${esc(profile.nickname || '')}" placeholder="스튜디오에 표시할 이름" required maxlength="40" /></label><label class="toggle-row" for="email-enabled"><span>운영 알림 이메일 <small class="hint">카드 검수 및 공개 상태 알림을 받습니다.</small></span><input id="email-enabled" name="emailEnabled" type="checkbox" ${profile.emailEnabled ? 'checked' : ''} /></label><div class="bottom-actions"><button class="primary" type="submit">변경사항 저장</button></div></form></div>`;
+}
+
 function renderShell(content) {
   const view = state.view || 'create';
-  const title = view === 'cards' ? '내 카드' : view === 'feedback' ? '팬 반응' : state.step === 1 ? '카드 만들기' : state.step === 2 ? '손글씨 추가' : state.step === 3 ? '카드 미리보기' : '검수 요청 완료';
-  app.innerHTML = `<div class="shell"><aside class="side"><div class="logo">Fanfolio <span>✦</span><small>아티스트 스튜디오</small></div><nav class="nav"><button data-studio-view="home" class="${view === 'home' ? 'active' : ''}">⌂　스튜디오 홈</button><button data-studio-view="create" class="${view === 'create' ? 'active' : ''}">▦　카드 만들기</button><button data-studio-view="cards" class="${view === 'cards' ? 'active' : ''}">◇　내 카드</button><button data-studio-view="feedback">♡　팬 반응</button><button data-studio-view="settings">⚙　설정</button></nav><div class="profile"><span class="avatar">A</span><div><strong>아티스트</strong>ARTIST</div></div></aside><main class="workspace"><header class="top"><div><p class="kicker">Fanfolio Artist Studio</p><h1 class="title">${title}</h1></div><div class="top-actions"><span class="save-state">● API 연결됨</span><button class="secondary" id="session-config">세션 설정</button><button class="secondary" id="logout">로그아웃</button></div></header>${content}</main></div><div class="toast" id="toast"></div>`;
+  const title = view === 'cards' ? '내 카드' : view === 'feedback' ? '팬 반응' : view === 'settings' ? '설정' : state.step === 1 ? '카드 만들기' : state.step === 2 ? '손글씨 추가' : state.step === 3 ? '카드 미리보기' : '검수 요청 완료';
+  app.innerHTML = `<div class="shell"><aside class="side"><div class="logo">Fanfolio <span>✦</span><small>아티스트 스튜디오</small></div><nav class="nav"><button data-studio-view="home" class="${view === 'home' ? 'active' : ''}">⌂　스튜디오 홈</button><button data-studio-view="create" class="${view === 'create' ? 'active' : ''}">▦　카드 만들기</button><button data-studio-view="cards" class="${view === 'cards' ? 'active' : ''}">◇　내 카드</button><button data-studio-view="feedback" class="${view === 'feedback' ? 'active' : ''}">♡　팬 반응</button><button data-studio-view="settings" class="${view === 'settings' ? 'active' : ''}">⚙　설정</button></nav><div class="profile"><span class="avatar">A</span><div><strong>${esc(state.profile?.nickname || '아티스트')}</strong>ARTIST</div></div></aside><main class="workspace"><header class="top"><div><p class="kicker">Fanfolio Artist Studio</p><h1 class="title">${title}</h1></div><div class="top-actions"><span class="save-state">● API 연결됨</span><button class="secondary" id="session-config">세션 설정</button><button class="secondary" id="logout">로그아웃</button></div></header>${content}</main></div><div class="toast" id="toast"></div>`;
   bindCommon();
   document.querySelector('#new-card')?.addEventListener('click', () => { state.view = 'create'; state.editingCardId = null; state.cardId = null; state.step = 1; render(); });
 }
@@ -179,9 +203,23 @@ document.addEventListener('click', (event) => {
   const view = button.dataset.studioView;
   if (view === 'cards') { state.view = 'cards'; shell(studioCardsView()); }
   if (view === 'feedback') { state.view = 'feedback'; shell(insightsView()); void loadInsights(); }
+  if (view === 'settings') { state.view = 'settings'; shell(settingsView()); void loadProfile(); }
   if (view === 'create' || view === 'home') { state.view = 'create'; state.editingCardId = null; state.cardId = null; state.step = 1; render(); }
-  if (view === 'settings') toast('설정 메뉴는 다음 단계에서 연결할 예정입니다.');
 });
+
+document.addEventListener('submit', async (event) => {
+  if (event.target.id !== 'profile-form') return;
+  event.preventDefault();
+  const form = new FormData(event.target);
+  try {
+    const result = await api('/artist/profile', { method: 'PATCH', body: JSON.stringify({ nickname: form.get('nickname')?.toString().trim(), emailEnabled: form.get('emailEnabled') === 'on' }) });
+    state.profile = result.data;
+    shell(settingsView());
+    toast('설정을 저장했습니다.');
+  } catch {
+    toast('설정을 저장하지 못했습니다. 입력 내용을 확인해 주세요.');
+  }
+}, true);
 
 function beginCardEdit(cardId) {
   const card = state.cards.find((item) => item.id === cardId);

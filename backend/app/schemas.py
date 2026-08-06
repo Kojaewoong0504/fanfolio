@@ -48,6 +48,12 @@ class ProfileUpdate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class ArtistProfileUpdate(BaseModel):
+    nickname: str | None = Field(default=None, min_length=1, max_length=40)
+    email_enabled: bool | None = Field(default=None, alias="emailEnabled")
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class NotificationPreferencesUpdate(BaseModel):
     email_enabled: bool = Field(alias="emailEnabled")
     model_config = ConfigDict(populate_by_name=True)

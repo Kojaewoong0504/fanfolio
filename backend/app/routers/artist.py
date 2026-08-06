@@ -10,10 +10,38 @@ from app.errors import AppError
 from app.image_processing import compose_card_preview
 from app.models import Artist, Asset, BackgroundRemovalJob, Card, Member, UserCard
 from app.rate_limit import enforce_rate_limit
-from app.schemas import ArtistCardRequest, ArtistCardUpdate
+from app.schemas import ArtistCardRequest, ArtistCardUpdate, ArtistProfileUpdate
 from app.tasks import enqueue_background_removal
 
 router = APIRouter(prefix="/api", tags=["artist"])
+
+
+def profile_data(user) -> dict:
+    return {
+        "id": user.id,
+        "email": user.email,
+        "nickname": user.nickname,
+        "role": user.role.value,
+        "emailEnabled": user.notification_email_enabled,
+    }
+
+
+@router.get("/artist/profile")
+async def get_profile(user: ArtistUser) -> dict:
+    return {"ok": True, "data": profile_data(user)}
+
+
+@router.patch("/artist/profile")
+async def update_profile(
+    payload: ArtistProfileUpdate, user: ArtistUser, session: DbSession
+) -> dict:
+    values = payload.model_dump(exclude_unset=True, by_alias=False)
+    if "nickname" in values:
+        user.nickname = values["nickname"]
+    if "email_enabled" in values:
+        user.notification_email_enabled = values["email_enabled"]
+    await session.commit()
+    return {"ok": True, "data": profile_data(user)}
 
 
 @router.get("/artist/templates")

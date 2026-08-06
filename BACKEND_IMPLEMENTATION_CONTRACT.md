@@ -323,6 +323,43 @@ QR payload는 redeem code 문자열 자체이며, 팬 앱은 QR 결과를 기존
 
 ## 8. 아티스트 스튜디오 API
 
+### GET /api/artist/profile
+
+권한: Artist. 로그인한 아티스트 계정의 설정 정보를 반환한다. 이메일은 현재
+로그인 식별자이므로 이 API에서 수정하지 않는다.
+
+성공 `200`:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "id": "artist",
+    "email": "artist@example.com",
+    "nickname": "드림스케이프 공식",
+    "role": "artist",
+    "emailEnabled": true
+  }
+}
+```
+
+### PATCH /api/artist/profile
+
+권한: Artist
+
+입력 필드는 선택적이며, 현재는 표시 이름과 운영 알림 이메일 수신 여부를 수정한다.
+
+```json
+{
+  "nickname": "드림스케이프 공식",
+  "emailEnabled": true
+}
+```
+
+성공 `200`: `GET /api/artist/profile`과 동일한 최신 계정 정보를 반환한다.
+
+실패: `401 AUTH_REQUIRED`, `403 FORBIDDEN`, `422 VALIDATION_ERROR`.
+
 ### POST /api/artist/cards
 
 권한: Artist

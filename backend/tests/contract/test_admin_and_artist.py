@@ -159,6 +159,46 @@ def test_artist_can_read_card_collection_insights(
     ]
 
 
+def test_artist_can_read_and_update_studio_profile(
+    actors: dict[str, TestClient],
+) -> None:
+    artist = actors["artist"]
+
+    profile = assert_success(artist.get("/api/artist/profile"))
+    assert profile == {
+        "id": "artist",
+        "email": "artist@example.com",
+        "nickname": None,
+        "role": "artist",
+        "emailEnabled": False,
+    }
+
+    updated = assert_success(
+        artist.patch(
+            "/api/artist/profile",
+            json={"nickname": "드림스케이프 공식", "emailEnabled": True},
+        )
+    )
+    assert updated == {
+        "id": "artist",
+        "email": "artist@example.com",
+        "nickname": "드림스케이프 공식",
+        "role": "artist",
+        "emailEnabled": True,
+    }
+    assert assert_success(artist.get("/api/artist/profile"))["nickname"] == "드림스케이프 공식"
+
+
+def test_fan_cannot_update_artist_studio_profile(
+    actors: dict[str, TestClient],
+) -> None:
+    assert_error(
+        actors["fan"].get("/api/artist/profile"),
+        403,
+        "FORBIDDEN",
+    )
+
+
 def test_fan_cannot_load_artist_studio_templates(actors: dict[str, TestClient]) -> None:
     assert_error(actors["fan"].get("/api/artist/templates"), 403, "FORBIDDEN")
 
