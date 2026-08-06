@@ -53,6 +53,63 @@ def test_redeeming_same_code_twice_returns_conflict_without_extra_card(
     assert detail["acquisitionSource"] == "manual"
 
 
+def test_redemption_keeps_code_usage_and_collection_counts_consistent(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    admin = actors["admin"]
+    fan = actors["fan"]
+
+    batch = assert_success(
+        admin.post(
+            "/api/admin/redeem-code-batches",
+            json={
+                "dropId": seeded["ids"]["liveDropId"],
+                "cardId": seeded["ids"]["publishedCardId"],
+                "quantity": 1,
+                "maxUsesPerCode": 1,
+                "expiresAt": "2026-12-31T23:59:59Z",
+                "prefix": "INV",
+            },
+        ),
+        201,
+    )
+    exported = admin.get(batch["csvExportUrl"])
+    assert exported.status_code == 200, exported.text
+    code = exported.text.splitlines()[1].split(",", 1)[0]
+
+    redeemed = assert_success(
+        fan.post("/api/redemptions", json={"code": code, "source": "qr"}), 201
+    )
+
+    listed_batch = next(
+        item
+        for item in assert_success(admin.get("/api/admin/redeem-code-batches"))["items"]
+        if item["id"] == batch["id"]
+    )
+    assert listed_batch["usedCount"] == 1
+
+    listed_code = assert_success(admin.get(f"/api/admin/redeem-code-batches/{batch['id']}/codes"))[
+        "items"
+    ][0]
+    assert listed_code["usedCount"] == 1
+
+    collection = assert_success(fan.get("/api/me/collection"))
+    assert collection["summary"]["ownedCount"] == 1
+    assert collection["cards"][0]["userCardId"] == redeemed["userCardId"]
+
+    assert_error(
+        fan.post("/api/redemptions", json={"code": code, "source": "qr"}),
+        409,
+        "REDEEM_CODE_ALREADY_USED",
+    )
+    listed_batch_after_retry = next(
+        item
+        for item in assert_success(admin.get("/api/admin/redeem-code-batches"))["items"]
+        if item["id"] == batch["id"]
+    )
+    assert listed_batch_after_retry["usedCount"] == 1
+
+
 def test_invalid_code_does_not_change_collection(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:
