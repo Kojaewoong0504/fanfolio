@@ -12,6 +12,7 @@ BACKEND_DIR="$ROOT_DIR/backend"
 LOG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/fanfolio-integration.XXXXXX")"
 API_PID=""
 CELERY_PID=""
+COMPOSE=()
 REDEEM_USER_A=""
 REDEEM_USER_B=""
 REDEEM_SESSION_A=""
@@ -24,7 +25,7 @@ cleanup() {
   set +e
   [[ -n "$API_PID" ]] && kill "$API_PID" 2>/dev/null || true
   [[ -n "$CELERY_PID" ]] && kill "$CELERY_PID" 2>/dev/null || true
-  if [[ "${STOP_SERVICES:-0}" == "1" ]]; then
+  if [[ "${STOP_SERVICES:-0}" == "1" && "${#COMPOSE[@]}" -gt 0 ]]; then
     compose down
   fi
   # LOG_DIR is an explicit mktemp directory owned by this run. `rm` keeps the
