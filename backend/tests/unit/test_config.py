@@ -34,9 +34,30 @@ def test_valid_production_settings_pass_runtime_validation() -> None:
         mail_from="Fanfolio <no-reply@fanfolio.example>",
         smtp_host="smtp.example.com",
         auto_create_schema=False,
+        rate_limit_backend="redis",
     )
 
     settings.validate_runtime()
+
+
+def test_production_settings_require_redis_rate_limiting() -> None:
+    settings = Settings(
+        app_env="production",
+        frontend_url="https://app.fanfolio.example",
+        frontend_origins="https://app.fanfolio.example",
+        mail_delivery_mode="smtp",
+        mail_from="Fanfolio <no-reply@fanfolio.example>",
+        smtp_host="smtp.example.com",
+        auto_create_schema=False,
+        rate_limit_backend="memory",
+    )
+
+    try:
+        settings.validate_runtime()
+    except ValueError as error:
+        assert "RATE_LIMIT_BACKEND" in str(error)
+    else:
+        raise AssertionError("production must use shared Redis rate limiting")
 
 
 def test_production_settings_require_explicit_migrations() -> None:
@@ -48,6 +69,7 @@ def test_production_settings_require_explicit_migrations() -> None:
         mail_from="Fanfolio <no-reply@fanfolio.example>",
         smtp_host="smtp.example.com",
         auto_create_schema=True,
+        rate_limit_backend="redis",
     )
 
     try:
@@ -67,6 +89,7 @@ def test_production_settings_reject_insecure_cors_origins() -> None:
         mail_from="Fanfolio <no-reply@fanfolio.example>",
         smtp_host="smtp.example.com",
         auto_create_schema=False,
+        rate_limit_backend="redis",
     )
 
     try:
@@ -86,6 +109,7 @@ def test_production_settings_reject_wildcard_cors_origins() -> None:
         mail_from="Fanfolio <no-reply@fanfolio.example>",
         smtp_host="smtp.example.com",
         auto_create_schema=False,
+        rate_limit_backend="redis",
     )
 
     try:

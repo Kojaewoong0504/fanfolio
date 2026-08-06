@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     task_queue_mode: str = "inline"
     celery_broker_url: str = "redis://localhost:6379/0"
     celery_result_backend: str = "redis://localhost:6379/0"
+    rate_limit_backend: str = "memory"
+    rate_limit_redis_url: str = "redis://localhost:6379/1"
 
     @property
     def allowed_origins(self) -> list[str]:
@@ -63,6 +65,10 @@ class Settings(BaseSettings):
             raise ValueError("MAIL_DELIVERY_MODE must be smtp in production")
         if not self.smtp_host or not self.mail_from:
             raise ValueError("SMTP_HOST and MAIL_FROM are required in production")
+        if self.rate_limit_backend != "redis":
+            raise ValueError("RATE_LIMIT_BACKEND must be redis in production")
+        if not self.rate_limit_redis_url:
+            raise ValueError("RATE_LIMIT_REDIS_URL is required in production")
 
 
 @lru_cache

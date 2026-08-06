@@ -72,6 +72,17 @@ cd backend
 python3 -m uv run celery -A app.tasks:celery_app worker --loglevel=INFO
 ```
 
+운영에서는 요청 제한도 모든 API 인스턴스가 공유해야 하므로 Redis를 사용합니다.
+`APP_ENV=production`일 때 `RATE_LIMIT_BACKEND=redis`가 아니면 API가 시작되지 않습니다.
+로컬 개발과 계약 테스트는 Redis 없이 실행할 수 있도록 기본값이 `memory`입니다.
+
+```bash
+RATE_LIMIT_BACKEND=redis
+RATE_LIMIT_REDIS_URL=redis://localhost:6379/1
+```
+
+Redis 장애 시 요청 제한을 우회하지 않고 `503 RATE_LIMITER_UNAVAILABLE`을 반환합니다.
+
 ### 7. 매직 링크 이메일 발송
 
 기본 `MAIL_DELIVERY_MODE=console`에서는 실제 메일 대신 백엔드 로그에 로그인 URL을 남깁니다.
