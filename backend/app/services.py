@@ -102,8 +102,15 @@ async def seed_core(session: AsyncSession) -> dict:
                 name="컴백 기념 사인 카드",
                 status="published",
                 artist_id="artist_nova3",
+                image_url="/src/assets/hero.png",
             ),
-            Card(id="card_draft", name="비공개 카드", status="draft", artist_id="artist_nova3"),
+            Card(
+                id="card_draft",
+                name="비공개 카드",
+                status="draft",
+                artist_id="artist_nova3",
+                image_url="/src/assets/hero.png",
+            ),
             Drop(id="drop_live", status="live"),
             Drop(id="drop_ended", status="ended"),
         ]

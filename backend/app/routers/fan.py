@@ -3,12 +3,12 @@ import json
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Query, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import func, select, update
 
 from app.dependencies import DbSession, FanUser
 from app.errors import AppError
-from app.models import Card, Notification, UserCard
+from app.models import Asset, Card, Notification, UserCard
 from app.schemas import (
     NotificationPreferencesUpdate,
     ProfileUpdate,
@@ -18,6 +18,13 @@ from app.schemas import (
 from app.services import redeem
 
 router = APIRouter(prefix="/api", tags=["fan"])
+
+
+def card_image_url(card: Card) -> str:
+    """Use the protected asset-backed image route for artist-created cards."""
+    if card.image_asset_id:
+        return f"/api/cards/{card.id}/image"
+    return card.image_url
 
 
 @router.get("/me")
@@ -51,7 +58,7 @@ async def collection(user: FanUser, session: DbSession) -> dict:
             "userCardId": uc.id,
             "cardId": card.id,
             "name": card.name,
-            "imageUrl": card.image_url,
+            "imageUrl": card_image_url(card),
             "isOfficial": card.is_official,
             "serialNumber": uc.serial_number,
             "acquiredAt": uc.acquired_at.isoformat(),
@@ -134,6 +141,17 @@ async def card_detail(user_card_id: str, user: FanUser, session: DbSession) -> d
     }
 
 
+@router.get("/cards/{card_id}/image")
+async def card_image(card_id: str, _: FanUser, session: DbSession) -> FileResponse:
+    card = await session.get(Card, card_id)
+    if not card or card.status != "published" or not card.image_asset_id:
+        raise AppError(404, "CARD_IMAGE_NOT_FOUND", "카드 이미지를 찾을 수 없습니다.")
+    asset = await session.get(Asset, card.image_asset_id)
+    if not asset or not asset.storage_path:
+        raise AppError(404, "CARD_IMAGE_NOT_READY", "카드 이미지가 아직 준비되지 않았습니다.")
+    return FileResponse(asset.storage_path, media_type=asset.content_type or "image/png")
+
+
 @router.get("/catalog/cards")
 async def catalog(
     user: FanUser,
@@ -155,7 +173,13 @@ async def catalog(
         "ok": True,
         "data": {
             "items": [
-                {"id": c.id, "status": c.status, "isOfficial": c.is_official, "name": c.name}
+                {
+                    "id": c.id,
+                    "status": c.status,
+                    "isOfficial": c.is_official,
+                    "name": c.name,
+                    "imageUrl": card_image_url(c),
+                }
                 for c in cards
             ],
             "meta": {"pagination": {"page": page, "pageSize": pageSize, "total": total}},

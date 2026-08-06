@@ -78,6 +78,44 @@ def test_catalog_returns_only_published_cards_to_fans(actors: dict[str, TestClie
 
     assert all(card["status"] == "published" for card in catalog["items"])
     assert all(card["isOfficial"] is True for card in catalog["items"])
+    assert catalog["items"][0]["imageUrl"] == "/src/assets/hero.png"
+
+
+def test_fan_can_load_an_artist_uploaded_image_for_a_published_card(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    artist = actors["artist"]
+    uploaded_bytes = b"test-card-image"
+    upload = assert_success(
+        artist.post(
+            "/api/uploads/presign",
+            json={"fileName": "card.png", "contentType": "image/png", "purpose": "card"},
+        ),
+        201,
+    )
+    uploaded = artist.put(upload["uploadUrl"], content=uploaded_bytes)
+    assert uploaded.status_code == 204, uploaded.text
+
+    draft = assert_success(
+        artist.post(
+            "/api/artist/cards",
+            json={
+                "templateId": seeded["ids"]["templateId"],
+                "name": "이미지 경로 카드",
+                "seasonName": "2026 SPRING",
+                "rarity": "Special",
+                "imageAssetId": upload["assetId"],
+                "issueLimit": 100,
+            },
+        ),
+        201,
+    )
+    assert_success(actors["admin"].post(f"/api/admin/cards/{draft['id']}/publish"))
+
+    image = actors["fan"].get(f"/api/cards/{draft['id']}/image")
+    assert image.status_code == 200, image.text
+    assert image.headers["content-type"].startswith("image/png")
+    assert image.content == uploaded_bytes
 
 
 def test_catalog_supports_search_and_pagination(actors: dict[str, TestClient]) -> None:
