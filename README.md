@@ -6,6 +6,7 @@
 
 - `frontend/`: React + Vite + TypeScript
 - `admin_app/`: 한국어 관리자 운영 화면(정적 브라우저 앱)
+- `builder_app/`: 아티스트 카드 스튜디오(정적 브라우저 앱)
 - `backend/`: FastAPI + SQLAlchemy + Alembic
 - 데이터베이스: SQLite로 시작하고 PostgreSQL로 마이그레이션 가능하게 설계
 
@@ -45,6 +46,16 @@ python3 -m http.server 4174
 
 관리자 화면은 `http://localhost:4174`에서 열 수 있습니다. 기본 API 주소는
 `http://localhost:8000/api`이며, 설정 화면에서 다른 주소로 변경할 수 있습니다.
+
+### 5. 아티스트 스튜디오 실행
+
+```bash
+cd builder_app
+python3 -m http.server 4175
+```
+
+스튜디오는 `http://localhost:4175`에서 열 수 있습니다. 카드 생성, 손글씨 캔버스,
+배경 제거 작업 요청, 검수 요청 API를 연결하며 백엔드가 없을 때는 데모 모드로 흐름을 확인할 수 있습니다.
 
 ## VS Code 개발 환경
 
