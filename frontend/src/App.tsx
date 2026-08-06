@@ -5,12 +5,6 @@ import { QrRedeemModal } from './components/QrRedeemModal'
 
 type Tab = 'collection' | 'discover' | 'alerts' | 'settings'
 
-const cards = [
-  { id: '#021', userCardId: 'user-card-021', title: '컴백 기념 사인 카드', artist: '드림스케이프', member: '민호', image: '/src/assets/hero.png' },
-  { id: '#022', userCardId: 'user-card-022', title: 'NOVA 특별 카드', artist: '드림스케이프', member: '유준', image: '/src/assets/hero.png' },
-  { id: '#023', userCardId: 'user-card-023', title: '봄의 시작', artist: '드림스케이프', member: '하린', image: '/src/assets/hero.png' },
-]
-
 type Card = {
   id: string
   userCardId?: string
@@ -54,8 +48,8 @@ function App() {
   const [showRedeem, setShowRedeem] = useState(false)
   const [signedIn, setSignedIn] = useState(false)
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
-  const [collectionCards, setCollectionCards] = useState<Card[]>(cards)
-  const [collectionSummary, setCollectionSummary] = useState<CollectionSummary>({ ownedCount: cards.length, totalSlots: 80, completionRate: 4 })
+  const [collectionCards, setCollectionCards] = useState<Card[]>([])
+  const [collectionSummary, setCollectionSummary] = useState<CollectionSummary>({ ownedCount: 0, totalSlots: 80, completionRate: 0 })
   const [apiConnected, setApiConnected] = useState(false)
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
@@ -68,10 +62,7 @@ function App() {
       setCollectionCards(result.data.cards.map(toCollectionCard))
       setCollectionSummary(result.data.summary)
       setApiConnected(true)
-    } catch {
-      // Keep the reviewable sample state until the backend session is available.
-      setApiConnected(false)
-    }
+    } catch { setApiConnected(false) }
   }
 
   const refreshUser = async () => {
@@ -195,7 +186,7 @@ function App() {
       </nav>
 
       {showRedeem && <QrRedeemModal onClose={() => setShowRedeem(false)} onRedeemed={(id) => { setShowRedeem(false); setRevealedCardId(id); void refreshCollection() }} />}
-      <span className={apiConnected ? 'connection-status connected' : 'connection-status'}>{apiConnected ? '실시간 컬렉션' : '미리보기 데이터'}</span>
+      <span className={apiConnected ? 'connection-status connected' : 'connection-status'}>{apiConnected ? '실시간 컬렉션' : '컬렉션 연결 대기'}</span>
       <button className="floating-register" onClick={() => setShowRedeem(true)}>카드 등록</button>
       {selectedCard && <CardDetail card={selectedCard} onClose={() => setSelectedCard(null)} />}
     </main>
@@ -326,7 +317,7 @@ function Discover({ onSelect }: { onSelect: (card: Card) => void }) {
   const [showAll, setShowAll] = useState(false)
   const [artists, setArtists] = useState<CatalogArtist[]>([])
   const [members, setMembers] = useState<CatalogMember[]>([])
-  const [results, setResults] = useState<Card[]>(cards)
+  const [results, setResults] = useState<Card[]>([])
 
   useEffect(() => {
     void apiFetch<{ ok: true, data: { items: CatalogArtist[] } }>('/catalog/artists')
@@ -348,7 +339,7 @@ function Discover({ onSelect }: { onSelect: (card: Card) => void }) {
     if (memberId) params.set('memberId', memberId)
     void apiFetch<{ ok: true, data: { items: CatalogCard[] } }>(`/catalog/cards?${params}`)
       .then(result => setResults(result.data.items.map(toCatalogCard)))
-      .catch(() => setResults(cards.filter(card => !query || card.title.includes(query))))
+      .catch(() => setResults([]))
   }, [artistId, memberId, query])
 
   const visibleResults = showAll ? results : results.slice(0, 6)
