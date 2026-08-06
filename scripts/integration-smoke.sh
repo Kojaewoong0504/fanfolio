@@ -83,7 +83,9 @@ export MAIL_FROM='Fanfolio <no-reply@localhost>'
 export SMTP_HOST=localhost
 export SMTP_PORT=1025
 export SMTP_USE_TLS=false
-export TASK_QUEUE_MODE=inline
+export TASK_QUEUE_MODE=celery
+export CELERY_BROKER_URL=redis://localhost:6379/0
+export CELERY_RESULT_BACKEND=redis://localhost:6379/0
 
 echo "[2/5] applying PostgreSQL migrations"
 (cd "$BACKEND_DIR" && .venv/bin/alembic upgrade head)

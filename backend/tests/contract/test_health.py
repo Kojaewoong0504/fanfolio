@@ -1,5 +1,8 @@
+from typing import Any
+
 from fastapi.testclient import TestClient
 
+from app.routers import health
 from tests.conftest import assert_success
 
 
@@ -22,6 +25,39 @@ def test_readiness_check_verifies_database_and_runtime_configuration(
     data = assert_success(client.get("/api/health/ready"))
 
     assert data["status"] == "ready"
+
+
+def test_readiness_checks_the_task_broker_when_celery_is_enabled(
+    client: TestClient,
+    monkeypatch: Any,
+) -> None:
+    checked = False
+
+    async def fake_check_task_queue() -> None:
+        nonlocal checked
+        checked = True
+
+    monkeypatch.setattr(health, "_check_task_queue", fake_check_task_queue)
+
+    data = assert_success(client.get("/api/health/ready"))
+
+    assert data["status"] == "ready"
+    assert checked is True
+
+
+def test_readiness_returns_service_unavailable_when_task_broker_is_down(
+    client: TestClient,
+    monkeypatch: Any,
+) -> None:
+    async def failed_check_task_queue() -> None:
+        raise OSError("redis is unavailable")
+
+    monkeypatch.setattr(health, "_check_task_queue", failed_check_task_queue)
+
+    response = client.get("/api/health/ready")
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "SERVICE_NOT_READY"
 
 
 def test_configured_frontend_origin_is_allowed_for_cookie_requests(client: TestClient) -> None:
