@@ -25,6 +25,7 @@ async def lifespan(_: FastAPI):
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    settings.validate_runtime()
     app = FastAPI(title="Fanfolio API", version="0.2.0", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,

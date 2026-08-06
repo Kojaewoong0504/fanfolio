@@ -8,3 +8,27 @@ def test_frontend_origins_are_parsed_without_empty_values() -> None:
     )
 
     assert settings.allowed_origins == ["https://app.example", "http://localhost:5173"]
+
+
+def test_production_settings_require_https_smtp_and_origins() -> None:
+    settings = Settings(app_env="production", frontend_url="http://localhost:5173")
+
+    try:
+        settings.validate_runtime()
+    except ValueError as error:
+        assert "HTTPS" in str(error)
+    else:
+        raise AssertionError("unsafe production settings must be rejected")
+
+
+def test_valid_production_settings_pass_runtime_validation() -> None:
+    settings = Settings(
+        app_env="production",
+        frontend_url="https://app.fanfolio.example",
+        frontend_origins="https://app.fanfolio.example,https://admin.fanfolio.example",
+        mail_delivery_mode="smtp",
+        mail_from="Fanfolio <no-reply@fanfolio.example>",
+        smtp_host="smtp.example.com",
+    )
+
+    settings.validate_runtime()

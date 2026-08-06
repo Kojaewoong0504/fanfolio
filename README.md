@@ -89,6 +89,9 @@ SMTP_USE_TLS=true
 
 사용자가 메일의 링크를 클릭하면 프론트가 `token` 쿼리 파라미터를 자동으로 검증하고 로그인합니다.
 SMTP 연결에 실패하면 API는 `503 MAGIC_LINK_DELIVERY_FAILED`를 반환합니다.
+운영 환경(`APP_ENV=production`)에서는 애플리케이션 시작 시 `FRONTEND_URL`이 HTTPS인지,
+`FRONTEND_ORIGINS`가 비어 있지 않은지, SMTP 설정이 있는지를 검사합니다. 조건을 만족하지
+않으면 안전하지 않은 기본값으로 서버가 시작되지 않습니다.
 
 ## VS Code 개발 환경
 

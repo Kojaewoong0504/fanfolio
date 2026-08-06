@@ -44,6 +44,19 @@ class Settings(BaseSettings):
             return self.database_url.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
         return self.database_url
 
+    def validate_runtime(self) -> None:
+        """Fail fast when a production process would start with unsafe defaults."""
+        if self.app_env != "production":
+            return
+        if not self.frontend_url.startswith("https://"):
+            raise ValueError("FRONTEND_URL must use HTTPS in production")
+        if not self.allowed_origins:
+            raise ValueError("FRONTEND_ORIGINS must contain at least one origin")
+        if self.mail_delivery_mode != "smtp":
+            raise ValueError("MAIL_DELIVERY_MODE must be smtp in production")
+        if not self.smtp_host or not self.mail_from:
+            raise ValueError("SMTP_HOST and MAIL_FROM are required in production")
+
 
 @lru_cache
 def get_settings() -> Settings:
