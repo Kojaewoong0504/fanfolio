@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+exec python3 -m uv run --project backend pre-commit run --hook-stage pre-commit "$@"

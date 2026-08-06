@@ -1,0 +1,75 @@
+from typing import Any
+
+from fastapi.testclient import TestClient
+
+from tests.conftest import assert_error, assert_success
+
+
+def test_valid_qr_code_issues_official_card_and_updates_collection(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    fan = actors["fan"]
+    code = seeded["codes"]["valid"]
+
+    redeemed = assert_success(
+        fan.post("/api/redemptions", json={"code": code, "source": "qr"}), 201
+    )
+
+    assert redeemed["cardId"] == seeded["ids"]["publishedCardId"]
+    assert redeemed["serialNumber"] == 1
+    assert redeemed["redirectTo"] == f"/reveal/{redeemed['userCardId']}"
+
+    collection = assert_success(fan.get("/api/me/collection"))
+    assert collection["summary"]["ownedCount"] == 1
+    assert collection["cards"][0]["userCardId"] == redeemed["userCardId"]
+    assert collection["cards"][0]["isOfficial"] is True
+
+
+def test_redeeming_same_code_twice_returns_conflict_without_extra_card(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    fan = actors["fan"]
+    code = seeded["codes"]["valid"]
+
+    assert_success(fan.post("/api/redemptions", json={"code": code, "source": "manual"}), 201)
+    assert_error(
+        fan.post("/api/redemptions", json={"code": code, "source": "manual"}),
+        409,
+        "REDEEM_CODE_ALREADY_USED",
+    )
+
+    collection = assert_success(fan.get("/api/me/collection"))
+    assert collection["summary"]["ownedCount"] == 1
+
+
+def test_invalid_code_does_not_change_collection(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    fan = actors["fan"]
+
+    assert_error(
+        fan.post("/api/redemptions", json={"code": "WRONG-CODE", "source": "manual"}),
+        404,
+        "REDEEM_CODE_NOT_FOUND",
+    )
+    collection = assert_success(fan.get("/api/me/collection"))
+    assert collection["summary"]["ownedCount"] == 0
+
+
+def test_redemption_rejects_expired_ended_unpublished_and_exhausted_states(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    fan = actors["fan"]
+    cases = [
+        ("expired", 409, "REDEEM_CODE_EXPIRED"),
+        ("endedDrop", 409, "DROP_NOT_LIVE"),
+        ("unpublished", 409, "CARD_NOT_PUBLISHED"),
+        ("exhausted", 409, "REDEEM_LIMIT_REACHED"),
+    ]
+
+    for name, status_code, error_code in cases:
+        assert_error(
+            fan.post("/api/redemptions", json={"code": seeded["codes"][name], "source": "qr"}),
+            status_code,
+            error_code,
+        )

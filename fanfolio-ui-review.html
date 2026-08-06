@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fanfolio UI/UX 검수 보드</title>
+  <style>
+    :root { --ink:#15142f; --muted:#66647b; --line:#e7e4f0; --violet:#624de5; --blue:#236af2; --surface:#fff; --canvas:#faf8f4; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:linear-gradient(180deg,#f8f5ef 0%,#fff 44%); font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; }
+    header { padding:72px max(24px, calc((100vw - 1160px)/2)); border-bottom:1px solid var(--line); background:radial-gradient(circle at 80% 10%,#e9e2ff 0,transparent 30%),#fcfbf8; }
+    .eyebrow { display:inline-flex; gap:8px; align-items:center; margin:0 0 16px; color:#5544c5; font-size:13px; font-weight:800; letter-spacing:.08em; }
+    .dot { width:9px; height:9px; border-radius:50%; background:linear-gradient(135deg,var(--violet),var(--blue)); }
+    h1 { margin:0; font-size:clamp(32px,5vw,58px); letter-spacing:-.055em; line-height:1.04; }
+    .intro { max-width:720px; margin:20px 0 0; color:var(--muted); font-size:17px; line-height:1.7; }
+    main { max-width:1160px; margin:0 auto; padding:36px 24px 96px; }
+    .tabs { display:flex; flex-wrap:wrap; gap:10px; margin:0 0 32px; }
+    .tab { cursor:pointer; border:1px solid var(--line); border-radius:999px; padding:10px 16px; font:inherit; font-size:14px; font-weight:750; color:#4c4a62; background:#fff; transition:.18s; }
+    .tab:hover,.tab.active { border-color:transparent; color:#fff; background:linear-gradient(110deg,var(--violet),var(--blue)); box-shadow:0 8px 20px rgba(74,64,194,.2); }
+    .section-title { display:flex; justify-content:space-between; gap:16px; align-items:end; margin:52px 0 18px; }
+    .section-title h2 { margin:0; font-size:25px; letter-spacing:-.035em; }
+    .section-title p { margin:0; color:var(--muted); font-size:14px; }
+    .gallery { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:22px; }
+    .card { overflow:hidden; border:1px solid var(--line); border-radius:20px; background:var(--surface); box-shadow:0 10px 26px rgba(36,30,78,.06); transition:transform .2s,box-shadow .2s; }
+    .card:hover { transform:translateY(-4px); box-shadow:0 18px 34px rgba(36,30,78,.13); }
+    .preview { display:block; width:100%; aspect-ratio:1.77; object-fit:cover; cursor:zoom-in; background:#f4f1f8; }
+    .info { padding:18px 19px 20px; }
+    .tag { display:inline-block; margin-bottom:8px; border-radius:999px; padding:5px 9px; color:#5442ca; background:#f0edff; font-size:12px; font-weight:800; }
+    h3 { margin:0; font-size:18px; letter-spacing:-.025em; }
+    .info p { margin:8px 0 0; color:var(--muted); font-size:14px; line-height:1.55; }
+    .full { grid-column:1 / -1; }
+    .full .preview { aspect-ratio:1.77; }
+    .empty { display:none; padding:52px 0; color:var(--muted); text-align:center; }
+    dialog { width:min(96vw,1500px); margin:auto; padding:0; border:0; border-radius:18px; background:#111; box-shadow:0 28px 80px rgba(0,0,0,.45); }
+    dialog::backdrop { background:rgba(14,12,35,.7); backdrop-filter:blur(4px); }
+    dialog img { display:block; max-width:100%; max-height:84vh; margin:auto; }
+    .close { position:absolute; top:13px; right:14px; cursor:pointer; width:40px; height:40px; border:0; border-radius:50%; color:#fff; background:rgba(0,0,0,.66); font-size:24px; line-height:1; }
+    footer { border-top:1px solid var(--line); padding:26px 24px; color:var(--muted); text-align:center; font-size:13px; }
+    @media (max-width:760px) { header { padding:52px 24px; } .gallery { grid-template-columns:1fr; } .section-title { align-items:start; flex-direction:column; } .full { grid-column:auto; } }
+  </style>
+</head>
+<body>
+  <header>
+    <p class="eyebrow"><span class="dot"></span> FANFOLIO · UI/UX REVIEW</p>
+    <h1>Fanfolio 서비스<br />UI/UX 검수 보드</h1>
+    <p class="intro">팬용 모바일 앱, 관리자 운영 웹, 아티스트 특별 카드 스튜디오의 모든 예시 시안을 한곳에 모았습니다. 카드를 클릭하면 크게 볼 수 있고, 역할별 필터로 필요한 흐름만 확인할 수 있습니다.</p>
+  </header>
+
+  <main>
+    <nav class="tabs" aria-label="시안 역할별 필터">
+      <button class="tab active" data-filter="all">전체 보기</button>
+      <button class="tab" data-filter="fan">팬 앱</button>
+      <button class="tab" data-filter="admin">관리자 웹</button>
+      <button class="tab" data-filter="artist">아티스트 스튜디오</button>
+    </nav>
+
+    <section class="group" data-group="overview">
+      <div class="section-title"><h2>서비스 전체 구성</h2><p>팬 경험·관리자 경험을 한눈에 보는 개요</p></div>
+      <div class="gallery">
+        <article class="card full" data-role="fan admin artist"><img class="preview" src="prototype-assets/00-service-overview.png" alt="Fanfolio 전체 서비스 UI 개요" /><div class="info"><span class="tag">서비스 개요</span><h3>팬 앱 → 관리자 웹 → 아티스트 스튜디오</h3><p>서비스의 주요 화면과 역할별 진입점을 먼저 확인합니다.</p></div></article>
+      </div>
+    </section>
+
+    <section class="group" data-group="fan">
+      <div class="section-title"><h2>팬용 모바일 앱</h2><p>가입부터 코드·QR 발급, 탐색과 개인 컬렉션까지</p></div>
+      <div class="gallery">
+        <article class="card" data-role="fan"><img class="preview" src="prototype-assets/01-fan-app-screens.png" alt="팬 앱 주요 화면" /><div class="info"><span class="tag">주요 화면</span><h3>로그인·컬렉션·탐색·알림·설정</h3><p>팬이 앱에서 이용할 핵심 메뉴와 화면 구성입니다.</p></div></article>
+        <article class="card" data-role="fan"><img class="preview" src="prototype-assets/02-fan-onboarding-flow.png" alt="팬 가입과 초기 설정 흐름" /><div class="info"><span class="tag">시작 흐름</span><h3>회원가입과 최초 설정</h3><p>이메일 인증 후 좋아하는 그룹, 멤버, 닉네임을 설정합니다.</p></div></article>
+        <article class="card" data-role="fan"><img class="preview" src="prototype-assets/03-fan-qr-code-activation.png" alt="카드 코드와 QR 활성화 흐름" /><div class="info"><span class="tag">카드 발급</span><h3>코드·QR로 공식 카드 받기</h3><p>직접 등록 대신 코드 입력 또는 QR 스캔으로 공식 디지털 카드를 발급받습니다.</p></div></article>
+        <article class="card" data-role="fan"><img class="preview" src="prototype-assets/04-fan-discover-notifications-settings.png" alt="탐색 알림 설정 흐름" /><div class="info"><span class="tag">지속 사용</span><h3>탐색·알림·설정</h3><p>관심 카드 탐색, 새 카드 알림 확인, 개인 설정 관리를 제공합니다.</p></div></article>
+      </div>
+    </section>
+
+    <section class="group" data-group="admin">
+      <div class="section-title"><h2>관리자 운영 웹</h2><p>카드·드롭·리딤 코드를 만들고 사용 현황을 관리</p></div>
+      <div class="gallery">
+        <article class="card" data-role="admin"><img class="preview" src="prototype-assets/05-admin-screens.png" alt="관리자 웹 주요 화면" /><div class="info"><span class="tag">주요 화면</span><h3>로그인·대시보드·카드·드롭 관리</h3><p>운영자가 보는 관리 화면의 기본 정보 구조입니다.</p></div></article>
+        <article class="card" data-role="admin"><img class="preview" src="prototype-assets/06-admin-operations-flow.png" alt="관리자 운영 흐름" /><div class="info"><span class="tag">운영 흐름</span><h3>카드 생성부터 코드 CSV 배포까지</h3><p>카드 공개, 드롭 연결, 코드 일괄 생성과 사용 현황 확인 과정을 설명합니다.</p></div></article>
+      </div>
+    </section>
+
+    <section class="group" data-group="artist">
+      <div class="section-title"><h2>아티스트 특별 카드 스튜디오</h2><p>아티스트가 공식 특별 카드를 템플릿으로 제작·검수·공개</p></div>
+      <div class="gallery">
+        <article class="card" data-role="artist"><img class="preview" src="prototype-assets/07-artist-studio-screens.png" alt="아티스트 스튜디오 주요 화면" /><div class="info"><span class="tag">주요 화면</span><h3>인증·스튜디오 홈·제작 에디터·공개</h3><p>아티스트 전용의 간결한 카드 제작 환경입니다.</p></div></article>
+        <article class="card" data-role="artist"><img class="preview" src="prototype-assets/08-artist-studio-workflow.png" alt="아티스트 카드 공개 흐름" /><div class="info"><span class="tag">제작 흐름</span><h3>특별 카드 제작부터 팬 알림까지</h3><p>템플릿 선택, 내용 입력, 팬 화면 미리보기, 공개 과정을 보여 줍니다.</p></div></article>
+        <article class="card" data-role="artist"><img class="preview" src="prototype-assets/09-artist-special-card-examples.png" alt="아티스트 특별 카드 예시" /><div class="info"><span class="tag">카드 예시</span><h3>사인·무대·생일·음성 특전 카드</h3><p>아티스트가 만들 수 있는 공식 특별 카드 유형을 예시로 제시합니다.</p></div></article>
+        <article class="card" data-role="artist"><img class="preview" src="prototype-assets/10-artist-handwriting-flow.png" alt="아티스트 손글씨 카드 적용 흐름" /><div class="info"><span class="tag">손글씨 기능</span><h3>직접 쓰기 또는 사진 누끼 처리</h3><p>실제 손글씨 사진을 투명 레이어로 분리해 카드에 배치할 수 있습니다.</p></div></article>
+      </div>
+    </section>
+
+    <p class="empty" id="empty">선택한 역할에 해당하는 시안이 없습니다.</p>
+  </main>
+
+  <dialog id="lightbox"><button class="close" aria-label="닫기">×</button><img id="lightbox-image" alt="확대된 UI 시안" /></dialog>
+  <footer>Fanfolio MVP · UI/UX 검수용 시안 모음</footer>
+
+  <script>
+    const tabs = document.querySelectorAll('.tab');
+    const cards = document.querySelectorAll('.card');
+    const groups = document.querySelectorAll('.group');
+    const empty = document.querySelector('#empty');
+    const dialog = document.querySelector('#lightbox');
+    const dialogImage = document.querySelector('#lightbox-image');
+    function filter(role) {
+      let visible = 0;
+      cards.forEach(card => {
+        const show = role === 'all' || card.dataset.role.split(' ').includes(role);
+        card.style.display = show ? '' : 'none';
+        if (show) visible++;
+      });
+      groups.forEach(group => {
+        group.style.display = [...group.querySelectorAll('.card')].some(card => card.style.display !== 'none') ? '' : 'none';
+      });
+      empty.style.display = visible ? 'none' : 'block';
+    }
+    tabs.forEach(tab => tab.addEventListener('click', () => {
+      tabs.forEach(item => item.classList.toggle('active', item === tab));
+      filter(tab.dataset.filter);
+    }));
+    document.querySelectorAll('.preview').forEach(image => image.addEventListener('click', () => {
+      dialogImage.src = image.src;
+      dialogImage.alt = image.alt;
+      dialog.showModal();
+    }));
+    dialog.querySelector('.close').addEventListener('click', () => dialog.close());
+    dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
+  </script>
+</body>
+</html>

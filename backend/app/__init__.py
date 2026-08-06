@@ -1,0 +1,1 @@
+"""Fanfolio FastAPI application package."""
