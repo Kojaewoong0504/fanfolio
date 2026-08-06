@@ -35,9 +35,10 @@ async def _check_storage_backend() -> None:
     """Check that the configured object store can answer a metadata request."""
     settings = get_settings()
     if settings.storage_backend == "local":
+        configured_asset_storage().check_ready()
         return
     storage = configured_asset_storage()
-    await asyncio.to_thread(storage.exists, storage.asset_path("__healthcheck__", ".bin"))
+    await asyncio.to_thread(storage.check_ready)
 
 
 async def _check_upload_scanner() -> None:

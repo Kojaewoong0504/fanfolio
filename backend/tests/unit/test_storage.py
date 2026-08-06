@@ -18,6 +18,11 @@ class FakeS3Client:
     def put_object(self, *, Bucket: str, Key: str, Body: bytes, **_: object) -> None:
         self.objects[(Bucket, Key)] = Body
 
+    def head_bucket(self, *, Bucket: str) -> None:
+        if not any(object_bucket == Bucket for object_bucket, _ in self.objects):
+            # The fake models an existing bucket independently of its objects.
+            return
+
     def head_object(self, *, Bucket: str, Key: str) -> None:
         if (Bucket, Key) not in self.objects:
             error = RuntimeError("not found")
@@ -50,6 +55,8 @@ def test_local_asset_storage_writes_assets_under_the_configured_root(tmp_path: P
 
 def test_s3_asset_storage_uses_object_keys_and_reads_objects() -> None:
     storage = S3AssetStorage(client=FakeS3Client(), bucket="fanfolio-test")
+
+    storage.check_ready()
 
     path = storage.save_bytes("asset_test", b"remote bytes")
 

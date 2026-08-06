@@ -12,6 +12,8 @@ from fastapi.responses import FileResponse, Response
 
 
 class AssetStorage(Protocol):
+    def check_ready(self) -> None: ...
+
     def save_bytes(self, asset_id: str, content: bytes) -> str: ...
 
     def asset_path(self, asset_id: str, suffix: str = "") -> str: ...
@@ -41,6 +43,10 @@ class LocalAssetStorage:
 
     def asset_path(self, asset_id: str, suffix: str = "") -> str:
         return str(self.root / "assets" / f"{asset_id}{suffix}")
+
+    def check_ready(self) -> None:
+        """The local provider is ready when the process can access its root."""
+        self.root.mkdir(parents=True, exist_ok=True)
 
     def preview_path(self, card_id: str) -> str:
         return str(self.root / "previews" / f"{card_id}.png")
@@ -113,6 +119,10 @@ class S3AssetStorage:
 
     def _key(self, storage_id: str, suffix: str = "") -> str:
         return f"{self.key_prefix}/assets/{storage_id}{suffix}"
+
+    def check_ready(self) -> None:
+        """Validate the bucket itself, not a possibly absent healthcheck object."""
+        self.client.head_bucket(Bucket=self.bucket)
 
     def _uri(self, key: str) -> str:
         return f"s3://{self.bucket}/{key}"
