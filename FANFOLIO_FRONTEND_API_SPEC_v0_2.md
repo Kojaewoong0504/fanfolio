@@ -205,7 +205,7 @@ Base URL: `/api`
 }
 ```
 
-개발 환경의 `uploadUrl`은 API 내부 PUT 엔드포인트이고, 운영 환경에서는 S3 등 오브젝트 스토리지의 presigned URL로 교체한다. 자산 소유권 검사는 두 환경에서 동일하게 유지한다.
+현재 `uploadUrl`은 API 내부 PUT 엔드포인트이며, `STORAGE_BACKEND=s3`일 때 서버가 업로드 바이트를 S3 호환 버킷에 저장한다. 자산 소유권과 만료 검사는 두 저장소에서 동일하다. 브라우저가 스토리지에 직접 업로드하는 presigned URL 방식은 다음 최적화 단계에서 추가할 수 있다.
 
 `POST /assets/{assetId}/background-removal` 성공 응답은 비동기 작업 정보를 반환한다.
 

@@ -12,6 +12,12 @@ class Settings(BaseSettings):
     auto_create_schema: bool = True
     storage_dir: str = "./storage"
     storage_backend: str = "local"
+    s3_endpoint_url: str = ""
+    s3_region: str = "ap-northeast-2"
+    s3_bucket: str = ""
+    s3_key_prefix: str = "fanfolio"
+    s3_access_key_id: str = ""
+    s3_secret_access_key: str = ""
     max_upload_bytes: int = 10 * 1024 * 1024
     upload_url_ttl_seconds: int = 15 * 60
     asset_scan_mode: str = "basic"
@@ -58,6 +64,10 @@ class Settings(BaseSettings):
 
     def validate_runtime(self) -> None:
         """Fail fast when a production process would start with unsafe defaults."""
+        if self.storage_backend not in {"local", "s3"}:
+            raise ValueError("STORAGE_BACKEND must be local or s3")
+        if self.storage_backend == "s3" and not self.s3_bucket:
+            raise ValueError("S3_BUCKET is required when STORAGE_BACKEND is s3")
         if self.app_env != "production":
             return
         if self.auto_create_schema:

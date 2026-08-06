@@ -7,9 +7,9 @@ from fastapi.responses import FileResponse
 from app.core.config import get_settings
 from app.dependencies import CurrentUser, DbSession
 from app.errors import AppError
-from app.image_processing import save_uploaded_bytes
 from app.models import Asset, Role
 from app.schemas import AssetTransformUpdate, UploadPresignRequest
+from app.storage import configured_asset_storage
 from app.upload_safety import scan_uploaded_content
 
 router = APIRouter(prefix="/api", tags=["assets"])
@@ -80,7 +80,7 @@ async def upload_asset_content(
         purpose=asset.purpose,
         content=content,
     )
-    asset.storage_path = save_uploaded_bytes(get_settings().storage_dir, asset.id, content)
+    asset.storage_path = configured_asset_storage().save_bytes(asset.id, content)
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

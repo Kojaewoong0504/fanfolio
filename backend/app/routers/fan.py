@@ -5,11 +5,10 @@ from typing import Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Query, Request, status
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from sqlalchemy import case, desc, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
-from app.core.config import get_settings
 from app.dependencies import DbSession, FanUser, OptionalCurrentUser
 from app.download_signing import download_url, verify_download_token
 from app.errors import AppError
@@ -32,7 +31,7 @@ from app.schemas import (
     RedemptionRequest,
 )
 from app.services import record_audit, redeem
-from app.storage import local_asset_storage
+from app.storage import configured_asset_storage
 
 router = APIRouter(prefix="/api", tags=["fan"])
 
@@ -348,11 +347,8 @@ async def download_collection_benefit(
     if not campaign.benefit_asset_id:
         raise AppError(404, "BENEFIT_ASSET_NOT_FOUND", "아직 다운로드할 특전 파일이 없습니다.")
     asset = await session.get(Asset, campaign.benefit_asset_id)
-    if (
-        asset is None
-        or not asset.storage_path
-        or not local_asset_storage(get_settings().storage_dir).exists(asset.storage_path)
-    ):
+    storage = configured_asset_storage()
+    if asset is None or not asset.storage_path or not storage.exists(asset.storage_path):
         raise AppError(404, "BENEFIT_ASSET_NOT_READY", "특전 파일이 아직 준비되지 않았습니다.")
     await record_audit(
         session,
@@ -363,11 +359,15 @@ async def download_collection_benefit(
         details={"claimId": claim.id, "assetId": asset.id},
     )
     await session.commit()
-    return FileResponse(
-        asset.storage_path,
-        media_type=asset.content_type or "application/octet-stream",
-        filename=asset.file_name or f"{campaign.id}-benefit",
-    )
+    media_type = asset.content_type or "application/octet-stream"
+    filename = asset.file_name or f"{campaign.id}-benefit"
+    if asset.storage_path.startswith("s3://"):
+        return Response(
+            content=storage.read_bytes(asset.storage_path),
+            media_type=media_type,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    return FileResponse(asset.storage_path, media_type=media_type, filename=filename)
 
 
 @router.patch("/me/profile")
