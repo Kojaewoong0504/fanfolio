@@ -2,13 +2,11 @@ from pathlib import Path
 
 from PIL import Image
 
+from app.storage import local_asset_storage
+
 
 def save_uploaded_bytes(storage_dir: str, asset_id: str, content: bytes) -> str:
-    root = Path(storage_dir).resolve() / "assets"
-    root.mkdir(parents=True, exist_ok=True)
-    path = root / f"{asset_id}.bin"
-    path.write_bytes(content)
-    return str(path)
+    return local_asset_storage(storage_dir).save_bytes(asset_id, content)
 
 
 def remove_light_background(storage_dir: str, asset_id: str, source_path: str) -> str:
@@ -18,7 +16,7 @@ def remove_light_background(storage_dir: str, asset_id: str, source_path: str) -
             red, green, blue, _alpha = source.getpixel((x, y))
             if red > 242 and green > 242 and blue > 242:
                 source.putpixel((x, y), (red, green, blue, 0))
-    output = Path(storage_dir).resolve() / "assets" / f"{asset_id}-transparent.png"
+    output = Path(local_asset_storage(storage_dir).asset_path(asset_id, "-transparent.png"))
     output.parent.mkdir(parents=True, exist_ok=True)
     source.save(output, "PNG")
     return str(output)
@@ -46,7 +44,7 @@ def compose_card_preview(
         x = int(options.get("x", 0))
         y = int(options.get("y", 0))
         base.alpha_composite(handwriting, (x, y))
-    output = Path(storage_dir).resolve() / "previews" / f"{card_id}.png"
+    output = Path(local_asset_storage(storage_dir).preview_path(card_id))
     output.parent.mkdir(parents=True, exist_ok=True)
     base.save(output, "PNG")
     return str(output)

@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./fanfolio.db"
     auto_create_schema: bool = True
     storage_dir: str = "./storage"
+    storage_backend: str = "local"
     max_upload_bytes: int = 10 * 1024 * 1024
     upload_url_ttl_seconds: int = 15 * 60
     asset_scan_mode: str = "basic"
