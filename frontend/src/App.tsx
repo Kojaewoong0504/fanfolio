@@ -81,7 +81,45 @@ function tabTitle(tab: Tab) { return { collection: '내 컬렉션', discover: '�
 
 function Login({ onLogin }: { onLogin: () => void }) {
   const [email, setEmail] = useState('')
-  return <main className="login-screen"><span className="brand-mark">F</span><p className="eyebrow">FANFOLIO</p><h1>내 손안의<br />팬 컬렉션</h1><p className="muted">좋아하는 아티스트의 순간을<br />디지털 카드로 간직하세요.</p><label className="field-label">이메일</label><input value={email} onChange={e => setEmail(e.target.value)} placeholder="이메일을 입력하세요" type="email" /><button className="primary" onClick={onLogin} disabled={!email.includes('@')}>로그인 링크 받기</button><p className="login-note">비밀번호 없이 이메일 링크로 안전하게 로그인합니다.</p></main>
+  const [token, setToken] = useState('')
+  const [requested, setRequested] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+
+  const requestLink = async () => {
+    setBusy(true)
+    setMessage('')
+    try {
+      await apiFetch('/auth/magic-link/request', {
+        method: 'POST',
+        body: JSON.stringify({ email, purpose: 'login' }),
+      })
+      setRequested(true)
+      setMessage(`${email}로 로그인 링크를 보냈습니다.`)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '로그인 링크 요청에 실패했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const verifyLink = async () => {
+    setBusy(true)
+    setMessage('')
+    try {
+      await apiFetch('/auth/magic-link/verify', {
+        method: 'POST',
+        body: JSON.stringify({ token }),
+      })
+      onLogin()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '로그인 링크 검증에 실패했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return <main className="login-screen"><span className="brand-mark">F</span><p className="eyebrow">FANFOLIO</p><h1>내 손안의<br />팬 컬렉션</h1><p className="muted">좋아하는 아티스트의 순간을<br />디지털 카드로 간직하세요.</p><label className="field-label">이메일</label><input value={email} onChange={e => setEmail(e.target.value)} placeholder="이메일을 입력하세요" type="email" disabled={requested} />{!requested ? <button className="primary" onClick={() => void requestLink()} disabled={!email.includes('@') || busy}>{busy ? '보내는 중...' : '로그인 링크 받기'}</button> : <><label className="field-label">로그인 토큰</label><input value={token} onChange={e => setToken(e.target.value)} placeholder="이메일의 로그인 토큰을 입력하세요" /><button className="primary" onClick={() => void verifyLink()} disabled={!token || busy}>{busy ? '확인 중...' : '로그인하기'}</button></>}<p className={message.includes('실패') ? 'form-message error-message' : 'form-message'}>{message}</p><p className="login-note">비밀번호 없이 이메일 링크로 안전하게 로그인합니다.</p></main>
 }
 
 function Collection({ cards: collectionCards, onSelect, onRedeem }: { cards: Card[], onSelect: (card: Card) => void, onRedeem: () => void }) {
