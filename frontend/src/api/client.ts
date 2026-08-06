@@ -14,6 +14,14 @@ export type CollectionCard = {
   acquiredAt: string
 }
 
+export type CatalogCard = {
+  id: string
+  status: string
+  isOfficial: boolean
+  name: string
+  imageUrl: string
+}
+
 export type NotificationItem = {
   id: string
   kind: string

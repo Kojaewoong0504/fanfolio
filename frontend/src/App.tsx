@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
-import { apiFetch, notificationStreamUrl, type CollectionCard, type NotificationItem, type UserCardDetail } from './api/client'
+import { apiFetch, notificationStreamUrl, type CatalogCard, type CollectionCard, type NotificationItem, type UserCardDetail } from './api/client'
 import { QrRedeemModal } from './components/QrRedeemModal'
 
 type Tab = 'collection' | 'discover' | 'alerts' | 'settings'
@@ -11,9 +11,16 @@ const cards = [
   { id: '#023', userCardId: 'user-card-023', title: '봄의 시작', artist: '드림스케이프', member: '하린', image: '/src/assets/hero.png' },
 ]
 
-type Card = typeof cards[number]
+type Card = {
+  id: string
+  userCardId?: string
+  title: string
+  artist: string
+  member: string
+  image: string
+}
 
-function toCard(card: CollectionCard): Card {
+function toCollectionCard(card: CollectionCard): Card {
   return {
     id: `#${String(card.serialNumber).padStart(3, '0')}`,
     userCardId: card.userCardId,
@@ -24,9 +31,19 @@ function toCard(card: CollectionCard): Card {
   }
 }
 
+function toCatalogCard(card: CatalogCard): Card {
+  return {
+    id: card.id,
+    title: card.name,
+    artist: 'Fanfolio 아티스트',
+    member: '공식 카드',
+    image: card.imageUrl,
+  }
+}
+
 function App() {
   const [tab, setTab] = useState<Tab>('collection')
-  const [selectedCard, setSelectedCard] = useState<typeof cards[number] | null>(null)
+  const [selectedCard, setSelectedCard] = useState<Card | null>(null)
   const [showRedeem, setShowRedeem] = useState(false)
   const [signedIn, setSignedIn] = useState(false)
   const [collectionCards, setCollectionCards] = useState<Card[]>(cards)
@@ -39,7 +56,7 @@ function App() {
   const refreshCollection = async () => {
     try {
       const result = await apiFetch<{ ok: true, data: { cards: CollectionCard[] } }>('/me/collection')
-      setCollectionCards(result.data.cards.map(toCard))
+      setCollectionCards(result.data.cards.map(toCollectionCard))
       setApiConnected(true)
     } catch {
       // Keep the reviewable sample state until the backend session is available.
@@ -252,8 +269,8 @@ function Discover({ onSelect }: { onSelect: (card: Card) => void }) {
   useEffect(() => {
     const params = new URLSearchParams({ page: '1', pageSize: '20' })
     if (query.trim()) params.set('q', query.trim())
-    void apiFetch<{ ok: true, data: { items: CollectionCard[] } }>(`/catalog/cards?${params}`)
-      .then(result => setResults(result.data.items.map(toCard)))
+    void apiFetch<{ ok: true, data: { items: CatalogCard[] } }>(`/catalog/cards?${params}`)
+      .then(result => setResults(result.data.items.map(toCatalogCard)))
       .catch(() => setResults(cards.filter(card => !query || card.title.includes(query))))
   }, [query])
 
@@ -310,7 +327,7 @@ function CardDetail({ card, onClose }: { card: Card, onClose: () => void }) {
       .then(result => setDetail(result.data))
       .catch(() => setDetail(null))
   }, [card.userCardId])
-  return <aside className="detail-panel"><button onClick={onClose}>닫기</button><img src={card.image} alt="카드 상세" /><dl><div><dt>아티스트</dt><dd>{card.artist}</dd></div><div><dt>멤버</dt><dd>{card.member}</dd></div><div><dt>발행번호</dt><dd>{detail ? `#${String(detail.serialNumber).padStart(3, '0')}` : card.id}</dd></div><div><dt>획득 경로</dt><dd>{detail?.acquisitionSource === 'redeem_code' ? '콘텐츠 코드' : '콘텐츠 코드 #1'}</dd></div></dl>{detail?.card.handwritingImageUrl && <p className="detail-badge">손글씨 특전 포함</p>}{detail?.card.hasVoice && <p className="detail-badge">보이스 특전 포함</p>}<button className="primary">컬렉션에 추가</button></aside>
+  return <aside className="detail-panel"><button onClick={onClose}>닫기</button><img src={card.image} alt="카드 상세" /><h2 className="detail-title">{detail?.card.name ?? card.title}</h2><dl><div><dt>아티스트</dt><dd>{card.artist}</dd></div><div><dt>멤버</dt><dd>{card.member}</dd></div>{detail && <><div><dt>발행번호</dt><dd>#{String(detail.serialNumber).padStart(3, '0')}</dd></div><div><dt>획득 경로</dt><dd>{detail.acquisitionSource === 'redeem_code' ? '콘텐츠 코드' : '직접 등록'}</dd></div></>}</dl>{detail?.card.handwritingImageUrl && <p className="detail-badge">손글씨 특전 포함</p>}{detail?.card.hasVoice && <p className="detail-badge">보이스 특전 포함</p>}{!detail && <p className="detail-hint">카드 패키지의 QR 또는 코드를 사용해 컬렉션에 등록할 수 있어요.</p>}</aside>
 }
 
 export function LegacyRedeemModal({ onClose, onRedeemed }: { onClose: () => void, onRedeemed: (userCardId: string) => void }) { const [code, setCode] = useState(''); const [message, setMessage] = useState(''); const [saving, setSaving] = useState(false); const redeem = async () => { setSaving(true); setMessage(''); try { const result = await apiFetch<{ ok: true, data: { userCardId: string } }>('/redemptions', { method: 'POST', body: JSON.stringify({ code, source: 'manual' }) }); onRedeemed(result.data.userCardId); } catch (error) { setMessage(error instanceof Error ? error.message : '카드 등록에 실패했습니다.'); } finally { setSaving(false) } }; return <div className="modal-backdrop"><div className="modal"><button className="modal-close" onClick={onClose}>×</button><h2>카드 등록</h2><p className="muted">카드 패키지의 QR을 스캔하거나<br />코드를 직접 입력하세요.</p><div className="qr-box"><span>QR</span><b>QR 스캔</b><small>카메라로 코드를 비춰주세요.</small></div><div className="divider">또는 코드 입력</div><input value={code} onChange={e => setCode(e.target.value)} placeholder="예: NOVA-VALID-01" /><button className="primary" disabled={!code || saving} onClick={() => void redeem()}>{saving ? '등록 중...' : '카드 등록하기'}</button>{message && <p className="form-message error-message">{message}</p>}</div></div> }
