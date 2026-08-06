@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
@@ -215,8 +216,11 @@ async def process_background_removal(job_id: str) -> None:
         try:
             job.status = "processing"
             await session.commit()
-            output_path = remove_light_background(
-                get_settings().storage_dir, asset.id, asset.storage_path
+            output_path = await asyncio.to_thread(
+                remove_light_background,
+                get_settings().storage_dir,
+                asset.id,
+                asset.storage_path,
             )
             asset.processed_storage_path = output_path
             job.status = "completed"
