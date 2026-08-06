@@ -1,0 +1,96 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: fanfolio
+      POSTGRES_USER: fanfolio
+      POSTGRES_PASSWORD: fanfolio-local-only
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fanfolio -d fanfolio"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - fanfolio-stack-postgres:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  mailpit:
+    image: axllent/mailpit:v1.26
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql+asyncpg://fanfolio:fanfolio-local-only@postgres:5432/fanfolio
+      AUTO_CREATE_SCHEMA: "false"
+      STORAGE_DIR: /var/lib/fanfolio/storage
+      FRONTEND_URL: http://localhost:5173
+      FRONTEND_ORIGINS: http://localhost:5173,http://localhost:4174,http://localhost:4175
+      MAIL_DELIVERY_MODE: smtp
+      MAIL_FROM: Fanfolio <no-reply@localhost>
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_USE_TLS: "false"
+      TASK_QUEUE_MODE: celery
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      RATE_LIMIT_BACKEND: redis
+      RATE_LIMIT_REDIS_URL: redis://redis:6379/1
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "8000:8000"
+    volumes:
+      - fanfolio-stack-storage:/var/lib/fanfolio/storage
+
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql+asyncpg://fanfolio:fanfolio-local-only@postgres:5432/fanfolio
+      AUTO_CREATE_SCHEMA: "false"
+      STORAGE_DIR: /var/lib/fanfolio/storage
+      TASK_QUEUE_MODE: celery
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      RATE_LIMIT_BACKEND: redis
+      RATE_LIMIT_REDIS_URL: redis://redis:6379/1
+    command: celery -A app.tasks:celery_app worker --loglevel=INFO
+    volumes:
+      - fanfolio-stack-storage:/var/lib/fanfolio/storage
+
+volumes:
+  fanfolio-stack-postgres:
+  fanfolio-stack-storage:

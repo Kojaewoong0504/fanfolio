@@ -169,6 +169,28 @@ SMTP Mailpit 수신까지 확인합니다. 컨테이너는 기본적으로 계�
 STOP_SERVICES=1 ./scripts/integration-smoke.sh
 ```
 
+API와 Celery까지 컨테이너로 실행하려면 별도의 전체 스택 compose 파일을 사용합니다.
+이 구성은 로컬 검증용이며, 운영에서는 비밀번호·도메인·TLS 설정을 반드시 교체하세요.
+
+```bash
+docker compose -f docker-compose.stack.yml up --build -d
+open http://localhost:8025
+```
+
+API 컨테이너가 시작될 때 Alembic 마이그레이션을 먼저 적용합니다. 상태와 로그는 다음처럼
+확인할 수 있습니다.
+
+```bash
+curl http://localhost:8000/api/health/ready
+docker compose -f docker-compose.stack.yml logs -f api worker
+```
+
+종료 및 로컬 볼륨까지 삭제하려면 다음을 사용합니다.
+
+```bash
+docker compose -f docker-compose.stack.yml down -v
+```
+
 운영에서는 `AUTO_CREATE_SCHEMA=false`를 유지하고 배포 단계에서 `alembic upgrade head`를
 먼저 실행합니다. 앱이 시작할 때 ORM이 임의로 테이블을 만들지 않도록 하는 설정입니다.
 
