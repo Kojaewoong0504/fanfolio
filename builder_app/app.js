@@ -17,7 +17,7 @@ function shell(content) {
 }
 function steps() { return `<div class="stepper"><div class="step ${state.step > 1 ? 'done' : 'current'}"><i>1</i> 기본 입력</div><div class="step-line"></div><div class="step ${state.step === 2 ? 'current' : state.step > 2 ? 'done' : ''}"><i>2</i> 손글씨</div><div class="step-line"></div><div class="step ${state.step === 3 ? 'current' : state.step > 3 ? 'done' : ''}"><i>3</i> 미리보기</div><div class="step-line"></div><div class="step ${state.step === 4 ? 'current' : ''}"><i>4</i> 검수·공개</div></div>`; }
 function cardPreview(name = state.cardName || state.form.name, imageUrl = state.preview?.previewImageUrl) { const image = imageUrl ? `<img class="card-preview-image" src="${esc(absoluteApiUrl(imageUrl))}" alt="${esc(name)} 미리보기" />` : '<div class="card-figure"></div><div class="card-glow"></div>'; return `<div class="card-preview">${image}<div class="card-text"><strong>${esc(name || '새 특별 카드')}</strong><span>Fanfolio Special Card</span></div></div>`; }
-function cardForm() {
+function renderCardForm() {
   const f = state.form;
   return `${steps()}<div class="studio-grid"><div class="panel preview-panel"><h2>카드 미리보기</h2><div id="preview">${cardPreview()}</div><span class="hint">권장 이미지 1000×1500px · JPG/PNG</span></div><form class="panel form-panel" id="card-form"><h2>카드 정보</h2><label class="field">카드 이미지 *<input name="cardImage" type="file" accept="image/png,image/jpeg,image/webp" required /></label><label class="field">카드명 *<input name="name" placeholder="카드 이름을 입력하세요" required value="${esc(f.name)}" /></label><div class="row"><label class="field">그룹<select name="group"><option value="artist_nova3">드림스케이프</option></select></label><label class="field">멤버<select name="memberId"><option value="member_yuna" ${f.memberId === 'member_yuna' ? 'selected' : ''}>유나</option><option value="member_minho" ${f.memberId === 'member_minho' ? 'selected' : ''}>민호</option><option value="member_jei" ${f.memberId === 'member_jei' ? 'selected' : ''}>제이</option></select></label></div><div class="row"><label class="field">시즌<select name="seasonName"><option ${f.seasonName === '2025 봄' ? 'selected' : ''}>2025 봄</option><option ${f.seasonName === '2025 여름' ? 'selected' : ''}>2025 여름</option></select></label><label class="field">카드 타입<select name="templateId"><option value="template_signature_v1" ${f.templateId === 'template_signature_v1' ? 'selected' : ''}>스페셜</option><option value="template_basic_v1" ${f.templateId === 'template_basic_v1' ? 'selected' : ''}>일반</option></select></label></div><label class="field">희귀도<select name="rarity"><option value="R" ${f.rarity === 'R' ? 'selected' : ''}>R (레어)</option><option value="SR" ${f.rarity === 'SR' ? 'selected' : ''}>SR (슈퍼 레어)</option><option value="N" ${f.rarity === 'N' ? 'selected' : ''}>N (노멀)</option></select></label><label class="field">사인 메시지<textarea name="signatureText" maxlength="200" placeholder="팬에게 전하고 싶은 메시지를 입력하세요">${esc(f.signatureText)}</textarea><span class="hint">최대 200자 · 다음 단계에서 직접 손글씨를 추가할 수 있어요.</span></label><div class="toggle-row"><span>보이스 카드 <small class="hint">카드 수집 시 음성이 재생됩니다.</small></span><button type="button" class="toggle ${f.hasVoice ? 'on' : ''}" aria-label="보이스 카드 켜기" aria-pressed="${f.hasVoice}"></button></div><label class="field">발행 수량<input name="issueLimit" type="number" value="${esc(f.issueLimit)}" min="1" required /><span class="hint">발행 수량은 검수 전까지 수정할 수 있습니다.</span></label><div class="bottom-actions"><button type="button" class="secondary" id="save-draft">임시 저장</button><button class="primary" type="submit">다음: 손글씨</button></div></form></div>`;
 }
@@ -61,7 +61,7 @@ function cardForm() {
   return `${steps()}<div class="studio-grid"><div class="panel preview-panel"><h2>카드 미리보기</h2><div id="preview">${cardPreview()}</div><span class="hint">권장 이미지 1000×1500px · JPG/PNG</span></div><form class="panel form-panel" id="card-form"><h2>카드 정보</h2><label class="field">카드 이미지 *<input name="cardImage" type="file" accept="image/png,image/jpeg,image/webp" required /></label><label class="field">카드명 *<input name="name" placeholder="카드 이름을 입력하세요" required value="${esc(f.name)}" /></label><div class="row"><label class="field">그룹<select name="group">${artistOptions}</select></label><label class="field">멤버<select name="memberId">${memberOptions}</select></label></div><div class="row"><label class="field">시즌<select name="seasonName"><option ${f.seasonName === '2025 봄' ? 'selected' : ''}>2025 봄</option><option ${f.seasonName === '2025 여름' ? 'selected' : ''}>2025 여름</option></select></label><label class="field">카드 타입<select name="templateId">${templateOptions}</select></label></div><label class="field">희귀도<select name="rarity"><option value="R" ${f.rarity === 'R' ? 'selected' : ''}>R (레어)</option><option value="SR" ${f.rarity === 'SR' ? 'selected' : ''}>SR (슈퍼 레어)</option><option value="N" ${f.rarity === 'N' ? 'selected' : ''}>N (노멀)</option></select></label><label class="field">사인 메시지<textarea name="signatureText" maxlength="200" placeholder="팬에게 전하고 싶은 메시지를 입력하세요">${esc(f.signatureText)}</textarea><span class="hint">최대 200자 · 다음 단계에서 직접 손글씨를 추가할 수 있어요.</span><div class="toggle-row"><span>보이스 카드 <small class="hint">카드 수집 시 음성이 재생됩니다.</small></span><button type="button" class="toggle ${f.hasVoice ? 'on' : ''}" aria-label="보이스 카드 켜기" aria-pressed="${f.hasVoice}"></button></div><label class="field">발행 수량<input name="issueLimit" type="number" value="${esc(f.issueLimit)}" min="1" required /><span class="hint">발행 수량은 검수 전까지 수정할 수 있습니다.</span></label><div class="bottom-actions"><button type="button" class="secondary" id="save-draft">임시 저장</button><button class="primary" type="submit">다음: 손글씨</button></div></form></div>`;
 }
 
-async function loadStudio() {
+async function loadStudioWithCatalog() {
   try {
     const [catalogResult, cardsResult] = await Promise.all([api('/artist/templates'), api('/artist/cards')]);
     state.catalog = catalogResult.data;
@@ -78,7 +78,7 @@ async function loadStudio() {
   }
 }
 
-async function loginArtist(event) {
+async function loginArtistWithCatalog(event) {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
   if (!state.magicLinkRequested) {
@@ -119,7 +119,7 @@ function studioCardsView() {
   return `<div class="panel studio-cards-panel"><div class="studio-list-heading"><div><h2>내 카드</h2><p class="hint">작성 중인 카드와 검수 상태를 확인할 수 있어요.</p></div><button class="primary compact" id="new-card">+ 새 카드 만들기</button></div><div class="studio-card-list">${cards}</div></div>`;
 }
 
-function shell(content) {
+function renderShell(content) {
   const view = state.view || 'create';
   const title = view === 'cards' ? '내 카드' : state.step === 1 ? '카드 만들기' : state.step === 2 ? '손글씨 추가' : state.step === 3 ? '카드 미리보기' : '검수 요청 완료';
   app.innerHTML = `<div class="shell"><aside class="side"><div class="logo">Fanfolio <span>✦</span><small>아티스트 스튜디오</small></div><nav class="nav"><button data-studio-view="home" class="${view === 'home' ? 'active' : ''}">⌂　스튜디오 홈</button><button data-studio-view="create" class="${view === 'create' ? 'active' : ''}">▦　카드 만들기</button><button data-studio-view="cards" class="${view === 'cards' ? 'active' : ''}">◇　내 카드</button><button data-studio-view="feedback">♡　팬 반응</button><button data-studio-view="settings">⚙　설정</button></nav><div class="profile"><span class="avatar">A</span><div><strong>아티스트</strong>ARTIST</div></div></aside><main class="workspace"><header class="top"><div><p class="kicker">Fanfolio Artist Studio</p><h1 class="title">${title}</h1></div><div class="top-actions"><span class="save-state">● API 연결됨</span><button class="secondary" id="session-config">세션 설정</button><button class="secondary" id="logout">로그아웃</button></div></header>${content}</main></div><div class="toast" id="toast"></div>`;
@@ -178,7 +178,7 @@ document.addEventListener('submit', async (event) => {
   }
 }, true);
 
-function handwritingForm() {
+function renderHandwritingForm() {
   const transform = state.handwritingTransform || { x: 68, y: 724, width: 402, rotation: -3 };
   const control = (key, label, min, max, step, unit) => `<label class="transform-field">${label}<span><input data-transform="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${transform[key]}" /><output id="transform-${key}-value">${transform[key]}${unit}</output></span></label>`;
   return `${steps()}<div class="handwriting-layout"><div class="panel"><h2>손글씨를 추가해 보세요</h2><p class="hint">직접 쓰거나 손글씨 이미지를 업로드하면 카드에 자연스럽게 합성됩니다.</p><div class="pad"><canvas id="signature-pad" width="760" height="420" aria-label="손글씨 입력 영역"></canvas><div class="pad-tools"><button class="secondary" id="clear-pad">지우기</button><span class="hint">손가락 또는 마우스로 작성</span></div></div><div style="height:12px"></div><label class="secondary" style="display:block;text-align:center">손글씨 이미지 업로드<input id="signature-file" type="file" accept="image/png,image/jpeg" hidden /></label><div style="height:12px"></div><button class="primary" id="remove-bg">배경 제거 요청</button><div id="job-area"></div></div><div class="panel"><h2>손글씨 배치</h2><p class="hint">카드 미리보기 기준으로 위치와 크기를 조정할 수 있어요.</p><div class="transform-controls">${control('x', '가로 위치', 0, 1000, 1, 'px')}${control('y', '세로 위치', 0, 1500, 1, 'px')}${control('width', '크기', 100, 800, 1, 'px')}${control('rotation', '회전', -180, 180, 1, '°')}</div><button class="secondary" id="save-transform">배치 저장</button><div class="handwriting-result" id="signature-result">${state.signature ? `<img src="${esc(state.signature)}" alt="입력한 손글씨 미리보기" />` : '<span class="hint">손글씨를 입력하면 여기에 표시됩니다.</span>'}</div><div style="height:15px"></div><div class="notice">배경 제거 결과와 배치값은 카드 초안에 저장되며, 다음 단계의 미리보기에 반영됩니다.</div><div class="bottom-actions" style="margin-top:18px"><button class="secondary" id="back-card">이전</button><button class="primary" id="next-review">다음: 미리보기</button></div></div></div>`;
@@ -199,7 +199,7 @@ async function saveTransform(silent = false) {
   } catch { if (!silent) toast('손글씨 배치를 저장하지 못했습니다.'); }
 }
 
-async function requestBackgroundRemoval() {
+async function handleBackgroundRemoval() {
   const area = document.querySelector('#job-area');
   area.innerHTML = '<div class="job"><span class="spinner"></span> 손글씨를 업로드하고 배경 제거를 요청하는 중...</div>';
   try {
@@ -214,7 +214,7 @@ async function requestBackgroundRemoval() {
   } catch { area.innerHTML = '<div class="notice">업로드 또는 배경 제거 요청에 실패했습니다. 아티스트 세션과 API 서버를 확인해 주세요.</div>'; }
 }
 
-async function loadPreview() {
+async function handleLoadPreview() {
   if (!state.cardId) { toast('먼저 카드 정보를 저장해 주세요.'); return; }
   try {
     await saveTransform(true);
@@ -232,6 +232,17 @@ async function loadPreview() {
   } catch { toast('카드 미리보기를 불러오지 못했습니다.'); }
 }
 
+async function restoreArtistSession() {
+  if (state.authenticated) return;
+  try {
+    await api('/artist/cards');
+    state.authenticated = true;
+    await loadStudio();
+  } catch {
+    // A missing or expired cookie simply keeps the login screen visible.
+  }
+}
+
 document.addEventListener('input', (event) => {
   const input = event.target.closest('[data-transform]');
   if (!input) return;
@@ -241,5 +252,14 @@ document.addEventListener('input', (event) => {
 });
 document.addEventListener('click', (event) => { if (event.target.id === 'save-transform') void saveTransform(); });
 
+cardForm = renderCardForm;
+loadStudio = loadStudioWithCatalog;
+loginArtist = loginArtistWithCatalog;
+shell = renderShell;
+handwritingForm = renderHandwritingForm;
+requestBackgroundRemoval = handleBackgroundRemoval;
+loadPreview = handleLoadPreview;
+
 render();
 if (state.authenticated) loadStudio();
+restoreArtistSession();
