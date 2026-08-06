@@ -45,12 +45,19 @@ def test_artist_can_submit_special_card_for_review_but_not_publish_it(
                 "seasonName": "2026 SPRING",
                 "rarity": "Special",
                 "imageAssetId": seeded["ids"]["imageAssetId"],
+                "signatureText": "우리 팬들 사랑해요.",
+                "hasVoice": True,
                 "issueLimit": 3000,
             },
         ),
         201,
     )
     assert draft["status"] == "draft"
+    assert draft["signatureText"] == "우리 팬들 사랑해요."
+    assert draft["hasVoice"] is True
+
+    cards = assert_success(artist.get("/api/artist/cards"))
+    assert any(card["id"] == draft["id"] for card in cards["items"])
 
     submitted = assert_success(artist.post(f"/api/artist/cards/{draft['id']}/submit-review"))
     assert submitted["status"] == "pending_review"

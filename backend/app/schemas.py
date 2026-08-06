@@ -89,6 +89,8 @@ class ArtistCardRequest(BaseModel):
     rarity: str
     image_asset_id: str = Field(alias="imageAssetId")
     member_id: str | None = Field(default=None, alias="memberId")
+    signature_text: str | None = Field(default=None, alias="signatureText", max_length=200)
+    has_voice: bool = Field(default=False, alias="hasVoice")
     issue_limit: int = Field(alias="issueLimit", gt=0)
     model_config = ConfigDict(populate_by_name=True)
 

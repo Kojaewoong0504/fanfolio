@@ -30,11 +30,21 @@ async def create_card(payload: ArtistCardRequest, user: ArtistUser, session: DbS
         season_name=payload.season_name,
         rarity=payload.rarity,
         image_asset_id=payload.image_asset_id,
+        signature_text=payload.signature_text,
+        has_voice=payload.has_voice,
         issue_limit=payload.issue_limit,
     )
     session.add(card)
     await session.commit()
     return {"ok": True, "data": card_data(card)}
+
+
+@router.get("/artist/cards")
+async def list_cards(user: ArtistUser, session: DbSession) -> dict:
+    cards = await session.scalars(
+        select(Card).where(Card.owner_artist_id == user.id).order_by(Card.id.desc())
+    )
+    return {"ok": True, "data": {"items": [card_data(card) for card in cards]}}
 
 
 def card_data(card: Card) -> dict:
