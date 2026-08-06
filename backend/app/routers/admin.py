@@ -8,7 +8,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 import qrcode
 from fastapi import APIRouter, Query, status
 from fastapi.responses import FileResponse, Response, StreamingResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from app.dependencies import AdminUser, DbSession
 from app.errors import AppError
@@ -754,14 +754,28 @@ async def audit_logs(
     _: AdminUser,
     session: DbSession,
     action: str | None = None,
-    limit: int = Query(default=50, ge=1, le=100),
+    q: str | None = None,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, alias="pageSize", ge=1, le=100),
 ) -> dict:
     filters = [AuditLog.action == action] if action else []
+    if q:
+        pattern = f"%{q}%"
+        filters.append(
+            or_(
+                AuditLog.actor_user_id.ilike(pattern),
+                AuditLog.action.ilike(pattern),
+                AuditLog.entity_type.ilike(pattern),
+                AuditLog.entity_id.ilike(pattern),
+            )
+        )
+    total = await session.scalar(select(func.count()).select_from(AuditLog).where(*filters))
     logs = await session.scalars(
         select(AuditLog)
         .where(*filters)
         .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
-        .limit(limit)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
     )
     return {
         "ok": True,
@@ -777,7 +791,14 @@ async def audit_logs(
                     "createdAt": log.created_at.isoformat(),
                 }
                 for log in logs
-            ]
+            ],
+            "meta": {
+                "pagination": {
+                    "page": page,
+                    "pageSize": page_size,
+                    "total": total or 0,
+                }
+            },
         },
     }
 

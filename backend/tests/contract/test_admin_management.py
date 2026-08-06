@@ -72,6 +72,29 @@ def test_admin_can_list_users_and_change_a_user_role(
     assert role_log["entityId"] == "fan"
 
 
+def test_admin_can_filter_and_paginate_audit_logs(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    logs = assert_success(
+        actors["admin"].get(
+            "/api/admin/audit-logs",
+            params={"q": "card_draft", "action": "card.published", "page": 1, "pageSize": 1},
+        )
+    )
+    assert logs["meta"]["pagination"] == {"page": 1, "pageSize": 1, "total": 0}
+
+    published = assert_success(actors["admin"].post("/api/admin/cards/card_draft/publish"))
+    assert published["status"] == "published"
+    logs = assert_success(
+        actors["admin"].get(
+            "/api/admin/audit-logs",
+            params={"q": "card_draft", "action": "card.published", "page": 1, "pageSize": 1},
+        )
+    )
+    assert logs["meta"]["pagination"] == {"page": 1, "pageSize": 1, "total": 1}
+    assert logs["items"][0]["entityId"] == "card_draft"
+
+
 def test_admin_cannot_change_own_role_or_fan_manage_users(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:
