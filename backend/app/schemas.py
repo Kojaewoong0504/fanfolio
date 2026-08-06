@@ -151,6 +151,7 @@ class ArtistCardRequest(BaseModel):
     season_name: str = Field(alias="seasonName")
     rarity: str
     image_asset_id: str = Field(alias="imageAssetId")
+    artist_id: str | None = Field(default=None, alias="artistId")
     member_id: str | None = Field(default=None, alias="memberId")
     signature_text: str | None = Field(default=None, alias="signatureText", max_length=200)
     voice_asset_id: str | None = Field(default=None, alias="voiceAssetId")
@@ -165,6 +166,7 @@ class ArtistCardUpdate(BaseModel):
     season_name: str | None = Field(default=None, alias="seasonName")
     rarity: str | None = None
     image_asset_id: str | None = Field(default=None, alias="imageAssetId")
+    artist_id: str | None = Field(default=None, alias="artistId")
     member_id: str | None = Field(default=None, alias="memberId")
     signature_text: str | None = Field(default=None, alias="signatureText", max_length=200)
     handwriting_asset_id: str | None = Field(default=None, alias="handwritingAssetId")

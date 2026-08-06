@@ -62,11 +62,15 @@ async def create_card(payload: ArtistCardRequest, user: ArtistUser, session: DbS
         raise AppError(404, "ASSET_NOT_FOUND", "카드 이미지를 찾을 수 없습니다.")
     if payload.voice_asset_id:
         await owned_asset(payload.voice_asset_id, user, session)
+    artist_id = await resolve_catalog_ids(
+        artist_id=payload.artist_id, member_id=payload.member_id, session=session
+    )
     card = Card(
         id=f"card_{uuid4().hex[:10]}",
         name=payload.name,
         owner_artist_id=user.id,
         status="draft",
+        artist_id=artist_id,
         member_id=payload.member_id,
         template_id=payload.template_id,
         season_name=payload.season_name,
@@ -98,6 +102,7 @@ def card_data(card: Card) -> dict:
         "templateId": card.template_id,
         "seasonName": card.season_name,
         "rarity": card.rarity,
+        "artistId": card.artist_id,
         "imageAssetId": card.image_asset_id,
         "memberId": card.member_id,
         "signatureText": card.signature_text,
@@ -141,10 +146,32 @@ async def update_card(
         asset_id = values.get(asset_field)
         if asset_id is not None:
             await owned_asset(asset_id, user, session)
+    if "artist_id" in values or "member_id" in values:
+        values["artist_id"] = await resolve_catalog_ids(
+            artist_id=values.get("artist_id", card.artist_id),
+            member_id=values.get("member_id", card.member_id),
+            session=session,
+        )
     for field, value in values.items():
         setattr(card, field, value)
     await session.commit()
     return {"ok": True, "data": card_data(card)}
+
+
+async def resolve_catalog_ids(
+    *, artist_id: str | None, member_id: str | None, session: DbSession
+) -> str | None:
+    """Validate the studio's group/member selection before saving a card."""
+    if artist_id is not None and not await session.get(Artist, artist_id):
+        raise AppError(404, "ARTIST_NOT_FOUND", "선택한 그룹을 찾을 수 없습니다.")
+    if member_id is None:
+        return artist_id
+    member = await session.get(Member, member_id)
+    if not member:
+        raise AppError(404, "MEMBER_NOT_FOUND", "선택한 멤버를 찾을 수 없습니다.")
+    if artist_id is not None and member.artist_id != artist_id:
+        raise AppError(422, "MEMBER_ARTIST_MISMATCH", "멤버와 그룹을 올바르게 선택해 주세요.")
+    return member.artist_id
 
 
 def preview_data(card: Card, *, preview_image_url: str | None = None) -> dict:

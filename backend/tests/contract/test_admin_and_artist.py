@@ -55,6 +55,25 @@ def test_artist_can_submit_special_card_for_review_but_not_publish_it(
     assert draft["status"] == "draft"
     assert draft["signatureText"] == "우리 팬들 사랑해요."
     assert draft["hasVoice"] is True
+    assert draft["artistId"] is None
+
+    catalog_draft = assert_success(
+        artist.post(
+            "/api/artist/cards",
+            json={
+                "templateId": seeded["ids"]["templateId"],
+                "name": "카탈로그 연결 카드",
+                "seasonName": "2026 SPRING",
+                "rarity": "Special",
+                "imageAssetId": seeded["ids"]["imageAssetId"],
+                "artistId": "artist_nova3",
+                "memberId": "member_yuna",
+                "issueLimit": 1,
+            },
+        ),
+        201,
+    )
+    assert catalog_draft["artistId"] == "artist_nova3"
 
     cards = assert_success(artist.get("/api/artist/cards"))
     assert any(card["id"] == draft["id"] for card in cards["items"])
@@ -63,6 +82,25 @@ def test_artist_can_submit_special_card_for_review_but_not_publish_it(
     assert submitted["status"] == "pending_review"
 
     assert_error(artist.post(f"/api/admin/cards/{draft['id']}/publish"), 403, "FORBIDDEN")
+
+
+def test_artist_card_rejects_an_unknown_member(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    response = actors["artist"].post(
+        "/api/artist/cards",
+        json={
+            "templateId": seeded["ids"]["templateId"],
+            "name": "그룹 불일치 카드",
+            "seasonName": "2026 SPRING",
+            "rarity": "Special",
+            "imageAssetId": seeded["ids"]["imageAssetId"],
+            "artistId": "artist_nova3",
+            "memberId": "member_unknown",
+            "issueLimit": 1,
+        },
+    )
+    assert_error(response, 404, "MEMBER_NOT_FOUND")
 
 
 def test_artist_studio_loads_templates_and_catalog_from_api(
