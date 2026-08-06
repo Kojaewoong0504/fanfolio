@@ -1,6 +1,7 @@
 from uuid import uuid4
 
 from fastapi import APIRouter, status
+from sqlalchemy import select
 
 from app.dependencies import ArtistUser, DbSession
 from app.errors import AppError
@@ -41,4 +42,17 @@ async def remove_background(asset_id: str, user: ArtistUser, session: DbSession)
     job = BackgroundRemovalJob(id=f"job_{uuid4().hex[:10]}", asset_id=asset.id, status="queued")
     session.add(job)
     await session.commit()
-    return {"ok": True, "data": {"id": job.id, "status": job.status}}
+    return {"ok": True, "data": {"jobId": job.id, "status": job.status}}
+
+
+@router.get("/background-removal-jobs/{job_id}")
+async def get_background_removal_job(job_id: str, user: ArtistUser, session: DbSession) -> dict:
+    job = await session.scalar(
+        select(BackgroundRemovalJob)
+        .join(Asset, Asset.id == BackgroundRemovalJob.asset_id)
+        .where(BackgroundRemovalJob.id == job_id, Asset.owner_id == user.id)
+    )
+    if not job:
+        raise AppError(404, "JOB_NOT_FOUND", "배경 제거 작업을 찾을 수 없습니다.")
+    data = {"jobId": job.id, "status": job.status}
+    return {"ok": True, "data": data}

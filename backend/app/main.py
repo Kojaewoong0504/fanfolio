@@ -10,7 +10,7 @@ from app.core.config import get_settings
 from app.db.session import engine
 from app.errors import AppError
 from app.models import Base
-from app.routers import admin, artist, auth, fan, fixtures, health
+from app.routers import admin, artist, assets, auth, fan, fixtures, health
 
 
 @asynccontextmanager
@@ -47,6 +47,7 @@ def create_app() -> FastAPI:
     app.include_router(fan.router)
     app.include_router(admin.router)
     app.include_router(artist.router)
+    app.include_router(assets.router)
     if get_settings().app_env == "test":
         app.include_router(fixtures.router)
     return app

@@ -68,5 +68,5 @@ def test_artist_handwriting_background_removal_returns_a_trackable_job(
         202,
     )
 
-    assert job["id"]
+    assert job["jobId"]
     assert job["status"] in {"queued", "processing", "completed"}

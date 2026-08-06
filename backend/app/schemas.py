@@ -69,3 +69,12 @@ class ArtistCardRequest(BaseModel):
     image_asset_id: str = Field(alias="imageAssetId")
     issue_limit: int = Field(alias="issueLimit", gt=0)
     model_config = ConfigDict(populate_by_name=True)
+
+
+class UploadPresignRequest(BaseModel):
+    file_name: str = Field(alias="fileName", min_length=1, max_length=255)
+    content_type: Literal["image/png", "image/jpeg", "image/webp", "audio/mpeg", "audio/mp4"] = (
+        Field(alias="contentType")
+    )
+    purpose: Literal["card", "handwriting", "voice"]
+    model_config = ConfigDict(populate_by_name=True)
