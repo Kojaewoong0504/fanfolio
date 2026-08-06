@@ -200,7 +200,7 @@ def test_admin_code_batch_creates_codes_and_downloads_csv(
     assert export.headers["content-type"].startswith("text/csv")
     rows = export.text.strip().splitlines()
     assert len(rows) == 4
-    assert rows[0] == "code,card_id,drop_id,expires_at,used_count,max_uses"
+    assert rows[0] == "code,card_id,drop_id,expires_at,used_count,max_uses,qr_image_url"
     assert all(row.startswith("NOVA-CSV-") for row in rows[1:])
 
 

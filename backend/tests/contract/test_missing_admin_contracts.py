@@ -98,6 +98,10 @@ def test_admin_can_list_batches_and_disable_a_code(
     export = actors["admin"].get(batch["csvExportUrl"])
     assert export.status_code == 200
     code_value = export.text.splitlines()[1].split(",", 1)[0]
+    qr = actors["admin"].get(f"/api/admin/redeem-codes/{code_value}/qr")
+    assert qr.status_code == 200
+    assert qr.headers["content-type"].startswith("image/png")
+    assert qr.content.startswith(b"\x89PNG\r\n\x1a\n")
     disabled = assert_success(
         actors["admin"].patch(
             f"/api/admin/redeem-codes/{code_value}",

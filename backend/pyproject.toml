@@ -13,6 +13,7 @@ dependencies = [
     "pydantic-settings>=2.14.2",
     "pillow>=11.3.0",
     "python-multipart>=0.0.32",
+    "qrcode>=8.2",
     "redis>=5.0.0",
     "sqlalchemy>=2.0.51",
     "uvicorn[standard]>=0.52.1",

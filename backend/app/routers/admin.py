@@ -1,10 +1,11 @@
 import csv
 from datetime import UTC, datetime
-from io import StringIO
+from io import BytesIO, StringIO
 from uuid import uuid4
 
+import qrcode
 from fastapi import APIRouter, Query, status
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from sqlalchemy import func, select
 
 from app.dependencies import AdminUser, DbSession
@@ -474,7 +475,9 @@ async def export_code_batch(batch_id: str, _: AdminUser, session: DbSession) -> 
     )
     output = StringIO(newline="")
     writer = csv.writer(output)
-    writer.writerow(["code", "card_id", "drop_id", "expires_at", "used_count", "max_uses"])
+    writer.writerow(
+        ["code", "card_id", "drop_id", "expires_at", "used_count", "max_uses", "qr_image_url"]
+    )
     for code in codes:
         writer.writerow(
             [
@@ -484,6 +487,7 @@ async def export_code_batch(batch_id: str, _: AdminUser, session: DbSession) -> 
                 batch.expires_at,
                 code.used_count,
                 code.max_uses,
+                f"/api/admin/redeem-codes/{code.code}/qr",
             ]
         )
     output.seek(0)
@@ -491,6 +495,22 @@ async def export_code_batch(batch_id: str, _: AdminUser, session: DbSession) -> 
         iter([output.getvalue()]),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{batch_id}.csv"'},
+    )
+
+
+@router.get("/redeem-codes/{code_id}/qr")
+async def redeem_code_qr(code_id: str, _: AdminUser, session: DbSession) -> Response:
+    """Render a printable QR whose payload is the redeem code itself."""
+    code = await session.get(RedeemCode, code_id)
+    if not code:
+        raise AppError(404, "REDEEM_CODE_NOT_FOUND", "코드를 찾을 수 없습니다.")
+    image = qrcode.make(code.code)
+    output = BytesIO()
+    image.save(output, format="PNG")
+    return Response(
+        content=output.getvalue(),
+        media_type="image/png",
+        headers={"Cache-Control": "private, no-store"},
     )
 
 
