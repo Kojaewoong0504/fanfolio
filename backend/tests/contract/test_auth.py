@@ -28,6 +28,27 @@ def test_magic_link_request_delivers_the_created_token(
     assert delivered[0][1]
 
 
+def test_magic_link_request_preserves_signup_purpose(
+    client: TestClient, seeded: dict[str, object], monkeypatch: Any
+) -> None:
+    delivered: list[tuple[str, str, str]] = []
+
+    async def fake_deliver(email: str, token: str, purpose: str) -> None:
+        delivered.append((email, token, purpose))
+
+    monkeypatch.setattr("app.routers.auth.deliver_magic_link", fake_deliver)
+    response = client.post(
+        "/api/auth/magic-link/request",
+        json={"email": "new-signup@example.com", "purpose": "signup"},
+    )
+
+    data = assert_success(response, 202)
+    assert data["delivery"] == "queued"
+    assert delivered[0][0] == "new-signup@example.com"
+    assert delivered[0][2] == "signup"
+    assert delivered[0][1]
+
+
 def test_magic_link_request_returns_a_delivery_error_when_provider_fails(
     client: TestClient, seeded: dict[str, object], monkeypatch: Any
 ) -> None:
