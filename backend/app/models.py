@@ -1,7 +1,7 @@
 import enum
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -118,6 +118,7 @@ class RedeemCode(Base):
 
 class UserCard(Base):
     __tablename__ = "user_cards"
+    __table_args__ = (Index("uq_user_cards_card_serial", "card_id", "serial_number", unique=True),)
     id: Mapped[str] = mapped_column(String, primary_key=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     card_id: Mapped[str] = mapped_column(ForeignKey("cards.id"))
