@@ -136,6 +136,15 @@ python3 -m uv run celery -A app.tasks:celery_app worker --loglevel=INFO
 `http://localhost:8000/api/health/ready`가 `ready`를 반환하고, `http://localhost:8025`에서
 매직 링크 메일을 확인하면 데이터베이스·SMTP·작업 큐를 연결한 개발 검증이 끝납니다.
 
+위 과정을 자동으로 확인하려면 루트에서 다음 명령을 실행합니다. 컨테이너는 기본적으로
+계속 실행되므로 Mailpit에서 메시지를 확인할 수 있습니다. 테스트 후 정리하려면
+`STOP_SERVICES=1`을 붙입니다.
+
+```bash
+./scripts/integration-smoke.sh
+STOP_SERVICES=1 ./scripts/integration-smoke.sh
+```
+
 운영에서는 `AUTO_CREATE_SCHEMA=false`를 유지하고 배포 단계에서 `alembic upgrade head`를
 먼저 실행합니다. 앱이 시작할 때 ORM이 임의로 테이블을 만들지 않도록 하는 설정입니다.
 
