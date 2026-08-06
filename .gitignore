@@ -18,7 +18,8 @@ frontend/dist/
 
 # Backend
 backend/.venv/
-backend/__pycache__/
+__pycache__/
+*.pyc
 backend/**/*.py[cod]
 backend/.pytest_cache/
 backend/.ruff_cache/
