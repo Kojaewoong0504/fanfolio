@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
-import { apiFetch, notificationStreamUrl, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionCard, type CollectionSummary, type NotificationItem, type UserCardDetail } from './api/client'
+import { apiFetch, notificationStreamUrl, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionCard, type CollectionSummary, type CurrentUser, type NotificationItem, type UserCardDetail } from './api/client'
 import { QrRedeemModal } from './components/QrRedeemModal'
 
 type Tab = 'collection' | 'discover' | 'alerts' | 'settings'
@@ -46,6 +46,7 @@ function App() {
   const [selectedCard, setSelectedCard] = useState<Card | null>(null)
   const [showRedeem, setShowRedeem] = useState(false)
   const [signedIn, setSignedIn] = useState(false)
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
   const [collectionCards, setCollectionCards] = useState<Card[]>(cards)
   const [collectionSummary, setCollectionSummary] = useState<CollectionSummary>({ ownedCount: cards.length, totalSlots: 80, completionRate: 4 })
   const [apiConnected, setApiConnected] = useState(false)
@@ -66,16 +67,22 @@ function App() {
     }
   }
 
+  const refreshUser = async () => {
+    const result = await apiFetch<{ ok: true, data: CurrentUser }>('/me')
+    setCurrentUser(result.data)
+    setShowOnboarding(!result.data.onboardingCompleted)
+    return result.data
+  }
+
   useEffect(() => {
-    void apiFetch<{ ok: true, data: { onboardingCompleted: boolean } }>('/me')
+    void refreshUser()
       .then(() => { setSignedIn(true); void refreshCollection() })
       .catch(() => setSignedIn(false))
   }, [])
 
   useEffect(() => {
     if (!signedIn) return
-    void apiFetch<{ ok: true, data: { onboardingCompleted: boolean } }>('/me')
-      .then(result => setShowOnboarding(!result.data.onboardingCompleted))
+    void refreshUser()
       .catch(() => setShowOnboarding(false))
   }, [signedIn])
 
@@ -147,7 +154,7 @@ function App() {
   }
 
   if (showOnboarding) {
-    return <Onboarding onComplete={() => { setShowOnboarding(false); void refreshCollection() }} />
+    return <Onboarding onComplete={() => { setShowOnboarding(false); void refreshUser(); void refreshCollection() }} />
   }
 
   if (revealedCardId) {
@@ -166,7 +173,7 @@ function App() {
         {tab === 'collection' && <Collection cards={collectionCards} summary={collectionSummary} onSelect={setSelectedCard} onRedeem={() => setShowRedeem(true)} />}
         {tab === 'discover' && <Discover onSelect={setSelectedCard} />}
         {tab === 'alerts' && <Alerts items={notifications} onRead={markNotificationRead} onReadAll={markAllNotificationsRead} />}
-        {tab === 'settings' && <Settings onLogout={logout} />}
+        {tab === 'settings' && currentUser && <Settings user={currentUser} onUserUpdated={setCurrentUser} onLogout={logout} />}
       </section>
 
       <nav className="bottom-nav" aria-label="주요 메뉴">
@@ -310,11 +317,14 @@ function notificationKindLabel(kind: string): string {
 
 function Alerts({ items, onRead, onReadAll }: { items: NotificationItem[], onRead: (id: string) => Promise<void>, onReadAll: () => Promise<void> }) { const sample = [['새 카드', '발행번호 #021', '새 카드가 공개되었습니다.'], ['컬렉션', '컬렉션이 업데이트되었습니다', '보유 카드가 18장으로 늘었어요.'], ['공지', '서비스 점검 안내', '5월 12일(월) 02:00 - 04:00']] as const; return <><div className="section-heading"><h2>새로운 소식</h2><button onClick={() => void onReadAll()}>모두 읽음</button></div><div className="alert-list">{(items.length ? items.map(item => [item.id, item.kind, item.title, item.body ?? 'Fanfolio의 새로운 소식이 도착했습니다.', item.isRead] as const) : sample.map((item, index) => [`sample-${index}`, ...item, true] as const)).map(([id, tag, title, body, isRead]) => <button className={isRead ? 'alert-card read' : 'alert-card'} key={id} onClick={() => !isRead && void onRead(id)}><span className="tag">{notificationKindLabel(tag)}</span><h2>{title}</h2><p>{body}</p><small>{isRead ? '확인함' : '새 알림'}</small></button>)}</div></> }
 
-function Settings({ onLogout }: { onLogout: () => Promise<void> }) {
+function Settings({ user, onUserUpdated, onLogout }: { user: CurrentUser, onUserUpdated: (user: CurrentUser) => void, onLogout: () => Promise<void> }) {
   const [busy, setBusy] = useState(false)
   const [emailEnabled, setEmailEnabled] = useState(false)
   const [preferenceBusy, setPreferenceBusy] = useState(false)
   const [message, setMessage] = useState('')
+  const [activePanel, setActivePanel] = useState<'profile' | 'account' | 'info' | null>(null)
+  const [nickname, setNickname] = useState(user.nickname ?? '')
+  const [profileBusy, setProfileBusy] = useState(false)
 
   useEffect(() => {
     void apiFetch<{ ok: true, data: { emailEnabled: boolean } }>('/me/notification-preferences')
@@ -337,7 +347,24 @@ function Settings({ onLogout }: { onLogout: () => Promise<void> }) {
     } finally { setPreferenceBusy(false) }
   }
 
-  return <><div className="profile"><div className="avatar">팬</div><div><b>팬포리오</b><small>fanfolio_1234</small></div><span>›</span></div><div className="settings-list"><button><span>프로필</span><strong>›</strong></button><button><span>계정</span><strong>›</strong></button><label className="preference-row"><span><b>알림 설정</b><small>새 카드와 드롭 소식을 이메일로 받아요.</small></span><input type="checkbox" checked={emailEnabled} disabled={preferenceBusy} onChange={event => void updateEmailPreference(event.target.checked)} /></label><button><span>앱 정보</span><strong>›</strong></button></div>{message && <p className="form-message error-message">{message}</p>}<button className="logout" onClick={() => void logout()} disabled={busy}>{busy ? '로그아웃 중...' : '로그아웃'}</button></>
+  const saveProfile = async () => {
+    if (!nickname.trim()) { setMessage('닉네임을 입력해 주세요.'); return }
+    setProfileBusy(true)
+    setMessage('')
+    try {
+      const result = await apiFetch<{ ok: true, data: { nickname: string, favoriteArtistIds: string[], favoriteMemberIds: string[], onboardingCompleted: boolean } }>('/me/profile', {
+        method: 'PATCH',
+        body: JSON.stringify({ nickname: nickname.trim(), favoriteArtistIds: user.favoriteArtistIds, favoriteMemberIds: user.favoriteMemberIds }),
+      })
+      onUserUpdated({ ...user, ...result.data })
+      setActivePanel(null)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '프로필을 저장하지 못했습니다.')
+    } finally { setProfileBusy(false) }
+  }
+
+  const roleLabel = user.role === 'fan' ? '팬' : user.role === 'artist' ? '아티스트' : '관리자'
+  return <><button className="profile profile-button" onClick={() => { setNickname(user.nickname ?? ''); setActivePanel('profile') }}><div className="avatar">{(user.nickname ?? '팬').slice(0, 1)}</div><div><b>{user.nickname || '팬포리오'}</b><small>{user.email}</small></div><span>›</span></button><div className="settings-list"><button onClick={() => { setNickname(user.nickname ?? ''); setActivePanel('profile') }}><span>프로필</span><strong>›</strong></button><button onClick={() => setActivePanel('account')}><span>계정</span><strong>›</strong></button><label className="preference-row"><span><b>알림 설정</b><small>새 카드와 드롭 소식을 이메일로 받아요.</small></span><input type="checkbox" checked={emailEnabled} disabled={preferenceBusy} onChange={event => void updateEmailPreference(event.target.checked)} /></label><button onClick={() => setActivePanel('info')}><span>앱 정보</span><strong>›</strong></button></div>{message && <p className="form-message error-message">{message}</p>}<button className="logout" onClick={() => void logout()} disabled={busy}>{busy ? '로그아웃 중...' : '로그아웃'}</button>{activePanel === 'profile' && <div className="modal-backdrop"><div className="modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="profile-title"><button className="modal-close" onClick={() => setActivePanel(null)}>×</button><h2 id="profile-title">프로필 수정</h2><p className="muted">컬렉션에 표시될 닉네임을 설정하세요.</p><label className="field-label">닉네임</label><input value={nickname} maxLength={40} onChange={event => setNickname(event.target.value)} /><button className="primary" disabled={!nickname.trim() || profileBusy} onClick={() => void saveProfile()}>{profileBusy ? '저장 중...' : '저장하기'}</button></div></div>}{activePanel === 'account' && <div className="modal-backdrop"><div className="modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="account-title"><button className="modal-close" onClick={() => setActivePanel(null)}>×</button><h2 id="account-title">계정 정보</h2><dl className="account-details"><div><dt>이메일</dt><dd>{user.email}</dd></div><div><dt>권한</dt><dd>{roleLabel}</dd></div><div><dt>계정 ID</dt><dd>{user.id}</dd></div></dl></div></div>}{activePanel === 'info' && <div className="modal-backdrop"><div className="modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="app-info-title"><button className="modal-close" onClick={() => setActivePanel(null)}>×</button><h2 id="app-info-title">앱 정보</h2><p className="muted">Fanfolio 디지털 카드 컬렉션</p><dl className="account-details"><div><dt>버전</dt><dd>0.2.0 MVP</dd></div><div><dt>언어</dt><dd>한국어</dd></div></dl></div></div>}</>
 }
 
 function CardDetail({ card, onClose }: { card: Card, onClose: () => void }) {

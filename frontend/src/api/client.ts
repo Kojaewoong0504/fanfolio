@@ -49,6 +49,16 @@ export type NotificationItem = {
   createdAt: string
 }
 
+export type CurrentUser = {
+  id: string
+  email: string
+  role: string
+  nickname: string | null
+  favoriteArtistIds: string[]
+  favoriteMemberIds: string[]
+  onboardingCompleted: boolean
+}
+
 export type UserCardDetail = {
   userCardId: string
   serialNumber: number
