@@ -28,6 +28,13 @@ def test_s3_storage_round_trip_and_presign() -> None:
         client.head_bucket(Bucket=bucket)
     except ClientError:
         client.create_bucket(Bucket=bucket)
+    cors_rules = client.get_bucket_cors(Bucket=bucket)["CORSRules"]
+    assert any(
+        "http://localhost:5173" in rule.get("AllowedOrigins", [])
+        and "PUT" in rule.get("AllowedMethods", [])
+        and "*" in rule.get("AllowedHeaders", [])
+        for rule in cors_rules
+    )
 
     storage = S3AssetStorage(
         client=client, bucket=bucket, key_prefix=os.getenv("S3_KEY_PREFIX", "fanfolio-test")
