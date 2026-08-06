@@ -94,6 +94,17 @@ SMTP 연결에 실패하면 API는 `503 MAGIC_LINK_DELIVERY_FAILED`를 반환합
 `FRONTEND_ORIGINS`가 비어 있지 않은지, SMTP 설정이 있는지를 검사합니다. 조건을 만족하지
 않으면 안전하지 않은 기본값으로 서버가 시작되지 않습니다.
 
+개발 중 실제 메일 메시지까지 확인하려면 Docker가 설치된 환경에서 Mailpit을 실행합니다.
+
+```bash
+docker compose -f docker-compose.mailpit.yml up -d
+# backend/.env에 backend/.env.mailpit.example의 값을 반영한 뒤 API를 재시작
+open http://localhost:8025
+```
+
+팬·관리자·아티스트 로그인 링크를 요청하면 메일이 Mailpit 화면에 도착합니다. SMTP 포트는
+`1025`, 웹 확인 화면은 `8025`이며 외부 SMTP 계정 없이도 링크 생성부터 수신까지 확인할 수 있습니다.
+
 ## VS Code 개발 환경
 
 프로젝트 루트 폴더를 VS Code로 열면 추천 확장 설치 알림이 표시됩니다. 다음 확장을 설치하세요.
