@@ -93,6 +93,18 @@ def test_magic_link_verify_creates_a_fan_account_for_a_new_email(
     assert data["onboardingCompleted"] is False
 
 
+def test_magic_link_verify_preserves_admin_and_artist_roles(
+    client: TestClient, seeded: dict[str, object]
+) -> None:
+    tokens = seeded["magicLinkTokens"]
+    assert isinstance(tokens, dict)
+
+    for role in ("admin", "artist"):
+        response = client.post("/api/auth/magic-link/verify", json={"token": tokens[role]})
+        data = assert_success(response)
+        assert data["user"]["role"] == role
+
+
 def test_magic_link_verify_rejects_an_expired_token(
     client: TestClient, seeded: dict[str, object]
 ) -> None:

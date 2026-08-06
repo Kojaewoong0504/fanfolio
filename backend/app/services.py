@@ -97,6 +97,18 @@ async def seed_core(session: AsyncSession) -> dict:
                 purpose="login",
                 expires_at=now() - timedelta(minutes=1),
             ),
+            MagicLink(
+                token_hash=magic_link_token_hash("test-magic-link-admin"),
+                email="admin@example.com",
+                purpose="login",
+                expires_at=now() + timedelta(minutes=15),
+            ),
+            MagicLink(
+                token_hash=magic_link_token_hash("test-magic-link-artist"),
+                email="artist@example.com",
+                purpose="login",
+                expires_at=now() + timedelta(minutes=15),
+            ),
         ]
     )
     session.add_all(
@@ -169,6 +181,8 @@ async def seed_core(session: AsyncSession) -> dict:
             "fan": "test-magic-link-fan",
             "newFan": "test-magic-link-new-fan",
             "expired": "test-magic-link-expired",
+            "admin": "test-magic-link-admin",
+            "artist": "test-magic-link-artist",
         },
         "ids": {
             "publishedCardId": "card_published",
