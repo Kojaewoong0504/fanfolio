@@ -7,7 +7,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 import qrcode
 from fastapi import APIRouter, Query, status
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import func, or_, select
 
 from app.dependencies import AdminUser, DbSession
@@ -387,7 +387,7 @@ async def update_admin_card(
 
 
 @router.get("/cards/{card_id}/preview/image")
-async def card_preview_image(card_id: str, _: AdminUser, session: DbSession) -> FileResponse:
+async def card_preview_image(card_id: str, _: AdminUser, session: DbSession) -> Response:
     card = await session.get(Card, card_id)
     if not card or not card.preview_storage_path:
         raise AppError(404, "PREVIEW_NOT_READY", "카드 미리보기가 아직 준비되지 않았습니다.")
@@ -397,7 +397,7 @@ async def card_preview_image(card_id: str, _: AdminUser, session: DbSession) -> 
 
 
 @router.get("/cards/{card_id}/image")
-async def card_source_image(card_id: str, _: AdminUser, session: DbSession) -> FileResponse:
+async def card_source_image(card_id: str, _: AdminUser, session: DbSession) -> Response:
     """Serve the uploaded source image to operators during card review."""
     card = await session.get(Card, card_id)
     if not card or not card.image_asset_id:

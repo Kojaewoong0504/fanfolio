@@ -1,7 +1,6 @@
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Request, status
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, BackgroundTasks, Request, Response, status
 from sqlalchemy import func, select
 
 from app.core.config import get_settings
@@ -319,7 +318,7 @@ async def get_preview(card_id: str, user: ArtistUser, session: DbSession) -> dic
 
 
 @router.get("/artist/cards/{card_id}/preview/image")
-async def get_preview_image(card_id: str, user: ArtistUser, session: DbSession) -> FileResponse:
+async def get_preview_image(card_id: str, user: ArtistUser, session: DbSession) -> Response:
     card = await owned_card(card_id, user, session)
     if not card.preview_storage_path:
         await render_preview(card, user, session)

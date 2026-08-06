@@ -4,8 +4,8 @@ from datetime import UTC, datetime
 from typing import Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, Query, Request, status
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import APIRouter, Query, Request, Response, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import case, desc, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
@@ -322,7 +322,7 @@ async def download_collection_benefit(
     user: OptionalCurrentUser,
     session: DbSession,
     token: str | None = Query(default=None),
-) -> FileResponse:
+) -> Response:
     token_data = verify_download_token(token) if token else None
     if token_data and not token_data.get("campaignId") == campaign_id:
         raise AppError(401, "SIGNED_URL_INVALID", "유효하지 않은 다운로드 링크입니다.")
@@ -494,7 +494,7 @@ async def card_detail(user_card_id: str, user: FanUser, session: DbSession) -> d
 
 
 @router.get("/me/cards/{user_card_id}/handwriting")
-async def card_handwriting(user_card_id: str, user: FanUser, session: DbSession) -> FileResponse:
+async def card_handwriting(user_card_id: str, user: FanUser, session: DbSession) -> Response:
     """Serve only the handwriting asset attached to a card the fan owns."""
     row = await session.execute(
         select(UserCard, Card)
@@ -514,7 +514,7 @@ async def card_handwriting(user_card_id: str, user: FanUser, session: DbSession)
 
 
 @router.get("/me/cards/{user_card_id}/voice")
-async def card_voice(user_card_id: str, user: FanUser, session: DbSession) -> FileResponse:
+async def card_voice(user_card_id: str, user: FanUser, session: DbSession) -> Response:
     """Serve a voice asset only after verifying the fan owns the card."""
     row = await session.execute(
         select(UserCard, Card)
@@ -534,7 +534,7 @@ async def card_voice(user_card_id: str, user: FanUser, session: DbSession) -> Fi
 
 
 @router.get("/cards/{card_id}/image")
-async def card_image(card_id: str, _: FanUser, session: DbSession) -> FileResponse:
+async def card_image(card_id: str, _: FanUser, session: DbSession) -> Response:
     card = await session.get(Card, card_id)
     if not card or card.status != "published" or not card.image_asset_id:
         raise AppError(404, "CARD_IMAGE_NOT_FOUND", "카드 이미지를 찾을 수 없습니다.")

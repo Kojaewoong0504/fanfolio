@@ -2,7 +2,6 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from fastapi import APIRouter, Request, Response, status
-from fastapi.responses import FileResponse
 
 from app.core.config import get_settings
 from app.dependencies import CurrentUser, DbSession
@@ -139,9 +138,7 @@ async def complete_asset_upload(asset_id: str, user: CurrentUser, session: DbSes
 
 
 @router.get("/assets/{asset_id}/transparent")
-async def get_transparent_asset(
-    asset_id: str, user: CurrentUser, session: DbSession
-) -> FileResponse:
+async def get_transparent_asset(asset_id: str, user: CurrentUser, session: DbSession) -> Response:
     require_upload_role(user)
     asset = await session.get(Asset, asset_id)
     if not asset or asset.owner_id != user.id or not asset.processed_storage_path:
