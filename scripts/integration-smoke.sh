@@ -137,7 +137,7 @@ echo "[2/5] applying PostgreSQL migrations"
 echo "[3/5] starting API against PostgreSQL and Mailpit"
 (
   cd "$BACKEND_DIR"
-  .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+  exec .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
 ) >"$LOG_DIR/api.log" 2>&1 &
 API_PID=$!
 wait_for_url http://localhost:8000/api/health/ready
@@ -147,7 +147,7 @@ echo "[3b/5] starting and checking a Celery worker"
   cd "$BACKEND_DIR"
   # The smoke worker only verifies broker reachability. `solo` avoids
   # platform-specific prefork behavior on macOS while remaining valid in CI.
-  .venv/bin/celery -A app.tasks:celery_app worker --loglevel=INFO --pool=solo \
+  exec .venv/bin/celery -A app.tasks:celery_app worker --loglevel=INFO --pool=solo \
     --hostname=fanfolio-integration@%h
 ) >"$LOG_DIR/celery.log" 2>&1 &
 CELERY_PID=$!
