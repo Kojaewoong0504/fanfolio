@@ -12,6 +12,13 @@ BACKEND_DIR="$ROOT_DIR/backend"
 LOG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/fanfolio-integration.XXXXXX")"
 API_PID=""
 CELERY_PID=""
+REDEEM_USER_A=""
+REDEEM_USER_B=""
+REDEEM_SESSION_A=""
+REDEEM_SESSION_B=""
+REDEEM_CODE=""
+REDEEM_CODE_A=""
+REDEEM_CODE_B=""
 
 cleanup() {
   set +e
@@ -129,6 +136,147 @@ if ! "$BACKEND_DIR/.venv/bin/celery" -A app.tasks:celery_app inspect ping --time
   cat "$LOG_DIR/celery.log" >&2
   exit 1
 fi
+
+echo "[3c/5] verifying PostgreSQL redemption concurrency"
+read -r REDEEM_USER_A REDEEM_USER_B REDEEM_SESSION_A REDEEM_SESSION_B REDEEM_CODE \
+  REDEEM_CODE_A REDEEM_CODE_B < <("$BACKEND_DIR/.venv/bin/python" - <<'PY'
+import asyncio
+from secrets import token_hex
+
+from app.db.session import SessionLocal
+from app.models import Card, Drop, RedeemCode, Role, Session, User
+
+
+async def main() -> None:
+    suffix = token_hex(8)
+    user_a = f"integration-a-{suffix}"
+    user_b = f"integration-b-{suffix}"
+    session_a = f"integration-session-a-{suffix}"
+    session_b = f"integration-session-b-{suffix}"
+    card_id = f"integration-card-{suffix}"
+    drop_id = f"integration-drop-{suffix}"
+    code = f"integration-same-{suffix}"
+    code_a = f"integration-a-{suffix}"
+    code_b = f"integration-b-{suffix}"
+
+    async with SessionLocal() as session:
+        session.add_all(
+            [
+                User(id=user_a, email=f"{user_a}@example.com", role=Role.FAN),
+                User(id=user_b, email=f"{user_b}@example.com", role=Role.FAN),
+                Session(token=session_a, user_id=user_a),
+                Session(token=session_b, user_id=user_b),
+                Drop(id=drop_id, name="Integration drop", status="live"),
+                Card(
+                    id=card_id,
+                    name="Integration card",
+                    status="published",
+                    is_official=True,
+                    image_url="https://example.test/integration.png",
+                ),
+                RedeemCode(code=code, card_id=card_id, drop_id=drop_id, max_uses=1),
+                RedeemCode(code=code_a, card_id=card_id, drop_id=drop_id, max_uses=1),
+                RedeemCode(code=code_b, card_id=card_id, drop_id=drop_id, max_uses=1),
+            ]
+        )
+        await session.commit()
+
+    print(user_a, user_b, session_a, session_b, code, code_a, code_b)
+
+
+asyncio.run(main())
+PY
+)
+
+same_code_dir="$(mktemp -d "${TMPDIR:-/tmp}/fanfolio-redeem.XXXXXX")"
+same_code_pids=()
+for token in "$REDEEM_SESSION_A" "$REDEEM_SESSION_B"; do
+  curl -sS -o "$same_code_dir/$token.json" -w '%{http_code}' -X POST \
+    http://localhost:8000/api/redemptions \
+    -H 'Content-Type: application/json' \
+    -H 'X-Fanfolio-Client: fan' \
+    -H "X-Fanfolio-Session: $token" \
+    -d "{\"code\":\"$REDEEM_CODE\",\"source\":\"qr\"}" \
+    >"$same_code_dir/$token.status" &
+  same_code_pids+=("$!")
+done
+for pid in "${same_code_pids[@]}"; do wait "$pid"; done
+same_code_statuses="$(cat "$same_code_dir"/*.status | sort | tr '\n' ' ')"
+[[ "$same_code_statuses" == *"201"* && "$same_code_statuses" == *"409"* ]] || {
+  echo "Expected one 201 and one 409 for the same redeem code, got: $same_code_statuses" >&2
+  exit 1
+}
+
+different_code_dir="$(mktemp -d "${TMPDIR:-/tmp}/fanfolio-redeem.XXXXXX")"
+curl -sS -o "$different_code_dir/a.json" -w '%{http_code}' -X POST \
+  http://localhost:8000/api/redemptions \
+  -H 'Content-Type: application/json' -H 'X-Fanfolio-Client: fan' \
+  -H "X-Fanfolio-Session: $REDEEM_SESSION_A" \
+  -d "{\"code\":\"$REDEEM_CODE_A\",\"source\":\"qr\"}" \
+  >"$different_code_dir/a.status" &
+pid_a=$!
+curl -sS -o "$different_code_dir/b.json" -w '%{http_code}' -X POST \
+  http://localhost:8000/api/redemptions \
+  -H 'Content-Type: application/json' -H 'X-Fanfolio-Client: fan' \
+  -H "X-Fanfolio-Session: $REDEEM_SESSION_B" \
+  -d "{\"code\":\"$REDEEM_CODE_B\",\"source\":\"qr\"}" \
+  >"$different_code_dir/b.status" &
+pid_b=$!
+wait "$pid_a"
+wait "$pid_b"
+[[ "$(cat "$different_code_dir/a.status")" == "201" && "$(cat "$different_code_dir/b.status")" == "201" ]] || {
+  echo "Expected both different redeem codes to succeed." >&2
+  exit 1
+}
+
+"$BACKEND_DIR/.venv/bin/python" - "$REDEEM_CODE" "$REDEEM_CODE_A" "$REDEEM_CODE_B" <<'PY'
+import asyncio
+import sys
+
+from sqlalchemy import func, select
+
+from app.db.session import SessionLocal
+from app.models import RedeemCode, UserCard
+
+
+async def main() -> None:
+    same_code, code_a, code_b = sys.argv[1:]
+    async with SessionLocal() as session:
+        used_count = await session.scalar(
+            select(RedeemCode.used_count).where(RedeemCode.code == same_code)
+        )
+        serials = (
+            await session.scalars(
+                select(UserCard.serial_number)
+                .where(
+                    UserCard.card_id
+                    == select(RedeemCode.card_id)
+                    .where(RedeemCode.code == code_a)
+                    .scalar_subquery()
+                )
+            )
+        ).all()
+        card_count = await session.scalar(
+            select(func.count())
+            .select_from(UserCard)
+            .where(
+                UserCard.card_id
+                == select(RedeemCode.card_id)
+                .where(RedeemCode.code == code_a)
+                .scalar_subquery(),
+                UserCard.serial_number.in_([1, 2]),
+            )
+        )
+    if used_count != 1 or sorted(serials) != [1, 2] or card_count < 2:
+        raise SystemExit(
+            f"Unexpected redemption concurrency state: used_count={used_count}, "
+            f"serials={serials}, card_count={card_count}"
+        )
+
+
+asyncio.run(main())
+PY
+rm -rf -- "$same_code_dir" "$different_code_dir"
 
 echo "[4/5] verifying Redis reachability"
 "$BACKEND_DIR/.venv/bin/python" - <<'PY'
