@@ -13,6 +13,7 @@ CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 PWCLI="${PWCLI:-$CODEX_HOME/skills/playwright/scripts/playwright_cli.sh}"
 PW_SESSION="fanfolio-e2e"
 E2E_TMP="$(mktemp -d "${TMPDIR:-/tmp}/fanfolio-e2e.XXXXXX")"
+CARD_IMAGE="$ROOT_DIR/frontend/src/assets/hero.png"
 
 BACKEND_PID=""
 FRONTEND_PID=""
@@ -92,7 +93,16 @@ curl -fsS -X POST "http://localhost:8000/api/test/seed" \
 "$PWCLI" --session "$PW_SESSION" open "http://localhost:5173" >/dev/null
 
 run_code() {
-  "$PWCLI" --session "$PW_SESSION" --raw run-code "async page => { $1 }"
+  local output
+  output="$("$PWCLI" --session "$PW_SESSION" --raw run-code "async page => { $1 }" 2>&1)" || {
+    printf '%s\n' "$output" >&2
+    return 1
+  }
+  if grep -Fq '### Error' <<<"$output"; then
+    printf '%s\n' "$output" >&2
+    return 1
+  fi
+  printf '%s\n' "$output"
 }
 
 assert_page_contains() {
@@ -106,26 +116,36 @@ assert_page_contains() {
   fi
 }
 
-echo "[1/4] fan login, onboarding, code redemption, and card detail"
+echo "[1/5] artist creates a special card with handwriting"
+run_code "await page.goto('http://localhost:4175'); await page.getByPlaceholder('artist@fanfolio.com').fill('artist@example.com'); await page.getByRole('button', {name: '로그인 링크 받기'}).click(); await page.getByPlaceholder('artist@fanfolio.com').waitFor({state: 'detached'}); await page.getByPlaceholder('이메일의 로그인 토큰').fill('test-magic-link-artist'); await page.getByRole('button', {name: '스튜디오 입장'}).click(); await page.getByRole('heading', {name: '카드 만들기'}).waitFor();"
+run_code "await page.locator('input[name=cardImage]').setInputFiles('${CARD_IMAGE}'); await page.getByPlaceholder('카드 이름을 입력하세요').fill('E2E 공식 특별 카드'); await page.locator('select[name=rarity]').selectOption('SR'); await page.locator('input[name=issueLimit]').fill('1'); await page.getByRole('button', {name: '다음: 손글씨'}).click(); await page.getByRole('heading', {name: '손글씨 추가'}).waitFor();"
+run_code "await page.locator('#signature-file').setInputFiles('${CARD_IMAGE}'); await page.getByRole('button', {name: '배경 제거 요청'}).click(); await page.getByText('투명 손글씨가 준비되었습니다.').waitFor({timeout: 15000}); await page.getByRole('button', {name: '배치 저장'}).click(); await page.getByRole('button', {name: '다음: 미리보기'}).click(); await page.getByRole('heading', {name: '카드 미리보기'}).waitFor();"
+run_code "await page.locator('#review-note').fill('E2E 전체 여정 검수 요청'); await page.getByRole('button', {name: '검수 요청하기'}).click(); await page.getByRole('heading', {name: '검수 요청 완료'}).waitFor();"
+assert_page_contains "검수 요청을 보냈어요"
+
+echo "[2/5] admin reviews and publishes the card"
+run_code "await page.goto('http://localhost:4174'); await page.getByPlaceholder('admin@fanfolio.com').fill('admin@example.com'); await page.getByRole('button', {name: '로그인 링크 받기'}).click(); await page.locator('#admin-login-token').waitFor(); await page.locator('#admin-login-token').fill('test-magic-link-admin'); await page.getByRole('button', {name: '운영 센터 들어가기'}).click(); await page.getByRole('heading', {name: '대시보드'}).waitFor(); await page.getByRole('button', {name: /카드 관리/}).click(); await page.getByRole('button', {name: '검수하기'}).waitFor();"
+run_code "await page.getByRole('button', {name: '검수하기'}).click(); await page.getByRole('heading', {name: 'E2E 공식 특별 카드'}).waitFor(); await page.locator('#review-note').fill('이미지와 손글씨 특전을 확인했습니다.'); await page.getByRole('button', {name: '검수 승인'}).click(); await page.getByText('검수가 승인되었습니다. 공개하기를 누르면 팬에게 카드가 노출됩니다.').waitFor(); await page.locator('button.review-publish').click(); await page.getByText('게시 완료').waitFor();"
+assert_page_contains "게시 완료"
+
+echo "[3/5] admin issues a one-time redeem code"
+run_code "await page.getByRole('button', {name: /드롭·코드 관리/}).click(); await page.locator('select[name=cardId]').waitFor(); await page.locator('select[name=cardId]').selectOption({label: 'E2E 공식 특별 카드'}); await page.locator('input[name=quantity]').fill('1'); await page.locator('input[name=maxUsesPerCode]').fill('1'); await page.locator('input[name=expiresAt]').fill('2030-12-31T23:59'); await page.locator('input[name=prefix]').fill('E2E'); await page.getByRole('button', {name: '코드 배치 생성'}).click(); await page.getByText(/배치 batch_/).waitFor();"
+REDEEM_CODE="$(run_code "const text = await page.locator('body').innerText(); const batchId = text.match(/batch_[a-z0-9]+/)[0]; const csv = await page.evaluate(async id => { const response = await fetch('http://localhost:8000/api/admin/redeem-code-batches/' + id + '/export', {credentials: 'include', headers: {'X-Fanfolio-Client': 'admin'}}); return response.text(); }, batchId); return csv.split('\\n')[1].split(',')[0];" | tr -d '\r\"')"
+if [[ ! "$REDEEM_CODE" =~ ^E2E-[A-Z0-9]+$ ]]; then
+  echo "Could not extract the generated redeem code: $REDEEM_CODE" >&2
+  exit 1
+fi
+
+echo "[4/5] fan redeems the published card and opens its detail"
 run_code "await page.goto('http://localhost:5173'); await page.getByPlaceholder('이메일을 입력하세요').fill('fan@example.com'); await page.getByRole('button', {name: '로그인 링크 받기'}).click(); await page.getByPlaceholder('이메일의 로그인 토큰을 입력하세요').waitFor(); await page.getByPlaceholder('이메일의 로그인 토큰을 입력하세요').fill('test-magic-link-fan'); await page.getByRole('button', {name: '로그인하기'}).click();"
 run_code "await page.getByRole('button', {name: '드림스케이프'}).click(); await page.getByRole('button', {name: '유나'}).click(); await page.getByPlaceholder('닉네임을 입력하세요').fill('E2E팬'); await page.getByRole('button', {name: '시작하기'}).click();"
-run_code "await page.getByRole('button', {name: '+ 카드 등록'}).click(); await page.getByPlaceholder('예: NOVA-VALID-01').fill('NOVA-VALID-01'); await page.getByRole('button', {name: '카드 등록하기'}).click(); await page.getByRole('button', {name: '카드 공개하기'}).click();"
-assert_page_contains "새 카드가 컬렉션에 추가됐어요"
-run_code "await page.getByRole('button', {name: '컬렉션으로 이동'}).click(); await page.getByRole('button', {name: '카드 이미지 #001 유나'}).click();"
-assert_page_contains "컴백 기념 사인 카드"
+run_code "await page.getByRole('button', {name: '+ 카드 등록'}).click(); await page.getByPlaceholder('예: NOVA-VALID-01').fill('${REDEEM_CODE}'); await page.getByRole('button', {name: '카드 등록하기'}).click(); await page.getByRole('button', {name: '카드 공개하기'}).click(); await page.getByRole('heading', {name: '새 카드가 컬렉션에 추가됐어요'}).waitFor();"
+assert_page_contains "E2E 공식 특별 카드"
+run_code "await page.getByRole('button', {name: '컬렉션으로 이동'}).click(); await page.getByRole('button', {name: '카드 이미지 #001 유나'}).click(); await page.getByRole('heading', {name: 'E2E 공식 특별 카드'}).waitFor();"
 assert_page_contains "콘텐츠 코드"
 
-echo "[2/4] admin login and dashboard access"
-run_code "await page.goto('http://localhost:4174'); await page.getByPlaceholder('admin@fanfolio.com').fill('admin@example.com'); await page.getByRole('button', {name: '로그인 링크 받기'}).click(); await page.locator('#admin-login-token').waitFor(); await page.locator('#admin-login-token').fill('test-magic-link-admin'); await page.getByRole('button', {name: '운영 센터 들어가기'}).click(); await page.getByRole('heading', {name: '대시보드'}).waitFor();"
-assert_page_contains "대시보드"
-
-echo "[3/4] artist login and studio access"
-run_code "await page.goto('http://localhost:4175'); await page.getByPlaceholder('artist@fanfolio.com').fill('artist@example.com'); await page.getByRole('button', {name: '로그인 링크 받기'}).click(); await page.getByPlaceholder('artist@fanfolio.com').waitFor({state: 'detached'}); await page.getByPlaceholder('이메일의 로그인 토큰').fill('test-magic-link-artist'); await page.getByRole('button', {name: '스튜디오 입장'}).click(); await page.getByRole('heading', {name: '카드 만들기'}).waitFor();"
-assert_page_contains "카드 만들기"
-
-echo "[4/4] scoped browser sessions remain available across apps"
-run_code "await page.goto('http://localhost:5173'); await page.getByRole('heading', {name: '내 컬렉션'}).waitFor(); await page.getByRole('button', {name: '카드 이미지 #001 유나'}).click(); await page.getByRole('heading', {name: '컴백 기념 사인 카드'}).waitFor();"
-assert_page_contains "내 컬렉션"
-assert_page_contains "컴백 기념 사인 카드"
+echo "[5/5] scoped browser sessions remain available across apps"
+run_code "const statuses = await page.evaluate(async () => { const requests = [['/api/admin/dashboard', 'admin'], ['/api/artist/cards', 'artist'], ['/api/me/collection', 'fan']].map(async ([path, client]) => (await fetch('http://localhost:8000' + path, {credentials: 'include', headers: {'X-Fanfolio-Client': client}})).status); return Promise.all(requests); }); if (statuses.join(',') !== '200,200,200') throw new Error('Scoped sessions failed: ' + statuses.join(','));"
+assert_page_contains "E2E 공식 특별 카드"
 
 echo "Fanfolio browser smoke test passed."
