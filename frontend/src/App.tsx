@@ -277,6 +277,7 @@ function Discover({ onSelect }: { onSelect: (card: Card) => void }) {
   const [query, setQuery] = useState('')
   const [artistId, setArtistId] = useState('')
   const [memberId, setMemberId] = useState('')
+  const [showAll, setShowAll] = useState(false)
   const [artists, setArtists] = useState<CatalogArtist[]>([])
   const [members, setMembers] = useState<CatalogMember[]>([])
   const [results, setResults] = useState<Card[]>(cards)
@@ -304,7 +305,13 @@ function Discover({ onSelect }: { onSelect: (card: Card) => void }) {
       .catch(() => setResults(cards.filter(card => !query || card.title.includes(query))))
   }, [artistId, memberId, query])
 
-  return <><input className="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="카드, 아티스트 검색" /><div className="filter-row"><select aria-label="아티스트 필터" value={artistId} onChange={event => { setArtistId(event.target.value); setMemberId('') }}><option value="">전체 아티스트</option>{artists.map(artist => <option key={artist.id} value={artist.id}>{artist.name}</option>)}</select><select aria-label="멤버 필터" value={memberId} onChange={event => setMemberId(event.target.value)}><option value="">전체 멤버</option>{members.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}</select></div>{results.length > 0 ? <><div className="section-heading"><h2>인기 카드</h2><button>전체 보기</button></div><div className="horizontal-cards">{results.slice(0, 4).map(card => <button key={card.id} onClick={() => onSelect(card)}><img src={card.image} alt="" /><b>{card.member}</b></button>)}</div><div className="section-heading"><h2>새로운 카드</h2><button>전체 보기</button></div><div className="discover-list">{results.map(card => <button key={card.id} onClick={() => onSelect(card)}><img src={card.image} alt="" /><span><b>{card.title}</b><small>{card.artist} · {card.member}</small></span><strong>›</strong></button>)}</div></> : <div className="empty-slot"><b>카드를 찾지 못했어요</b><small>검색어나 필터를 바꿔 보세요.</small></div>}</>
+  const visibleResults = showAll ? results : results.slice(0, 6)
+  const showAllResults = () => {
+    setShowAll(true)
+    requestAnimationFrame(() => document.getElementById('discover-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }
+
+  return <><input className="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="카드, 아티스트 검색" /><div className="filter-row"><select aria-label="아티스트 필터" value={artistId} onChange={event => { setArtistId(event.target.value); setMemberId(''); setShowAll(false) }}><option value="">전체 아티스트</option>{artists.map(artist => <option key={artist.id} value={artist.id}>{artist.name}</option>)}</select><select aria-label="멤버 필터" value={memberId} onChange={event => { setMemberId(event.target.value); setShowAll(false) }}><option value="">전체 멤버</option>{members.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}</select></div>{results.length > 0 ? <><div className="section-heading"><h2>인기 카드</h2>{results.length > 6 && <button onClick={showAllResults}>전체 보기</button>}</div><div className="horizontal-cards">{results.slice(0, 4).map(card => <button key={card.id} onClick={() => onSelect(card)}><img src={card.image} alt="" /><b>{card.member}</b></button>)}</div><div className="section-heading" id="discover-results"><h2>새로운 카드</h2>{results.length > 6 && <button onClick={() => setShowAll(value => !value)}>{showAll ? '간단히 보기' : `전체 보기 (${results.length})`}</button>}</div><div className="discover-list">{visibleResults.map(card => <button key={card.id} onClick={() => onSelect(card)}><img src={card.image} alt="" /><span><b>{card.title}</b><small>{card.artist} · {card.member}</small></span><strong>›</strong></button>)}</div></> : <div className="empty-slot"><b>카드를 찾지 못했어요</b><small>검색어나 필터를 바꿔 보세요.</small></div>}</>
 }
 
 function notificationKindLabel(kind: string): string {
