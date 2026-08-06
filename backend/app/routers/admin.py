@@ -77,6 +77,8 @@ def collection_campaign_data(campaign: CollectionCampaign) -> dict:
         "requiredCardIds": campaign.required_card_ids,
         "benefitTitle": campaign.benefit_title,
         "benefitDescription": campaign.benefit_description,
+        "benefitAssetId": campaign.benefit_asset_id,
+        "benefitDownloadAvailable": bool(campaign.benefit_asset_id),
         "status": campaign.status,
     }
 
@@ -102,6 +104,7 @@ async def create_collection_campaign(
     payload: CollectionCampaignCreate, admin: AdminUser, session: DbSession
 ) -> dict:
     await validate_campaign_cards(payload.required_card_ids, session)
+    await validate_admin_assets(payload.model_dump(exclude_unset=True, by_alias=False), session)
     campaign = CollectionCampaign(
         id=f"campaign_{uuid4().hex[:10]}",
         **payload.model_dump(exclude_unset=True, by_alias=False),
@@ -131,6 +134,7 @@ async def update_collection_campaign(
     values = payload.model_dump(exclude_unset=True, by_alias=False)
     if "required_card_ids" in values:
         await validate_campaign_cards(values["required_card_ids"], session)
+    await validate_admin_assets(values, session)
     for field, value in values.items():
         setattr(campaign, field, value)
     await record_audit(
@@ -265,7 +269,12 @@ def admin_card_data(card: Card) -> dict:
 
 
 async def validate_admin_assets(values: dict, session: DbSession) -> None:
-    for field in ("image_asset_id", "handwriting_asset_id", "voice_asset_id"):
+    for field in (
+        "image_asset_id",
+        "handwriting_asset_id",
+        "voice_asset_id",
+        "benefit_asset_id",
+    ):
         asset_id = values.get(field)
         if asset_id and not await session.get(Asset, asset_id):
             raise AppError(404, "ASSET_NOT_FOUND", "카드 자산을 찾을 수 없습니다.")

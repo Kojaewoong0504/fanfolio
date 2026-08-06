@@ -114,6 +114,7 @@ def test_collection_benefit_unlocks_when_a_catalog_set_is_complete(
             "claimed": False,
             "claimedAt": None,
             "claimable": False,
+            "downloadUrl": None,
             "benefit": {
                 "type": "digital_bonus",
                 "title": "드림스케이프 2026 SPRING 완성 특전",
@@ -161,6 +162,7 @@ def test_collection_benefits_use_active_admin_campaign_rules(
             "claimed": False,
             "claimedAt": None,
             "claimable": False,
+            "downloadUrl": None,
             "benefit": {
                 "type": "digital_bonus",
                 "title": "운영자 지정 특전",
@@ -173,6 +175,19 @@ def test_collection_benefits_use_active_admin_campaign_rules(
 def test_fan_can_claim_a_completed_collection_benefit_once(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:
+    asset = assert_success(
+        actors["admin"].post(
+            "/api/uploads/presign",
+            json={
+                "fileName": "special-bonus.pdf",
+                "contentType": "application/pdf",
+                "purpose": "collection_benefit",
+            },
+        ),
+        201,
+    )
+    uploaded = actors["admin"].put(asset["uploadUrl"], content=b"fanfolio bonus")
+    assert uploaded.status_code == 204, uploaded.text
     campaign = assert_success(
         actors["admin"].post(
             "/api/admin/collection-campaigns",
@@ -182,12 +197,18 @@ def test_fan_can_claim_a_completed_collection_benefit_once(
                 "requiredCardIds": ["card_published"],
                 "benefitTitle": "디지털 사인 포토",
                 "benefitDescription": "아티스트의 특별 메시지입니다.",
+                "benefitAssetId": asset["assetId"],
             },
         ),
         201,
     )
     path = f"/api/me/collection/benefits/{campaign['id']}/claim"
     assert_error(actors["fan"].post(path), 409, "BENEFIT_NOT_UNLOCKED")
+    assert_error(
+        actors["fan"].get(f"/api/me/collection/benefits/{campaign['id']}/download"),
+        403,
+        "BENEFIT_NOT_CLAIMED",
+    )
 
     assert_success(
         actors["fan"].post(
@@ -200,6 +221,10 @@ def test_fan_can_claim_a_completed_collection_benefit_once(
     assert claim["claimId"].startswith("claim_")
     assert claim["benefit"]["title"] == "디지털 사인 포토"
     assert claim["claimedAt"]
+    assert claim["downloadUrl"] == f"/api/me/collection/benefits/{campaign['id']}/download"
+    download = actors["fan"].get(claim["downloadUrl"])
+    assert download.status_code == 200
+    assert download.content == b"fanfolio bonus"
     assert_error(actors["fan"].post(path), 409, "BENEFIT_ALREADY_CLAIMED")
 
     item = assert_success(actors["fan"].get("/api/me/collection/benefits"))["items"][0]

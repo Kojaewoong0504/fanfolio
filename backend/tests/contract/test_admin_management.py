@@ -109,6 +109,20 @@ def test_admin_cannot_change_own_role_or_fan_manage_users(
 def test_admin_can_configure_a_collection_campaign(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:
+    assert_error(
+        actors["admin"].post(
+            "/api/admin/collection-campaigns",
+            json={
+                "name": "잘못된 파일 캠페인",
+                "requiredCardIds": ["card_published"],
+                "benefitTitle": "특전",
+                "benefitDescription": "설명",
+                "benefitAssetId": "asset_missing",
+            },
+        ),
+        404,
+        "ASSET_NOT_FOUND",
+    )
     created = assert_success(
         actors["admin"].post(
             "/api/admin/collection-campaigns",

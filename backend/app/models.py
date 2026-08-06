@@ -139,6 +139,7 @@ class CollectionCampaign(Base):
     required_card_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
     benefit_title: Mapped[str] = mapped_column(String)
     benefit_description: Mapped[str] = mapped_column(String)
+    benefit_asset_id: Mapped[str | None] = mapped_column(ForeignKey("assets.id"), nullable=True)
     status: Mapped[str] = mapped_column(String, default="active")
 
 

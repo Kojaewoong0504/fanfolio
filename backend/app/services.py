@@ -48,16 +48,16 @@ def magic_link_token_hash(token: str) -> str:
 async def reset_database(session: AsyncSession) -> None:
     for model in (
         BackgroundRemovalJob,
-        Asset,
+        CollectionBenefitClaim,
         AuditLog,
         Notification,
         UserCard,
-        CollectionBenefitClaim,
         RedeemCode,
         RedeemCodeBatch,
         Drop,
         Card,
         CollectionCampaign,
+        Asset,
         Member,
         Artist,
         MagicLink,

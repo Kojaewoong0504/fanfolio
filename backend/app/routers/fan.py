@@ -1,6 +1,7 @@
 import asyncio
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
@@ -173,6 +174,11 @@ async def collection_benefits(user: FanUser, session: DbSession) -> dict:
                             all(card_id in owned_card_ids for card_id in campaign.required_card_ids)
                             and campaign.id not in claim_by_campaign
                         ),
+                        "downloadUrl": (
+                            f"/api/me/collection/benefits/{campaign.id}/download"
+                            if campaign.id in claim_by_campaign and campaign.benefit_asset_id
+                            else None
+                        ),
                         "benefit": {
                             "type": "digital_bonus",
                             "title": campaign.benefit_title,
@@ -226,6 +232,7 @@ async def collection_benefits(user: FanUser, session: DbSession) -> dict:
                 "claimed": False,
                 "claimedAt": None,
                 "claimable": False,
+                "downloadUrl": None,
                 "benefit": {
                     "type": "digital_bonus",
                     "title": f"{group['artistName']} {group['seasonName']} 완성 특전",
@@ -281,6 +288,11 @@ async def claim_collection_benefit(campaign_id: str, user: FanUser, session: DbS
             "campaignId": campaign.id,
             "claimId": claim.id,
             "claimedAt": claim.claimed_at.isoformat(),
+            "downloadUrl": (
+                f"/api/me/collection/benefits/{campaign.id}/download"
+                if campaign.benefit_asset_id
+                else None
+            ),
             "benefit": {
                 "type": "digital_bonus",
                 "title": campaign.benefit_title,
@@ -288,6 +300,33 @@ async def claim_collection_benefit(campaign_id: str, user: FanUser, session: DbS
             },
         },
     }
+
+
+@router.get("/me/collection/benefits/{campaign_id}/download")
+async def download_collection_benefit(
+    campaign_id: str, user: FanUser, session: DbSession
+) -> FileResponse:
+    campaign = await session.get(CollectionCampaign, campaign_id)
+    if campaign is None:
+        raise AppError(404, "CAMPAIGN_NOT_FOUND", "컬렉션 캠페인을 찾을 수 없습니다.")
+    claim = await session.scalar(
+        select(CollectionBenefitClaim).where(
+            CollectionBenefitClaim.user_id == user.id,
+            CollectionBenefitClaim.campaign_id == campaign.id,
+        )
+    )
+    if claim is None:
+        raise AppError(403, "BENEFIT_NOT_CLAIMED", "특전을 먼저 수령해 주세요.")
+    if not campaign.benefit_asset_id:
+        raise AppError(404, "BENEFIT_ASSET_NOT_FOUND", "아직 다운로드할 특전 파일이 없습니다.")
+    asset = await session.get(Asset, campaign.benefit_asset_id)
+    if asset is None or not asset.storage_path or not Path(asset.storage_path).is_file():
+        raise AppError(404, "BENEFIT_ASSET_NOT_READY", "특전 파일이 아직 준비되지 않았습니다.")
+    return FileResponse(
+        asset.storage_path,
+        media_type=asset.content_type or "application/octet-stream",
+        filename=asset.file_name or f"{campaign.id}-benefit",
+    )
 
 
 @router.patch("/me/profile")

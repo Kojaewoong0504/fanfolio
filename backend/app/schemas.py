@@ -155,6 +155,7 @@ class CollectionCampaignCreate(BaseModel):
     required_card_ids: list[str] = Field(min_length=1, alias="requiredCardIds")
     benefit_title: str = Field(min_length=1, max_length=160, alias="benefitTitle")
     benefit_description: str = Field(min_length=1, max_length=500, alias="benefitDescription")
+    benefit_asset_id: str | None = Field(default=None, alias="benefitAssetId")
     status: Literal["active", "disabled"] = "active"
     model_config = ConfigDict(populate_by_name=True)
 
@@ -170,6 +171,7 @@ class CollectionCampaignUpdate(BaseModel):
     benefit_description: str | None = Field(
         default=None, min_length=1, max_length=500, alias="benefitDescription"
     )
+    benefit_asset_id: str | None = Field(default=None, alias="benefitAssetId")
     status: Literal["active", "disabled"] | None = None
     model_config = ConfigDict(populate_by_name=True)
 
@@ -215,8 +217,14 @@ class ArtistCardUpdate(BaseModel):
 
 class UploadPresignRequest(BaseModel):
     file_name: str = Field(alias="fileName", min_length=1, max_length=255)
-    content_type: Literal["image/png", "image/jpeg", "image/webp", "audio/mpeg", "audio/mp4"] = (
-        Field(alias="contentType")
-    )
-    purpose: Literal["card", "handwriting", "voice"]
+    content_type: Literal[
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+        "audio/mpeg",
+        "audio/mp4",
+        "audio/wav",
+        "application/pdf",
+    ] = Field(alias="contentType")
+    purpose: Literal["card", "handwriting", "voice", "collection_benefit"]
     model_config = ConfigDict(populate_by_name=True)

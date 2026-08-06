@@ -36,6 +36,7 @@ export type CollectionBenefit = {
   claimed: boolean
   claimedAt: string | null
   claimable: boolean
+  downloadUrl: string | null
   benefit: { type: 'digital_bonus'; title: string; description: string }
 }
 
