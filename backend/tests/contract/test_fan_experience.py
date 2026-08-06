@@ -275,7 +275,6 @@ def test_owned_card_detail_exposes_handwriting_and_voice_entitlements(
             json={
                 "name": "손글씨 보이스 카드",
                 "memberId": "member_yuna",
-                "ownerArtistId": "artist",
                 "handwritingAssetId": seeded["ids"]["handwritingAssetId"],
                 "voiceAssetId": voice_asset["assetId"],
                 "hasVoice": True,
@@ -402,6 +401,13 @@ def test_fan_can_load_an_artist_uploaded_image_for_a_published_card(
             },
         ),
         201,
+    )
+    assert_success(artist.post(f"/api/artist/cards/{draft['id']}/submit-review"))
+    assert_success(
+        actors["admin"].post(
+            f"/api/admin/cards/{draft['id']}/review",
+            json={"decision": "approve", "note": "이미지 확인"},
+        )
     )
     assert_success(actors["admin"].post(f"/api/admin/cards/{draft['id']}/publish"))
 

@@ -911,7 +911,9 @@ async def publish(card_id: str, admin: AdminUser, session: DbSession) -> dict:
     card = await session.get(Card, card_id)
     if not card:
         raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
-    if card.status == "pending_review":
+    if card.status == "pending_review" or (
+        card.status == "draft" and card.owner_artist_id is not None
+    ):
         raise AppError(409, "REVIEW_REQUIRED", "검수 승인 후 카드를 공개할 수 있습니다.")
     previous_status = card.status
     card.status = "published"

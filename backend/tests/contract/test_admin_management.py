@@ -5,6 +5,30 @@ from fastapi.testclient import TestClient
 from tests.conftest import assert_error, assert_success
 
 
+def test_admin_cannot_publish_an_artist_owned_draft_before_review(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    draft = assert_success(
+        actors["artist"].post(
+            "/api/artist/cards",
+            json={
+                "templateId": seeded["ids"]["templateId"],
+                "name": "검수 전 공개 차단 카드",
+                "seasonName": "2026 SPRING",
+                "rarity": "R",
+                "imageAssetId": seeded["ids"]["imageAssetId"],
+                "issueLimit": 1,
+            },
+        ),
+        201,
+    )
+    assert_error(
+        actors["admin"].post(f"/api/admin/cards/{draft['id']}/publish"),
+        409,
+        "REVIEW_REQUIRED",
+    )
+
+
 def test_admin_can_create_list_and_activate_a_drop(
     actors: dict[str, TestClient],
 ) -> None:
