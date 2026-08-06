@@ -2,6 +2,7 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
+from app.core.config import get_settings
 from app.routers import health
 from tests.conftest import assert_success
 
@@ -78,6 +79,22 @@ def test_readiness_checks_storage_and_upload_scanner(client: TestClient, monkeyp
 
     assert data["status"] == "ready"
     assert checked == {"storage": True, "scanner": True}
+
+
+def test_readiness_fails_when_the_s3_bucket_is_unavailable(
+    client: TestClient, monkeypatch: Any
+) -> None:
+    class UnavailableStorage:
+        def check_ready(self) -> None:
+            raise OSError("bucket is unavailable")
+
+    monkeypatch.setattr(get_settings(), "storage_backend", "s3")
+    monkeypatch.setattr(health, "configured_asset_storage", lambda: UnavailableStorage())
+
+    response = client.get("/api/health/ready")
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "SERVICE_NOT_READY"
 
 
 def test_readiness_returns_service_unavailable_when_rate_limiter_is_down(
