@@ -4,6 +4,7 @@ from fastapi.responses import Response
 from app.db.session import engine
 from app.dependencies import DbSession
 from app.models import Base
+from app.rate_limit import reset_rate_limits
 from app.services import reset_database, seed_core
 
 router = APIRouter(prefix="/api/test", tags=["test-only"])
@@ -17,6 +18,7 @@ async def reset(session: DbSession) -> Response:
         await connection.run_sync(Base.metadata.drop_all)
         await connection.run_sync(Base.metadata.create_all)
     await reset_database(session)
+    await reset_rate_limits()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

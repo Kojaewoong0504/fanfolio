@@ -44,6 +44,17 @@ def test_magic_link_request_returns_a_delivery_error_when_provider_fails(
     assert_error(response, 503, "MAGIC_LINK_DELIVERY_FAILED")
 
 
+def test_magic_link_requests_are_rate_limited(
+    client: TestClient, seeded: dict[str, object]
+) -> None:
+    payload = {"email": "rate-limit@example.com", "purpose": "login"}
+
+    for _ in range(5):
+        assert client.post("/api/auth/magic-link/request", json=payload).status_code == 202
+
+    assert_error(client.post("/api/auth/magic-link/request", json=payload), 429, "RATE_LIMITED")
+
+
 def test_magic_link_verify_rejects_an_unknown_token(
     client: TestClient, seeded: dict[str, object]
 ) -> None:

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Cookie, Header, Response, status
+from fastapi import APIRouter, Cookie, Header, Request, Response, status
 from sqlalchemy import delete
 
 from app.core.config import get_settings
@@ -6,6 +6,7 @@ from app.dependencies import CurrentUser, DbSession, session_cookie_name
 from app.errors import AppError
 from app.mailer import MailDeliveryError, deliver_magic_link
 from app.models import Session
+from app.rate_limit import enforce_rate_limit
 from app.schemas import MagicLinkRequest, MagicLinkVerify
 from app.services import request_magic_link as create_magic_link
 from app.services import verify_magic_link
@@ -14,8 +15,12 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.post("/magic-link/request", status_code=status.HTTP_202_ACCEPTED)
-async def request_magic_link(payload: MagicLinkRequest, session: DbSession) -> dict:
+async def request_magic_link(
+    payload: MagicLinkRequest, request: Request, session: DbSession
+) -> dict:
     email = str(payload.email).lower()
+    client_host = request.client.host if request.client else "unknown"
+    await enforce_rate_limit(f"magic-link:{email}:{client_host}", limit=5, window_seconds=15 * 60)
     token = await create_magic_link(session, email=email, purpose=payload.purpose)
     try:
         await deliver_magic_link(email, token, payload.purpose)

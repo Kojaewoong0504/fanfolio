@@ -2,13 +2,14 @@ import asyncio
 import json
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Query, Request, status
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import func, select, update
 
 from app.dependencies import DbSession, FanUser
 from app.errors import AppError
 from app.models import Artist, Asset, Card, Member, Notification, UserCard
+from app.rate_limit import enforce_rate_limit
 from app.schemas import (
     NotificationPreferencesUpdate,
     ProfileUpdate,
@@ -44,7 +45,11 @@ async def me(user: FanUser) -> dict:
 
 
 @router.post("/redemptions", status_code=status.HTTP_201_CREATED)
-async def create_redemption(payload: RedemptionRequest, user: FanUser, session: DbSession) -> dict:
+async def create_redemption(
+    payload: RedemptionRequest, request: Request, user: FanUser, session: DbSession
+) -> dict:
+    client_host = request.client.host if request.client else "unknown"
+    await enforce_rate_limit(f"redemption:{user.id}:{client_host}", limit=10, window_seconds=60)
     return {"ok": True, "data": await redeem(session, user, payload.code)}
 
 

@@ -1,6 +1,6 @@
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, status
+from fastapi import APIRouter, BackgroundTasks, Request, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 
@@ -9,6 +9,7 @@ from app.dependencies import ArtistUser, DbSession
 from app.errors import AppError
 from app.image_processing import compose_card_preview
 from app.models import Artist, Asset, BackgroundRemovalJob, Card, Member
+from app.rate_limit import enforce_rate_limit
 from app.schemas import ArtistCardRequest, ArtistCardUpdate
 from app.tasks import enqueue_background_removal
 
@@ -231,9 +232,14 @@ async def submit_review(card_id: str, user: ArtistUser, session: DbSession) -> d
 async def remove_background(
     asset_id: str,
     background_tasks: BackgroundTasks,
+    request: Request,
     user: ArtistUser,
     session: DbSession,
 ) -> dict:
+    client_host = request.client.host if request.client else "unknown"
+    await enforce_rate_limit(
+        f"background-removal:{user.id}:{client_host}", limit=10, window_seconds=60 * 60
+    )
     asset = await session.get(Asset, asset_id)
     if not asset or asset.owner_id != user.id:
         raise AppError(404, "ASSET_NOT_FOUND", "자산을 찾을 수 없습니다.")
