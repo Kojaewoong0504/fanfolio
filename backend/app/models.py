@@ -195,6 +195,9 @@ class Asset(Base):
     upload_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    upload_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     storage_path: Mapped[str | None] = mapped_column(String, nullable=True)
     processed_storage_path: Mapped[str | None] = mapped_column(String, nullable=True)
     transform: Mapped[dict | None] = mapped_column(JSON, nullable=True)

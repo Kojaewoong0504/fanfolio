@@ -31,7 +31,7 @@ def test_alembic_upgrade_creates_the_current_schema(tmp_path: Path) -> None:
         asset_columns = {
             row[1] for row in connection.execute("PRAGMA table_info(assets)").fetchall()
         }
-        assert {"transform", "upload_expires_at"} <= asset_columns
+        assert {"transform", "upload_expires_at", "upload_completed_at"} <= asset_columns
         redeem_code_columns = {
             row[1] for row in connection.execute("PRAGMA table_info(redeem_codes)").fetchall()
         }

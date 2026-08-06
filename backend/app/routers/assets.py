@@ -93,6 +93,7 @@ async def upload_asset_content(
         content=content,
     )
     asset.storage_path = configured_asset_storage().save_bytes(asset.id, content)
+    asset.upload_completed_at = datetime.now(UTC)
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -127,6 +128,7 @@ async def complete_asset_upload(asset_id: str, user: CurrentUser, session: DbSes
         asset.storage_path = None
         await session.commit()
         raise
+    asset.upload_completed_at = datetime.now(UTC)
     await session.commit()
     return {"ok": True, "data": {"assetId": asset.id, "status": "ready"}}
 

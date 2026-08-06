@@ -4,7 +4,7 @@ from celery import Celery
 from starlette.background import BackgroundTasks
 
 from app.core.config import get_settings
-from app.services import process_background_removal
+from app.services import cleanup_expired_uploads, process_background_removal
 
 settings = get_settings()
 celery_app = Celery("fanfolio", broker=settings.celery_broker_url)
@@ -30,3 +30,9 @@ def enqueue_background_removal(job_id: str, background_tasks: BackgroundTasks) -
         process_background_removal_task.delay(job_id)
         return
     background_tasks.add_task(process_background_removal, job_id)
+
+
+@celery_app.task(name="fanfolio.cleanup_expired_uploads")
+def cleanup_expired_uploads_task() -> int:
+    """Periodic worker entry point; schedule it with Celery Beat in production."""
+    return asyncio.run(cleanup_expired_uploads())

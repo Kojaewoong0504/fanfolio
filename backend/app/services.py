@@ -239,6 +239,28 @@ async def process_background_removal(job_id: str) -> None:
             await session.commit()
 
 
+async def cleanup_expired_uploads() -> int:
+    """Delete objects from presigns that expired without a completion step."""
+    async with SessionLocal() as session:
+        assets = await session.scalars(
+            select(Asset).where(
+                Asset.upload_expires_at.is_not(None),
+                Asset.upload_expires_at < now(),
+                Asset.upload_completed_at.is_(None),
+                Asset.storage_path.is_not(None),
+            )
+        )
+        storage = configured_asset_storage()
+        cleaned = 0
+        for asset in assets:
+            if asset.storage_path:
+                storage.delete(asset.storage_path)
+            asset.storage_path = None
+            cleaned += 1
+        await session.commit()
+        return cleaned
+
+
 async def record_audit(
     session: AsyncSession,
     *,
