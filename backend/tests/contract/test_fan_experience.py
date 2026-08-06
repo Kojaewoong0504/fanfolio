@@ -60,6 +60,16 @@ def test_catalog_returns_only_published_cards_to_fans(actors: dict[str, TestClie
     assert all(card["isOfficial"] is True for card in catalog["items"])
 
 
+def test_catalog_supports_search_and_pagination(actors: dict[str, TestClient]) -> None:
+    catalog = assert_success(
+        actors["fan"].get("/api/catalog/cards", params={"q": "사인", "page": 1, "pageSize": 1})
+    )
+
+    assert len(catalog["items"]) == 1
+    assert catalog["items"][0]["name"] == "컴백 기념 사인 카드"
+    assert catalog["meta"]["pagination"] == {"page": 1, "pageSize": 1, "total": 1}
+
+
 def test_notifications_can_be_marked_as_read(actors: dict[str, TestClient]) -> None:
     fan = actors["fan"]
     notifications = assert_success(fan.get("/api/notifications"))

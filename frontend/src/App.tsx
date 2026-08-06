@@ -181,7 +181,20 @@ function Collection({ cards: collectionCards, onSelect, onRedeem }: { cards: Car
   return <><div className="summary"><div><span className="muted">보유 카드 수</span><strong>{collectionCards.length} <small>/ 80</small></strong></div><button onClick={onRedeem} className="outline">+ 카드 등록</button></div><div className="section-heading"><h2>최근 수집한 카드</h2><button>전체 보기</button></div><div className="card-grid">{collectionCards.map(card => <button className="card-tile" key={card.id} onClick={() => onSelect(card)}><img src={card.image} alt="카드 이미지" /><span>{card.id}</span><b>{card.member}</b></button>)}</div><div className="empty-slot" onClick={onRedeem}><span>+</span><b>새 카드를 등록하세요</b><small>QR 또는 카드 코드를 사용합니다.</small></div></>
 }
 
-function Discover({ onSelect }: { onSelect: (card: typeof cards[number]) => void }) { return <><input className="search" placeholder="카드, 아티스트 검색" /><div className="section-heading"><h2>인기 카드</h2><button>전체 보기</button></div><div className="horizontal-cards">{cards.map(card => <button key={card.id} onClick={() => onSelect(card)}><img src={card.image} alt="" /><b>{card.member}</b></button>)}</div><div className="section-heading"><h2>새로운 카드</h2><button>전체 보기</button></div><div className="discover-list">{cards.map(card => <button key={card.id} onClick={() => onSelect(card)}><img src={card.image} alt="" /><span><b>{card.title}</b><small>{card.artist} · {card.member}</small></span><strong>›</strong></button>)}</div></> }
+function Discover({ onSelect }: { onSelect: (card: Card) => void }) {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<Card[]>(cards)
+
+  useEffect(() => {
+    const params = new URLSearchParams({ page: '1', pageSize: '20' })
+    if (query.trim()) params.set('q', query.trim())
+    void apiFetch<{ ok: true, data: { items: CollectionCard[] } }>(`/catalog/cards?${params}`)
+      .then(result => setResults(result.data.items.map(toCard)))
+      .catch(() => setResults(cards.filter(card => !query || card.title.includes(query))))
+  }, [query])
+
+  return <><input className="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="카드, 아티스트 검색" /><div className="section-heading"><h2>인기 카드</h2><button>전체 보기</button></div><div className="horizontal-cards">{results.slice(0, 4).map(card => <button key={card.id} onClick={() => onSelect(card)}><img src={card.image} alt="" /><b>{card.member}</b></button>)}</div><div className="section-heading"><h2>새로운 카드</h2><button>전체 보기</button></div><div className="discover-list">{results.map(card => <button key={card.id} onClick={() => onSelect(card)}><img src={card.image} alt="" /><span><b>{card.title}</b><small>{card.artist} · {card.member}</small></span><strong>›</strong></button>)}</div></>
+}
 
 function Alerts({ items, onRead }: { items: NotificationItem[], onRead: (id: string) => Promise<void> }) { const sample = [['새 카드', '발행번호 #021', '새 카드가 공개되었습니다.'], ['컬렉션', '컬렉션이 업데이트되었습니다', '보유 카드가 18장으로 늘었어요.'], ['공지', '서비스 점검 안내', '5월 12일(월) 02:00 - 04:00']] as const; return <div className="alert-list">{(items.length ? items.map(item => [item.id, '새 소식', 'Fanfolio의 새로운 소식이 도착했습니다.', item.isRead] as const) : sample.map((item, index) => [`sample-${index}`, ...item, true] as const)).map(([id, tag, title, body, isRead]) => <button className={isRead ? 'alert-card read' : 'alert-card'} key={id} onClick={() => !isRead && void onRead(id)}><span className="tag">{tag}</span><h2>{title}</h2><p>{body}</p><small>{isRead ? '확인함' : '새 알림'}</small></button>)}</div> }
 

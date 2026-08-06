@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, status
-from sqlalchemy import select
+from fastapi import APIRouter, Query, status
+from sqlalchemy import func, select
 
 from app.dependencies import DbSession, FanUser
 from app.errors import AppError
@@ -113,10 +113,21 @@ async def card_detail(user_card_id: str, user: FanUser, session: DbSession) -> d
 
 
 @router.get("/catalog/cards")
-async def catalog(user: FanUser, session: DbSession, artistId: str | None = None) -> dict:
-    statement = select(Card).where(Card.status == "published", Card.is_official.is_(True))
+async def catalog(
+    user: FanUser,
+    session: DbSession,
+    artistId: str | None = None,
+    q: str | None = None,
+    page: int = Query(default=1, ge=1),
+    pageSize: int = Query(default=20, ge=1, le=100),
+) -> dict:
+    filters = [Card.status == "published", Card.is_official.is_(True)]
     if artistId:
-        statement = statement.where(Card.artist_id == artistId)
+        filters.append(Card.artist_id == artistId)
+    if q:
+        filters.append(Card.name.ilike(f"%{q}%"))
+    total = await session.scalar(select(func.count()).select_from(Card).where(*filters))
+    statement = select(Card).where(*filters).offset((page - 1) * pageSize).limit(pageSize)
     cards = (await session.scalars(statement)).all()
     return {
         "ok": True,
@@ -124,7 +135,8 @@ async def catalog(user: FanUser, session: DbSession, artistId: str | None = None
             "items": [
                 {"id": c.id, "status": c.status, "isOfficial": c.is_official, "name": c.name}
                 for c in cards
-            ]
+            ],
+            "meta": {"pagination": {"page": page, "pageSize": pageSize, "total": total}},
         },
     }
 
