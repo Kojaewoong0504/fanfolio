@@ -28,7 +28,7 @@ function App() {
   const [tab, setTab] = useState<Tab>('collection')
   const [selectedCard, setSelectedCard] = useState<typeof cards[number] | null>(null)
   const [showRedeem, setShowRedeem] = useState(false)
-  const [signedIn, setSignedIn] = useState(true)
+  const [signedIn, setSignedIn] = useState(false)
   const [collectionCards, setCollectionCards] = useState<Card[]>(cards)
   const [apiConnected, setApiConnected] = useState(false)
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
@@ -46,7 +46,11 @@ function App() {
     }
   }
 
-  useEffect(() => { void refreshCollection() }, [])
+  useEffect(() => {
+    void apiFetch<{ ok: true, data: { onboardingCompleted: boolean } }>('/me')
+      .then(() => { setSignedIn(true); void refreshCollection() })
+      .catch(() => setSignedIn(false))
+  }, [])
 
   useEffect(() => {
     if (!signedIn) return
@@ -78,7 +82,7 @@ function App() {
   }
 
   if (!signedIn) {
-    return <Login onLogin={() => setSignedIn(true)} />
+    return <Login onLogin={() => { setSignedIn(true); void refreshCollection() }} />
   }
 
   if (showOnboarding) {
@@ -205,7 +209,7 @@ function Discover({ onSelect }: { onSelect: (card: Card) => void }) {
 
 function Alerts({ items, onRead }: { items: NotificationItem[], onRead: (id: string) => Promise<void> }) { const sample = [['새 카드', '발행번호 #021', '새 카드가 공개되었습니다.'], ['컬렉션', '컬렉션이 업데이트되었습니다', '보유 카드가 18장으로 늘었어요.'], ['공지', '서비스 점검 안내', '5월 12일(월) 02:00 - 04:00']] as const; return <div className="alert-list">{(items.length ? items.map(item => [item.id, '새 소식', 'Fanfolio의 새로운 소식이 도착했습니다.', item.isRead] as const) : sample.map((item, index) => [`sample-${index}`, ...item, true] as const)).map(([id, tag, title, body, isRead]) => <button className={isRead ? 'alert-card read' : 'alert-card'} key={id} onClick={() => !isRead && void onRead(id)}><span className="tag">{tag}</span><h2>{title}</h2><p>{body}</p><small>{isRead ? '확인함' : '새 알림'}</small></button>)}</div> }
 
-function Settings({ onLogout }: { onLogout: () => Promise<void> }) { const [busy, setBusy] = useState(false); const logout = async () => { setBusy(true); await onLogout(); setBusy(false) }; return <><div className="profile"><div className="avatar">팬</div><div><b>팬포리오</b><small>fanfolio_1234</small></div><span>›</span></div><div className="settings-list">{['프로필', '계정', '알림 설정', '앱 정보'].map(item => <button key={item}><span>{item}</span><strong>›</strong></button>)}</div><button className="logout" onClick={() => void logout} disabled={busy}>{busy ? '로그아웃 중...' : '로그아웃'}</button></> }
+function Settings({ onLogout }: { onLogout: () => Promise<void> }) { const [busy, setBusy] = useState(false); const logout = async () => { setBusy(true); await onLogout(); setBusy(false) }; return <><div className="profile"><div className="avatar">팬</div><div><b>팬포리오</b><small>fanfolio_1234</small></div><span>›</span></div><div className="settings-list">{['프로필', '계정', '알림 설정', '앱 정보'].map(item => <button key={item}><span>{item}</span><strong>›</strong></button>)}</div><button className="logout" onClick={() => void logout()} disabled={busy}>{busy ? '로그아웃 중...' : '로그아웃'}</button></> }
 
 function CardDetail({ card, onClose }: { card: Card, onClose: () => void }) {
   const [detail, setDetail] = useState<{ serialNumber: number, acquisitionSource: string, card: { name: string, handwritingImageUrl: string | null, hasVoice: boolean } } | null>(null)
