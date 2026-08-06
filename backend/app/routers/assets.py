@@ -107,6 +107,11 @@ async def complete_asset_upload(asset_id: str, user: CurrentUser, session: DbSes
         raise AppError(404, "ASSET_NOT_FOUND", "자산을 찾을 수 없습니다.")
     if asset.upload_expires_at and datetime.now(UTC) > asset.upload_expires_at.replace(tzinfo=UTC):
         raise AppError(410, "UPLOAD_URL_EXPIRED", "업로드 URL이 만료되었습니다.")
+    # Browser retries and worker handoffs can repeat the finalize request. Once
+    # the object has passed the server-side scan, the state transition is
+    # already complete and the same success response is safe to return.
+    if asset.upload_completed_at:
+        return {"ok": True, "data": {"assetId": asset.id, "status": "ready"}}
     if not asset.storage_path:
         raise AppError(409, "UPLOAD_NOT_READY", "업로드된 파일을 찾을 수 없습니다.")
     storage = configured_asset_storage()

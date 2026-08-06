@@ -171,6 +171,8 @@ def test_s3_direct_upload_is_completed_only_after_server_scan(
         200,
     )
     assert completed["status"] == "ready"
+    retried = assert_success(actors["artist"].post(asset["completeUrl"]), 200)
+    assert retried == completed
 
 
 def test_upload_fails_closed_when_clamav_is_unavailable(
