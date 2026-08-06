@@ -8,7 +8,7 @@ const state = {
 };
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
 
-function absoluteApiUrl(path) { if (!path) return ''; if (/^https?:\/\//.test(path)) return path; return `${API_BASE.replace(/\/api$/, '')}${path}`; }
+function absoluteApiUrl(path) { if (!path) return ''; if (/^(https?:|blob:|data:)/.test(path)) return path; return `${API_BASE.replace(/\/api$/, '')}${path}`; }
 function loginView() { const step = state.magicLinkRequested ? '<label class="field">로그인 토큰<input name="token" type="password" autocomplete="one-time-code" placeholder="이메일의 로그인 토큰" required /></label><button class="primary" type="submit">스튜디오 입장</button>' : '<label class="field">아티스트 이메일<input name="email" type="email" autocomplete="email" placeholder="artist@fanfolio.com" required /></label><button class="primary" type="submit">로그인 링크 받기</button>'; return `<main class="login-page"><div class="login-card"><p class="kicker">Fanfolio Artist Studio</p><div class="login-mark">✦</div><h1>아티스트 스튜디오 로그인</h1><p class="hint">아티스트 이메일로 받은 로그인 링크를 사용합니다.</p><form id="login-form" class="login-form">${step}</form>${state.loginError ? `<p class="login-error" role="alert">${esc(state.loginError)}</p>` : ''}</div></main>`; }
 
 function shell(content) {
