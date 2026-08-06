@@ -136,6 +136,49 @@ def test_session_header_can_authenticate_a_browser_admin_client(
     assert response.status_code == 200, response.text
 
 
+def test_browser_clients_keep_fan_and_admin_sessions_separate(
+    app: FastAPI, seeded: dict[str, Any]
+) -> None:
+    tokens = seeded["magicLinkTokens"]
+    assert isinstance(tokens, dict)
+
+    fan_client = TestClient(app)
+    fan_login = fan_client.post(
+        "/api/auth/magic-link/verify",
+        json={"token": tokens["fan"]},
+        headers={"X-Fanfolio-Client": "fan"},
+    )
+    assert fan_login.status_code == 200, fan_login.text
+    fan_session = fan_login.cookies.get("fanfolio_fan_session")
+    assert fan_session
+
+    admin_login = fan_client.post(
+        "/api/auth/magic-link/verify",
+        json={"token": tokens["admin"]},
+        headers={"X-Fanfolio-Client": "admin"},
+    )
+    assert admin_login.status_code == 200, admin_login.text
+    admin_session = admin_login.cookies.get("fanfolio_admin_session")
+    assert admin_session
+
+    browser = TestClient(app)
+    browser.cookies.set("fanfolio_fan_session", fan_session)
+    browser.cookies.set("fanfolio_admin_session", admin_session)
+    fan_state = browser.get("/api/me", headers={"X-Fanfolio-Client": "fan"})
+    admin_state = browser.get("/api/admin/dashboard", headers={"X-Fanfolio-Client": "admin"})
+
+    assert fan_state.status_code == 200, fan_state.text
+    assert fan_state.json()["data"]["role"] == "fan"
+    assert admin_state.status_code == 200, admin_state.text
+
+    fan_logout = browser.post("/api/auth/logout", headers={"X-Fanfolio-Client": "fan"})
+    assert fan_logout.status_code == 204, fan_logout.text
+    admin_after_fan_logout = browser.get(
+        "/api/admin/dashboard", headers={"X-Fanfolio-Client": "admin"}
+    )
+    assert admin_after_fan_logout.status_code == 200, admin_after_fan_logout.text
+
+
 def test_logout_invalidates_the_server_session(actors: dict[str, TestClient]) -> None:
     fan = actors["fan"]
     assert fan.post("/api/auth/logout").status_code == 204

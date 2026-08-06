@@ -1,7 +1,7 @@
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
 export function notificationStreamUrl(): string {
-  return `${apiBaseUrl}/notifications/stream`
+  return `${apiBaseUrl}/notifications/stream?client=fan`
 }
 
 export type CollectionCard = {
@@ -89,7 +89,7 @@ export class ApiError extends Error {
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    headers: { 'Content-Type': 'application/json', 'X-Fanfolio-Client': 'fan', ...init?.headers },
     ...init,
   })
 

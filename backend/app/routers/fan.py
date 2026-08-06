@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api", tags=["fan"])
 def card_image_url(card: Card) -> str:
     """Use the protected asset-backed image route for artist-created cards."""
     if card.image_asset_id:
-        return f"/api/cards/{card.id}/image"
+        return f"/api/cards/{card.id}/image?client=fan"
     return card.image_url
 
 

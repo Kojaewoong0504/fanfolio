@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Cookie, Response, status
+from fastapi import APIRouter, Cookie, Header, Response, status
 from sqlalchemy import delete
 
 from app.core.config import get_settings
-from app.dependencies import CurrentUser, DbSession
+from app.dependencies import CurrentUser, DbSession, session_cookie_name
 from app.errors import AppError
 from app.mailer import MailDeliveryError, deliver_magic_link
 from app.models import Session
@@ -30,11 +30,14 @@ async def request_magic_link(payload: MagicLinkRequest, session: DbSession) -> d
 
 @router.post("/magic-link/verify")
 async def verify_magic_link_endpoint(
-    payload: MagicLinkVerify, response: Response, session: DbSession
+    payload: MagicLinkVerify,
+    response: Response,
+    session: DbSession,
+    client: str | None = Header(default=None, alias="X-Fanfolio-Client"),
 ) -> dict:
     data = await verify_magic_link(session, token=payload.token)
     response.set_cookie(
-        "fanfolio_session",
+        session_cookie_name(client),
         data.pop("sessionToken"),
         httponly=True,
         secure=get_settings().app_env == "production",
@@ -50,9 +53,23 @@ async def logout(
     session: DbSession,
     response: Response,
     fanfolio_session: str | None = Cookie(default=None),
+    fanfolio_fan_session: str | None = Cookie(default=None),
+    fanfolio_admin_session: str | None = Cookie(default=None),
+    fanfolio_artist_session: str | None = Cookie(default=None),
+    client: str | None = Header(default=None, alias="X-Fanfolio-Client"),
+    session_header: str | None = Header(default=None, alias="X-Fanfolio-Session"),
 ) -> Response:
-    await session.execute(delete(Session).where(Session.token == fanfolio_session))
+    scoped_token = {
+        "fan": fanfolio_fan_session,
+        "admin": fanfolio_admin_session,
+        "artist": fanfolio_artist_session,
+    }.get(client or "")
+    token = scoped_token or fanfolio_session or session_header
+    if token:
+        await session.execute(delete(Session).where(Session.token == token))
     await session.commit()
-    response.delete_cookie("fanfolio_session", path="/")
+    response.delete_cookie(session_cookie_name(client), path="/")
+    if client is None:
+        response.delete_cookie("fanfolio_session", path="/")
     response.status_code = status.HTTP_204_NO_CONTENT
     return response

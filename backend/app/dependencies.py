@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import Cookie, Depends, Header
+from fastapi import Cookie, Depends, Header, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,13 +10,35 @@ from app.models import Role, Session, User
 
 DbSession = Annotated[AsyncSession, Depends(get_session)]
 
+SESSION_COOKIE_BY_CLIENT = {
+    "fan": "fanfolio_fan_session",
+    "admin": "fanfolio_admin_session",
+    "artist": "fanfolio_artist_session",
+}
+
+
+def session_cookie_name(client: str | None) -> str:
+    """Keep browser sessions isolated when the local apps share one host."""
+    return SESSION_COOKIE_BY_CLIENT.get(client or "", "fanfolio_session")
+
 
 async def current_user(
     session: DbSession,
     fanfolio_session: str | None = Cookie(default=None),
+    fanfolio_fan_session: str | None = Cookie(default=None),
+    fanfolio_admin_session: str | None = Cookie(default=None),
+    fanfolio_artist_session: str | None = Cookie(default=None),
+    client_header: str | None = Header(default=None, alias="X-Fanfolio-Client"),
+    client_query: str | None = Query(default=None, alias="client"),
     session_header: str | None = Header(default=None, alias="X-Fanfolio-Session"),
 ) -> User:
-    token = fanfolio_session or session_header
+    client = client_header or client_query
+    scoped_token = {
+        "fan": fanfolio_fan_session,
+        "admin": fanfolio_admin_session,
+        "artist": fanfolio_artist_session,
+    }.get(client or "")
+    token = scoped_token or fanfolio_session or session_header
     if not token:
         raise AppError(401, "AUTH_REQUIRED", "로그인이 필요합니다.")
     user = await session.scalar(
