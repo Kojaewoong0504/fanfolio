@@ -62,7 +62,19 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
     const imageUrl = URL.createObjectURL(file)
     try {
       const { BrowserQRCodeReader } = await import('@zxing/browser')
-      const result = await new BrowserQRCodeReader().decodeFromImageUrl(imageUrl)
+      const reader = new BrowserQRCodeReader()
+      let result
+      let lastError: unknown
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          result = await reader.decodeFromImageUrl(imageUrl)
+          break
+        } catch (error) {
+          lastError = error
+          if (attempt < 2) await new Promise(resolve => window.setTimeout(resolve, 120))
+        }
+      }
+      if (!result) throw lastError ?? new Error('QR_IMAGE_NOT_FOUND')
       setCode(normalizeQrValue(result.getText()))
       setSource('qr')
       setMessage('사진에서 QR 코드가 인식되었습니다.')
