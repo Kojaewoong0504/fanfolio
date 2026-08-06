@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Query, Request, status
 from fastapi.responses import FileResponse, StreamingResponse
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 
 from app.dependencies import DbSession, FanUser
 from app.errors import AppError
@@ -314,8 +314,19 @@ async def catalog(
     if memberId:
         filters.append(Card.member_id == memberId)
     if q:
-        filters.append(Card.name.ilike(f"%{q}%"))
-    total = await session.scalar(select(func.count()).select_from(Card).where(*filters))
+        search = f"%{q}%"
+        filters.append(
+            or_(Card.name.ilike(search), Artist.name.ilike(search), Member.name.ilike(search))
+        )
+    catalog_from = (
+        select(Card)
+        .select_from(Card)
+        .outerjoin(Artist, Card.artist_id == Artist.id)
+        .outerjoin(Member, Card.member_id == Member.id)
+    )
+    total = await session.scalar(
+        select(func.count()).select_from(catalog_from.where(*filters).subquery())
+    )
     statement = (
         select(Card, Artist, Member)
         .outerjoin(Artist, Card.artist_id == Artist.id)

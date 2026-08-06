@@ -337,9 +337,13 @@ function Discover({ onSelect }: { onSelect: (card: Card) => void }) {
     if (query.trim()) params.set('q', query.trim())
     if (artistId) params.set('artistId', artistId)
     if (memberId) params.set('memberId', memberId)
-    void apiFetch<{ ok: true, data: { items: CatalogCard[] } }>(`/catalog/cards?${params}`)
-      .then(result => setResults(result.data.items.map(toCatalogCard)))
-      .catch(() => setResults([]))
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      void apiFetch<{ ok: true, data: { items: CatalogCard[] } }>(`/catalog/cards?${params}`)
+        .then(result => { if (!cancelled) setResults(result.data.items.map(toCatalogCard)) })
+        .catch(() => { if (!cancelled) setResults([]) })
+    }, 250)
+    return () => { cancelled = true; window.clearTimeout(timer) }
   }, [artistId, memberId, query])
 
   const visibleResults = showAll ? results : results.slice(0, 6)

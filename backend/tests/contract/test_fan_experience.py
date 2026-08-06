@@ -169,6 +169,17 @@ def test_catalog_returns_only_published_cards_to_fans(actors: dict[str, TestClie
     assert catalog["items"][0]["imageUrl"] == "/src/assets/hero.png"
 
 
+@pytest.mark.parametrize("query", ["드림스케이프", "유나"])
+def test_catalog_search_matches_artist_and_member_names(
+    actors: dict[str, TestClient], query: str
+) -> None:
+    catalog = assert_success(actors["fan"].get("/api/catalog/cards", params={"q": query}))
+
+    assert catalog["items"]
+    assert catalog["items"][0]["artistName"] == "드림스케이프"
+    assert catalog["items"][0]["memberName"] == "유나"
+
+
 def test_collection_returns_live_summary_and_card_metadata(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:
