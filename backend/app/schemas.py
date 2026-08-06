@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -59,6 +60,17 @@ class CodeBatchRequest(BaseModel):
     expires_at: str = Field(alias="expiresAt")
     prefix: str
     model_config = ConfigDict(populate_by_name=True)
+
+
+class DropCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    starts_at: datetime | None = Field(default=None, alias="startsAt")
+    ends_at: datetime | None = Field(default=None, alias="endsAt")
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class DropStatusUpdate(BaseModel):
+    status: Literal["draft", "scheduled", "live", "ended"]
 
 
 class ArtistCardRequest(BaseModel):

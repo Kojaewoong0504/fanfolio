@@ -67,7 +67,10 @@ class Card(Base):
 class Drop(Base):
     __tablename__ = "drops"
     id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String, default="이름 없는 드롭")
     status: Mapped[str] = mapped_column(String, default="live")
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class RedeemCodeBatch(Base):

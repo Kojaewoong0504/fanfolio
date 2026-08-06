@@ -2,7 +2,41 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
-from tests.conftest import assert_success
+from tests.conftest import assert_error, assert_success
+
+
+def test_admin_can_create_list_and_activate_a_drop(
+    actors: dict[str, TestClient],
+) -> None:
+    created = assert_success(
+        actors["admin"].post(
+            "/api/admin/drops",
+            json={
+                "name": "2026 봄 컴백 드롭",
+                "startsAt": "2026-03-01T00:00:00Z",
+                "endsAt": "2026-03-31T23:59:59Z",
+            },
+        ),
+        201,
+    )
+
+    assert created["status"] == "draft"
+    assert created["name"] == "2026 봄 컴백 드롭"
+
+    listed = assert_success(actors["admin"].get("/api/admin/drops"))
+    assert any(drop["id"] == created["id"] for drop in listed["items"])
+
+    activated = assert_success(
+        actors["admin"].patch(
+            f"/api/admin/drops/{created['id']}/status",
+            json={"status": "live"},
+        )
+    )
+    assert activated == {"id": created["id"], "status": "live"}
+
+
+def test_fan_cannot_manage_drops(actors: dict[str, TestClient]) -> None:
+    assert_error(actors["fan"].get("/api/admin/drops"), 403, "FORBIDDEN")
 
 
 def test_admin_dashboard_and_card_list_are_backed_by_database(

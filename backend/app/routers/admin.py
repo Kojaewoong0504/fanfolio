@@ -10,9 +10,19 @@ from sqlalchemy import func, select
 from app.dependencies import AdminUser, DbSession
 from app.errors import AppError
 from app.models import Card, Drop, RedeemCode, RedeemCodeBatch
-from app.schemas import CodeBatchRequest
+from app.schemas import CodeBatchRequest, DropCreateRequest, DropStatusUpdate
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+
+def drop_data(drop: Drop) -> dict:
+    return {
+        "id": drop.id,
+        "name": drop.name,
+        "status": drop.status,
+        "startsAt": drop.starts_at.isoformat() if drop.starts_at else None,
+        "endsAt": drop.ends_at.isoformat() if drop.ends_at else None,
+    }
 
 
 @router.get("/dashboard")
@@ -79,6 +89,40 @@ async def cards(
             "meta": {"pagination": {"page": page, "pageSize": page_size, "total": total}},
         },
     }
+
+
+@router.get("/drops")
+async def list_drops(_: AdminUser, session: DbSession) -> dict:
+    drops = await session.scalars(select(Drop).order_by(Drop.id.desc()))
+    return {"ok": True, "data": {"items": [drop_data(drop) for drop in drops]}}
+
+
+@router.post("/drops", status_code=status.HTTP_201_CREATED)
+async def create_drop(payload: DropCreateRequest, _: AdminUser, session: DbSession) -> dict:
+    if payload.starts_at and payload.ends_at and payload.ends_at <= payload.starts_at:
+        raise AppError(422, "INVALID_DROP_WINDOW", "종료 시각은 시작 시각보다 늦어야 합니다.")
+    drop = Drop(
+        id=f"drop_{uuid4().hex[:10]}",
+        name=payload.name,
+        status="draft",
+        starts_at=payload.starts_at,
+        ends_at=payload.ends_at,
+    )
+    session.add(drop)
+    await session.commit()
+    return {"ok": True, "data": drop_data(drop)}
+
+
+@router.patch("/drops/{drop_id}/status")
+async def update_drop_status(
+    drop_id: str, payload: DropStatusUpdate, _: AdminUser, session: DbSession
+) -> dict:
+    drop = await session.get(Drop, drop_id)
+    if not drop:
+        raise AppError(404, "DROP_NOT_FOUND", "드롭을 찾을 수 없습니다.")
+    drop.status = payload.status
+    await session.commit()
+    return {"ok": True, "data": {"id": drop.id, "status": drop.status}}
 
 
 @router.post("/redeem-code-batches", status_code=status.HTTP_201_CREATED)
