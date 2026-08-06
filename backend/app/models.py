@@ -44,6 +44,21 @@ class MagicLink(Base):
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class Artist(Base):
+    __tablename__ = "artists"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String)
+    image_url: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class Member(Base):
+    __tablename__ = "members"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id"))
+    name: Mapped[str] = mapped_column(String)
+    image_url: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
 class Card(Base):
     __tablename__ = "cards"
     id: Mapped[str] = mapped_column(String, primary_key=True)
@@ -52,6 +67,7 @@ class Card(Base):
     is_official: Mapped[bool] = mapped_column(Boolean, default=True)
     image_url: Mapped[str] = mapped_column(String, default="https://example.test/card.png")
     artist_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    member_id: Mapped[str | None] = mapped_column(ForeignKey("members.id"), nullable=True)
     owner_artist_id: Mapped[str | None] = mapped_column(String, nullable=True)
     template_id: Mapped[str | None] = mapped_column(String, nullable=True)
     season_name: Mapped[str | None] = mapped_column(String, nullable=True)

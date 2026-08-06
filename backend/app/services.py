@@ -13,12 +13,14 @@ from app.errors import AppError
 from app.image_processing import remove_light_background
 from app.mailer import MailDeliveryError, deliver_notification_email
 from app.models import (
+    Artist,
     Asset,
     AuditLog,
     BackgroundRemovalJob,
     Card,
     Drop,
     MagicLink,
+    Member,
     Notification,
     RedeemCode,
     RedeemCodeBatch,
@@ -51,6 +53,8 @@ async def reset_database(session: AsyncSession) -> None:
         RedeemCodeBatch,
         Drop,
         Card,
+        Member,
+        Artist,
         MagicLink,
         Session,
         User,
@@ -97,11 +101,16 @@ async def seed_core(session: AsyncSession) -> dict:
     )
     session.add_all(
         [
+            Artist(id="artist_nova3", name="드림스케이프", image_url="/src/assets/hero.png"),
+            Member(id="member_yuna", artist_id="artist_nova3", name="유나"),
+            Member(id="member_minho", artist_id="artist_nova3", name="민호"),
+            Member(id="member_jei", artist_id="artist_nova3", name="제이"),
             Card(
                 id="card_published",
                 name="컴백 기념 사인 카드",
                 status="published",
                 artist_id="artist_nova3",
+                member_id="member_yuna",
                 image_url="/src/assets/hero.png",
             ),
             Card(

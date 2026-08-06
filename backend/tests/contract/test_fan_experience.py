@@ -128,6 +128,38 @@ def test_catalog_supports_search_and_pagination(actors: dict[str, TestClient]) -
     assert catalog["meta"]["pagination"] == {"page": 1, "pageSize": 1, "total": 1}
 
 
+def test_catalog_exposes_published_artists_and_members(
+    actors: dict[str, TestClient],
+) -> None:
+    artists = assert_success(actors["fan"].get("/api/catalog/artists"))
+    assert artists["items"] == [
+        {"id": "artist_nova3", "name": "드림스케이프", "imageUrl": "/src/assets/hero.png"}
+    ]
+
+    members = assert_success(
+        actors["fan"].get("/api/catalog/members", params={"artistId": "artist_nova3"})
+    )
+    assert {member["id"] for member in members["items"]} == {
+        "member_jei",
+        "member_minho",
+        "member_yuna",
+    }
+
+
+def test_catalog_can_filter_cards_by_artist_and_member(
+    actors: dict[str, TestClient],
+) -> None:
+    filtered = assert_success(
+        actors["fan"].get(
+            "/api/catalog/cards",
+            params={"artistId": "artist_nova3", "memberId": "member_yuna"},
+        )
+    )
+    assert filtered["meta"]["pagination"]["total"] == 1
+    assert filtered["items"][0]["memberId"] == "member_yuna"
+    assert filtered["items"][0]["memberName"] == "유나"
+
+
 def test_notifications_can_be_marked_as_read(actors: dict[str, TestClient]) -> None:
     fan = actors["fan"]
     notifications = assert_success(fan.get("/api/notifications"))

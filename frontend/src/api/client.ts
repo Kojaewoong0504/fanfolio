@@ -12,6 +12,10 @@ export type CollectionCard = {
   isOfficial: boolean
   serialNumber: number
   acquiredAt: string
+  artistId?: string | null
+  artistName?: string | null
+  memberId?: string | null
+  memberName?: string | null
 }
 
 export type CatalogCard = {
@@ -20,7 +24,14 @@ export type CatalogCard = {
   isOfficial: boolean
   name: string
   imageUrl: string
+  artistId?: string | null
+  artistName?: string | null
+  memberId?: string | null
+  memberName?: string | null
 }
+
+export type CatalogArtist = { id: string; name: string; imageUrl: string | null }
+export type CatalogMember = { id: string; artistId: string; name: string }
 
 export type NotificationItem = {
   id: string
@@ -42,6 +53,11 @@ export type UserCardDetail = {
     isOfficial: boolean
     handwritingImageUrl: string | null
     hasVoice: boolean
+    imageUrl?: string
+    artistId?: string | null
+    artistName?: string | null
+    memberId?: string | null
+    memberName?: string | null
   }
 }
 

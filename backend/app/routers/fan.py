@@ -8,7 +8,7 @@ from sqlalchemy import func, select, update
 
 from app.dependencies import DbSession, FanUser
 from app.errors import AppError
-from app.models import Asset, Card, Notification, UserCard
+from app.models import Artist, Asset, Card, Member, Notification, UserCard
 from app.schemas import (
     NotificationPreferencesUpdate,
     ProfileUpdate,
@@ -51,7 +51,14 @@ async def create_redemption(payload: RedemptionRequest, user: FanUser, session: 
 @router.get("/me/collection")
 async def collection(user: FanUser, session: DbSession) -> dict:
     rows = (
-        await session.execute(select(UserCard, Card).join(Card).where(UserCard.user_id == user.id))
+        await session.execute(
+            select(UserCard, Card, Artist, Member)
+            .select_from(UserCard)
+            .join(Card, UserCard.card_id == Card.id)
+            .outerjoin(Artist, Card.artist_id == Artist.id)
+            .outerjoin(Member, Card.member_id == Member.id)
+            .where(UserCard.user_id == user.id)
+        )
     ).all()
     cards = [
         {
@@ -60,10 +67,14 @@ async def collection(user: FanUser, session: DbSession) -> dict:
             "name": card.name,
             "imageUrl": card_image_url(card),
             "isOfficial": card.is_official,
+            "artistId": artist.id if artist else card.artist_id,
+            "artistName": artist.name if artist else None,
+            "memberId": member.id if member else card.member_id,
+            "memberName": member.name if member else None,
             "serialNumber": uc.serial_number,
             "acquiredAt": uc.acquired_at.isoformat(),
         }
-        for uc, card in rows
+        for uc, card, artist, member in rows
     ]
     return {
         "ok": True,
@@ -116,14 +127,17 @@ async def update_notification_preferences(
 async def card_detail(user_card_id: str, user: FanUser, session: DbSession) -> dict:
     row = (
         await session.execute(
-            select(UserCard, Card)
-            .join(Card)
+            select(UserCard, Card, Artist, Member)
+            .select_from(UserCard)
+            .join(Card, UserCard.card_id == Card.id)
+            .outerjoin(Artist, Card.artist_id == Artist.id)
+            .outerjoin(Member, Card.member_id == Member.id)
             .where(UserCard.id == user_card_id, UserCard.user_id == user.id)
         )
     ).one_or_none()
     if not row:
         raise AppError(404, "USER_CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
-    uc, card = row
+    uc, card, artist, member = row
     return {
         "ok": True,
         "data": {
@@ -134,6 +148,11 @@ async def card_detail(user_card_id: str, user: FanUser, session: DbSession) -> d
                 "id": card.id,
                 "name": card.name,
                 "isOfficial": card.is_official,
+                "imageUrl": card_image_url(card),
+                "artistId": artist.id if artist else card.artist_id,
+                "artistName": artist.name if artist else None,
+                "memberId": member.id if member else card.member_id,
+                "memberName": member.name if member else None,
                 "handwritingImageUrl": None,
                 "hasVoice": False,
             },
@@ -152,11 +171,52 @@ async def card_image(card_id: str, _: FanUser, session: DbSession) -> FileRespon
     return FileResponse(asset.storage_path, media_type=asset.content_type or "image/png")
 
 
+@router.get("/catalog/artists")
+async def catalog_artists(_: FanUser, session: DbSession) -> dict:
+    artists = await session.scalars(
+        select(Artist)
+        .join(Card, Card.artist_id == Artist.id)
+        .where(Card.status == "published", Card.is_official.is_(True))
+        .distinct()
+        .order_by(Artist.name)
+    )
+    return {
+        "ok": True,
+        "data": {
+            "items": [
+                {"id": artist.id, "name": artist.name, "imageUrl": artist.image_url}
+                for artist in artists
+            ]
+        },
+    }
+
+
+@router.get("/catalog/members")
+async def catalog_members(_: FanUser, session: DbSession, artistId: str | None = None) -> dict:
+    available_artist_ids = select(Card.artist_id).where(
+        Card.status == "published", Card.is_official.is_(True)
+    )
+    filters = [Member.artist_id.in_(available_artist_ids)]
+    if artistId:
+        filters.append(Member.artist_id == artistId)
+    members = await session.scalars(select(Member).where(*filters).distinct().order_by(Member.name))
+    return {
+        "ok": True,
+        "data": {
+            "items": [
+                {"id": member.id, "artistId": member.artist_id, "name": member.name}
+                for member in members
+            ]
+        },
+    }
+
+
 @router.get("/catalog/cards")
 async def catalog(
     user: FanUser,
     session: DbSession,
     artistId: str | None = None,
+    memberId: str | None = None,
     q: str | None = None,
     page: int = Query(default=1, ge=1),
     pageSize: int = Query(default=20, ge=1, le=100),
@@ -164,11 +224,20 @@ async def catalog(
     filters = [Card.status == "published", Card.is_official.is_(True)]
     if artistId:
         filters.append(Card.artist_id == artistId)
+    if memberId:
+        filters.append(Card.member_id == memberId)
     if q:
         filters.append(Card.name.ilike(f"%{q}%"))
     total = await session.scalar(select(func.count()).select_from(Card).where(*filters))
-    statement = select(Card).where(*filters).offset((page - 1) * pageSize).limit(pageSize)
-    cards = (await session.scalars(statement)).all()
+    statement = (
+        select(Card, Artist, Member)
+        .outerjoin(Artist, Card.artist_id == Artist.id)
+        .outerjoin(Member, Card.member_id == Member.id)
+        .where(*filters)
+        .offset((page - 1) * pageSize)
+        .limit(pageSize)
+    )
+    cards = (await session.execute(statement)).all()
     return {
         "ok": True,
         "data": {
@@ -179,8 +248,12 @@ async def catalog(
                     "isOfficial": c.is_official,
                     "name": c.name,
                     "imageUrl": card_image_url(c),
+                    "artistId": artist.id if artist else c.artist_id,
+                    "artistName": artist.name if artist else None,
+                    "memberId": member.id if member else c.member_id,
+                    "memberName": member.name if member else None,
                 }
-                for c in cards
+                for c, artist, member in cards
             ],
             "meta": {"pagination": {"page": page, "pageSize": pageSize, "total": total}},
         },
