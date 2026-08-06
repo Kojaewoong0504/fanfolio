@@ -1,6 +1,8 @@
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, Cookie, Response, status
+from sqlalchemy import delete
 
-from app.dependencies import DbSession, FanUser
+from app.dependencies import CurrentUser, DbSession
+from app.models import Session
 from app.schemas import MagicLinkRequest, MagicLinkVerify
 from app.services import request_magic_link as create_magic_link
 from app.services import verify_magic_link
@@ -25,6 +27,14 @@ async def verify_magic_link_endpoint(
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(_: FanUser, response: Response) -> Response:
+async def logout(
+    _: CurrentUser,
+    session: DbSession,
+    response: Response,
+    fanfolio_session: str | None = Cookie(default=None),
+) -> Response:
+    await session.execute(delete(Session).where(Session.token == fanfolio_session))
+    await session.commit()
     response.delete_cookie("fanfolio_session")
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return response

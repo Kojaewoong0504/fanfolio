@@ -3,6 +3,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
@@ -29,6 +30,16 @@ def create_app() -> FastAPI:
         return JSONResponse(
             status_code=error.status_code,
             content={"ok": False, "error": {"code": error.code, "message": error.message}},
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(_: Request, error: RequestValidationError) -> JSONResponse:
+        return JSONResponse(
+            status_code=422,
+            content={
+                "ok": False,
+                "error": {"code": "VALIDATION_ERROR", "message": "입력값을 확인해 주세요."},
+            },
         )
 
     app.include_router(health.router)

@@ -47,3 +47,4 @@ async def artist_user(user: Annotated[User, Depends(current_user)]) -> User:
 FanUser = Annotated[User, Depends(fan_user)]
 AdminUser = Annotated[User, Depends(admin_user)]
 ArtistUser = Annotated[User, Depends(artist_user)]
+CurrentUser = Annotated[User, Depends(current_user)]

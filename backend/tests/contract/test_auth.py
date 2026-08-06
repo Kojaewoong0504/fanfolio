@@ -78,3 +78,14 @@ def test_authenticated_user_can_log_out(actors: dict[str, TestClient]) -> None:
     response = actors["fan"].post("/api/auth/logout")
 
     assert response.status_code == 204
+
+
+def test_admin_and_artist_can_log_out(actors: dict[str, TestClient]) -> None:
+    assert actors["admin"].post("/api/auth/logout").status_code == 204
+    assert actors["artist"].post("/api/auth/logout").status_code == 204
+
+
+def test_logout_invalidates_the_server_session(actors: dict[str, TestClient]) -> None:
+    fan = actors["fan"]
+    assert fan.post("/api/auth/logout").status_code == 204
+    assert_error(fan.get("/api/me/collection"), 401, "AUTH_REQUIRED")
