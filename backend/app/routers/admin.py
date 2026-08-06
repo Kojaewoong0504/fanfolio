@@ -270,6 +270,7 @@ def admin_card_data(card: Card) -> dict:
 
 
 async def validate_admin_assets(values: dict, session: DbSession) -> None:
+    storage = None
     for field in (
         "image_asset_id",
         "handwriting_asset_id",
@@ -277,8 +278,16 @@ async def validate_admin_assets(values: dict, session: DbSession) -> None:
         "benefit_asset_id",
     ):
         asset_id = values.get(field)
-        if asset_id and not await session.get(Asset, asset_id):
+        if not asset_id:
+            continue
+        asset = await session.get(Asset, asset_id)
+        if not asset:
             raise AppError(404, "ASSET_NOT_FOUND", "카드 자산을 찾을 수 없습니다.")
+        if asset.storage_path:
+            if storage is None:
+                storage = configured_asset_storage()
+            if not storage.exists(asset.storage_path):
+                raise AppError(409, "ASSET_NOT_READY", "업로드된 자산이 아직 준비되지 않았습니다.")
 
 
 async def resolve_admin_catalog_ids(
