@@ -52,6 +52,10 @@ class Settings(BaseSettings):
             raise ValueError("FRONTEND_URL must use HTTPS in production")
         if not self.allowed_origins:
             raise ValueError("FRONTEND_ORIGINS must contain at least one origin")
+        if "*" in self.allowed_origins:
+            raise ValueError("FRONTEND_ORIGINS cannot use a wildcard in production")
+        if any(not origin.startswith("https://") for origin in self.allowed_origins):
+            raise ValueError("FRONTEND_ORIGINS must use HTTPS in production")
         if self.mail_delivery_mode != "smtp":
             raise ValueError("MAIL_DELIVERY_MODE must be smtp in production")
         if not self.smtp_host or not self.mail_from:

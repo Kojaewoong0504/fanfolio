@@ -160,6 +160,16 @@ npm run build
 코드 발행, 팬 로그인·최초 설정·코드 등록·카드 상세 확인, 그리고 세 앱의 브라우저 세션
 분리를 확인합니다.
 
+### 운영 배포 전 설정 점검
+
+운영 서버를 시작하기 전에 `backend/.env` 또는 환경변수를 로드한 상태에서 실행합니다.
+HTTPS origin, SMTP 설정, 그리고 test-only route 비활성화를 확인하며 데이터베이스를 변경하지
+않습니다.
+
+```bash
+APP_ENV=production ./scripts/production-preflight.sh
+```
+
 ## 백엔드 계약 테스트
 
 백엔드 구현 전에는 아래 테스트가 실패하는 것이 정상입니다. API를 구현하면서 순서대로 통과시키세요.

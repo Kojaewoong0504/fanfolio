@@ -32,3 +32,39 @@ def test_valid_production_settings_pass_runtime_validation() -> None:
     )
 
     settings.validate_runtime()
+
+
+def test_production_settings_reject_insecure_cors_origins() -> None:
+    settings = Settings(
+        app_env="production",
+        frontend_url="https://app.fanfolio.example",
+        frontend_origins="https://app.fanfolio.example,http://admin.fanfolio.example",
+        mail_delivery_mode="smtp",
+        mail_from="Fanfolio <no-reply@fanfolio.example>",
+        smtp_host="smtp.example.com",
+    )
+
+    try:
+        settings.validate_runtime()
+    except ValueError as error:
+        assert "HTTPS" in str(error)
+    else:
+        raise AssertionError("production CORS origins must all use HTTPS")
+
+
+def test_production_settings_reject_wildcard_cors_origins() -> None:
+    settings = Settings(
+        app_env="production",
+        frontend_url="https://app.fanfolio.example",
+        frontend_origins="*",
+        mail_delivery_mode="smtp",
+        mail_from="Fanfolio <no-reply@fanfolio.example>",
+        smtp_host="smtp.example.com",
+    )
+
+    try:
+        settings.validate_runtime()
+    except ValueError as error:
+        assert "wildcard" in str(error)
+    else:
+        raise AssertionError("production CORS origins must not use a wildcard")
