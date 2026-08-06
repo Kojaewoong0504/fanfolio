@@ -23,6 +23,7 @@ cp backend/.env.example backend/.env
 
 ```bash
 cd backend
+python3 -m uv run alembic upgrade head
 python3 -m uv run uvicorn app.main:app --reload --port 8000
 ```
 
