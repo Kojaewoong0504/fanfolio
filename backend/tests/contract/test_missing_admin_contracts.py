@@ -137,7 +137,10 @@ def test_admin_can_list_batches_and_disable_a_code(
         201,
     )
     listed = assert_success(actors["admin"].get("/api/admin/redeem-code-batches"))
-    assert any(item["id"] == batch["id"] for item in listed["items"])
+    listed_batch = next(item for item in listed["items"] if item["id"] == batch["id"])
+    assert listed_batch["quantity"] == 1
+    assert listed_batch["codeCount"] == 1
+    assert listed_batch["usedCount"] == 0
 
     export = actors["admin"].get(batch["csvExportUrl"])
     assert export.status_code == 200

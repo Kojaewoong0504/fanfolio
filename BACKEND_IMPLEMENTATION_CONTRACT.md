@@ -368,6 +368,11 @@ Fanfolio의 회원가입과 로그인은 이메일 매직링크를 같은 흐름
 배치 전체는 `GET /api/admin/redeem-code-batches/{batchId}/qr.zip`에서 한 번에 받을 수 있다.
 QR payload는 redeem code 문자열 자체이며, 팬 앱은 QR 결과를 기존 코드 등록 API로 전달한다.
 
+### GET /api/admin/redeem-code-batches
+
+성공 응답의 각 배치 항목에는 `quantity`, `codeCount`, `usedCount`, `expiresAt`와
+CSV/QR ZIP 다운로드 URL이 포함된다. `usedCount`는 해당 배치 코드들의 실제 누적 사용량이다.
+
 ## 7. 관리자·아티스트 카탈로그 연결
 
 `GET /api/admin/catalog`는 관리자 카드 등록 화면에 사용할 그룹과 멤버 목록을

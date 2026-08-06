@@ -543,6 +543,21 @@ def redeem_code_status(code: RedeemCode) -> str:
 @router.get("/redeem-code-batches")
 async def list_code_batches(_: AdminUser, session: DbSession) -> dict:
     batches = await session.scalars(select(RedeemCodeBatch).order_by(RedeemCodeBatch.id.desc()))
+    usage_rows = (
+        await session.execute(
+            select(
+                RedeemCode.batch_id,
+                func.count(RedeemCode.code),
+                func.coalesce(func.sum(RedeemCode.used_count), 0),
+            )
+            .where(RedeemCode.batch_id.is_not(None))
+            .group_by(RedeemCode.batch_id)
+        )
+    ).all()
+    usage = {
+        batch_id: {"codeCount": count, "usedCount": used_count}
+        for batch_id, count, used_count in usage_rows
+    }
     return {
         "ok": True,
         "data": {
@@ -555,6 +570,8 @@ async def list_code_batches(_: AdminUser, session: DbSession) -> dict:
                     "maxUsesPerCode": batch.max_uses_per_code,
                     "expiresAt": batch.expires_at,
                     "prefix": batch.prefix,
+                    "codeCount": usage.get(batch.id, {}).get("codeCount", 0),
+                    "usedCount": usage.get(batch.id, {}).get("usedCount", 0),
                     "csvExportUrl": f"/api/admin/redeem-code-batches/{batch.id}/export",
                     "qrZipUrl": f"/api/admin/redeem-code-batches/{batch.id}/qr.zip",
                 }
