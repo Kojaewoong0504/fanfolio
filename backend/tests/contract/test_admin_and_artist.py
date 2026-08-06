@@ -1,7 +1,10 @@
+import asyncio
 from typing import Any
 
 from fastapi.testclient import TestClient
 
+from app.db.session import SessionLocal
+from app.models import Artist, Member
 from tests.conftest import assert_error, assert_success
 
 
@@ -120,6 +123,42 @@ def test_artist_studio_loads_templates_and_catalog_from_api(
     }
 
 
+def test_artist_profile_exposes_affiliated_catalog_and_verification_status(
+    actors: dict[str, TestClient],
+) -> None:
+    data = assert_success(actors["artist"].get("/api/artist/profile"))
+
+    assert data["artistId"] == "artist_nova3"
+    assert data["verificationStatus"] == "verified"
+
+
+def test_artist_cannot_create_card_for_an_unaffiliated_catalog_group(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    async def add_unaffiliated_catalog() -> None:
+        async with SessionLocal() as session:
+            session.add(Artist(id="artist_other", name="다른 그룹"))
+            session.add(Member(id="member_other", artist_id="artist_other", name="다른 멤버"))
+            await session.commit()
+
+    asyncio.run(add_unaffiliated_catalog())
+
+    response = actors["artist"].post(
+        "/api/artist/cards",
+        json={
+            "templateId": seeded["ids"]["templateId"],
+            "name": "소속 외 그룹 카드",
+            "seasonName": "2026 SPRING",
+            "rarity": "Special",
+            "imageAssetId": seeded["ids"]["imageAssetId"],
+            "artistId": "artist_other",
+            "memberId": "member_other",
+            "issueLimit": 1,
+        },
+    )
+    assert_error(response, 403, "ARTIST_CATALOG_FORBIDDEN")
+
+
 def test_artist_can_read_card_collection_insights(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:
@@ -171,6 +210,8 @@ def test_artist_can_read_and_update_studio_profile(
         "nickname": None,
         "role": "artist",
         "emailEnabled": False,
+        "artistId": "artist_nova3",
+        "verificationStatus": "verified",
     }
 
     updated = assert_success(
@@ -185,6 +226,8 @@ def test_artist_can_read_and_update_studio_profile(
         "nickname": "드림스케이프 공식",
         "role": "artist",
         "emailEnabled": True,
+        "artistId": "artist_nova3",
+        "verificationStatus": "verified",
     }
     assert assert_success(artist.get("/api/artist/profile"))["nickname"] == "드림스케이프 공식"
 

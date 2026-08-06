@@ -7,7 +7,15 @@ from app.core.config import get_settings
 from app.dependencies import ArtistUser, DbSession
 from app.errors import AppError
 from app.image_processing import compose_card_preview, compose_card_preview_bytes
-from app.models import Artist, Asset, BackgroundRemovalJob, Card, Member, UserCard
+from app.models import (
+    Artist,
+    ArtistProfile,
+    Asset,
+    BackgroundRemovalJob,
+    Card,
+    Member,
+    UserCard,
+)
 from app.rate_limit import enforce_rate_limit
 from app.schemas import ArtistCardRequest, ArtistCardUpdate, ArtistProfileUpdate
 from app.storage import configured_asset_storage, storage_response
@@ -16,19 +24,22 @@ from app.tasks import enqueue_background_removal
 router = APIRouter(prefix="/api", tags=["artist"])
 
 
-def profile_data(user) -> dict:
+def profile_data(user, profile: ArtistProfile | None = None) -> dict:
     return {
         "id": user.id,
         "email": user.email,
         "nickname": user.nickname,
         "role": user.role.value,
         "emailEnabled": user.notification_email_enabled,
+        "artistId": profile.artist_id if profile else None,
+        "verificationStatus": profile.verification_status if profile else "pending",
     }
 
 
 @router.get("/artist/profile")
-async def get_profile(user: ArtistUser) -> dict:
-    return {"ok": True, "data": profile_data(user)}
+async def get_profile(user: ArtistUser, session: DbSession) -> dict:
+    profile = await session.get(ArtistProfile, user.id)
+    return {"ok": True, "data": profile_data(user, profile)}
 
 
 @router.patch("/artist/profile")
@@ -41,7 +52,8 @@ async def update_profile(
     if "email_enabled" in values:
         user.notification_email_enabled = values["email_enabled"]
     await session.commit()
-    return {"ok": True, "data": profile_data(user)}
+    profile = await session.get(ArtistProfile, user.id)
+    return {"ok": True, "data": profile_data(user, profile)}
 
 
 @router.get("/artist/templates")
@@ -52,8 +64,17 @@ async def list_templates(user: ArtistUser, session: DbSession) -> dict:
     outside the card table. Artists still receive the group/member catalog
     from the database instead of relying on values baked into the UI.
     """
-    artists = (await session.scalars(select(Artist).order_by(Artist.name))).all()
-    members = (await session.scalars(select(Member).order_by(Member.name))).all()
+    profile = await session.get(ArtistProfile, user.id)
+    artist_query = select(Artist).order_by(Artist.name)
+    member_query = select(Member).order_by(Member.name)
+    if profile and profile.verification_status == "verified":
+        artist_query = artist_query.where(Artist.id == profile.artist_id)
+        member_query = member_query.where(Member.artist_id == profile.artist_id)
+    else:
+        artist_query = artist_query.where(False)
+        member_query = member_query.where(False)
+    artists = (await session.scalars(artist_query)).all()
+    members = (await session.scalars(member_query)).all()
     return {
         "ok": True,
         "data": {
@@ -93,6 +114,7 @@ async def create_card(payload: ArtistCardRequest, user: ArtistUser, session: DbS
     artist_id = await resolve_catalog_ids(
         artist_id=payload.artist_id, member_id=payload.member_id, session=session
     )
+    await ensure_artist_catalog_access(artist_id=artist_id, user=user, session=session)
     card = Card(
         id=f"card_{uuid4().hex[:10]}",
         name=payload.name,
@@ -225,6 +247,9 @@ async def update_card(
             member_id=values.get("member_id", card.member_id),
             session=session,
         )
+        await ensure_artist_catalog_access(
+            artist_id=values["artist_id"], user=user, session=session
+        )
     for field, value in values.items():
         setattr(card, field, value)
     await session.commit()
@@ -245,6 +270,17 @@ async def resolve_catalog_ids(
     if artist_id is not None and member.artist_id != artist_id:
         raise AppError(422, "MEMBER_ARTIST_MISMATCH", "멤버와 그룹을 올바르게 선택해 주세요.")
     return member.artist_id
+
+
+async def ensure_artist_catalog_access(
+    *, artist_id: str | None, user: ArtistUser, session: DbSession
+) -> None:
+    """Allow an artist account to select only its verified catalog group."""
+    if artist_id is None:
+        return
+    profile = await session.get(ArtistProfile, user.id)
+    if not profile or profile.verification_status != "verified" or profile.artist_id != artist_id:
+        raise AppError(403, "ARTIST_CATALOG_FORBIDDEN", "소속이 확인된 그룹만 선택할 수 있습니다.")
 
 
 def preview_data(card: Card, *, preview_image_url: str | None = None) -> dict:

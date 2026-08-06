@@ -51,6 +51,15 @@ class Artist(Base):
     image_url: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
+class ArtistProfile(Base):
+    """Connect an artist account to the catalog group it may publish for."""
+
+    __tablename__ = "artist_profiles"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id"))
+    verification_status: Mapped[str] = mapped_column(String, default="pending")
+
+
 class Member(Base):
     __tablename__ = "members"
     id: Mapped[str] = mapped_column(String, primary_key=True)

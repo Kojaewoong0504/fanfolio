@@ -14,6 +14,7 @@ from app.image_processing import remove_light_background_bytes
 from app.mailer import MailDeliveryError, deliver_notification_email
 from app.models import (
     Artist,
+    ArtistProfile,
     Asset,
     AuditLog,
     BackgroundRemovalJob,
@@ -59,6 +60,7 @@ async def reset_database(session: AsyncSession) -> None:
         CollectionCampaign,
         Asset,
         Member,
+        ArtistProfile,
         Artist,
         MagicLink,
         Session,
@@ -144,6 +146,9 @@ async def seed_core(session: AsyncSession) -> dict:
             Drop(id="drop_live", name="NOVA-3 Comeback Live Drop", status="live"),
             Drop(id="drop_ended", status="ended"),
         ]
+    )
+    session.add(
+        ArtistProfile(user_id="artist", artist_id="artist_nova3", verification_status="verified")
     )
     session.add_all(
         [

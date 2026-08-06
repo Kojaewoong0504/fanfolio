@@ -52,6 +52,10 @@ def test_alembic_upgrade_creates_the_current_schema(tmp_path: Path) -> None:
             "uq_user_cards_card_serial",
             "uq_user_cards_user_redeem_code",
         } <= user_card_indexes
+        artist_profile_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(artist_profiles)").fetchall()
+        }
+        assert {"user_id", "artist_id", "verification_status"} <= artist_profile_columns
 
 
 def test_alembic_upgrade_adds_drop_metadata_to_a_legacy_database(tmp_path: Path) -> None:
