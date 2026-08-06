@@ -2,6 +2,7 @@
   <CORSRule>
     <AllowedOrigin>http://localhost:5173</AllowedOrigin>
     <AllowedOrigin>http://localhost:4174</AllowedOrigin>
+    <AllowedOrigin>http://localhost:4175</AllowedOrigin>
     <AllowedMethod>GET</AllowedMethod>
     <AllowedMethod>PUT</AllowedMethod>
     <AllowedMethod>HEAD</AllowedMethod>

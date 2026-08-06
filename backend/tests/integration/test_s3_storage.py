@@ -29,8 +29,10 @@ def test_s3_storage_round_trip_and_presign() -> None:
     except ClientError:
         client.create_bucket(Bucket=bucket)
     cors_rules = client.get_bucket_cors(Bucket=bucket)["CORSRules"]
+    allowed_origins = {origin for rule in cors_rules for origin in rule.get("AllowedOrigins", [])}
     assert any(
-        "http://localhost:5173" in rule.get("AllowedOrigins", [])
+        {"http://localhost:5173", "http://localhost:4174", "http://localhost:4175"}
+        <= allowed_origins
         and "PUT" in rule.get("AllowedMethods", [])
         and "*" in rule.get("AllowedHeaders", [])
         for rule in cors_rules
