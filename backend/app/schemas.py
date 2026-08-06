@@ -148,6 +148,32 @@ class AdminUserRoleUpdate(BaseModel):
     role: Literal["fan", "artist", "admin"]
 
 
+class CollectionCampaignCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    artist_id: str | None = Field(default=None, alias="artistId")
+    season_name: str | None = Field(default=None, alias="seasonName")
+    required_card_ids: list[str] = Field(min_length=1, alias="requiredCardIds")
+    benefit_title: str = Field(min_length=1, max_length=160, alias="benefitTitle")
+    benefit_description: str = Field(min_length=1, max_length=500, alias="benefitDescription")
+    status: Literal["active", "disabled"] = "active"
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class CollectionCampaignUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    artist_id: str | None = Field(default=None, alias="artistId")
+    season_name: str | None = Field(default=None, alias="seasonName")
+    required_card_ids: list[str] | None = Field(default=None, min_length=1, alias="requiredCardIds")
+    benefit_title: str | None = Field(
+        default=None, min_length=1, max_length=160, alias="benefitTitle"
+    )
+    benefit_description: str | None = Field(
+        default=None, min_length=1, max_length=500, alias="benefitDescription"
+    )
+    status: Literal["active", "disabled"] | None = None
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class AdminCardReviewRequest(BaseModel):
     decision: Literal["approve", "request_changes"]
     note: str | None = Field(default=None, max_length=500)

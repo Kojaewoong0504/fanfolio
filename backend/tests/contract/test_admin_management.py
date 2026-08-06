@@ -106,6 +106,40 @@ def test_admin_cannot_change_own_role_or_fan_manage_users(
     assert_error(actors["fan"].get("/api/admin/users"), 403, "FORBIDDEN")
 
 
+def test_admin_can_configure_a_collection_campaign(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    created = assert_success(
+        actors["admin"].post(
+            "/api/admin/collection-campaigns",
+            json={
+                "name": "2026 봄 완성 캠페인",
+                "artistId": "artist_nova3",
+                "seasonName": "2026 SPRING",
+                "requiredCardIds": ["card_published"],
+                "benefitTitle": "봄 컴백 디지털 메시지",
+                "benefitDescription": "완성 팬에게 디지털 메시지를 공개합니다.",
+            },
+        ),
+        201,
+    )
+    assert created["status"] == "active"
+    assert created["requiredCardIds"] == ["card_published"]
+
+    listed = assert_success(actors["admin"].get("/api/admin/collection-campaigns"))
+    assert listed["items"][0]["id"] == created["id"]
+    updated = assert_success(
+        actors["admin"].patch(
+            f"/api/admin/collection-campaigns/{created['id']}",
+            json={"status": "disabled", "benefitTitle": "수정된 디지털 메시지"},
+        )
+    )
+    assert updated["status"] == "disabled"
+    assert updated["benefitTitle"] == "수정된 디지털 메시지"
+
+    assert_error(actors["fan"].get("/api/admin/collection-campaigns"), 403, "FORBIDDEN")
+
+
 def test_publishing_a_card_creates_audit_log_and_fan_notification(
     actors: dict[str, TestClient], seeded: dict[str, Any], monkeypatch: Any
 ) -> None:

@@ -295,6 +295,9 @@ Base URL: `/api`
 | GET | `/admin/redeem-code-batches/{batchId}/qr.zip` | 배치 전체 QR PNG ZIP 다운로드 |
 | PATCH | `/admin/redeem-codes/{codeId}` | 만료/비활성화/상태 수정 |
 | GET | `/admin/users` | 사용자/역할 목록 (`q`, `role`, `page`, `pageSize` 지원; 응답 `meta.pagination`과 `isCurrentUser` 포함) |
+| GET | `/admin/collection-campaigns` | 관리자 특전 캠페인 목록 |
+| POST | `/admin/collection-campaigns` | 카드 조합·디지털 특전 캠페인 등록 |
+| PATCH | `/admin/collection-campaigns/{campaignId}` | 캠페인 카드 구성·문구·활성 상태 수정 |
 | GET | `/admin/audit-logs` | 감사 로그 (`action`, `q`, `page`, `pageSize` 지원; 응답 `meta.pagination` 포함) |
 
 `POST /admin/redeem-code-batches`

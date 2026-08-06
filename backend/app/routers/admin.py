@@ -17,6 +17,7 @@ from app.models import (
     Asset,
     AuditLog,
     Card,
+    CollectionCampaign,
     Drop,
     Member,
     RedeemCode,
@@ -30,6 +31,8 @@ from app.schemas import (
     AdminCardUpdate,
     AdminUserRoleUpdate,
     CodeBatchRequest,
+    CollectionCampaignCreate,
+    CollectionCampaignUpdate,
     DropCreateRequest,
     DropStatusUpdate,
     DropUpdateRequest,
@@ -63,6 +66,83 @@ def qr_zip_bytes(codes: list[str]) -> bytes:
         for code in codes:
             archive.writestr(f"{code}.png", qr_png_bytes(code))
     return output.getvalue()
+
+
+def collection_campaign_data(campaign: CollectionCampaign) -> dict:
+    return {
+        "id": campaign.id,
+        "name": campaign.name,
+        "artistId": campaign.artist_id,
+        "seasonName": campaign.season_name,
+        "requiredCardIds": campaign.required_card_ids,
+        "benefitTitle": campaign.benefit_title,
+        "benefitDescription": campaign.benefit_description,
+        "status": campaign.status,
+    }
+
+
+async def validate_campaign_cards(card_ids: list[str], session: DbSession) -> None:
+    if len(card_ids) != len(set(card_ids)):
+        raise AppError(422, "DUPLICATE_CAMPAIGN_CARD", "캠페인 카드 목록에 중복 카드가 있습니다.")
+    cards = await session.scalars(select(Card).where(Card.id.in_(card_ids)))
+    if len(cards.all()) != len(card_ids):
+        raise AppError(404, "CARD_NOT_FOUND", "캠페인에 포함할 카드를 찾을 수 없습니다.")
+
+
+@router.get("/collection-campaigns")
+async def list_collection_campaigns(_: AdminUser, session: DbSession) -> dict:
+    campaigns = await session.scalars(
+        select(CollectionCampaign).order_by(CollectionCampaign.status, CollectionCampaign.name)
+    )
+    return {"ok": True, "data": {"items": [collection_campaign_data(item) for item in campaigns]}}
+
+
+@router.post("/collection-campaigns", status_code=status.HTTP_201_CREATED)
+async def create_collection_campaign(
+    payload: CollectionCampaignCreate, admin: AdminUser, session: DbSession
+) -> dict:
+    await validate_campaign_cards(payload.required_card_ids, session)
+    campaign = CollectionCampaign(
+        id=f"campaign_{uuid4().hex[:10]}",
+        **payload.model_dump(exclude_unset=True, by_alias=False),
+    )
+    session.add(campaign)
+    await record_audit(
+        session,
+        actor_user_id=admin.id,
+        action="collection_campaign.created",
+        entity_type="collection_campaign",
+        entity_id=campaign.id,
+    )
+    await session.commit()
+    return {"ok": True, "data": collection_campaign_data(campaign)}
+
+
+@router.patch("/collection-campaigns/{campaign_id}")
+async def update_collection_campaign(
+    campaign_id: str,
+    payload: CollectionCampaignUpdate,
+    admin: AdminUser,
+    session: DbSession,
+) -> dict:
+    campaign = await session.get(CollectionCampaign, campaign_id)
+    if not campaign:
+        raise AppError(404, "CAMPAIGN_NOT_FOUND", "특전 캠페인을 찾을 수 없습니다.")
+    values = payload.model_dump(exclude_unset=True, by_alias=False)
+    if "required_card_ids" in values:
+        await validate_campaign_cards(values["required_card_ids"], session)
+    for field, value in values.items():
+        setattr(campaign, field, value)
+    await record_audit(
+        session,
+        actor_user_id=admin.id,
+        action="collection_campaign.updated",
+        entity_type="collection_campaign",
+        entity_id=campaign.id,
+        details={"fields": sorted(values)},
+    )
+    await session.commit()
+    return {"ok": True, "data": collection_campaign_data(campaign)}
 
 
 @router.get("/dashboard")

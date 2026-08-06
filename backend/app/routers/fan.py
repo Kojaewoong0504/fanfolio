@@ -9,7 +9,7 @@ from sqlalchemy import case, desc, func, or_, select, update
 
 from app.dependencies import DbSession, FanUser
 from app.errors import AppError
-from app.models import Artist, Asset, Card, Drop, Member, Notification, UserCard
+from app.models import Artist, Asset, Card, CollectionCampaign, Drop, Member, Notification, UserCard
 from app.rate_limit import enforce_rate_limit
 from app.schemas import (
     NotificationPreferencesUpdate,
@@ -104,6 +104,60 @@ async def collection_benefits(user: FanUser, session: DbSession) -> dict:
     rule is derived from the catalog, so adding a card automatically changes
     the required set size without a separate write-side configuration table.
     """
+    owned_card_ids = set(
+        (await session.scalars(select(UserCard.card_id).where(UserCard.user_id == user.id))).all()
+    )
+    campaigns = (
+        await session.scalars(
+            select(CollectionCampaign)
+            .where(CollectionCampaign.status == "active")
+            .order_by(CollectionCampaign.name)
+        )
+    ).all()
+    if campaigns:
+        artist_ids = {campaign.artist_id for campaign in campaigns if campaign.artist_id}
+        artists = {
+            artist.id: artist
+            for artist in await session.scalars(select(Artist).where(Artist.id.in_(artist_ids)))
+        }
+        return {
+            "ok": True,
+            "data": {
+                "items": [
+                    {
+                        "campaignId": campaign.id,
+                        "artistId": campaign.artist_id,
+                        "artistName": artists[campaign.artist_id].name
+                        if campaign.artist_id in artists
+                        else "Fanfolio",
+                        "seasonName": campaign.season_name or "기본 컬렉션",
+                        "requiredCount": len(campaign.required_card_ids),
+                        "ownedCount": sum(
+                            card_id in owned_card_ids for card_id in campaign.required_card_ids
+                        ),
+                        "completionRate": round(
+                            sum(card_id in owned_card_ids for card_id in campaign.required_card_ids)
+                            / len(campaign.required_card_ids)
+                            * 100
+                        ),
+                        "status": (
+                            "unlocked"
+                            if all(
+                                card_id in owned_card_ids for card_id in campaign.required_card_ids
+                            )
+                            else "locked"
+                        ),
+                        "benefit": {
+                            "type": "digital_bonus",
+                            "title": campaign.benefit_title,
+                            "description": campaign.benefit_description,
+                        },
+                    }
+                    for campaign in campaigns
+                ]
+            },
+        }
+
     catalog_rows = (
         await session.execute(
             select(Card, Artist)
@@ -113,9 +167,6 @@ async def collection_benefits(user: FanUser, session: DbSession) -> dict:
             .order_by(Card.artist_id, Card.season_name, Card.id)
         )
     ).all()
-    owned_card_ids = set(
-        (await session.scalars(select(UserCard.card_id).where(UserCard.user_id == user.id))).all()
-    )
     groups: dict[tuple[str, str], dict] = {}
     for card, artist in catalog_rows:
         artist_id = card.artist_id or "fanfolio"

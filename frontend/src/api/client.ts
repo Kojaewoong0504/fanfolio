@@ -25,6 +25,7 @@ export type CollectionSummary = {
 }
 
 export type CollectionBenefit = {
+  campaignId?: string
   artistId: string | null
   artistName: string
   seasonName: string

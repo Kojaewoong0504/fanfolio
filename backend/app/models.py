@@ -128,6 +128,20 @@ class UserCard(Base):
     acquired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class CollectionCampaign(Base):
+    """Operator-defined card set and the digital benefit it unlocks."""
+
+    __tablename__ = "collection_campaigns"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String)
+    artist_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    season_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    required_card_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    benefit_title: Mapped[str] = mapped_column(String)
+    benefit_description: Mapped[str] = mapped_column(String)
+    status: Mapped[str] = mapped_column(String, default="active")
+
+
 class Notification(Base):
     __tablename__ = "notifications"
     id: Mapped[str] = mapped_column(String, primary_key=True)

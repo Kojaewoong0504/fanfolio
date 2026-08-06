@@ -128,6 +128,42 @@ def test_collection_benefit_unlocks_when_a_catalog_set_is_complete(
     assert after["items"][0]["status"] == "unlocked"
 
 
+def test_collection_benefits_use_active_admin_campaign_rules(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    created = assert_success(
+        actors["admin"].post(
+            "/api/admin/collection-campaigns",
+            json={
+                "name": "운영자 지정 캠페인",
+                "artistId": "artist_nova3",
+                "requiredCardIds": ["card_published"],
+                "benefitTitle": "운영자 지정 특전",
+                "benefitDescription": "운영자가 지정한 특전입니다.",
+            },
+        ),
+        201,
+    )
+    benefits = assert_success(actors["fan"].get("/api/me/collection/benefits"))
+    assert benefits["items"] == [
+        {
+            "campaignId": created["id"],
+            "artistId": "artist_nova3",
+            "artistName": "드림스케이프",
+            "seasonName": "기본 컬렉션",
+            "requiredCount": 1,
+            "ownedCount": 0,
+            "completionRate": 0,
+            "status": "locked",
+            "benefit": {
+                "type": "digital_bonus",
+                "title": "운영자 지정 특전",
+                "description": "운영자가 지정한 특전입니다.",
+            },
+        }
+    ]
+
+
 def test_owned_card_detail_exposes_handwriting_and_voice_entitlements(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:
