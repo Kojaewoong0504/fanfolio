@@ -225,6 +225,11 @@ def test_fan_can_claim_a_completed_collection_benefit_once(
     download = actors["fan"].get(claim["downloadUrl"])
     assert download.status_code == 200
     assert download.content == b"fanfolio bonus"
+    logs = assert_success(actors["admin"].get("/api/admin/audit-logs"))
+    download_log = next(
+        item for item in logs["items"] if item["action"] == "collection_benefit.downloaded"
+    )
+    assert download_log["entityId"] == campaign["id"]
     assert_error(actors["fan"].post(path), 409, "BENEFIT_ALREADY_CLAIMED")
 
     item = assert_success(actors["fan"].get("/api/me/collection/benefits"))["items"][0]

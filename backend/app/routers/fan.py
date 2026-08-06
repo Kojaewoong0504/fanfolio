@@ -327,6 +327,15 @@ async def download_collection_benefit(
     asset = await session.get(Asset, campaign.benefit_asset_id)
     if asset is None or not asset.storage_path or not Path(asset.storage_path).is_file():
         raise AppError(404, "BENEFIT_ASSET_NOT_READY", "특전 파일이 아직 준비되지 않았습니다.")
+    await record_audit(
+        session,
+        actor_user_id=user.id,
+        action="collection_benefit.downloaded",
+        entity_type="collection_campaign",
+        entity_id=campaign.id,
+        details={"claimId": claim.id, "assetId": asset.id},
+    )
+    await session.commit()
     return FileResponse(
         asset.storage_path,
         media_type=asset.content_type or "application/octet-stream",
