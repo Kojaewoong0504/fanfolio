@@ -230,6 +230,19 @@ S3_SECRET_ACCESS_KEY=fanfolio-local-secret \
 .venv/bin/pytest -q tests/integration/test_s3_storage.py
 ```
 
+ClamAV의 정상 파일 통과와 EICAR 테스트 시그니처 차단까지 확인하려면 같은 스택에서
+다음 통합 테스트를 실행합니다. 테스트 시그니처는 실제 악성 코드가 아니라 안티바이러스
+연동 검증용 표준 문자열입니다.
+
+```bash
+cd backend
+FANFOLIO_CLAMAV_INTEGRATION=1 \
+ASSET_SCAN_MODE=clamav \
+CLAMAV_HOST=localhost \
+CLAMAV_PORT=3310 \
+.venv/bin/pytest -q tests/integration/test_clamav.py
+```
+
 포트를 바꿨다면 `S3_ENDPOINT_URL`도 같은 외부 MinIO 포트로 맞추세요. 검증 후에는
 `docker compose -f docker-compose.storage.example.yml down -v`로 테스트 컨테이너와 볼륨을
 정리합니다.
