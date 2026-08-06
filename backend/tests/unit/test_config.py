@@ -119,3 +119,25 @@ def test_production_settings_reject_wildcard_cors_origins() -> None:
         assert "wildcard" in str(error)
     else:
         raise AssertionError("production CORS origins must not use a wildcard")
+
+
+def test_production_settings_require_asset_scanning() -> None:
+    settings = Settings(
+        app_env="production",
+        frontend_url="https://app.fanfolio.example",
+        frontend_origins="https://app.fanfolio.example",
+        mail_delivery_mode="smtp",
+        mail_from="Fanfolio <no-reply@fanfolio.example>",
+        smtp_host="smtp.example.com",
+        auto_create_schema=False,
+        rate_limit_backend="redis",
+        download_signing_secret="production-secret-from-environment",
+        asset_scan_mode="disabled",
+    )
+
+    try:
+        settings.validate_runtime()
+    except ValueError as error:
+        assert "ASSET_SCAN_MODE" in str(error)
+    else:
+        raise AssertionError("production uploads must not disable safety scanning")

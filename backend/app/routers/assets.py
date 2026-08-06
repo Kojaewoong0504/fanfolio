@@ -10,6 +10,7 @@ from app.errors import AppError
 from app.image_processing import save_uploaded_bytes
 from app.models import Asset, Role
 from app.schemas import AssetTransformUpdate, UploadPresignRequest
+from app.upload_safety import scan_uploaded_content
 
 router = APIRouter(prefix="/api", tags=["assets"])
 
@@ -74,6 +75,11 @@ async def upload_asset_content(
         raise AppError(422, "EMPTY_UPLOAD", "업로드할 파일이 없습니다.")
     if len(content) > get_settings().max_upload_bytes:
         raise AppError(413, "UPLOAD_TOO_LARGE", "업로드 파일이 너무 큽니다.")
+    scan_uploaded_content(
+        content_type=asset.content_type,
+        purpose=asset.purpose,
+        content=content,
+    )
     asset.storage_path = save_uploaded_bytes(get_settings().storage_dir, asset.id, content)
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

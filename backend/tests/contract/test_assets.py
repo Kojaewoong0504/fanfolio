@@ -87,6 +87,24 @@ def test_upload_rejects_expired_urls_and_oversized_content(
     )
 
 
+def test_upload_rejects_obvious_executable_content(
+    actors: dict[str, TestClient],
+) -> None:
+    asset = assert_success(
+        actors["artist"].post(
+            "/api/uploads/presign",
+            json={"fileName": "unsafe.png", "contentType": "image/png", "purpose": "card"},
+        ),
+        201,
+    )
+
+    assert_error(
+        actors["artist"].put(asset["uploadUrl"], content=b"MZ\x90\x00fake executable"),
+        422,
+        "UNSAFE_UPLOAD",
+    )
+
+
 def test_fan_cannot_presign_an_asset(actors: dict[str, TestClient]) -> None:
     assert_error(
         actors["fan"].post(
