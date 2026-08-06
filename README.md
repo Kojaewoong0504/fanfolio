@@ -243,6 +243,15 @@ CLAMAV_PORT=3310 \
 .venv/bin/pytest -q tests/integration/test_clamav.py
 ```
 
+두 검증을 한 번에 실행하고 완료 후 스택까지 정리하려면 루트에서 다음 스크립트를
+사용합니다. Docker 대신 Podman을 사용한다면 연결 이름을 지정할 수 있습니다.
+
+```bash
+./scripts/storage-integration-smoke.sh
+COMPOSE_PROVIDER=podman PODMAN_CONNECTION=fanfolio-machine \
+  ./scripts/storage-integration-smoke.sh
+```
+
 포트를 바꿨다면 `S3_ENDPOINT_URL`도 같은 외부 MinIO 포트로 맞추세요. 검증 후에는
 `docker compose -f docker-compose.storage.example.yml down -v`로 테스트 컨테이너와 볼륨을
 정리합니다.
