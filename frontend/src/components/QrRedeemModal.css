@@ -1,0 +1,20 @@
+.qr-photo-upload {
+  display: block;
+  margin: 0 0 18px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--violet);
+  font-size: 12px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.qr-photo-upload input {
+  display: block;
+  width: 100%;
+  margin-top: 7px;
+  font-size: 11px;
+  color: var(--muted);
+}
