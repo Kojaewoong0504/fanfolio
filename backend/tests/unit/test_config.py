@@ -142,3 +142,14 @@ def test_production_settings_require_asset_scanning() -> None:
         assert "ASSET_SCAN_MODE" in str(error)
     else:
         raise AssertionError("production uploads must not disable safety scanning")
+
+
+def test_upload_cleanup_interval_must_be_positive() -> None:
+    settings = Settings(upload_cleanup_interval_seconds=0)
+
+    try:
+        settings.validate_runtime()
+    except ValueError as error:
+        assert "UPLOAD_CLEANUP_INTERVAL_SECONDS" in str(error)
+    else:
+        raise AssertionError("upload cleanup interval must be positive")

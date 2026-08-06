@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_use_tls: bool = True
     task_queue_mode: str = "inline"
+    upload_cleanup_interval_seconds: int = 15 * 60
     celery_broker_url: str = "redis://localhost:6379/0"
     celery_result_backend: str = "redis://localhost:6379/0"
     rate_limit_backend: str = "memory"
@@ -68,6 +69,8 @@ class Settings(BaseSettings):
             raise ValueError("STORAGE_BACKEND must be local or s3")
         if self.storage_backend == "s3" and not self.s3_bucket:
             raise ValueError("S3_BUCKET is required when STORAGE_BACKEND is s3")
+        if self.upload_cleanup_interval_seconds <= 0:
+            raise ValueError("UPLOAD_CLEANUP_INTERVAL_SECONDS must be positive")
         if self.app_env != "production":
             return
         if self.auto_create_schema:

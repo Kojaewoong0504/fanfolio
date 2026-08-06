@@ -57,6 +57,13 @@ def test_background_removal_can_dispatch_to_celery(monkeypatch: Any) -> None:
     assert dispatched == ["job_celery_test"]
 
 
+def test_celery_beat_schedules_expired_upload_cleanup() -> None:
+    schedule = tasks.celery_app.conf.beat_schedule["cleanup-expired-uploads"]
+
+    assert schedule["task"] == "fanfolio.cleanup_expired_uploads"
+    assert schedule["schedule"] == get_settings().upload_cleanup_interval_seconds
+
+
 def test_artist_can_presign_and_upload_an_asset(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:

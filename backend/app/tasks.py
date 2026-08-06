@@ -15,6 +15,12 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
+    beat_schedule={
+        "cleanup-expired-uploads": {
+            "task": "fanfolio.cleanup_expired_uploads",
+            "schedule": settings.upload_cleanup_interval_seconds,
+        }
+    },
 )
 
 
