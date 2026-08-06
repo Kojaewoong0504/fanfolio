@@ -11,10 +11,12 @@ COMPOSE_FILE="$ROOT_DIR/docker-compose.local.yml"
 BACKEND_DIR="$ROOT_DIR/backend"
 LOG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/fanfolio-integration.XXXXXX")"
 API_PID=""
+CELERY_PID=""
 
 cleanup() {
   set +e
   [[ -n "$API_PID" ]] && kill "$API_PID" 2>/dev/null || true
+  [[ -n "$CELERY_PID" ]] && kill "$CELERY_PID" 2>/dev/null || true
   if [[ "${STOP_SERVICES:-0}" == "1" ]]; then
     compose down
   fi
@@ -99,6 +101,31 @@ echo "[3/5] starting API against PostgreSQL and Mailpit"
 ) >"$LOG_DIR/api.log" 2>&1 &
 API_PID=$!
 wait_for_url http://localhost:8000/api/health/ready
+
+echo "[3b/5] starting and checking a Celery worker"
+(
+  cd "$BACKEND_DIR"
+  .venv/bin/celery -A app.tasks:celery_app worker --loglevel=WARNING --concurrency=1
+) >"$LOG_DIR/celery.log" 2>&1 &
+CELERY_PID=$!
+for _ in {1..30}; do
+  if "$BACKEND_DIR/.venv/bin/celery" -A app.tasks:celery_app inspect ping --timeout=1 2>/dev/null \
+    | grep -q "pong"; then
+    break
+  fi
+  if ! kill -0 "$CELERY_PID" 2>/dev/null; then
+    echo "Celery worker exited before responding." >&2
+    cat "$LOG_DIR/celery.log" >&2
+    exit 1
+  fi
+  sleep 1
+done
+if ! "$BACKEND_DIR/.venv/bin/celery" -A app.tasks:celery_app inspect ping --timeout=1 2>/dev/null \
+  | grep -q "pong"; then
+  echo "Timed out waiting for the Celery worker." >&2
+  cat "$LOG_DIR/celery.log" >&2
+  exit 1
+fi
 
 echo "[4/5] verifying Redis reachability"
 "$BACKEND_DIR/.venv/bin/python" - <<'PY'
