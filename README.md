@@ -83,6 +83,7 @@ CELERY_RESULT_BACKEND=redis://localhost:6379/0
 
 cd backend
 .venv/bin/celery -A app.tasks:celery_app worker --loglevel=INFO
+.venv/bin/celery -A app.tasks:celery_app beat --loglevel=INFO
 ```
 
 운영에서는 요청 제한도 모든 API 인스턴스가 공유해야 하므로 Redis를 사용합니다.
@@ -203,7 +204,7 @@ API와 Celery는 컨테이너 내부의 비특권 `fanfolio` 사용자로 실행
 
 ```bash
 curl http://localhost:8000/api/health/ready
-docker compose -f docker-compose.stack.yml logs -f api worker
+docker compose -f docker-compose.stack.yml logs -f api worker beat
 ```
 
 종료 및 로컬 볼륨까지 삭제하려면 다음을 사용합니다.

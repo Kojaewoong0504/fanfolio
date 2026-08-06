@@ -96,6 +96,31 @@ services:
     volumes:
       - fanfolio-stack-storage:/var/lib/fanfolio/storage
 
+  beat:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql+asyncpg://fanfolio:fanfolio-local-only@postgres:5432/fanfolio
+      AUTO_CREATE_SCHEMA: "false"
+      STORAGE_DIR: /var/lib/fanfolio/storage
+      TASK_QUEUE_MODE: celery
+      UPLOAD_CLEANUP_INTERVAL_SECONDS: "900"
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      RATE_LIMIT_BACKEND: redis
+      RATE_LIMIT_REDIS_URL: redis://redis:6379/1
+    command: celery -A app.tasks:celery_app beat --loglevel=INFO
+    volumes:
+      - fanfolio-stack-storage:/var/lib/fanfolio/storage
+
 volumes:
   fanfolio-stack-postgres:
   fanfolio-stack-storage:
