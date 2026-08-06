@@ -1,18 +1,74 @@
+import { useState } from 'react'
 import './App.css'
 
+type Tab = 'collection' | 'discover' | 'alerts' | 'settings'
+
+const cards = [
+  { id: '#021', title: '컴백 기념 사인 카드', artist: '드림스케이프', member: '민호', image: '/src/assets/hero.png' },
+  { id: '#022', title: 'NOVA 특별 카드', artist: '드림스케이프', member: '유준', image: '/src/assets/hero.png' },
+  { id: '#023', title: '봄의 시작', artist: '드림스케이프', member: '하린', image: '/src/assets/hero.png' },
+]
+
 function App() {
+  const [tab, setTab] = useState<Tab>('collection')
+  const [selectedCard, setSelectedCard] = useState<typeof cards[number] | null>(null)
+  const [showRedeem, setShowRedeem] = useState(false)
+  const [signedIn, setSignedIn] = useState(true)
+
+  if (!signedIn) {
+    return <Login onLogin={() => setSignedIn(true)} />
+  }
+
   return (
-    <main className="setup-page">
-      <p className="eyebrow">FANFOLIO · DEVELOPMENT READY</p>
-      <h1>Fanfolio 개발 환경이 준비되었습니다.</h1>
-      <p>팬 앱, 관리자 웹, 아티스트 스튜디오를 이 프론트엔드에서 단계적으로 구현합니다.</p>
-      <div className="setup-grid">
-        <article><strong>팬 앱</strong><span>코드·QR 카드 발급, 컬렉션, 탐색, 알림</span></article>
-        <article><strong>관리자 웹</strong><span>카드·드롭·리딤 코드 운영</span></article>
-        <article><strong>아티스트 스튜디오</strong><span>특별 카드·손글씨 제작과 검수</span></article>
-      </div>
+    <main className="app-shell">
+      <div className="phone-bar"><span>9:41</span><span>● ● ▰</span></div>
+      <header className="app-header">
+        <div><span className="eyebrow">FANFOLIO</span><h1>{tabTitle(tab)}</h1></div>
+        <button className="icon-button" onClick={() => setShowRedeem(true)} aria-label="카드 등록">+</button>
+      </header>
+
+      <section className="screen">
+        {tab === 'collection' && <Collection onSelect={setSelectedCard} onRedeem={() => setShowRedeem(true)} />}
+        {tab === 'discover' && <Discover onSelect={setSelectedCard} />}
+        {tab === 'alerts' && <Alerts />}
+        {tab === 'settings' && <Settings onLogout={() => setSignedIn(false)} />}
+      </section>
+
+      <nav className="bottom-nav" aria-label="주요 메뉴">
+        <NavItem active={tab === 'collection'} label="컬렉션" onClick={() => setTab('collection')} />
+        <NavItem active={tab === 'discover'} label="탐색" onClick={() => setTab('discover')} />
+        <NavItem active={tab === 'alerts'} label="알림" onClick={() => setTab('alerts')} />
+        <NavItem active={tab === 'settings'} label="설정" onClick={() => setTab('settings')} />
+      </nav>
+
+      {showRedeem && <RedeemModal onClose={() => setShowRedeem(false)} />}
+      <button className="floating-register" onClick={() => setShowRedeem(true)}>카드 등록</button>
+      {selectedCard && <CardDetail card={selectedCard} onClose={() => setSelectedCard(null)} />}
     </main>
   )
 }
+
+function tabTitle(tab: Tab) { return { collection: '내 컬렉션', discover: '탐색', alerts: '알림', settings: '설정' }[tab] }
+
+function Login({ onLogin }: { onLogin: () => void }) {
+  const [email, setEmail] = useState('')
+  return <main className="login-screen"><span className="brand-mark">F</span><p className="eyebrow">FANFOLIO</p><h1>내 손안의<br />팬 컬렉션</h1><p className="muted">좋아하는 아티스트의 순간을<br />디지털 카드로 간직하세요.</p><label className="field-label">이메일</label><input value={email} onChange={e => setEmail(e.target.value)} placeholder="이메일을 입력하세요" type="email" /><button className="primary" onClick={onLogin} disabled={!email.includes('@')}>로그인 링크 받기</button><p className="login-note">비밀번호 없이 이메일 링크로 안전하게 로그인합니다.</p></main>
+}
+
+function Collection({ onSelect, onRedeem }: { onSelect: (card: typeof cards[number]) => void, onRedeem: () => void }) {
+  return <><div className="summary"><div><span className="muted">보유 카드 수</span><strong>18 <small>/ 80</small></strong></div><button onClick={onRedeem} className="outline">+ 카드 등록</button></div><div className="section-heading"><h2>최근 수집한 카드</h2><button>전체 보기</button></div><div className="card-grid">{cards.map(card => <button className="card-tile" key={card.id} onClick={() => onSelect(card)}><img src={card.image} alt="카드 이미지" /><span>{card.id}</span><b>{card.member}</b></button>)}</div><div className="empty-slot" onClick={onRedeem}><span>+</span><b>새 카드를 등록하세요</b><small>QR 또는 카드 코드를 사용합니다.</small></div></>
+}
+
+function Discover({ onSelect }: { onSelect: (card: typeof cards[number]) => void }) { return <><input className="search" placeholder="카드, 아티스트 검색" /><div className="section-heading"><h2>인기 카드</h2><button>전체 보기</button></div><div className="horizontal-cards">{cards.map(card => <button key={card.id} onClick={() => onSelect(card)}><img src={card.image} alt="" /><b>{card.member}</b></button>)}</div><div className="section-heading"><h2>새로운 카드</h2><button>전체 보기</button></div><div className="discover-list">{cards.map(card => <button key={card.id} onClick={() => onSelect(card)}><img src={card.image} alt="" /><span><b>{card.title}</b><small>{card.artist} · {card.member}</small></span><strong>›</strong></button>)}</div></> }
+
+function Alerts() { return <div className="alert-list">{[['새 카드', '발행번호 #021', '새 카드가 공개되었습니다.'], ['컬렉션', '컬렉션이 업데이트되었습니다', '보유 카드가 18장으로 늘었어요.'], ['공지', '서비스 점검 안내', '5월 12일(월) 02:00 - 04:00']].map(([tag, title, body]) => <article key={title}><span className="tag">{tag}</span><h2>{title}</h2><p>{body}</p><small>10분 전</small></article>)}</div> }
+
+function Settings({ onLogout }: { onLogout: () => void }) { return <><div className="profile"><div className="avatar">팬</div><div><b>팬포리오</b><small>fanfolio_1234</small></div><span>›</span></div><div className="settings-list">{['프로필', '계정', '알림 설정', '앱 정보'].map(item => <button key={item}><span>{item}</span><strong>›</strong></button>)}</div><button className="logout" onClick={onLogout}>로그아웃</button></> }
+
+function CardDetail({ card, onClose }: { card: typeof cards[number], onClose: () => void }) { return <aside className="detail-panel"><button onClick={onClose}>닫기</button><img src={card.image} alt="카드 상세" /><dl><div><dt>아티스트</dt><dd>{card.artist}</dd></div><div><dt>멤버</dt><dd>{card.member}</dd></div><div><dt>발행번호</dt><dd>{card.id}</dd></div><div><dt>획득 경로</dt><dd>콘텐츠 코드 #1</dd></div></dl><button className="primary">컬렉션에 추가</button></aside> }
+
+function RedeemModal({ onClose }: { onClose: () => void }) { const [code, setCode] = useState(''); return <div className="modal-backdrop"><div className="modal"><button className="modal-close" onClick={onClose}>×</button><h2>카드 등록</h2><p className="muted">카드 패키지의 QR을 스캔하거나<br />코드를 직접 입력하세요.</p><div className="qr-box"><span>QR</span><b>QR 스캔</b><small>카메라로 코드를 비춰주세요.</small></div><div className="divider">또는 코드 입력</div><input value={code} onChange={e => setCode(e.target.value)} placeholder="예: NOVA-VALID-01" /><button className="primary" disabled={!code}>카드 등록하기</button></div></div> }
+
+function NavItem({ active, label, onClick }: { active: boolean, label: string, onClick: () => void }) { return <button className={active ? 'nav-item active' : 'nav-item'} onClick={onClick}><span className="nav-dot" />{label}</button> }
 
 export default App
