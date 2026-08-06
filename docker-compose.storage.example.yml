@@ -17,7 +17,9 @@ services:
       - fanfolio-minio:/data
 
   clamav:
-    image: clamav/clamav:latest
+    # Pin a current official multi-architecture Debian image. The floating
+    # `latest` tag may resolve to a manifest without linux/arm64.
+    image: clamav/clamav:1.5.3-debian13-slim
     ports:
       - "3310:3310"
     healthcheck:
