@@ -62,11 +62,22 @@ export type CurrentUser = {
 export type UserCardDetail = {
   userCardId: string
   serialNumber: number
+  acquiredAt: string
   acquisitionSource: string
+  drop: { name: string } | null
+  redeemCode: { code: string } | null
+  futureBenefitPreview: string | null
   card: {
     id: string
     name: string
     isOfficial: boolean
+    seasonName: string | null
+    cardType: string | null
+    rarity: string | null
+    signatureText: string | null
+    handwrittenMessage: string | null
+    issueLimit: number | null
+    status: string
     handwritingImageUrl: string | null
     hasVoice: boolean
     voiceAudioUrl: string | null

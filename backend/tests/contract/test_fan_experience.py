@@ -78,8 +78,17 @@ def test_card_detail_is_available_only_to_its_owner(
     assert detail["card"]["imageUrl"] == "/src/assets/hero.png"
     assert detail["card"]["artistName"] == "드림스케이프"
     assert detail["card"]["memberName"] == "유나"
+    assert detail["card"]["seasonName"] == "2026 SPRING"
+    assert detail["card"]["rarity"] == "Special"
+    assert detail["card"]["signatureText"] == "오늘 와줘서 고마워"
+    assert detail["card"]["status"] == "published"
+    assert detail["card"]["issueLimit"] == 500
+    assert detail["acquiredAt"]
     assert detail["serialNumber"] == 1
     assert detail["acquisitionSource"] == "qr"
+    assert detail["drop"] == {"name": "NOVA-3 Comeback Live Drop"}
+    assert detail["redeemCode"] is None
+    assert detail["futureBenefitPreview"]
 
     other_fan = TestClient(app)
     other_fan.cookies.set("fanfolio_session", seeded["sessions"]["otherFan"])

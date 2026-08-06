@@ -8,7 +8,7 @@ from sqlalchemy import func, or_, select, update
 
 from app.dependencies import DbSession, FanUser
 from app.errors import AppError
-from app.models import Artist, Asset, Card, Member, Notification, UserCard
+from app.models import Artist, Asset, Card, Drop, Member, Notification, UserCard
 from app.rate_limit import enforce_rate_limit
 from app.schemas import (
     NotificationPreferencesUpdate,
@@ -165,17 +165,18 @@ async def update_notification_preferences(
 async def card_detail(user_card_id: str, user: FanUser, session: DbSession) -> dict:
     row = (
         await session.execute(
-            select(UserCard, Card, Artist, Member)
+            select(UserCard, Card, Artist, Member, Drop)
             .select_from(UserCard)
             .join(Card, UserCard.card_id == Card.id)
             .outerjoin(Artist, Card.artist_id == Artist.id)
             .outerjoin(Member, Card.member_id == Member.id)
+            .outerjoin(Drop, UserCard.drop_id == Drop.id)
             .where(UserCard.id == user_card_id, UserCard.user_id == user.id)
         )
     ).one_or_none()
     if not row:
         raise AppError(404, "USER_CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
-    uc, card, artist, member = row
+    uc, card, artist, member, drop = row
     handwriting_image_url = None
     if card.handwriting_asset_id:
         handwriting_asset = await session.get(Asset, card.handwriting_asset_id)
@@ -193,11 +194,19 @@ async def card_detail(user_card_id: str, user: FanUser, session: DbSession) -> d
         "data": {
             "userCardId": uc.id,
             "serialNumber": uc.serial_number,
+            "acquiredAt": uc.acquired_at.isoformat(),
             "acquisitionSource": uc.acquisition_source,
             "card": {
                 "id": card.id,
                 "name": card.name,
                 "isOfficial": card.is_official,
+                "seasonName": card.season_name,
+                "cardType": card.template_id,
+                "rarity": card.rarity,
+                "signatureText": card.signature_text,
+                "handwrittenMessage": None,
+                "issueLimit": card.issue_limit,
+                "status": card.status,
                 "imageUrl": card_image_url(card),
                 "artistId": artist.id if artist else card.artist_id,
                 "artistName": artist.name if artist else None,
@@ -207,6 +216,9 @@ async def card_detail(user_card_id: str, user: FanUser, session: DbSession) -> d
                 "hasVoice": card.has_voice and voice_audio_url is not None,
                 "voiceAudioUrl": voice_audio_url,
             },
+            "drop": {"name": drop.name} if drop else None,
+            "redeemCode": None,
+            "futureBenefitPreview": "이 카드는 추후 스페셜 카드 해금 조건에 사용될 수 있습니다.",
         },
     }
 

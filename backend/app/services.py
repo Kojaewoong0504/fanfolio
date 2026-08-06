@@ -124,6 +124,10 @@ async def seed_core(session: AsyncSession) -> dict:
                 status="published",
                 artist_id="artist_nova3",
                 member_id="member_yuna",
+                season_name="2026 SPRING",
+                rarity="Special",
+                signature_text="오늘 와줘서 고마워",
+                issue_limit=500,
                 image_url="/src/assets/hero.png",
             ),
             Card(
@@ -133,7 +137,7 @@ async def seed_core(session: AsyncSession) -> dict:
                 artist_id="artist_nova3",
                 image_url="/src/assets/hero.png",
             ),
-            Drop(id="drop_live", status="live"),
+            Drop(id="drop_live", name="NOVA-3 Comeback Live Drop", status="live"),
             Drop(id="drop_ended", status="ended"),
         ]
     )
@@ -371,6 +375,7 @@ async def redeem(
             id=f"uc_{uuid4().hex[:12]}",
             user_id=user_id,
             card_id=card.id,
+            drop_id=code.drop_id,
             serial_number=serial,
             acquisition_source=acquisition_source,
             acquired_at=now(),

@@ -238,14 +238,25 @@ Fanfolio의 회원가입과 로그인은 이메일 매직링크를 같은 흐름
   "data": {
     "userCardId": "uc_123",
     "serialNumber": 1,
+    "acquiredAt": "2026-08-05T00:00:00Z",
     "acquisitionSource": "qr",
     "card": {
       "id": "card_published",
       "name": "컴백 기념 사인 카드",
       "isOfficial": true,
+      "seasonName": "2026 SPRING",
+      "cardType": "template_signature_v1",
+      "rarity": "Special",
+      "signatureText": "오늘 와줘서 고마워",
+      "handwrittenMessage": null,
+      "issueLimit": 500,
+      "status": "published",
       "handwritingImageUrl": "https://...",
       "hasVoice": false
-    }
+    },
+    "drop": { "name": "NOVA-3 Comeback Live Drop" },
+    "redeemCode": null,
+    "futureBenefitPreview": "이 카드는 추후 스페셜 카드 해금 조건에 사용될 수 있습니다."
   }
 }
 ```
