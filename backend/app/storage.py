@@ -16,6 +16,8 @@ class AssetStorage(Protocol):
 
     def preview_path(self, card_id: str) -> str: ...
 
+    def exists(self, storage_path: str) -> bool: ...
+
 
 class LocalAssetStorage:
     """Filesystem-backed provider used by local development and tests."""
@@ -28,6 +30,9 @@ class LocalAssetStorage:
 
     def preview_path(self, card_id: str) -> str:
         return str(self.root / "previews" / f"{card_id}.png")
+
+    def exists(self, storage_path: str) -> bool:
+        return Path(storage_path).is_file()
 
     def save_bytes(self, asset_id: str, content: bytes) -> str:
         path = Path(self.asset_path(asset_id, ".bin"))

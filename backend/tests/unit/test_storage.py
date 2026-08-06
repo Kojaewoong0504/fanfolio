@@ -14,3 +14,5 @@ def test_local_asset_storage_writes_assets_under_the_configured_root(tmp_path: P
         tmp_path / "assets" / "asset_test-transparent.png"
     )
     assert storage.preview_path("card_test") == str(tmp_path / "previews" / "card_test.png")
+    assert storage.exists(path)
+    assert not storage.exists(str(tmp_path / "assets" / "missing.bin"))
