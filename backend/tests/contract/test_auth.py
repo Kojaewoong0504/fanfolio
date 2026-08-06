@@ -1,3 +1,6 @@
+from typing import Any
+
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from tests.conftest import assert_error, assert_success
@@ -83,6 +86,14 @@ def test_authenticated_user_can_log_out(actors: dict[str, TestClient]) -> None:
 def test_admin_and_artist_can_log_out(actors: dict[str, TestClient]) -> None:
     assert actors["admin"].post("/api/auth/logout").status_code == 204
     assert actors["artist"].post("/api/auth/logout").status_code == 204
+
+
+def test_session_header_can_authenticate_a_browser_admin_client(
+    app: FastAPI, seeded: dict[str, Any]
+) -> None:
+    client = TestClient(app, headers={"X-Fanfolio-Session": seeded["sessions"]["admin"]})
+    response = client.get("/api/admin/dashboard")
+    assert response.status_code == 200, response.text
 
 
 def test_logout_invalidates_the_server_session(actors: dict[str, TestClient]) -> None:

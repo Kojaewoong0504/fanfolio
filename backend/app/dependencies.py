@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import Cookie, Depends
+from fastapi import Cookie, Depends, Header
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,14 +12,15 @@ DbSession = Annotated[AsyncSession, Depends(get_session)]
 
 
 async def current_user(
-    session: DbSession, fanfolio_session: str | None = Cookie(default=None)
+    session: DbSession,
+    fanfolio_session: str | None = Cookie(default=None),
+    session_header: str | None = Header(default=None, alias="X-Fanfolio-Session"),
 ) -> User:
-    if not fanfolio_session:
+    token = fanfolio_session or session_header
+    if not token:
         raise AppError(401, "AUTH_REQUIRED", "로그인이 필요합니다.")
     user = await session.scalar(
-        select(User)
-        .join(Session, Session.user_id == User.id)
-        .where(Session.token == fanfolio_session)
+        select(User).join(Session, Session.user_id == User.id).where(Session.token == token)
     )
     if not user:
         raise AppError(401, "AUTH_REQUIRED", "유효하지 않은 세션입니다.")

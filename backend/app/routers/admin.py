@@ -1,23 +1,121 @@
+import csv
+from datetime import datetime
+from io import StringIO
 from uuid import uuid4
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Query, status
+from fastapi.responses import StreamingResponse
+from sqlalchemy import func, select
 
 from app.dependencies import AdminUser, DbSession
 from app.errors import AppError
-from app.models import Card
+from app.models import Card, Drop, RedeemCode, RedeemCodeBatch
 from app.schemas import CodeBatchRequest
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
 @router.get("/dashboard")
-async def dashboard(_: AdminUser) -> dict:
-    return {"ok": True, "data": {"metrics": {"redeemedCount": 0, "activeDrops": 1}}}
+async def dashboard(_: AdminUser, session: DbSession) -> dict:
+    total_cards = await session.scalar(select(func.count()).select_from(Card))
+    published_cards = await session.scalar(
+        select(func.count()).select_from(Card).where(Card.status == "published")
+    )
+    active_drops = await session.scalar(
+        select(func.count()).select_from(Drop).where(Drop.status == "live")
+    )
+    redeemed_count = await session.scalar(select(func.coalesce(func.sum(RedeemCode.used_count), 0)))
+    return {
+        "ok": True,
+        "data": {
+            "metrics": {
+                "totalCards": total_cards or 0,
+                "publishedCards": published_cards or 0,
+                "activeDrops": active_drops or 0,
+                "redeemedCount": redeemed_count or 0,
+            }
+        },
+    }
+
+
+@router.get("/cards")
+async def cards(
+    _: AdminUser,
+    session: DbSession,
+    q: str | None = None,
+    card_status: str | None = Query(default=None, alias="status"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100, alias="pageSize"),
+) -> dict:
+    filters = []
+    if q:
+        filters.append(Card.name.ilike(f"%{q}%"))
+    if card_status:
+        filters.append(Card.status == card_status)
+    total = await session.scalar(select(func.count()).select_from(Card).where(*filters)) or 0
+    results = await session.scalars(
+        select(Card)
+        .where(*filters)
+        .order_by(Card.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    items = [
+        {
+            "id": card.id,
+            "name": card.name,
+            "status": card.status,
+            "rarity": card.rarity,
+            "issueLimit": card.issue_limit,
+            "imageAssetId": card.image_asset_id,
+            "ownerArtistId": card.owner_artist_id,
+        }
+        for card in results
+    ]
+    return {
+        "ok": True,
+        "data": {
+            "items": items,
+            "meta": {"pagination": {"page": page, "pageSize": page_size, "total": total}},
+        },
+    }
 
 
 @router.post("/redeem-code-batches", status_code=status.HTTP_201_CREATED)
-async def code_batch(payload: CodeBatchRequest, _: AdminUser) -> dict:
+async def code_batch(payload: CodeBatchRequest, _: AdminUser, session: DbSession) -> dict:
+    drop = await session.get(Drop, payload.drop_id)
+    card = await session.get(Card, payload.card_id)
+    if not drop:
+        raise AppError(404, "DROP_NOT_FOUND", "드롭을 찾을 수 없습니다.")
+    if not card:
+        raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
+    try:
+        expires_at = datetime.fromisoformat(payload.expires_at)
+    except ValueError as error:
+        raise AppError(422, "INVALID_EXPIRY", "만료 시각 형식이 올바르지 않습니다.") from error
     batch_id = f"batch_{uuid4().hex[:8]}"
+    batch = RedeemCodeBatch(
+        id=batch_id,
+        drop_id=payload.drop_id,
+        card_id=payload.card_id,
+        quantity=payload.quantity,
+        max_uses_per_code=payload.max_uses_per_code,
+        expires_at=payload.expires_at,
+        prefix=payload.prefix,
+    )
+    session.add(batch)
+    for _ in range(payload.quantity):
+        session.add(
+            RedeemCode(
+                code=f"{payload.prefix}-{uuid4().hex[:10].upper()}",
+                card_id=payload.card_id,
+                drop_id=payload.drop_id,
+                expires_at=expires_at,
+                max_uses=payload.max_uses_per_code,
+                batch_id=batch_id,
+            )
+        )
+    await session.commit()
     return {
         "ok": True,
         "data": {
@@ -27,6 +125,36 @@ async def code_batch(payload: CodeBatchRequest, _: AdminUser) -> dict:
             "csvExportUrl": f"/api/admin/redeem-code-batches/{batch_id}/export",
         },
     }
+
+
+@router.get("/redeem-code-batches/{batch_id}/export")
+async def export_code_batch(batch_id: str, _: AdminUser, session: DbSession) -> StreamingResponse:
+    batch = await session.get(RedeemCodeBatch, batch_id)
+    if not batch:
+        raise AppError(404, "BATCH_NOT_FOUND", "코드 배치를 찾을 수 없습니다.")
+    codes = await session.scalars(
+        select(RedeemCode).where(RedeemCode.batch_id == batch_id).order_by(RedeemCode.code)
+    )
+    output = StringIO(newline="")
+    writer = csv.writer(output)
+    writer.writerow(["code", "card_id", "drop_id", "expires_at", "used_count", "max_uses"])
+    for code in codes:
+        writer.writerow(
+            [
+                code.code,
+                code.card_id,
+                code.drop_id,
+                batch.expires_at,
+                code.used_count,
+                code.max_uses,
+            ]
+        )
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{batch_id}.csv"'},
+    )
 
 
 @router.post("/cards/{card_id}/publish")

@@ -70,6 +70,17 @@ class Drop(Base):
     status: Mapped[str] = mapped_column(String, default="live")
 
 
+class RedeemCodeBatch(Base):
+    __tablename__ = "redeem_code_batches"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    drop_id: Mapped[str] = mapped_column(ForeignKey("drops.id"))
+    card_id: Mapped[str] = mapped_column(ForeignKey("cards.id"))
+    quantity: Mapped[int] = mapped_column(Integer)
+    max_uses_per_code: Mapped[int] = mapped_column(Integer)
+    expires_at: Mapped[str] = mapped_column(String)
+    prefix: Mapped[str] = mapped_column(String)
+
+
 class RedeemCode(Base):
     __tablename__ = "redeem_codes"
     code: Mapped[str] = mapped_column(String, primary_key=True)
@@ -78,6 +89,9 @@ class RedeemCode(Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     used_count: Mapped[int] = mapped_column(Integer, default=0)
     max_uses: Mapped[int] = mapped_column(Integer, default=1)
+    batch_id: Mapped[str | None] = mapped_column(
+        ForeignKey("redeem_code_batches.id"), nullable=True
+    )
 
 
 class UserCard(Base):
