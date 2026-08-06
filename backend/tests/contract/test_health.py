@@ -62,6 +62,21 @@ def test_readiness_checks_the_shared_rate_limit_backend(
     assert checked is True
 
 
+def test_readiness_returns_service_unavailable_when_rate_limiter_is_down(
+    client: TestClient,
+    monkeypatch: Any,
+) -> None:
+    async def failed_check_rate_limit_backend() -> None:
+        raise OSError("redis is unavailable")
+
+    monkeypatch.setattr(health, "check_rate_limit_backend", failed_check_rate_limit_backend)
+
+    response = client.get("/api/health/ready")
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "SERVICE_NOT_READY"
+
+
 def test_readiness_returns_service_unavailable_when_task_broker_is_down(
     client: TestClient,
     monkeypatch: Any,
