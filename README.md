@@ -5,6 +5,7 @@
 ## 개발 환경
 
 - `frontend/`: React + Vite + TypeScript
+- `admin_app/`: 한국어 관리자 운영 화면(정적 브라우저 앱)
 - `backend/`: FastAPI + SQLAlchemy + Alembic
 - 데이터베이스: SQLite로 시작하고 PostgreSQL로 마이그레이션 가능하게 설계
 
@@ -34,6 +35,16 @@ npm run dev
 ```
 
 프론트는 `http://localhost:5173`에서 실행되며 `/api` 요청을 FastAPI로 프록시합니다.
+
+### 4. 관리자 화면 실행
+
+```bash
+cd admin_app
+python3 -m http.server 4174
+```
+
+관리자 화면은 `http://localhost:4174`에서 열 수 있습니다. 기본 API 주소는
+`http://localhost:8000/api`이며, 설정 화면에서 다른 주소로 변경할 수 있습니다.
 
 ## VS Code 개발 환경
 
