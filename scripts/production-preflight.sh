@@ -33,5 +33,6 @@ print("Production settings passed")
 print(f"- frontend: {settings.frontend_url}")
 print(f"- allowed origins: {', '.join(settings.allowed_origins)}")
 print(f"- mail delivery: {settings.mail_delivery_mode}")
+print(f"- auto schema creation: {'enabled' if settings.auto_create_schema else 'disabled'}")
 print("- test-only routes: disabled")
 PY

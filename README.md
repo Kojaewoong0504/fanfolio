@@ -120,6 +120,7 @@ cp backend/.env.mailpit.example backend/.env
 
 ```dotenv
 DATABASE_URL=postgresql+asyncpg://fanfolio:fanfolio-local-only@localhost:5432/fanfolio
+AUTO_CREATE_SCHEMA=false
 TASK_QUEUE_MODE=celery
 CELERY_BROKER_URL=redis://localhost:6379/0
 CELERY_RESULT_BACKEND=redis://localhost:6379/0
@@ -134,6 +135,9 @@ python3 -m uv run celery -A app.tasks:celery_app worker --loglevel=INFO
 
 `http://localhost:8000/api/health/ready`가 `ready`를 반환하고, `http://localhost:8025`에서
 매직 링크 메일을 확인하면 데이터베이스·SMTP·작업 큐를 연결한 개발 검증이 끝납니다.
+
+운영에서는 `AUTO_CREATE_SCHEMA=false`를 유지하고 배포 단계에서 `alembic upgrade head`를
+먼저 실행합니다. 앱이 시작할 때 ORM이 임의로 테이블을 만들지 않도록 하는 설정입니다.
 
 ## VS Code 개발 환경
 
@@ -204,7 +208,7 @@ DATABASE_URL=postgresql+asyncpg://user:password@db:5432/fanfolio
 ```
 
 ```bash
-APP_ENV=production ./scripts/production-preflight.sh
+APP_ENV=production AUTO_CREATE_SCHEMA=false ./scripts/production-preflight.sh
 ```
 
 ## 백엔드 계약 테스트

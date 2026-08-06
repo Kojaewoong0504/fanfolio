@@ -17,8 +17,9 @@ from app.routers import admin, artist, assets, auth, fan, fixtures, health
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     # `lifespan` replaces the older startup/shutdown event decorators.
-    async with engine.begin() as connection:
-        await connection.run_sync(Base.metadata.create_all)
+    if get_settings().auto_create_schema:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
     yield
     await engine.dispose()
 

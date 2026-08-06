@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     app_env: str = "development"
     database_url: str = "sqlite+aiosqlite:///./fanfolio.db"
+    auto_create_schema: bool = True
     storage_dir: str = "./storage"
     frontend_origins: str = (
         "http://localhost:4174,http://localhost:4175,http://localhost:5173,"
@@ -48,6 +49,8 @@ class Settings(BaseSettings):
         """Fail fast when a production process would start with unsafe defaults."""
         if self.app_env != "production":
             return
+        if self.auto_create_schema:
+            raise ValueError("AUTO_CREATE_SCHEMA must be false in production; run Alembic first")
         if not self.frontend_url.startswith("https://"):
             raise ValueError("FRONTEND_URL must use HTTPS in production")
         if not self.allowed_origins:

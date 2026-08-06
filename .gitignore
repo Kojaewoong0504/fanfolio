@@ -24,3 +24,8 @@ backend/.pytest_cache/
 backend/.ruff_cache/
 backend/*.db
 backend/*.sqlite3
+
+# Local runtime artifacts
+fanfolio.db
+storage/
+.playwright-cli/
