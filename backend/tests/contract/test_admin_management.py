@@ -96,6 +96,41 @@ def test_admin_can_list_users_and_change_a_user_role(
     assert role_log["entityId"] == "fan"
 
 
+def test_admin_can_review_artist_catalog_affiliation(
+    actors: dict[str, TestClient],
+) -> None:
+    profiles = assert_success(actors["admin"].get("/api/admin/artist-profiles"))
+    profile = next(item for item in profiles["items"] if item["userId"] == "artist")
+    assert profile["artistId"] == "artist_nova3"
+    assert profile["verificationStatus"] == "verified"
+
+    pending = assert_success(
+        actors["admin"].patch(
+            "/api/admin/artist-profiles/artist",
+            json={"artistId": "artist_nova3", "verificationStatus": "pending"},
+        )
+    )
+    assert pending["verificationStatus"] == "pending"
+
+    approved = assert_success(
+        actors["admin"].patch(
+            "/api/admin/artist-profiles/artist",
+            json={"artistId": "artist_nova3", "verificationStatus": "verified"},
+        )
+    )
+    assert approved["verificationStatus"] == "verified"
+
+
+def test_fan_cannot_review_artist_catalog_affiliation(
+    actors: dict[str, TestClient],
+) -> None:
+    assert_error(
+        actors["fan"].get("/api/admin/artist-profiles"),
+        403,
+        "FORBIDDEN",
+    )
+
+
 def test_admin_can_filter_and_paginate_audit_logs(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:

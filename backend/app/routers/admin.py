@@ -14,6 +14,7 @@ from app.dependencies import AdminUser, DbSession
 from app.errors import AppError
 from app.models import (
     Artist,
+    ArtistProfile,
     Asset,
     AuditLog,
     Card,
@@ -26,6 +27,7 @@ from app.models import (
     User,
 )
 from app.schemas import (
+    AdminArtistProfileUpdate,
     AdminCardCreate,
     AdminCardReviewRequest,
     AdminCardUpdate,
@@ -592,6 +594,79 @@ async def update_user_role(
     )
     await session.commit()
     return {"ok": True, "data": {"id": user.id, "role": user.role.value}}
+
+
+def artist_profile_data(user: User, profile: ArtistProfile | None, artist: Artist | None) -> dict:
+    return {
+        "userId": user.id,
+        "email": user.email,
+        "nickname": user.nickname,
+        "artistId": profile.artist_id if profile else None,
+        "artistName": artist.name if artist else None,
+        "verificationStatus": profile.verification_status if profile else "pending",
+    }
+
+
+@router.get("/artist-profiles")
+async def list_artist_profiles(_: AdminUser, session: DbSession) -> dict:
+    rows = (
+        await session.execute(
+            select(User, ArtistProfile, Artist)
+            .outerjoin(ArtistProfile, ArtistProfile.user_id == User.id)
+            .outerjoin(Artist, Artist.id == ArtistProfile.artist_id)
+            .where(User.role == Role.ARTIST)
+            .order_by(User.email)
+        )
+    ).all()
+    return {
+        "ok": True,
+        "data": {
+            "items": [artist_profile_data(user, profile, artist) for user, profile, artist in rows]
+        },
+    }
+
+
+@router.patch("/artist-profiles/{user_id}")
+async def review_artist_profile(
+    user_id: str,
+    payload: AdminArtistProfileUpdate,
+    admin: AdminUser,
+    session: DbSession,
+) -> dict:
+    user = await session.get(User, user_id)
+    if not user:
+        raise AppError(404, "USER_NOT_FOUND", "사용자를 찾을 수 없습니다.")
+    if user.role != Role.ARTIST:
+        raise AppError(409, "USER_NOT_ARTIST", "아티스트 계정만 소속을 검수할 수 있습니다.")
+    artist = await session.get(Artist, payload.artist_id)
+    if not artist:
+        raise AppError(404, "ARTIST_NOT_FOUND", "선택한 그룹을 찾을 수 없습니다.")
+    profile = await session.get(ArtistProfile, user.id)
+    previous_status = profile.verification_status if profile else "pending"
+    if profile:
+        profile.artist_id = payload.artist_id
+        profile.verification_status = payload.verification_status
+    else:
+        profile = ArtistProfile(
+            user_id=user.id,
+            artist_id=payload.artist_id,
+            verification_status=payload.verification_status,
+        )
+        session.add(profile)
+    await record_audit(
+        session,
+        actor_user_id=admin.id,
+        action="artist_profile.reviewed",
+        entity_type="artist_profile",
+        entity_id=user.id,
+        details={
+            "previousStatus": previous_status,
+            "newStatus": payload.verification_status,
+            "artistId": payload.artist_id,
+        },
+    )
+    await session.commit()
+    return {"ok": True, "data": artist_profile_data(user, profile, artist)}
 
 
 @router.post("/redeem-code-batches", status_code=status.HTTP_201_CREATED)

@@ -148,6 +148,14 @@ class AdminUserRoleUpdate(BaseModel):
     role: Literal["fan", "artist", "admin"]
 
 
+class AdminArtistProfileUpdate(BaseModel):
+    artist_id: str = Field(alias="artistId")
+    verification_status: Literal["pending", "verified", "rejected"] = Field(
+        alias="verificationStatus"
+    )
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class CollectionCampaignCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     artist_id: str | None = Field(default=None, alias="artistId")
