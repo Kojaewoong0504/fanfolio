@@ -65,11 +65,54 @@ wait_for_tcp() {
   return 1
 }
 
+wait_for_minio() {
+  for _ in {1..90}; do
+    if curl -fsS "http://127.0.0.1:${MINIO_API_HOST_PORT}/minio/health/ready" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "Timed out waiting for MinIO readiness" >&2
+  return 1
+}
+
+wait_for_clamav() {
+  for _ in {1..120}; do
+    if (
+      cd "$ROOT_DIR/backend"
+      ASSET_SCAN_MODE=clamav \
+      CLAMAV_HOST=127.0.0.1 \
+      CLAMAV_PORT="$CLAMAV_HOST_PORT" \
+      .venv/bin/python - <<'PY'
+import asyncio
+
+from app.upload_safety import scan_uploaded_content
+
+
+asyncio.run(
+    scan_uploaded_content(
+        content_type="text/plain",
+        purpose="readiness",
+        content=b"Fanfolio ClamAV readiness probe",
+    )
+)
+PY
+    ) >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+  done
+  echo "Timed out waiting for ClamAV readiness" >&2
+  return 1
+}
+
 echo "Starting MinIO and ClamAV with ${COMPOSE[0]}"
 export MINIO_API_HOST_PORT MINIO_CONSOLE_HOST_PORT CLAMAV_HOST_PORT
 compose up -d
 wait_for_tcp "$MINIO_API_HOST_PORT"
+wait_for_minio
 wait_for_tcp "$CLAMAV_HOST_PORT"
+wait_for_clamav
 
 echo "Running S3 round-trip and ClamAV integration tests"
 (
