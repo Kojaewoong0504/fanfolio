@@ -70,6 +70,8 @@ def test_magic_link_verify_sets_a_session_and_cannot_be_reused(
     }
     assert data["onboardingCompleted"] is False
     assert response.cookies.get("fanfolio_session")
+    assert "HttpOnly" in response.headers["set-cookie"]
+    assert "Path=/" in response.headers["set-cookie"]
 
     reused = client.post("/api/auth/magic-link/verify", json={"token": token})
     assert_error(reused, 401, "MAGIC_LINK_INVALID")

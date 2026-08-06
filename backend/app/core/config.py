@@ -10,7 +10,10 @@ class Settings(BaseSettings):
     app_env: str = "development"
     database_url: str = "sqlite+aiosqlite:///./fanfolio.db"
     storage_dir: str = "./storage"
-    frontend_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    frontend_origins: str = (
+        "http://localhost:4174,http://localhost:4175,http://localhost:5173,"
+        "http://127.0.0.1:4174,http://127.0.0.1:4175,http://127.0.0.1:5173"
+    )
     frontend_url: str = "http://localhost:5173"
     mail_delivery_mode: str = "console"
     mail_from: str = "Fanfolio <no-reply@localhost>"
