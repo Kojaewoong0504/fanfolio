@@ -51,3 +51,27 @@ jobs:
       - run: uv sync --locked --dev
         working-directory: backend
       - run: STOP_SERVICES=1 ./scripts/integration-smoke.sh
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the application image
+        run: docker compose -f docker-compose.stack.yml build api worker
+      - name: Start the application stack
+        run: docker compose -f docker-compose.stack.yml up -d
+      - name: Wait for API readiness
+        run: |
+          for attempt in {1..60}; do
+            if curl -fsS http://localhost:8000/api/health/ready; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose -f docker-compose.stack.yml logs api worker
+          exit 1
+      - name: Verify the Celery worker
+        run: docker compose -f docker-compose.stack.yml exec -T worker celery -A app.tasks:celery_app inspect ping --timeout=5
+      - name: Stop the application stack
+        if: always()
+        run: docker compose -f docker-compose.stack.yml down -v
