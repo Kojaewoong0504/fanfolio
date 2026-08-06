@@ -75,6 +75,11 @@ async def dashboard(_: AdminUser, session: DbSession) -> dict:
         select(func.count()).select_from(Drop).where(Drop.status == "live")
     )
     redeemed_count = await session.scalar(select(func.coalesce(func.sum(RedeemCode.used_count), 0)))
+    recent_logs = (
+        await session.scalars(
+            select(AuditLog).order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).limit(5)
+        )
+    ).all()
     return {
         "ok": True,
         "data": {
@@ -83,7 +88,16 @@ async def dashboard(_: AdminUser, session: DbSession) -> dict:
                 "publishedCards": published_cards or 0,
                 "activeDrops": active_drops or 0,
                 "redeemedCount": redeemed_count or 0,
-            }
+            },
+            "recentActivity": [
+                {
+                    "action": log.action,
+                    "actorId": log.actor_user_id,
+                    "entityType": log.entity_type,
+                    "entityId": log.entity_id,
+                }
+                for log in recent_logs
+            ],
         },
     }
 

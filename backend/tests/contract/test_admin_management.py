@@ -177,6 +177,21 @@ def test_admin_dashboard_and_card_list_are_backed_by_database(
     assert [card["id"] for card in drafts["items"]] == ["card_draft"]
 
 
+def test_admin_dashboard_includes_recent_audit_activity(
+    actors: dict[str, TestClient],
+) -> None:
+    published = assert_success(actors["admin"].post("/api/admin/cards/card_draft/publish"))
+    assert published["status"] == "published"
+
+    dashboard = assert_success(actors["admin"].get("/api/admin/dashboard"))
+    assert dashboard["recentActivity"][0] == {
+        "action": "card.published",
+        "actorId": "admin",
+        "entityType": "card",
+        "entityId": "card_draft",
+    }
+
+
 def test_admin_code_batch_creates_codes_and_downloads_csv(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:

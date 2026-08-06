@@ -279,6 +279,31 @@ Fanfolio의 회원가입과 로그인은 이메일 매직링크를 같은 흐름
 
 권한: Admin. Fan이 요청하면 `403 FORBIDDEN`.
 
+성공 `200`의 `data`에는 `metrics`와 최근 감사 활동 5건을 담은
+`recentActivity`가 포함된다.
+
+```json
+{
+  "ok": true,
+  "data": {
+    "metrics": {
+      "totalCards": 2,
+      "publishedCards": 1,
+      "activeDrops": 1,
+      "redeemedCount": 0
+    },
+    "recentActivity": [
+      {
+        "action": "card.published",
+        "actorId": "admin",
+        "entityType": "card",
+        "entityId": "card_draft"
+      }
+    ]
+  }
+}
+```
+
 ### POST /api/admin/redeem-code-batches
 
 권한: Admin
