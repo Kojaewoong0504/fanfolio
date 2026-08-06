@@ -105,6 +105,36 @@ open http://localhost:8025
 팬·관리자·아티스트 로그인 링크를 요청하면 메일이 Mailpit 화면에 도착합니다. SMTP 포트는
 `1025`, 웹 확인 화면은 `8025`이며 외부 SMTP 계정 없이도 링크 생성부터 수신까지 확인할 수 있습니다.
 
+### 8. PostgreSQL·SMTP·Redis 통합 환경
+
+Docker 또는 Podman Compose를 사용할 수 있다면 세 외부 의존성을 한 번에 실행할 수 있습니다.
+이 구성의 비밀번호와 포트는 로컬 개발 전용이며 운영 환경에서 재사용하지 마세요.
+
+```bash
+docker compose -f docker-compose.local.yml up -d
+cp backend/.env.mailpit.example backend/.env
+```
+
+`backend/.env`의 데이터베이스와 작업 큐 설정을 다음처럼 바꾼 뒤 마이그레이션과 API를
+실행합니다.
+
+```dotenv
+DATABASE_URL=postgresql+asyncpg://fanfolio:fanfolio-local-only@localhost:5432/fanfolio
+TASK_QUEUE_MODE=celery
+CELERY_BROKER_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/0
+```
+
+```bash
+cd backend
+python3 -m uv run alembic upgrade head
+python3 -m uv run uvicorn app.main:app --reload --port 8000
+python3 -m uv run celery -A app.tasks:celery_app worker --loglevel=INFO
+```
+
+`http://localhost:8000/api/health/ready`가 `ready`를 반환하고, `http://localhost:8025`에서
+매직 링크 메일을 확인하면 데이터베이스·SMTP·작업 큐를 연결한 개발 검증이 끝납니다.
+
 ## VS Code 개발 환경
 
 프로젝트 루트 폴더를 VS Code로 열면 추천 확장 설치 알림이 표시됩니다. 다음 확장을 설치하세요.

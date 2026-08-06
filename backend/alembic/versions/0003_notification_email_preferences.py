@@ -23,7 +23,8 @@ def upgrade() -> None:
                 "notification_email_enabled",
                 sa.Boolean(),
                 nullable=False,
-                server_default=sa.text("0"),
+                # Use a boolean literal accepted by both SQLite and PostgreSQL.
+                server_default=sa.text("false"),
             ),
         )
 
