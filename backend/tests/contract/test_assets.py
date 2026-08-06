@@ -7,11 +7,40 @@ from starlette.background import BackgroundTasks
 from app import tasks, upload_safety
 from app.core.config import get_settings
 from app.errors import AppError
+from app.routers import assets as assets_router
 from tests.conftest import assert_error, assert_success
 
 PNG_1X1 = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
 )
+
+
+class FakeDirectStorage:
+    def __init__(self) -> None:
+        self.objects: dict[str, bytes] = {}
+
+    def asset_path(self, asset_id: str, suffix: str = "") -> str:
+        return f"s3://test-bucket/fanfolio/assets/{asset_id}{suffix}"
+
+    def presigned_upload_url(self, asset_id: str, *, content_type: str, expires_in: int) -> str:
+        return f"https://storage.test/{asset_id}?type={content_type}&expires={expires_in}"
+
+    def save_bytes(self, asset_id: str, content: bytes) -> str:
+        path = self.asset_path(asset_id, ".bin")
+        self.objects[path] = content
+        return path
+
+    def exists(self, storage_path: str) -> bool:
+        return storage_path in self.objects
+
+    def size_bytes(self, storage_path: str) -> int:
+        return len(self.objects[storage_path])
+
+    def read_bytes(self, storage_path: str) -> bytes:
+        return self.objects[storage_path]
+
+    def delete(self, storage_path: str) -> None:
+        self.objects.pop(storage_path, None)
 
 
 def test_background_removal_can_dispatch_to_celery(monkeypatch: Any) -> None:
@@ -109,6 +138,32 @@ def test_upload_rejects_obvious_executable_content(
         422,
         "UNSAFE_UPLOAD",
     )
+
+
+def test_s3_direct_upload_is_completed_only_after_server_scan(
+    actors: dict[str, TestClient], monkeypatch: Any
+) -> None:
+    storage = FakeDirectStorage()
+    monkeypatch.setattr(get_settings(), "storage_backend", "s3")
+    monkeypatch.setattr(assets_router, "configured_asset_storage", lambda: storage)
+    asset = assert_success(
+        actors["artist"].post(
+            "/api/uploads/presign",
+            json={"fileName": "direct.png", "contentType": "image/png", "purpose": "card"},
+        ),
+        201,
+    )
+
+    assert asset["uploadMode"] == "direct"
+    assert asset["uploadUrl"].startswith("https://storage.test/")
+    assert asset["completeUrl"] == f"/api/uploads/{asset['assetId']}/complete"
+
+    storage.objects[f"s3://test-bucket/fanfolio/assets/{asset['assetId']}.bin"] = b"safe bytes"
+    completed = assert_success(
+        actors["artist"].post(asset["completeUrl"]),
+        200,
+    )
+    assert completed["status"] == "ready"
 
 
 def test_upload_fails_closed_when_clamav_is_unavailable(
