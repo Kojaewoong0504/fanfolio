@@ -18,6 +18,12 @@ export type CollectionCard = {
   memberName?: string | null
 }
 
+export type CollectionSummary = {
+  ownedCount: number
+  totalSlots: number
+  completionRate: number
+}
+
 export type CatalogCard = {
   id: string
   status: string

@@ -61,6 +61,9 @@ def test_card_detail_is_available_only_to_its_owner(
 
     detail = assert_success(fan.get(f"/api/me/cards/{redeemed['userCardId']}"))
     assert detail["card"]["isOfficial"] is True
+    assert detail["card"]["imageUrl"] == "/src/assets/hero.png"
+    assert detail["card"]["artistName"] == "드림스케이프"
+    assert detail["card"]["memberName"] == "유나"
     assert detail["serialNumber"] == 1
     assert detail["acquisitionSource"] == "redeem_code"
 
@@ -79,6 +82,39 @@ def test_catalog_returns_only_published_cards_to_fans(actors: dict[str, TestClie
     assert all(card["status"] == "published" for card in catalog["items"])
     assert all(card["isOfficial"] is True for card in catalog["items"])
     assert catalog["items"][0]["imageUrl"] == "/src/assets/hero.png"
+
+
+def test_collection_returns_live_summary_and_card_metadata(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    redeemed = assert_success(
+        actors["fan"].post(
+            "/api/redemptions", json={"code": seeded["codes"]["valid"], "source": "qr"}
+        ),
+        201,
+    )
+
+    collection = assert_success(actors["fan"].get("/api/me/collection"))
+    assert collection["summary"] == {
+        "ownedCount": 1,
+        "totalSlots": 9,
+        "completionRate": 11,
+    }
+    assert collection["cards"] == [
+        {
+            "userCardId": redeemed["userCardId"],
+            "cardId": "card_published",
+            "name": "컴백 기념 사인 카드",
+            "imageUrl": "/src/assets/hero.png",
+            "isOfficial": True,
+            "artistId": "artist_nova3",
+            "artistName": "드림스케이프",
+            "memberId": "member_yuna",
+            "memberName": "유나",
+            "serialNumber": 1,
+            "acquiredAt": collection["cards"][0]["acquiredAt"],
+        }
+    ]
 
 
 def test_fan_can_load_an_artist_uploaded_image_for_a_published_card(
