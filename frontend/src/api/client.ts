@@ -139,5 +139,10 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     throw new ApiError(response.status, message)
   }
 
+  // Logout and other command-style endpoints legitimately return 204 with
+  // no response body. Do not turn a successful empty response into a JSON
+  // parsing error in the shared client.
+  if (response.status === 204) return undefined as T
+
   return response.json() as Promise<T>
 }
