@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class MailDeliveryError(RuntimeError):
-    """Raised when the configured provider cannot deliver a magic link."""
+    """Raised when the configured provider cannot deliver an email."""
 
 
 def build_magic_link_url(token: str, settings: Settings) -> str:
@@ -41,6 +41,15 @@ def _message(email: str, token: str, purpose: str, settings: Settings) -> EmailM
     return message
 
 
+def _notification_message(email: str, title: str, body: str, settings: Settings) -> EmailMessage:
+    message = EmailMessage()
+    message["From"] = settings.mail_from
+    message["To"] = email
+    message["Subject"] = f"Fanfolio 알림: {title}"
+    message.set_content(f"{title}\n\n{body}\n\nFanfolio 앱에서 확인해 주세요.")
+    return message
+
+
 class ConsoleMailer:
     """Development provider that logs the link instead of sending email."""
 
@@ -52,6 +61,9 @@ class ConsoleMailer:
             build_magic_link_url(token, get_settings()),
         )
 
+    def send_notification(self, email: str, title: str, body: str) -> None:
+        logger.info("Notification email for %s: %s - %s", email, title, body)
+
 
 class SMTPMailer:
     """Small synchronous SMTP adapter executed off the async event loop."""
@@ -61,6 +73,13 @@ class SMTPMailer:
 
     def send_magic_link(self, email: str, token: str, purpose: str) -> None:
         message = _message(email, token, purpose, self.settings)
+        self._send(message, "magic-link")
+
+    def send_notification(self, email: str, title: str, body: str) -> None:
+        message = _notification_message(email, title, body, self.settings)
+        self._send(message, "notification")
+
+    def _send(self, message: EmailMessage, message_kind: str) -> None:
         try:
             with smtplib.SMTP(
                 self.settings.smtp_host,
@@ -73,7 +92,7 @@ class SMTPMailer:
                     smtp.login(self.settings.smtp_username, self.settings.smtp_password)
                 smtp.send_message(message)
         except (OSError, smtplib.SMTPException) as error:
-            raise MailDeliveryError("SMTP magic-link delivery failed") from error
+            raise MailDeliveryError(f"SMTP {message_kind} delivery failed") from error
 
 
 def _mailer(settings: Settings) -> ConsoleMailer | SMTPMailer:
@@ -88,3 +107,9 @@ async def deliver_magic_link(email: str, token: str, purpose: str) -> None:
     """Deliver a link without blocking FastAPI's event loop on SMTP I/O."""
     settings = get_settings()
     await asyncio.to_thread(_mailer(settings).send_magic_link, email, token, purpose)
+
+
+async def deliver_notification_email(email: str, title: str, body: str) -> None:
+    """Send optional event mail off the event loop, just like magic links."""
+    settings = get_settings()
+    await asyncio.to_thread(_mailer(settings).send_notification, email, title, body)

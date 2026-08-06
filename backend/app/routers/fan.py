@@ -9,7 +9,12 @@ from sqlalchemy import func, select, update
 from app.dependencies import DbSession, FanUser
 from app.errors import AppError
 from app.models import Card, Notification, UserCard
-from app.schemas import ProfileUpdate, ReadNotification, RedemptionRequest
+from app.schemas import (
+    NotificationPreferencesUpdate,
+    ProfileUpdate,
+    ReadNotification,
+    RedemptionRequest,
+)
 from app.services import redeem
 
 router = APIRouter(prefix="/api", tags=["fan"])
@@ -84,6 +89,20 @@ async def update_profile(payload: ProfileUpdate, user: FanUser, session: DbSessi
             "onboardingCompleted": True,
         },
     }
+
+
+@router.get("/me/notification-preferences")
+async def notification_preferences(user: FanUser) -> dict:
+    return {"ok": True, "data": {"emailEnabled": user.notification_email_enabled}}
+
+
+@router.patch("/me/notification-preferences")
+async def update_notification_preferences(
+    payload: NotificationPreferencesUpdate, user: FanUser, session: DbSession
+) -> dict:
+    user.notification_email_enabled = payload.email_enabled
+    await session.commit()
+    return {"ok": True, "data": {"emailEnabled": user.notification_email_enabled}}
 
 
 @router.get("/me/cards/{user_card_id}")

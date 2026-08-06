@@ -32,6 +32,25 @@ def test_authenticated_fan_can_complete_onboarding(actors: dict[str, TestClient]
     assert profile["onboardingCompleted"] is True
 
 
+def test_fan_can_read_and_update_notification_email_preferences(
+    actors: dict[str, TestClient],
+) -> None:
+    fan = actors["fan"]
+    current = assert_success(fan.get("/api/me/notification-preferences"))
+    assert current == {"emailEnabled": False}
+
+    updated = assert_success(
+        fan.patch("/api/me/notification-preferences", json={"emailEnabled": True})
+    )
+    assert updated == {"emailEnabled": True}
+    assert assert_success(fan.get("/api/me/notification-preferences")) == {"emailEnabled": True}
+
+    other_fan = actors["otherFan"]
+    assert assert_success(other_fan.get("/api/me/notification-preferences")) == {
+        "emailEnabled": False
+    }
+
+
 def test_card_detail_is_available_only_to_its_owner(
     app: Any, actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:

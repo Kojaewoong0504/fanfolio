@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from secrets import token_urlsafe
@@ -10,6 +11,7 @@ from app.core.config import get_settings
 from app.db.session import SessionLocal
 from app.errors import AppError
 from app.image_processing import remove_light_background
+from app.mailer import MailDeliveryError, deliver_notification_email
 from app.models import (
     Asset,
     AuditLog,
@@ -25,6 +27,8 @@ from app.models import (
     User,
     UserCard,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def now() -> datetime:
@@ -227,6 +231,15 @@ async def notify_fans(session: AsyncSession, *, kind: str, title: str, body: str
                 body=body,
             )
         )
+        if fan.notification_email_enabled:
+            try:
+                await deliver_notification_email(fan.email, title, body)
+            except MailDeliveryError:
+                # In-app delivery is the source of truth; an SMTP outage must
+                # not roll back the card/drop event transaction.
+                logger.warning(
+                    "Could not deliver notification email to %s", fan.email, exc_info=True
+                )
 
 
 async def request_magic_link(session: AsyncSession, *, email: str, purpose: str) -> str:

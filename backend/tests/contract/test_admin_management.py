@@ -71,8 +71,18 @@ def test_admin_cannot_change_own_role_or_fan_manage_users(
 
 
 def test_publishing_a_card_creates_audit_log_and_fan_notification(
-    actors: dict[str, TestClient], seeded: dict[str, Any]
+    actors: dict[str, TestClient], seeded: dict[str, Any], monkeypatch: Any
 ) -> None:
+    sent: list[tuple[str, str, str]] = []
+
+    async def fake_deliver(email: str, title: str, body: str) -> None:
+        sent.append((email, title, body))
+
+    monkeypatch.setattr("app.services.deliver_notification_email", fake_deliver)
+    assert_success(
+        actors["fan"].patch("/api/me/notification-preferences", json={"emailEnabled": True})
+    )
+
     published = assert_success(actors["admin"].post("/api/admin/cards/card_draft/publish"))
     assert published["status"] == "published"
 
@@ -84,6 +94,9 @@ def test_publishing_a_card_creates_audit_log_and_fan_notification(
     log = next(item for item in logs["items"] if item["action"] == "card.published")
     assert log["actorId"] == "admin"
     assert log["entityId"] == "card_draft"
+    assert sent == [
+        ("fan@example.com", "새 카드가 공개되었어요", "비공개 카드 카드를 확인해보세요.")
+    ]
 
 
 def test_admin_dashboard_and_card_list_are_backed_by_database(

@@ -24,6 +24,7 @@ class User(Base):
     favorite_artist_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
     favorite_member_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False)
+    notification_email_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class Session(Base):

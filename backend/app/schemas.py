@@ -48,6 +48,11 @@ class ProfileUpdate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class NotificationPreferencesUpdate(BaseModel):
+    email_enabled: bool = Field(alias="emailEnabled")
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class ReadNotification(BaseModel):
     read: bool
 
