@@ -166,6 +166,13 @@ npm run build
 HTTPS origin, SMTP 설정, 그리고 test-only route 비활성화를 확인하며 데이터베이스를 변경하지
 않습니다.
 
+PostgreSQL을 사용할 때는 async URL을 지정합니다. `asyncpg` 드라이버는 backend 의존성에
+포함되어 있습니다.
+
+```bash
+DATABASE_URL=postgresql+asyncpg://user:password@db:5432/fanfolio
+```
+
 ```bash
 APP_ENV=production ./scripts/production-preflight.sh
 ```
