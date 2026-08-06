@@ -139,7 +139,7 @@ fi
 echo "[4/5] fan redeems the published card and opens its detail"
 run_code "await page.goto('http://localhost:5173'); await page.getByPlaceholder('이메일을 입력하세요').fill('fan@example.com'); await page.getByRole('button', {name: '로그인 링크 받기'}).click(); await page.getByPlaceholder('이메일의 로그인 토큰을 입력하세요').waitFor(); await page.getByPlaceholder('이메일의 로그인 토큰을 입력하세요').fill('test-magic-link-fan'); await page.getByRole('button', {name: '로그인하기'}).click();"
 run_code "await page.getByRole('button', {name: '드림스케이프'}).click(); await page.getByRole('button', {name: '유나'}).click(); await page.getByPlaceholder('닉네임을 입력하세요').fill('E2E팬'); await page.getByRole('button', {name: '시작하기'}).click();"
-run_code "await page.getByRole('button', {name: '+ 카드 등록'}).click(); await page.getByPlaceholder('예: NOVA-VALID-01').fill('${REDEEM_CODE}'); await page.getByRole('button', {name: '카드 등록하기'}).click(); await page.getByRole('button', {name: '카드 공개하기'}).click(); await page.getByRole('heading', {name: '새 카드가 컬렉션에 추가됐어요'}).waitFor();"
+run_code "await page.getByRole('button', {name: '+ 카드 등록'}).click(); await page.getByRole('button', {name: /QR QR 스캔/}).click(); await page.getByText(/이 브라우저에서는 QR 스캔을 지원하지 않습니다|카메라를 사용할 수 없습니다/).waitFor(); await page.getByPlaceholder('예: NOVA-VALID-01').fill('${REDEEM_CODE}'); await page.getByRole('button', {name: '카드 등록하기'}).click(); await page.getByRole('button', {name: '카드 공개하기'}).click(); await page.getByRole('heading', {name: '새 카드가 컬렉션에 추가됐어요'}).waitFor();"
 assert_page_contains "E2E 공식 특별 카드"
 run_code "await page.getByRole('button', {name: '컬렉션으로 이동'}).click(); await page.getByRole('button', {name: '카드 이미지 #001 유나'}).click(); await page.getByRole('heading', {name: 'E2E 공식 특별 카드'}).waitFor();"
 assert_page_contains "콘텐츠 코드"
