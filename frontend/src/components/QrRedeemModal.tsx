@@ -1,19 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { apiFetch } from '../api/client'
 import '../App.css'
+import { normalizeQrValue } from './qrUtils'
 
 type Detector = { detect(source: HTMLVideoElement): Promise<Array<{ rawValue: string }>> }
 type DetectorConstructor = new (options: { formats: string[] }) => Detector
 type RedemptionSource = 'manual' | 'qr'
-
-function normalizeQrValue(rawValue: string): string {
-  try {
-    const url = new URL(rawValue)
-    return url.searchParams.get('code') ?? url.pathname.split('/').filter(Boolean).pop() ?? rawValue
-  } catch {
-    return rawValue.trim()
-  }
-}
 
 export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, onRedeemed: (userCardId: string) => void }) {
   const [code, setCode] = useState('')
@@ -43,15 +35,20 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
         const detector = new BarcodeDetector({ formats: ['qr_code'] })
         const check = async () => {
           if (cancelled || !videoRef.current) return
-          const results = await detector.detect(videoRef.current)
-          if (results[0]?.rawValue) {
-            setCode(normalizeQrValue(results[0].rawValue))
-            setSource('qr')
-            setMessage('QR 코드가 인식되었습니다.')
+          try {
+            const results = await detector.detect(videoRef.current)
+            if (results[0]?.rawValue) {
+              setCode(normalizeQrValue(results[0].rawValue))
+              setSource('qr')
+              setMessage('QR 코드가 인식되었습니다.')
+              setScanning(false)
+              return
+            }
+            window.setTimeout(() => void check(), 250)
+          } catch {
+            setMessage('QR을 읽지 못했습니다. 카메라를 확인하거나 코드를 직접 입력해 주세요.')
             setScanning(false)
-            return
           }
-          window.setTimeout(() => void check(), 250)
         }
         void check()
       } catch {
