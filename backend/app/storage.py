@@ -8,6 +8,8 @@ the provider with S3/MinIO does not require changing the domain services.
 from pathlib import Path
 from typing import Protocol
 
+from fastapi.responses import FileResponse, Response
+
 
 class AssetStorage(Protocol):
     def save_bytes(self, asset_id: str, content: bytes) -> str: ...
@@ -19,6 +21,10 @@ class AssetStorage(Protocol):
     def exists(self, storage_path: str) -> bool: ...
 
     def read_bytes(self, storage_path: str) -> bytes: ...
+
+    def save_derived_bytes(self, asset_id: str, suffix: str, content: bytes) -> str: ...
+
+    def save_preview_bytes(self, card_id: str, content: bytes) -> str: ...
 
 
 class LocalAssetStorage:
@@ -38,6 +44,18 @@ class LocalAssetStorage:
 
     def read_bytes(self, storage_path: str) -> bytes:
         return Path(storage_path).read_bytes()
+
+    def save_derived_bytes(self, asset_id: str, suffix: str, content: bytes) -> str:
+        path = Path(self.asset_path(asset_id, suffix))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+        return str(path)
+
+    def save_preview_bytes(self, card_id: str, content: bytes) -> str:
+        path = Path(self.preview_path(card_id))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+        return str(path)
 
     def save_bytes(self, asset_id: str, content: bytes) -> str:
         path = Path(self.asset_path(asset_id, ".bin"))
@@ -115,6 +133,16 @@ class S3AssetStorage:
         response = self.client.get_object(Bucket=self.bucket, Key=self._key_from_uri(storage_path))
         return response["Body"].read()
 
+    def save_derived_bytes(self, asset_id: str, suffix: str, content: bytes) -> str:
+        key = self._key(asset_id, suffix)
+        self.client.put_object(Bucket=self.bucket, Key=key, Body=content)
+        return self._uri(key)
+
+    def save_preview_bytes(self, card_id: str, content: bytes) -> str:
+        key = f"{self.key_prefix}/previews/{card_id}.png"
+        self.client.put_object(Bucket=self.bucket, Key=key, Body=content, ContentType="image/png")
+        return self._uri(key)
+
     @classmethod
     def from_settings(cls, settings: object) -> "S3AssetStorage":
         import boto3
@@ -131,3 +159,21 @@ class S3AssetStorage:
             bucket=settings.s3_bucket,
             key_prefix=settings.s3_key_prefix,
         )
+
+
+def storage_response(
+    storage: AssetStorage,
+    storage_path: str,
+    *,
+    media_type: str,
+    filename: str | None = None,
+) -> Response:
+    """Serve either a local file or a remote object through one route helper."""
+    if storage_path.startswith("s3://"):
+        headers = {}
+        if filename:
+            headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return Response(
+            content=storage.read_bytes(storage_path), media_type=media_type, headers=headers
+        )
+    return FileResponse(storage_path, media_type=media_type, filename=filename)

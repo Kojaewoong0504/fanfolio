@@ -8,10 +8,9 @@ from uuid import uuid4
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import get_settings
 from app.db.session import SessionLocal
 from app.errors import AppError
-from app.image_processing import remove_light_background
+from app.image_processing import remove_light_background_bytes
 from app.mailer import MailDeliveryError, deliver_notification_email
 from app.models import (
     Artist,
@@ -32,6 +31,7 @@ from app.models import (
     User,
     UserCard,
 )
+from app.storage import configured_asset_storage
 
 logger = logging.getLogger(__name__)
 
@@ -224,12 +224,11 @@ async def process_background_removal(job_id: str) -> None:
         try:
             job.status = "processing"
             await session.commit()
-            output_path = await asyncio.to_thread(
-                remove_light_background,
-                get_settings().storage_dir,
-                asset.id,
-                asset.storage_path,
+            storage = configured_asset_storage()
+            output_bytes = await asyncio.to_thread(
+                remove_light_background_bytes, storage.read_bytes(asset.storage_path)
             )
+            output_path = storage.save_derived_bytes(asset.id, "-transparent.png", output_bytes)
             asset.processed_storage_path = output_path
             job.status = "completed"
             job.transparent_image_url = f"/api/assets/{asset.id}/transparent"

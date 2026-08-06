@@ -9,7 +9,7 @@ from app.dependencies import CurrentUser, DbSession
 from app.errors import AppError
 from app.models import Asset, Role
 from app.schemas import AssetTransformUpdate, UploadPresignRequest
-from app.storage import configured_asset_storage
+from app.storage import configured_asset_storage, storage_response
 from app.upload_safety import scan_uploaded_content
 
 router = APIRouter(prefix="/api", tags=["assets"])
@@ -93,7 +93,9 @@ async def get_transparent_asset(
     asset = await session.get(Asset, asset_id)
     if not asset or asset.owner_id != user.id or not asset.processed_storage_path:
         raise AppError(404, "ASSET_NOT_FOUND", "처리된 자산을 찾을 수 없습니다.")
-    return FileResponse(asset.processed_storage_path, media_type="image/png")
+    return storage_response(
+        configured_asset_storage(), asset.processed_storage_path, media_type="image/png"
+    )
 
 
 @router.patch("/assets/{asset_id}/transform")

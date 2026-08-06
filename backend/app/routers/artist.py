@@ -7,10 +7,11 @@ from sqlalchemy import func, select
 from app.core.config import get_settings
 from app.dependencies import ArtistUser, DbSession
 from app.errors import AppError
-from app.image_processing import compose_card_preview
+from app.image_processing import compose_card_preview, compose_card_preview_bytes
 from app.models import Artist, Asset, BackgroundRemovalJob, Card, Member, UserCard
 from app.rate_limit import enforce_rate_limit
 from app.schemas import ArtistCardRequest, ArtistCardUpdate, ArtistProfileUpdate
+from app.storage import configured_asset_storage, storage_response
 from app.tasks import enqueue_background_removal
 
 router = APIRouter(prefix="/api", tags=["artist"])
@@ -282,13 +283,24 @@ async def render_preview(card: Card, user: ArtistUser, session: DbSession) -> di
             if handwriting_asset
             else None
         )
-        card.preview_storage_path = compose_card_preview(
-            get_settings().storage_dir,
-            card.id,
-            base_asset.storage_path,
-            handwriting_path,
-            card.handwriting_transform,
-        )
+        storage = configured_asset_storage()
+        if base_asset.storage_path.startswith("s3://"):
+            card.preview_storage_path = storage.save_preview_bytes(
+                card.id,
+                compose_card_preview_bytes(
+                    storage.read_bytes(base_asset.storage_path),
+                    storage.read_bytes(handwriting_path) if handwriting_path else None,
+                    card.handwriting_transform,
+                ),
+            )
+        else:
+            card.preview_storage_path = compose_card_preview(
+                get_settings().storage_dir,
+                card.id,
+                base_asset.storage_path,
+                handwriting_path,
+                card.handwriting_transform,
+            )
         await session.commit()
         preview_image_url = f"/api/artist/cards/{card.id}/preview/image"
     return preview_data(card, preview_image_url=preview_image_url)
@@ -313,7 +325,9 @@ async def get_preview_image(card_id: str, user: ArtistUser, session: DbSession) 
         await render_preview(card, user, session)
     if not card.preview_storage_path:
         raise AppError(404, "PREVIEW_NOT_READY", "카드 미리보기가 아직 준비되지 않았습니다.")
-    return FileResponse(card.preview_storage_path, media_type="image/png")
+    return storage_response(
+        configured_asset_storage(), card.preview_storage_path, media_type="image/png"
+    )
 
 
 @router.post("/artist/cards/{card_id}/submit-review")

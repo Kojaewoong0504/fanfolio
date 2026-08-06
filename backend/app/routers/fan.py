@@ -5,7 +5,7 @@ from typing import Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Query, Request, status
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import case, desc, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
@@ -31,7 +31,7 @@ from app.schemas import (
     RedemptionRequest,
 )
 from app.services import record_audit, redeem
-from app.storage import configured_asset_storage
+from app.storage import configured_asset_storage, storage_response
 
 router = APIRouter(prefix="/api", tags=["fan"])
 
@@ -361,13 +361,7 @@ async def download_collection_benefit(
     await session.commit()
     media_type = asset.content_type or "application/octet-stream"
     filename = asset.file_name or f"{campaign.id}-benefit"
-    if asset.storage_path.startswith("s3://"):
-        return Response(
-            content=storage.read_bytes(asset.storage_path),
-            media_type=media_type,
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-        )
-    return FileResponse(asset.storage_path, media_type=media_type, filename=filename)
+    return storage_response(storage, asset.storage_path, media_type=media_type, filename=filename)
 
 
 @router.patch("/me/profile")
@@ -514,7 +508,9 @@ async def card_handwriting(user_card_id: str, user: FanUser, session: DbSession)
     path = asset.processed_storage_path or asset.storage_path if asset else None
     if not path:
         raise AppError(404, "HANDWRITING_NOT_READY", "손글씨 특전이 아직 준비되지 않았습니다.")
-    return FileResponse(path, media_type=asset.content_type or "image/png")
+    return storage_response(
+        configured_asset_storage(), path, media_type=asset.content_type or "image/png"
+    )
 
 
 @router.get("/me/cards/{user_card_id}/voice")
@@ -532,7 +528,9 @@ async def card_voice(user_card_id: str, user: FanUser, session: DbSession) -> Fi
     path = asset.processed_storage_path or asset.storage_path if asset else None
     if not path:
         raise AppError(404, "VOICE_NOT_READY", "보이스 특전이 아직 준비되지 않았습니다.")
-    return FileResponse(path, media_type=asset.content_type or "audio/mpeg")
+    return storage_response(
+        configured_asset_storage(), path, media_type=asset.content_type or "audio/mpeg"
+    )
 
 
 @router.get("/cards/{card_id}/image")
@@ -543,7 +541,9 @@ async def card_image(card_id: str, _: FanUser, session: DbSession) -> FileRespon
     asset = await session.get(Asset, card.image_asset_id)
     if not asset or not asset.storage_path:
         raise AppError(404, "CARD_IMAGE_NOT_READY", "카드 이미지가 아직 준비되지 않았습니다.")
-    return FileResponse(asset.storage_path, media_type=asset.content_type or "image/png")
+    return storage_response(
+        configured_asset_storage(), asset.storage_path, media_type=asset.content_type or "image/png"
+    )
 
 
 @router.get("/catalog/artists")

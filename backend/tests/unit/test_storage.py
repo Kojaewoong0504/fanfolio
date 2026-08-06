@@ -15,7 +15,7 @@ class FakeS3Client:
     def __init__(self) -> None:
         self.objects: dict[tuple[str, str], bytes] = {}
 
-    def put_object(self, *, Bucket: str, Key: str, Body: bytes) -> None:
+    def put_object(self, *, Bucket: str, Key: str, Body: bytes, **_: object) -> None:
         self.objects[(Bucket, Key)] = Body
 
     def head_object(self, *, Bucket: str, Key: str) -> None:
@@ -52,3 +52,9 @@ def test_s3_asset_storage_uses_object_keys_and_reads_objects() -> None:
     assert storage.exists(path)
     assert storage.read_bytes(path) == b"remote bytes"
     assert not storage.exists("s3://fanfolio-test/fanfolio/assets/missing.bin")
+
+    derived = storage.save_derived_bytes("asset_test", "-transparent.png", b"png bytes")
+    preview = storage.save_preview_bytes("card_test", b"preview bytes")
+
+    assert storage.read_bytes(derived) == b"png bytes"
+    assert storage.read_bytes(preview) == b"preview bytes"

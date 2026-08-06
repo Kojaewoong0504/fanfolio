@@ -39,6 +39,7 @@ from app.schemas import (
     RedeemCodeStatusUpdate,
 )
 from app.services import notify_fans, record_audit
+from app.storage import configured_asset_storage, storage_response
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -381,7 +382,9 @@ async def card_preview_image(card_id: str, _: AdminUser, session: DbSession) -> 
     card = await session.get(Card, card_id)
     if not card or not card.preview_storage_path:
         raise AppError(404, "PREVIEW_NOT_READY", "카드 미리보기가 아직 준비되지 않았습니다.")
-    return FileResponse(card.preview_storage_path, media_type="image/png")
+    return storage_response(
+        configured_asset_storage(), card.preview_storage_path, media_type="image/png"
+    )
 
 
 @router.get("/cards/{card_id}/image")
@@ -393,7 +396,9 @@ async def card_source_image(card_id: str, _: AdminUser, session: DbSession) -> F
     asset = await session.get(Asset, card.image_asset_id)
     if not asset or not asset.storage_path:
         raise AppError(404, "CARD_IMAGE_NOT_READY", "카드 원본 이미지가 아직 준비되지 않았습니다.")
-    return FileResponse(asset.storage_path, media_type=asset.content_type or "image/png")
+    return storage_response(
+        configured_asset_storage(), asset.storage_path, media_type=asset.content_type or "image/png"
+    )
 
 
 @router.post("/cards/{card_id}/review")
