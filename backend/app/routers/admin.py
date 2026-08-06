@@ -286,6 +286,10 @@ async def code_batch(payload: CodeBatchRequest, _: AdminUser, session: DbSession
         raise AppError(404, "DROP_NOT_FOUND", "드롭을 찾을 수 없습니다.")
     if not card:
         raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
+    if drop.status != "live":
+        raise AppError(409, "DROP_NOT_LIVE", "진행 중인 드롭에만 코드를 발급할 수 있습니다.")
+    if card.status != "published":
+        raise AppError(409, "CARD_NOT_PUBLISHED", "공개된 카드에만 코드를 발급할 수 있습니다.")
     try:
         expires_at = datetime.fromisoformat(payload.expires_at)
     except ValueError as error:

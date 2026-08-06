@@ -202,3 +202,31 @@ def test_admin_code_batch_creates_codes_and_downloads_csv(
     assert len(rows) == 4
     assert rows[0] == "code,card_id,drop_id,expires_at,used_count,max_uses"
     assert all(row.startswith("NOVA-CSV-") for row in rows[1:])
+
+
+def test_admin_code_batch_requires_live_drop_and_published_card(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    draft_drop = assert_success(
+        actors["admin"].post("/api/admin/drops", json={"name": "준비 중인 드롭"}), 201
+    )
+    payload = {
+        "dropId": draft_drop["id"],
+        "cardId": seeded["ids"]["publishedCardId"],
+        "quantity": 1,
+        "maxUsesPerCode": 1,
+        "expiresAt": "2026-12-31T23:59:59Z",
+        "prefix": "NOVA-GUARD",
+    }
+    assert_error(
+        actors["admin"].post("/api/admin/redeem-code-batches", json=payload),
+        409,
+        "DROP_NOT_LIVE",
+    )
+    payload["dropId"] = seeded["ids"]["liveDropId"]
+    payload["cardId"] = "card_draft"
+    assert_error(
+        actors["admin"].post("/api/admin/redeem-code-batches", json=payload),
+        409,
+        "CARD_NOT_PUBLISHED",
+    )
