@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
+import type { IScannerControls } from '@zxing/browser'
 import { apiFetch } from '../api/client'
 import '../App.css'
 import { normalizeQrValue } from './qrUtils'
 
-type Detector = { detect(source: HTMLVideoElement): Promise<Array<{ rawValue: string }>> }
-type DetectorConstructor = new (options: { formats: string[] }) => Detector
 type RedemptionSource = 'manual' | 'qr'
 
 export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, onRedeemed: (userCardId: string) => void }) {
@@ -14,50 +13,44 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
   const [saving, setSaving] = useState(false)
   const [scanning, setScanning] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
-  const streamRef = useRef<MediaStream | null>(null)
+  const scannerControlsRef = useRef<IScannerControls | null>(null)
 
   useEffect(() => {
     if (!scanning) return
     let cancelled = false
     const scan = async () => {
-      const BarcodeDetector = (window as unknown as { BarcodeDetector?: DetectorConstructor }).BarcodeDetector
-      if (!BarcodeDetector || !navigator.mediaDevices?.getUserMedia) {
-        setMessage('이 브라우저에서는 QR 스캔을 지원하지 않습니다. 코드를 직접 입력해 주세요.')
-        setScanning(false)
-        return
-      }
+      if (!videoRef.current) return
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-        if (cancelled || !videoRef.current) { stream.getTracks().forEach(track => track.stop()); return }
-        streamRef.current = stream
-        videoRef.current.srcObject = stream
-        await videoRef.current.play()
-        const detector = new BarcodeDetector({ formats: ['qr_code'] })
-        const check = async () => {
-          if (cancelled || !videoRef.current) return
-          try {
-            const results = await detector.detect(videoRef.current)
-            if (results[0]?.rawValue) {
-              setCode(normalizeQrValue(results[0].rawValue))
-              setSource('qr')
-              setMessage('QR 코드가 인식되었습니다.')
-              setScanning(false)
-              return
-            }
-            window.setTimeout(() => void check(), 250)
-          } catch {
-            setMessage('QR을 읽지 못했습니다. 카메라를 확인하거나 코드를 직접 입력해 주세요.')
+        // Load the camera decoder only when the user opens the scanner. This
+        // keeps login, collection, and discovery startup bundles small.
+        const { BrowserQRCodeReader } = await import('@zxing/browser')
+        const reader = new BrowserQRCodeReader()
+        const controls = await reader.decodeFromConstraints(
+          { video: { facingMode: { ideal: 'environment' } } },
+          videoRef.current,
+          (result) => {
+            if (!result || cancelled) return
+            setCode(normalizeQrValue(result.getText()))
+            setSource('qr')
+            setMessage('QR 코드가 인식되었습니다.')
+            controls.stop()
+            scannerControlsRef.current = null
             setScanning(false)
-          }
-        }
-        void check()
+          },
+        )
+        if (cancelled) controls.stop()
+        else scannerControlsRef.current = controls
       } catch {
         setMessage('카메라를 사용할 수 없습니다. 권한을 확인하거나 코드를 직접 입력해 주세요.')
         setScanning(false)
       }
     }
     void scan()
-    return () => { cancelled = true; streamRef.current?.getTracks().forEach(track => track.stop()); streamRef.current = null }
+    return () => {
+      cancelled = true
+      scannerControlsRef.current?.stop()
+      scannerControlsRef.current = null
+    }
   }, [scanning])
 
   const redeem = async () => {
