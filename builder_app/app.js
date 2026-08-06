@@ -143,6 +143,7 @@ function beginCardEdit(cardId) {
   state.cardId = card.id;
   state.cardName = card.name;
   state.form = { ...state.form, imageAssetId: card.imageAssetId, name: card.name, memberId: card.memberId || '', seasonName: card.seasonName || '', templateId: card.templateId || state.form.templateId, rarity: card.rarity || state.form.rarity, signatureText: card.signatureText || '', hasVoice: Boolean(card.hasVoice), issueLimit: card.issueLimit || state.form.issueLimit };
+  state.handwritingTransform = card.handwritingTransform || { x: 68, y: 724, width: 402, rotation: -3 };
   state.view = 'create';
   state.step = 1;
   render();
@@ -176,6 +177,69 @@ document.addEventListener('submit', async (event) => {
     toast('카드 수정에 실패했습니다. 변경 내용을 확인해 주세요.');
   }
 }, true);
+
+function handwritingForm() {
+  const transform = state.handwritingTransform || { x: 68, y: 724, width: 402, rotation: -3 };
+  const control = (key, label, min, max, step, unit) => `<label class="transform-field">${label}<span><input data-transform="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${transform[key]}" /><output id="transform-${key}-value">${transform[key]}${unit}</output></span></label>`;
+  return `${steps()}<div class="handwriting-layout"><div class="panel"><h2>손글씨를 추가해 보세요</h2><p class="hint">직접 쓰거나 손글씨 이미지를 업로드하면 카드에 자연스럽게 합성됩니다.</p><div class="pad"><canvas id="signature-pad" width="760" height="420" aria-label="손글씨 입력 영역"></canvas><div class="pad-tools"><button class="secondary" id="clear-pad">지우기</button><span class="hint">손가락 또는 마우스로 작성</span></div></div><div style="height:12px"></div><label class="secondary" style="display:block;text-align:center">손글씨 이미지 업로드<input id="signature-file" type="file" accept="image/png,image/jpeg" hidden /></label><div style="height:12px"></div><button class="primary" id="remove-bg">배경 제거 요청</button><div id="job-area"></div></div><div class="panel"><h2>손글씨 배치</h2><p class="hint">카드 미리보기 기준으로 위치와 크기를 조정할 수 있어요.</p><div class="transform-controls">${control('x', '가로 위치', 0, 1000, 1, 'px')}${control('y', '세로 위치', 0, 1500, 1, 'px')}${control('width', '크기', 100, 800, 1, 'px')}${control('rotation', '회전', -180, 180, 1, '°')}</div><button class="secondary" id="save-transform">배치 저장</button><div class="handwriting-result" id="signature-result">${state.signature ? `<img src="${esc(state.signature)}" alt="입력한 손글씨 미리보기" />` : '<span class="hint">손글씨를 입력하면 여기에 표시됩니다.</span>'}</div><div style="height:15px"></div><div class="notice">배경 제거 결과와 배치값은 카드 초안에 저장되며, 다음 단계의 미리보기에 반영됩니다.</div><div class="bottom-actions" style="margin-top:18px"><button class="secondary" id="back-card">이전</button><button class="primary" id="next-review">다음: 미리보기</button></div></div></div>`;
+}
+
+function readTransformControls() {
+  const value = (key) => Number(document.querySelector(`[data-transform="${key}"]`)?.value ?? 0);
+  return { x: value('x'), y: value('y'), width: value('width'), rotation: value('rotation') };
+}
+
+async function saveTransform(silent = false) {
+  state.handwritingTransform = readTransformControls();
+  if (!state.cardId) { if (!silent) toast('먼저 카드 정보를 저장해 주세요.'); return; }
+  try {
+    const result = await api(`/artist/cards/${state.cardId}`, { method: 'PATCH', body: JSON.stringify({ handwritingTransform: state.handwritingTransform }) });
+    state.cards = state.cards.map((card) => card.id === result.data.id ? result.data : card);
+    if (!silent) toast('손글씨 배치를 저장했습니다.');
+  } catch { if (!silent) toast('손글씨 배치를 저장하지 못했습니다.'); }
+}
+
+async function requestBackgroundRemoval() {
+  const area = document.querySelector('#job-area');
+  area.innerHTML = '<div class="job"><span class="spinner"></span> 손글씨를 업로드하고 배경 제거를 요청하는 중...</div>';
+  try {
+    const blob = await new Promise((resolve) => document.querySelector('#signature-pad').toBlob(resolve, 'image/png'));
+    state.assetId = await uploadAsset(new File([blob], 'handwriting.png', { type: 'image/png' }), 'handwriting');
+    const result = await api(`/assets/${state.assetId}/background-removal`, { method: 'POST' });
+    state.jobId = result.data.jobId;
+    state.handwritingTransform = readTransformControls();
+    await api(`/artist/cards/${state.cardId}`, { method: 'PATCH', body: JSON.stringify({ signatureText: state.form.signatureText, handwritingAssetId: state.assetId, handwritingTransform: state.handwritingTransform }) });
+    area.innerHTML = `<div class="job"><span class="ok">✓</span> 작업이 등록되었습니다 · ${esc(result.data.status)}</div>`;
+    pollBackgroundRemoval();
+  } catch { area.innerHTML = '<div class="notice">업로드 또는 배경 제거 요청에 실패했습니다. 아티스트 세션과 API 서버를 확인해 주세요.</div>'; }
+}
+
+async function loadPreview() {
+  if (!state.cardId) { toast('먼저 카드 정보를 저장해 주세요.'); return; }
+  try {
+    await saveTransform(true);
+    const result = await api(`/artist/cards/${state.cardId}/preview`, { method: 'POST' });
+    state.preview = result.data;
+    if (state.previewImageSrc) URL.revokeObjectURL(state.previewImageSrc);
+    state.previewImageSrc = '';
+    if (result.data.previewImageUrl) {
+      const image = await fetch(absoluteApiUrl(result.data.previewImageUrl), { credentials: 'include', headers: SESSION_TOKEN ? { 'X-Fanfolio-Session': SESSION_TOKEN } : {} });
+      if (!image.ok) throw new Error(`PREVIEW_IMAGE ${image.status}`);
+      state.previewImageSrc = URL.createObjectURL(await image.blob());
+    }
+    state.step = 3;
+    render();
+  } catch { toast('카드 미리보기를 불러오지 못했습니다.'); }
+}
+
+document.addEventListener('input', (event) => {
+  const input = event.target.closest('[data-transform]');
+  if (!input) return;
+  state.handwritingTransform = { ...(state.handwritingTransform || {}), [input.dataset.transform]: Number(input.value) };
+  const output = document.querySelector(`#transform-${input.dataset.transform}-value`);
+  if (output) output.value = `${input.value}${input.dataset.transform === 'rotation' ? '°' : 'px'}`;
+});
+document.addEventListener('click', (event) => { if (event.target.id === 'save-transform') void saveTransform(); });
 
 render();
 if (state.authenticated) loadStudio();
