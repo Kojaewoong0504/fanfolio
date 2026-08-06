@@ -268,7 +268,9 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
 }
 
 function Collection({ cards: collectionCards, summary, onSelect, onRedeem }: { cards: Card[], summary: CollectionSummary, onSelect: (card: Card) => void, onRedeem: () => void }) {
-  return <><div className="summary"><div><span className="muted">보유 카드 수</span><strong>{summary.ownedCount} <small>/ {summary.totalSlots}</small></strong><small className="completion-rate">컬렉션 {summary.completionRate}% 완료</small></div><button onClick={onRedeem} className="outline">+ 카드 등록</button></div><div className="section-heading"><h2>최근 수집한 카드</h2><button>전체 보기</button></div>{collectionCards.length > 0 ? <div className="card-grid">{collectionCards.map(card => <button className="card-tile" key={card.id} onClick={() => onSelect(card)}><img src={card.image} alt="카드 이미지" /><span>{card.id}</span><b>{card.member}</b></button>)}</div> : null}<div className="empty-slot" onClick={onRedeem}><span>+</span><b>새 카드를 등록하세요</b><small>QR 또는 카드 코드를 사용합니다.</small></div></>
+  const [showAll, setShowAll] = useState(false)
+  const visibleCards = showAll ? collectionCards : collectionCards.slice(0, 4)
+  return <><div className="summary"><div><span className="muted">보유 카드 수</span><strong>{summary.ownedCount} <small>/ {summary.totalSlots}</small></strong><small className="completion-rate">컬렉션 {summary.completionRate}% 완료</small></div><button onClick={onRedeem} className="outline">+ 카드 등록</button></div><div className="section-heading"><h2>{showAll ? '내 컬렉션' : '최근 수집한 카드'}</h2>{collectionCards.length > 4 && <button onClick={() => setShowAll(value => !value)}>{showAll ? '최근 카드만 보기' : `전체 보기 (${collectionCards.length})`}</button>}</div>{visibleCards.length > 0 ? <div className="card-grid">{visibleCards.map(card => <button className="card-tile" key={card.id} onClick={() => onSelect(card)}><img src={card.image} alt="카드 이미지" /><span>{card.id}</span><b>{card.member}</b></button>)}</div> : null}<div className="empty-slot" onClick={onRedeem}><span>+</span><b>새 카드를 등록하세요</b><small>QR 또는 카드 코드를 사용합니다.</small></div></>
 }
 
 function Discover({ onSelect }: { onSelect: (card: Card) => void }) {
