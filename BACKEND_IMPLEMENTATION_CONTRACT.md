@@ -147,6 +147,19 @@ Fanfolio의 회원가입과 로그인은 이메일 매직링크를 같은 흐름
 { "ok": true, "data": { "status": "healthy" } }
 ```
 
+### GET /api/health/ready
+
+배포 직전 readiness probe가 사용하는 공개 경로다. 런타임 설정, 데이터베이스,
+작업 큐, rate limit backend를 확인한다.
+
+준비되면 `200`:
+
+```json
+{ "ok": true, "data": { "status": "ready" } }
+```
+
+의존성 확인에 실패하면 `503 SERVICE_NOT_READY` 공통 오류를 반환한다.
+
 ### POST /api/redemptions
 
 권한: Fan

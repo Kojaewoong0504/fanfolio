@@ -25,7 +25,7 @@
     <div class="meta"><span class="chip">MVP · v0.2</span><span class="chip">정본: BACKEND_IMPLEMENTATION_CONTRACT.md</span><span class="chip">테스트: backend/tests/contract</span></div>
   </header>
   <main>
-    <div class="notice"><b>현재 상태:</b> 맵의 37개 HTTP 경로는 계약 테스트로 구현·검증됩니다. <code>Health → Fixture → Auth → Fan → Admin → Artist</code> 순서로 테스트를 읽으면 각 기능 경계를 따라갈 수 있습니다.</div>
+    <div class="notice"><b>현재 상태:</b> 맵의 38개 HTTP 경로는 계약 테스트로 구현·검증됩니다. <code>Health → Fixture → Auth → Fan → Admin → Artist</code> 순서로 테스트를 읽으면 각 기능 경계를 따라갈 수 있습니다.</div>
     <h2>구현 순서</h2>
     <div class="steps" id="steps"></div>
     <div class="layout">
@@ -44,6 +44,7 @@
   <script>
     const endpoints = [
       {stage:'Health', role:'Public', method:'GET', path:'/api/health', auth:'Public', request:null, success:'200', response:{status:'healthy'}, errors:[], test:'tests/contract/test_health.py', note:'배포·개발 환경에서 앱 생존 여부를 확인하는 최소 경로.'},
+      {stage:'Health', role:'Public', method:'GET', path:'/api/health/ready', auth:'Public', request:null, success:'200', response:{status:'ready'}, errors:['503 SERVICE_NOT_READY'], test:'tests/contract/test_health.py', note:'트래픽을 받기 전에 런타임 설정, 데이터베이스, 작업 큐, rate limit backend의 준비 상태를 확인합니다.'},
       {stage:'Fixture', role:'Test', method:'POST', path:'/api/test/reset', auth:'APP_ENV=test', request:null, success:'204', response:null, errors:[], test:'tests/conftest.py', note:'매 계약 테스트 전 DB/스토리지 상태를 비웁니다. production에서는 라우터를 등록하지 않습니다.'},
       {stage:'Fixture', role:'Test', method:'POST', path:'/api/test/seed', auth:'APP_ENV=test', request:{scenario:'core'}, success:'201', response:{sessions:{fan:'test-session-fan',otherFan:'test-session-other-fan',admin:'test-session-admin',artist:'test-session-artist'},ids:{publishedCardId:'card_published'},codes:{valid:'NOVA-VALID-01',expired:'NOVA-EXPIRED-01'}}, errors:['422 VALIDATION_ERROR'], test:'tests/conftest.py', note:'팬·관리자·아티스트 세션, 카드·드롭·자산, 상태별 코드를 일관된 fixture로 만듭니다.'},
       {stage:'Auth', role:'Public', method:'POST', path:'/api/auth/magic-link/request', auth:'Public', request:{email:'fan@example.com',purpose:'login'}, success:'202', response:{delivery:'queued'}, errors:['422 VALIDATION_ERROR'], test:'tests/contract/test_auth.py', note:'signup과 login 모두 이메일 매직링크 요청 흐름입니다.'},
@@ -62,7 +63,7 @@
       {stage:'Fan', role:'Fan', method:'GET', path:'/api/notifications', auth:'Fan', request:null, success:'200', response:{items:[{id:'notification_1',isRead:false}]}, errors:['401 AUTH_REQUIRED'], test:'tests/contract/test_fan_experience.py', note:'팬 알림 목록.'},
       {stage:'Fan', role:'Fan', method:'GET', path:'/api/notifications/stream', auth:'Fan', request:null, success:'200 text/event-stream', response:{event:'notification',data:{id:'notification_1',kind:'card_published'}}, errors:['401 AUTH_REQUIRED'], test:'tests/contract/test_fan_experience.py', note:'새 알림을 SSE로 전달하며, 연결 실패 시 프론트는 폴링으로 fallback합니다.'},
       {stage:'Fan', role:'Fan', method:'GET', path:'/api/notifications/unread-count', auth:'Fan', request:null, success:'200', response:{unreadCount:1}, errors:['401 AUTH_REQUIRED'], test:'tests/contract/test_fan_experience.py', note:'하단 알림 탭 배지에 사용하는 읽지 않은 알림 수입니다.'},
-      {stage:'Fan', role:'Fan', method:'PATCH', path:'/api/notifications/read-all', auth:'Fan', request:null, success:'200', response:{updatedCount:1}, errors:['401 AUTH_REQUIRED'], test:'tests/contract/test_fan_experience.py', note:'팬 본인의 읽지 않은 알림을 한 번에 읽음 처리합니다.'},
+      {stage:'Fan', role:'Fan', method:'POST', path:'/api/notifications/read-all', auth:'Fan', request:null, success:'200', response:{updatedCount:1}, errors:['401 AUTH_REQUIRED'], test:'tests/contract/test_fan_experience.py', note:'팬 본인의 읽지 않은 알림을 한 번에 읽음 처리하는 canonical 메서드입니다. 기존 클라이언트 호환을 위해 PATCH도 허용합니다.'},
       {stage:'Fan', role:'Fan', method:'PATCH', path:'/api/notifications/{id}', auth:'Fan', request:{isRead:true}, success:'200', response:{id:'notification_1',isRead:true}, errors:['401 AUTH_REQUIRED','404 NOTIFICATION_NOT_FOUND'], test:'tests/contract/test_fan_experience.py', note:'팬 본인의 알림만 읽음 처리합니다.'},
       {stage:'Admin', role:'Admin', method:'GET', path:'/api/admin/dashboard', auth:'Admin', request:null, success:'200', response:{metrics:{redeemedCount:1,activeDrops:1},recentActivity:[{action:'card.published',actorId:'admin',entityType:'card',entityId:'card_123'}]}, errors:['401 AUTH_REQUIRED','403 FORBIDDEN'], test:'tests/contract/test_admin_management.py', note:'운영 지표와 최근 감사 활동 5건을 함께 제공합니다. 팬·아티스트는 접근할 수 없습니다.'},
       {stage:'Admin', role:'Admin', method:'GET', path:'/api/admin/catalog', auth:'Admin', request:null, success:'200', response:{artists:[{id:'artist_nova3',name:'드림스케이프'}],members:[{id:'member_yuna',artistId:'artist_nova3',name:'유나'}]}, errors:['401 AUTH_REQUIRED','403 FORBIDDEN'], test:'tests/contract/test_missing_admin_contracts.py', note:'관리자 카드 등록 화면에서 그룹·멤버를 선택할 수 있도록 카탈로그를 제공합니다.'},
