@@ -113,5 +113,28 @@ async function loginArtist(event) {
   }
 }
 
+function studioCardsView() {
+  const statusLabels = { draft: '임시 저장', pending_review: '검수 중', changes_requested: '수정 요청', published: '공개', rejected: '반려' };
+  const cards = state.cards.length ? state.cards.map((card) => `<article class="studio-card-row"><div><strong>${esc(card.name)}</strong><span>${esc(card.seasonName || '시즌 미정')} · ${esc(card.rarity || '타입 미정')}</span></div><span class="studio-status">${esc(statusLabels[card.status] || card.status)}</span><small>${card.issueLimit ? `${esc(card.issueLimit)}장` : '발행 수량 미정'}</small></article>`).join('') : '<div class="studio-empty"><strong>아직 만든 카드가 없어요.</strong><span>첫 번째 특별 카드를 만들어 보세요.</span></div>';
+  return `<div class="panel studio-cards-panel"><div class="studio-list-heading"><div><h2>내 카드</h2><p class="hint">작성 중인 카드와 검수 상태를 확인할 수 있어요.</p></div><button class="primary compact" id="new-card">+ 새 카드 만들기</button></div><div class="studio-card-list">${cards}</div></div>`;
+}
+
+function shell(content) {
+  const view = state.view || 'create';
+  const title = view === 'cards' ? '내 카드' : state.step === 1 ? '카드 만들기' : state.step === 2 ? '손글씨 추가' : state.step === 3 ? '카드 미리보기' : '검수 요청 완료';
+  app.innerHTML = `<div class="shell"><aside class="side"><div class="logo">Fanfolio <span>✦</span><small>아티스트 스튜디오</small></div><nav class="nav"><button data-studio-view="home" class="${view === 'home' ? 'active' : ''}">⌂　스튜디오 홈</button><button data-studio-view="create" class="${view === 'create' ? 'active' : ''}">▦　카드 만들기</button><button data-studio-view="cards" class="${view === 'cards' ? 'active' : ''}">◇　내 카드</button><button data-studio-view="feedback">♡　팬 반응</button><button data-studio-view="settings">⚙　설정</button></nav><div class="profile"><span class="avatar">A</span><div><strong>아티스트</strong>ARTIST</div></div></aside><main class="workspace"><header class="top"><div><p class="kicker">Fanfolio Artist Studio</p><h1 class="title">${title}</h1></div><div class="top-actions"><span class="save-state">● API 연결됨</span><button class="secondary" id="session-config">세션 설정</button><button class="secondary" id="logout">로그아웃</button></div></header>${content}</main></div><div class="toast" id="toast"></div>`;
+  bindCommon();
+  document.querySelector('#new-card')?.addEventListener('click', () => { state.view = 'create'; state.step = 1; render(); });
+}
+
+document.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-studio-view]');
+  if (!button || !state.authenticated) return;
+  const view = button.dataset.studioView;
+  if (view === 'cards') { state.view = 'cards'; shell(studioCardsView()); }
+  if (view === 'create' || view === 'home') { state.view = 'create'; state.step = 1; render(); }
+  if (view === 'feedback' || view === 'settings') toast('이 메뉴는 다음 단계에서 연결할 예정입니다.');
+});
+
 render();
 if (state.authenticated) loadStudio();
