@@ -8,6 +8,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Query, Request, status
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import case, desc, func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, FanUser
 from app.errors import AppError
@@ -281,7 +282,11 @@ async def claim_collection_benefit(campaign_id: str, user: FanUser, session: DbS
         entity_id=campaign.id,
         details={"userId": user.id, "claimId": claim.id},
     )
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise AppError(409, "BENEFIT_ALREADY_CLAIMED", "이 특전은 이미 수령했습니다.")
     return {
         "ok": True,
         "data": {

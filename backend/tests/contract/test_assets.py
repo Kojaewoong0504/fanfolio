@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from starlette.background import BackgroundTasks
 
 from app import tasks
+from app.core.config import get_settings
 from tests.conftest import assert_error, assert_success
 
 PNG_1X1 = base64.b64decode(
@@ -44,11 +45,46 @@ def test_artist_can_presign_and_upload_an_asset(
     assert asset["assetId"].startswith("asset_")
     assert asset["uploadUrl"] == f"/api/uploads/{asset['assetId']}/content"
     assert asset["expiresAt"]
+    assert asset["maxUploadBytes"] == get_settings().max_upload_bytes
 
     uploaded = actors["artist"].put(
         asset["uploadUrl"], content=b"fake-png", headers={"Content-Type": "image/png"}
     )
     assert uploaded.status_code == 204, uploaded.text
+
+
+def test_upload_rejects_expired_urls_and_oversized_content(
+    actors: dict[str, TestClient], monkeypatch: Any
+) -> None:
+    settings = get_settings()
+    monkeypatch.setattr(settings, "upload_url_ttl_seconds", -1)
+    expired = assert_success(
+        actors["artist"].post(
+            "/api/uploads/presign",
+            json={"fileName": "expired.png", "contentType": "image/png", "purpose": "card"},
+        ),
+        201,
+    )
+    assert_error(
+        actors["artist"].put(expired["uploadUrl"], content=b"expired"),
+        410,
+        "UPLOAD_URL_EXPIRED",
+    )
+
+    monkeypatch.setattr(settings, "upload_url_ttl_seconds", 900)
+    monkeypatch.setattr(settings, "max_upload_bytes", 4)
+    oversized = assert_success(
+        actors["artist"].post(
+            "/api/uploads/presign",
+            json={"fileName": "large.png", "contentType": "image/png", "purpose": "card"},
+        ),
+        201,
+    )
+    assert_error(
+        actors["artist"].put(oversized["uploadUrl"], content=b"12345"),
+        413,
+        "UPLOAD_TOO_LARGE",
+    )
 
 
 def test_fan_cannot_presign_an_asset(actors: dict[str, TestClient]) -> None:

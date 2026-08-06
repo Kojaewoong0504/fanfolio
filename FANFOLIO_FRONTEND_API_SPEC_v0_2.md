@@ -179,12 +179,12 @@ Base URL: `/api`
 
 | Method | Endpoint | 권한 | 설명 |
 | --- | --- | --- | --- |
-| POST | `/uploads/presign` | Admin, Artist | 카드 이미지/손글씨 원본용 업로드 URL 발급 |
+| POST | `/uploads/presign` | Admin, Artist | 카드·손글씨·보이스·컬렉션 특전 파일용 업로드 URL 발급 |
 | POST | `/assets/{assetId}/background-removal` | Artist | 손글씨 원본에서 투명 PNG 생성 작업 요청 |
 | GET | `/background-removal-jobs/{jobId}` | Artist | 작업 상태/결과 조회 |
 | PATCH | `/assets/{assetId}/transform` | Artist | 자르기, 명암, 배치 전 보정값 저장 |
 
-`POST /uploads/presign` 요청과 응답은 다음과 같다. `purpose`는 `card`, `handwriting`, `voice` 중 하나이며, 응답의 `uploadUrl`로 파일 바이트를 `PUT`한 뒤 반환된 `assetId`를 카드/배경 제거 API에 전달한다.
+`POST /uploads/presign` 요청과 응답은 다음과 같다. `purpose`는 `card`, `handwriting`, `voice`, `collection_benefit` 중 하나이며, 응답의 `uploadUrl`은 제한 시간 동안만 유효하다. 파일 크기는 서버의 `maxUploadBytes`를 넘을 수 없다. 업로드 뒤 반환된 `assetId`를 카드·캠페인·배경 제거 API에 전달한다.
 
 ```json
 // request

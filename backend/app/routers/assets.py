@@ -29,22 +29,24 @@ async def presign_upload(
     The asset record and ownership check stay the same in both environments.
     """
     require_upload_role(user)
+    expires_at = datetime.now(UTC) + timedelta(seconds=get_settings().upload_url_ttl_seconds)
     asset = Asset(
         id=f"asset_{uuid4().hex[:10]}",
         owner_id=user.id,
         file_name=payload.file_name,
         content_type=payload.content_type,
         purpose=payload.purpose,
+        upload_expires_at=expires_at,
     )
     session.add(asset)
     await session.commit()
-    expires_at = datetime.now(UTC) + timedelta(minutes=15)
     return {
         "ok": True,
         "data": {
             "assetId": asset.id,
             "uploadUrl": f"/api/uploads/{asset.id}/content",
             "expiresAt": expires_at.isoformat(),
+            "maxUploadBytes": get_settings().max_upload_bytes,
         },
     }
 
@@ -58,9 +60,20 @@ async def upload_asset_content(
     asset = await session.get(Asset, asset_id)
     if not asset or asset.owner_id != user.id:
         raise AppError(404, "ASSET_NOT_FOUND", "자산을 찾을 수 없습니다.")
+    if asset.upload_expires_at and datetime.now(UTC) > asset.upload_expires_at.replace(tzinfo=UTC):
+        raise AppError(410, "UPLOAD_URL_EXPIRED", "업로드 URL이 만료되었습니다.")
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > get_settings().max_upload_bytes:
+                raise AppError(413, "UPLOAD_TOO_LARGE", "업로드 파일이 너무 큽니다.")
+        except ValueError:
+            raise AppError(400, "INVALID_CONTENT_LENGTH", "업로드 크기를 확인할 수 없습니다.")
     content = await request.body()
     if not content:
         raise AppError(422, "EMPTY_UPLOAD", "업로드할 파일이 없습니다.")
+    if len(content) > get_settings().max_upload_bytes:
+        raise AppError(413, "UPLOAD_TOO_LARGE", "업로드 파일이 너무 큽니다.")
     asset.storage_path = save_uploaded_bytes(get_settings().storage_dir, asset.id, content)
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
