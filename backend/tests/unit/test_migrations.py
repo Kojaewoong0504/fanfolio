@@ -28,6 +28,14 @@ def test_alembic_upgrade_creates_the_current_schema(tmp_path: Path) -> None:
             row[1] for row in connection.execute("PRAGMA table_info(notifications)").fetchall()
         }
         assert {"kind", "title", "body", "created_at"} <= notification_columns
+        asset_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(assets)").fetchall()
+        }
+        assert "transform" in asset_columns
+        redeem_code_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(redeem_codes)").fetchall()
+        }
+        assert "disabled_at" in redeem_code_columns
         assert connection.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='audit_logs'"
         ).fetchone()

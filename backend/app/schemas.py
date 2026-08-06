@@ -78,6 +78,57 @@ class DropStatusUpdate(BaseModel):
     status: Literal["draft", "scheduled", "live", "ended"]
 
 
+class DropUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    starts_at: datetime | None = Field(default=None, alias="startsAt")
+    ends_at: datetime | None = Field(default=None, alias="endsAt")
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class RedeemCodeStatusUpdate(BaseModel):
+    status: Literal["active", "disabled", "expired"]
+
+
+class AdminCardCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    template_id: str | None = Field(default=None, alias="templateId")
+    season_name: str | None = Field(default=None, alias="seasonName")
+    rarity: str | None = None
+    image_asset_id: str | None = Field(default=None, alias="imageAssetId")
+    owner_artist_id: str | None = Field(default=None, alias="ownerArtistId")
+    member_id: str | None = Field(default=None, alias="memberId")
+    signature_text: str | None = Field(default=None, alias="signatureText", max_length=200)
+    handwriting_asset_id: str | None = Field(default=None, alias="handwritingAssetId")
+    handwriting_transform: dict[str, float] | None = Field(
+        default=None, alias="handwritingTransform"
+    )
+    has_voice: bool = Field(default=False, alias="hasVoice")
+    issue_limit: int | None = Field(default=None, alias="issueLimit", gt=0)
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class AdminCardUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    template_id: str | None = Field(default=None, alias="templateId")
+    season_name: str | None = Field(default=None, alias="seasonName")
+    rarity: str | None = None
+    image_asset_id: str | None = Field(default=None, alias="imageAssetId")
+    owner_artist_id: str | None = Field(default=None, alias="ownerArtistId")
+    member_id: str | None = Field(default=None, alias="memberId")
+    signature_text: str | None = Field(default=None, alias="signatureText", max_length=200)
+    handwriting_asset_id: str | None = Field(default=None, alias="handwritingAssetId")
+    handwriting_transform: dict[str, float] | None = Field(
+        default=None, alias="handwritingTransform"
+    )
+    has_voice: bool | None = Field(default=None, alias="hasVoice")
+    issue_limit: int | None = Field(default=None, alias="issueLimit", gt=0)
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class AssetTransformUpdate(BaseModel):
+    transform: dict[str, float]
+
+
 class AdminUserRoleUpdate(BaseModel):
     role: Literal["fan", "artist", "admin"]
 

@@ -1,5 +1,5 @@
 import csv
-from datetime import datetime
+from datetime import UTC, datetime
 from io import StringIO
 from uuid import uuid4
 
@@ -9,13 +9,17 @@ from sqlalchemy import func, select
 
 from app.dependencies import AdminUser, DbSession
 from app.errors import AppError
-from app.models import AuditLog, Card, Drop, RedeemCode, RedeemCodeBatch, Role, User
+from app.models import Asset, AuditLog, Card, Drop, RedeemCode, RedeemCodeBatch, Role, User
 from app.schemas import (
+    AdminCardCreate,
     AdminCardReviewRequest,
+    AdminCardUpdate,
     AdminUserRoleUpdate,
     CodeBatchRequest,
     DropCreateRequest,
     DropStatusUpdate,
+    DropUpdateRequest,
+    RedeemCodeStatusUpdate,
 )
 from app.services import notify_fans, record_audit
 
@@ -104,6 +108,14 @@ async def list_drops(_: AdminUser, session: DbSession) -> dict:
     return {"ok": True, "data": {"items": [drop_data(drop) for drop in drops]}}
 
 
+@router.get("/drops/{drop_id}")
+async def get_drop(drop_id: str, _: AdminUser, session: DbSession) -> dict:
+    drop = await session.get(Drop, drop_id)
+    if not drop:
+        raise AppError(404, "DROP_NOT_FOUND", "드롭을 찾을 수 없습니다.")
+    return {"ok": True, "data": drop_data(drop)}
+
+
 def admin_card_data(card: Card) -> dict:
     return {
         "id": card.id,
@@ -126,11 +138,65 @@ def admin_card_data(card: Card) -> dict:
     }
 
 
+async def validate_admin_assets(values: dict, session: DbSession) -> None:
+    for field in ("image_asset_id", "handwriting_asset_id"):
+        asset_id = values.get(field)
+        if asset_id and not await session.get(Asset, asset_id):
+            raise AppError(404, "ASSET_NOT_FOUND", "카드 자산을 찾을 수 없습니다.")
+
+
+@router.post("/cards", status_code=status.HTTP_201_CREATED)
+async def create_admin_card(payload: AdminCardCreate, admin: AdminUser, session: DbSession) -> dict:
+    values = payload.model_dump(exclude_unset=True, by_alias=False)
+    await validate_admin_assets(values, session)
+    card = Card(id=f"card_{uuid4().hex[:10]}", **values)
+    session.add(card)
+    await record_audit(
+        session,
+        actor_user_id=admin.id,
+        action="card.created",
+        entity_type="card",
+        entity_id=card.id,
+    )
+    await session.commit()
+    return {"ok": True, "data": admin_card_data(card)}
+
+
 @router.get("/cards/{card_id}")
 async def card_detail(card_id: str, _: AdminUser, session: DbSession) -> dict:
     card = await session.get(Card, card_id)
     if not card:
         raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
+    return {"ok": True, "data": admin_card_data(card)}
+
+
+@router.patch("/cards/{card_id}")
+async def update_admin_card(
+    card_id: str,
+    payload: AdminCardUpdate,
+    admin: AdminUser,
+    session: DbSession,
+) -> dict:
+    card = await session.get(Card, card_id)
+    if not card:
+        raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
+    if card.status == "published":
+        raise AppError(
+            409, "INVALID_CARD_STATUS", "공개된 카드는 운영 화면에서 수정할 수 없습니다."
+        )
+    values = payload.model_dump(exclude_unset=True, by_alias=False)
+    await validate_admin_assets(values, session)
+    for field, value in values.items():
+        setattr(card, field, value)
+    await record_audit(
+        session,
+        actor_user_id=admin.id,
+        action="card.updated",
+        entity_type="card",
+        entity_id=card.id,
+        details={"fields": sorted(values)},
+    )
+    await session.commit()
     return {"ok": True, "data": admin_card_data(card)}
 
 
@@ -167,6 +233,16 @@ async def review_card(
     )
     await session.commit()
     return {"ok": True, "data": {"id": card.id, "status": card.status}}
+
+
+@router.post("/cards/{card_id}/approve")
+async def approve_card(card_id: str, admin: AdminUser, session: DbSession) -> dict:
+    return await review_card(
+        card_id,
+        AdminCardReviewRequest(decision="approve"),
+        admin,
+        session,
+    )
 
 
 @router.post("/drops", status_code=status.HTTP_201_CREATED)
@@ -211,6 +287,27 @@ async def update_drop_status(
         )
     await session.commit()
     return {"ok": True, "data": {"id": drop.id, "status": drop.status}}
+
+
+@router.patch("/drops/{drop_id}")
+async def update_drop(
+    drop_id: str,
+    payload: DropUpdateRequest,
+    _: AdminUser,
+    session: DbSession,
+) -> dict:
+    drop = await session.get(Drop, drop_id)
+    if not drop:
+        raise AppError(404, "DROP_NOT_FOUND", "드롭을 찾을 수 없습니다.")
+    values = payload.model_dump(exclude_unset=True, by_alias=False)
+    starts_at = values.get("starts_at", drop.starts_at)
+    ends_at = values.get("ends_at", drop.ends_at)
+    if starts_at and ends_at and ends_at <= starts_at:
+        raise AppError(422, "INVALID_DROP_WINDOW", "종료 시각은 시작 시각보다 늦어야 합니다.")
+    for field, value in values.items():
+        setattr(drop, field, value)
+    await session.commit()
+    return {"ok": True, "data": drop_data(drop)}
 
 
 @router.get("/users")
@@ -328,6 +425,44 @@ async def code_batch(payload: CodeBatchRequest, _: AdminUser, session: DbSession
     }
 
 
+def redeem_code_status(code: RedeemCode) -> str:
+    if code.disabled_at:
+        return "disabled"
+    expires_at = (
+        code.expires_at.replace(tzinfo=UTC)
+        if code.expires_at and code.expires_at.tzinfo is None
+        else code.expires_at
+    )
+    if expires_at and expires_at <= datetime.now(UTC):
+        return "expired"
+    if code.used_count >= code.max_uses:
+        return "exhausted"
+    return "active"
+
+
+@router.get("/redeem-code-batches")
+async def list_code_batches(_: AdminUser, session: DbSession) -> dict:
+    batches = await session.scalars(select(RedeemCodeBatch).order_by(RedeemCodeBatch.id.desc()))
+    return {
+        "ok": True,
+        "data": {
+            "items": [
+                {
+                    "id": batch.id,
+                    "dropId": batch.drop_id,
+                    "cardId": batch.card_id,
+                    "quantity": batch.quantity,
+                    "maxUsesPerCode": batch.max_uses_per_code,
+                    "expiresAt": batch.expires_at,
+                    "prefix": batch.prefix,
+                    "csvExportUrl": f"/api/admin/redeem-code-batches/{batch.id}/export",
+                }
+                for batch in batches
+            ]
+        },
+    }
+
+
 @router.get("/redeem-code-batches/{batch_id}/export")
 async def export_code_batch(batch_id: str, _: AdminUser, session: DbSession) -> StreamingResponse:
     batch = await session.get(RedeemCodeBatch, batch_id)
@@ -356,6 +491,35 @@ async def export_code_batch(batch_id: str, _: AdminUser, session: DbSession) -> 
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{batch_id}.csv"'},
     )
+
+
+@router.patch("/redeem-codes/{code_id}")
+async def update_redeem_code(
+    code_id: str,
+    payload: RedeemCodeStatusUpdate,
+    admin: AdminUser,
+    session: DbSession,
+) -> dict:
+    code = await session.get(RedeemCode, code_id)
+    if not code:
+        raise AppError(404, "REDEEM_CODE_NOT_FOUND", "코드를 찾을 수 없습니다.")
+    if payload.status == "disabled":
+        code.disabled_at = datetime.now(UTC)
+    elif payload.status == "expired":
+        code.disabled_at = None
+        code.expires_at = datetime.now(UTC)
+    else:
+        code.disabled_at = None
+    await record_audit(
+        session,
+        actor_user_id=admin.id,
+        action="redeem_code.status_changed",
+        entity_type="redeem_code",
+        entity_id=code.code,
+        details={"status": payload.status},
+    )
+    await session.commit()
+    return {"ok": True, "data": {"code": code.code, "status": redeem_code_status(code)}}
 
 
 @router.get("/audit-logs")

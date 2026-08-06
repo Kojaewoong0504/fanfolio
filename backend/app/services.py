@@ -331,6 +331,8 @@ async def redeem(session: AsyncSession, user: User, code_value: str) -> dict:
         code = await session.get(RedeemCode, code_value)
         if not code:
             raise AppError(404, "REDEEM_CODE_NOT_FOUND", "코드를 찾을 수 없습니다.")
+        if code.disabled_at:
+            raise AppError(409, "REDEEM_CODE_DISABLED", "비활성화된 코드입니다.")
         if code.used_count >= code.max_uses:
             error_code = (
                 "REDEEM_LIMIT_REACHED" if code.max_uses == 0 else "REDEEM_CODE_ALREADY_USED"
