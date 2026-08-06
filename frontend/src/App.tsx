@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import './App.css'
-import { apiFetch, type CollectionCard, type NotificationItem } from './api/client'
+import { apiFetch, type CollectionCard, type NotificationItem, type UserCardDetail } from './api/client'
 
 type Tab = 'collection' | 'discover' | 'alerts' | 'settings'
 
@@ -32,6 +32,7 @@ function App() {
   const [apiConnected, setApiConnected] = useState(false)
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [revealedCardId, setRevealedCardId] = useState<string | null>(null)
 
   const refreshCollection = async () => {
     try {
@@ -83,6 +84,10 @@ function App() {
     return <Onboarding onComplete={() => { setShowOnboarding(false); void refreshCollection() }} />
   }
 
+  if (revealedCardId) {
+    return <RevealCard userCardId={revealedCardId} onClose={() => setRevealedCardId(null)} />
+  }
+
   return (
     <main className="app-shell">
       <div className="phone-bar"><span>9:41</span><span>● ● ▰</span></div>
@@ -105,7 +110,7 @@ function App() {
         <NavItem active={tab === 'settings'} label="설정" onClick={() => setTab('settings')} />
       </nav>
 
-      {showRedeem && <RedeemModal onClose={() => setShowRedeem(false)} onRedeemed={refreshCollection} />}
+      {showRedeem && <RedeemModal onClose={() => setShowRedeem(false)} onRedeemed={(id) => { setShowRedeem(false); setRevealedCardId(id); void refreshCollection() }} />}
       <span className={apiConnected ? 'connection-status connected' : 'connection-status'}>{apiConnected ? '실시간 컬렉션' : '미리보기 데이터'}</span>
       <button className="floating-register" onClick={() => setShowRedeem(true)}>카드 등록</button>
       {selectedCard && <CardDetail card={selectedCard} onClose={() => setSelectedCard(null)} />}
@@ -212,7 +217,14 @@ function CardDetail({ card, onClose }: { card: Card, onClose: () => void }) {
   return <aside className="detail-panel"><button onClick={onClose}>닫기</button><img src={card.image} alt="카드 상세" /><dl><div><dt>아티스트</dt><dd>{card.artist}</dd></div><div><dt>멤버</dt><dd>{card.member}</dd></div><div><dt>발행번호</dt><dd>{detail ? `#${String(detail.serialNumber).padStart(3, '0')}` : card.id}</dd></div><div><dt>획득 경로</dt><dd>{detail?.acquisitionSource === 'redeem_code' ? '콘텐츠 코드' : '콘텐츠 코드 #1'}</dd></div></dl>{detail?.card.handwritingImageUrl && <p className="detail-badge">손글씨 특전 포함</p>}{detail?.card.hasVoice && <p className="detail-badge">보이스 특전 포함</p>}<button className="primary">컬렉션에 추가</button></aside>
 }
 
-function RedeemModal({ onClose, onRedeemed }: { onClose: () => void, onRedeemed: () => Promise<void> }) { const [code, setCode] = useState(''); const [message, setMessage] = useState(''); const [saving, setSaving] = useState(false); const redeem = async () => { setSaving(true); setMessage(''); try { await apiFetch('/redemptions', { method: 'POST', body: JSON.stringify({ code, source: 'manual' }) }); await onRedeemed(); setMessage('카드가 컬렉션에 추가되었습니다.'); setCode(''); } catch (error) { setMessage(error instanceof Error ? error.message : '카드 등록에 실패했습니다.'); } finally { setSaving(false) } }; return <div className="modal-backdrop"><div className="modal"><button className="modal-close" onClick={onClose}>×</button><h2>카드 등록</h2><p className="muted">카드 패키지의 QR을 스캔하거나<br />코드를 직접 입력하세요.</p><div className="qr-box"><span>QR</span><b>QR 스캔</b><small>카메라로 코드를 비춰주세요.</small></div><div className="divider">또는 코드 입력</div><input value={code} onChange={e => setCode(e.target.value)} placeholder="예: NOVA-VALID-01" /><button className="primary" disabled={!code || saving} onClick={() => void redeem()}>{saving ? '등록 중...' : '카드 등록하기'}</button>{message && <p className="form-message">{message}</p>}</div></div> }
+function RedeemModal({ onClose, onRedeemed }: { onClose: () => void, onRedeemed: (userCardId: string) => void }) { const [code, setCode] = useState(''); const [message, setMessage] = useState(''); const [saving, setSaving] = useState(false); const redeem = async () => { setSaving(true); setMessage(''); try { const result = await apiFetch<{ ok: true, data: { userCardId: string } }>('/redemptions', { method: 'POST', body: JSON.stringify({ code, source: 'manual' }) }); onRedeemed(result.data.userCardId); } catch (error) { setMessage(error instanceof Error ? error.message : '카드 등록에 실패했습니다.'); } finally { setSaving(false) } }; return <div className="modal-backdrop"><div className="modal"><button className="modal-close" onClick={onClose}>×</button><h2>카드 등록</h2><p className="muted">카드 패키지의 QR을 스캔하거나<br />코드를 직접 입력하세요.</p><div className="qr-box"><span>QR</span><b>QR 스캔</b><small>카메라로 코드를 비춰주세요.</small></div><div className="divider">또는 코드 입력</div><input value={code} onChange={e => setCode(e.target.value)} placeholder="예: NOVA-VALID-01" /><button className="primary" disabled={!code || saving} onClick={() => void redeem()}>{saving ? '등록 중...' : '카드 등록하기'}</button>{message && <p className="form-message error-message">{message}</p>}</div></div> }
+
+function RevealCard({ userCardId, onClose }: { userCardId: string, onClose: () => void }) {
+  const [revealed, setRevealed] = useState(false)
+  const [detail, setDetail] = useState<UserCardDetail | null>(null)
+  useEffect(() => { void apiFetch<{ ok: true, data: UserCardDetail }>(`/me/cards/${userCardId}`).then(result => setDetail(result.data)).catch(() => setDetail(null)) }, [userCardId])
+  return <main className="reveal-screen"><button className="reveal-close" onClick={onClose}>닫기</button><p className="eyebrow">CARD UNLOCKED</p><h1>{revealed ? '새 카드가 컬렉션에 추가됐어요' : '카드가 도착했어요'}</h1><p className="muted">{revealed ? '나만의 디지털 컬렉션에서 확인해 보세요.' : '버튼을 눌러 카드를 공개하세요.'}</p><div className={revealed ? 'reveal-card revealed' : 'reveal-card'}><img src="/src/assets/hero.png" alt="등록된 공식 카드" />{revealed && <span className="official-badge">공식 카드</span>}</div>{revealed && detail && <div className="reveal-meta"><b>{detail.card.name}</b><span>발행번호 #{String(detail.serialNumber).padStart(3, '0')} · {detail.acquisitionSource === 'redeem_code' ? '콘텐츠 코드' : '직접 등록'}</span></div>}{!revealed ? <button className="primary" onClick={() => setRevealed(true)}>카드 공개하기</button> : <button className="primary" onClick={onClose}>컬렉션으로 이동</button>}</main>
+}
 
 function NavItem({ active, label, onClick }: { active: boolean, label: string, onClick: () => void }) { return <button className={active ? 'nav-item active' : 'nav-item'} onClick={onClick}><span className="nav-dot" />{label}</button> }
 
