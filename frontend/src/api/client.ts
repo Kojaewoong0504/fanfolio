@@ -1,5 +1,9 @@
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
+export function notificationStreamUrl(): string {
+  return `${apiBaseUrl}/notifications/stream`
+}
+
 export type CollectionCard = {
   userCardId: string
   cardId: string

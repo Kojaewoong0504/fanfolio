@@ -1,5 +1,6 @@
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 
 from tests.conftest import assert_error, assert_success
@@ -93,3 +94,22 @@ def test_fan_can_read_unread_count_and_mark_all_notifications_as_read(
 
     count = assert_success(fan.get("/api/notifications/unread-count"))
     assert count["unreadCount"] == 0
+
+
+@pytest.mark.anyio
+async def test_fan_can_receive_notifications_over_an_sse_stream(
+    seeded: dict[str, Any],
+) -> None:
+    from app.db.session import SessionLocal
+    from app.models import User
+    from app.routers.fan import notification_stream
+
+    async with SessionLocal() as session:
+        user = await session.get(User, "fan")
+        assert user is not None
+        response = await notification_stream(user, session)
+        first_event = await response.body_iterator.__anext__()
+        await response.body_iterator.aclose()
+
+    assert "event: notification" in first_event
+    assert '"id": "notification_1"' in first_event

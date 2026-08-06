@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
-import { apiFetch, type CollectionCard, type NotificationItem, type UserCardDetail } from './api/client'
+import { apiFetch, notificationStreamUrl, type CollectionCard, type NotificationItem, type UserCardDetail } from './api/client'
 import { QrRedeemModal } from './components/QrRedeemModal'
 
 type Tab = 'collection' | 'discover' | 'alerts' | 'settings'
@@ -83,7 +83,17 @@ function App() {
     }
     void refreshNotifications()
     const interval = window.setInterval(() => void refreshNotifications(), 30_000)
-    return () => { cancelled = true; window.clearInterval(interval) }
+    const stream = new EventSource(notificationStreamUrl(), { withCredentials: true })
+    stream.addEventListener('notification', (event: MessageEvent<string>) => {
+      const item = JSON.parse(event.data) as NotificationItem
+      setNotifications(items => {
+        if (items.some(existing => existing.id === item.id)) return items
+        setUnreadCount(count => count + 1)
+        return [item, ...items]
+      })
+    })
+    stream.onerror = () => stream.close()
+    return () => { cancelled = true; window.clearInterval(interval); stream.close() }
   }, [signedIn])
 
   const logout = async () => {

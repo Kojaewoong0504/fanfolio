@@ -1,6 +1,9 @@
+import asyncio
+import json
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select, update
 
 from app.dependencies import DbSession, FanUser
@@ -163,6 +166,51 @@ async def notifications(user: FanUser, session: DbSession) -> dict:
             ]
         },
     }
+
+
+@router.get("/notifications/stream")
+async def notification_stream(user: FanUser, session: DbSession) -> StreamingResponse:
+    """Send unread and newly-created notifications over a lightweight SSE stream."""
+    user_id = user.id
+
+    async def events():
+        seen_ids: set[str] = set()
+        while True:
+            items = (
+                await session.scalars(
+                    select(Notification)
+                    .where(Notification.user_id == user_id, Notification.is_read.is_(False))
+                    .order_by(Notification.created_at, Notification.id)
+                )
+            ).all()
+            payloads = [
+                {
+                    "id": item.id,
+                    "kind": item.kind,
+                    "title": item.title,
+                    "body": item.body,
+                    "isRead": item.is_read,
+                    "readAt": item.read_at.isoformat() if item.read_at else None,
+                    "createdAt": item.created_at.isoformat(),
+                }
+                for item in items
+                if item.id not in seen_ids
+            ]
+            seen_ids.update(item["id"] for item in payloads)
+            if session.in_transaction():
+                await session.rollback()
+            if payloads:
+                for item in payloads:
+                    yield f"event: notification\ndata: {json.dumps(item, ensure_ascii=False)}\n\n"
+            else:
+                yield ": keep-alive\n\n"
+            await asyncio.sleep(15)
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+    )
 
 
 @router.get("/notifications/unread-count")
