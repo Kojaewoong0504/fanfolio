@@ -65,6 +65,27 @@ def test_artist_can_submit_special_card_for_review_but_not_publish_it(
     assert_error(artist.post(f"/api/admin/cards/{draft['id']}/publish"), 403, "FORBIDDEN")
 
 
+def test_artist_studio_loads_templates_and_catalog_from_api(
+    actors: dict[str, TestClient],
+) -> None:
+    data = assert_success(actors["artist"].get("/api/artist/templates"))
+
+    assert {template["id"] for template in data["items"]} == {
+        "template_signature_v1",
+        "template_basic_v1",
+    }
+    assert data["artists"][0]["id"] == "artist_nova3"
+    assert {member["id"] for member in data["members"]} == {
+        "member_yuna",
+        "member_minho",
+        "member_jei",
+    }
+
+
+def test_fan_cannot_load_artist_studio_templates(actors: dict[str, TestClient]) -> None:
+    assert_error(actors["fan"].get("/api/artist/templates"), 403, "FORBIDDEN")
+
+
 def test_artist_handwriting_background_removal_returns_a_trackable_job(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:

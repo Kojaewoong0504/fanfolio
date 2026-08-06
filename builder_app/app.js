@@ -39,5 +39,79 @@ async function pollBackgroundRemoval() { for (let attempt = 0; attempt < 10; att
 async function loadPreview() { if (!state.cardId) { toast('먼저 카드 정보를 저장해 주세요.'); return; } try { const result = await api(`/artist/cards/${state.cardId}/preview`, { method: 'POST' }); state.preview = result.data; if (state.previewImageSrc) URL.revokeObjectURL(state.previewImageSrc); state.previewImageSrc = ''; if (result.data.previewImageUrl) { const image = await fetch(absoluteApiUrl(result.data.previewImageUrl), { credentials: 'include', headers: SESSION_TOKEN ? { 'X-Fanfolio-Session': SESSION_TOKEN } : {} }); if (!image.ok) throw new Error(`PREVIEW_IMAGE ${image.status}`); state.previewImageSrc = URL.createObjectURL(await image.blob()); } state.step = 3; render(); } catch { toast('카드 미리보기를 불러오지 못했습니다.'); } }
 document.addEventListener('submit', async (event) => { if (event.target.id !== 'card-form') return; event.preventDefault(); const form = new FormData(event.target); const imageFile = form.get('cardImage'); state.form = { ...state.form, name: form.get('name'), memberId: form.get('memberId'), seasonName: form.get('seasonName'), templateId: form.get('templateId'), rarity: form.get('rarity'), signatureText: form.get('signatureText'), issueLimit: Number(form.get('issueLimit')) }; try { const imageAssetId = await uploadAsset(imageFile, 'card'); const result = await api('/artist/cards', { method: 'POST', body: JSON.stringify({ templateId: state.form.templateId, name: state.form.name, seasonName: state.form.seasonName, rarity: state.form.rarity, imageAssetId, memberId: state.form.memberId, signatureText: state.form.signatureText, hasVoice: state.form.hasVoice, issueLimit: state.form.issueLimit }) }); state.cardId = result.data.id; state.cardName = result.data.name; state.cards = [result.data, ...state.cards.filter((card) => card.id !== result.data.id)]; toast('카드를 임시 저장했습니다.'); state.step = 2; render(); } catch { toast('카드 이미지 업로드 또는 저장에 실패했습니다. 아티스트 세션과 API 서버를 확인해 주세요.'); } });
 document.addEventListener('click', async (event) => { if (event.target.id === 'save-draft') toast('카드 정보는 다음 단계로 이동할 때 API에 저장됩니다.'); if (event.target.id === 'submit-review') { if (!state.cardId) { toast('먼저 카드 정보를 저장해 주세요.'); return; } try { await api(`/artist/cards/${state.cardId}/submit-review`, { method: 'POST' }); state.step = 4; render(); } catch { toast('검수 요청에 실패했습니다. 아티스트 세션과 API 서버를 확인해 주세요.'); } } if (event.target.id === 'back-signature') { state.step = 2; render(); } });
+// API에서 받은 카탈로그를 카드 생성 폼에 반영합니다. 기존 목업 옵션을
+// fallback으로 남겨 두어 API가 아직 준비되지 않은 로컬 화면도 깨지지 않습니다.
+function cardForm() {
+  const f = state.form;
+  const catalog = state.catalog || {};
+  const artists = catalog.artists || [{ id: 'artist_nova3', name: '드림스케이프' }];
+  const members = catalog.members || [
+    { id: 'member_yuna', name: '유나', artistId: 'artist_nova3' },
+    { id: 'member_minho', name: '민호', artistId: 'artist_nova3' },
+    { id: 'member_jei', name: '제이', artistId: 'artist_nova3' },
+  ];
+  const templates = catalog.items || [
+    { id: 'template_signature_v1', name: '스페셜' },
+    { id: 'template_basic_v1', name: '일반' },
+  ];
+  const selectedArtistId = f.artistId || artists[0]?.id;
+  const artistOptions = artists.map((artist) => `<option value="${esc(artist.id)}" ${artist.id === selectedArtistId ? 'selected' : ''}>${esc(artist.name)}</option>`).join('');
+  const memberOptions = members.filter((member) => !selectedArtistId || member.artistId === selectedArtistId).map((member) => `<option value="${esc(member.id)}" ${member.id === f.memberId ? 'selected' : ''}>${esc(member.name)}</option>`).join('');
+  const templateOptions = templates.filter((template) => template.status !== 'archived').map((template) => `<option value="${esc(template.id)}" ${template.id === f.templateId ? 'selected' : ''}>${esc(template.name)}</option>`).join('');
+  return `${steps()}<div class="studio-grid"><div class="panel preview-panel"><h2>카드 미리보기</h2><div id="preview">${cardPreview()}</div><span class="hint">권장 이미지 1000×1500px · JPG/PNG</span></div><form class="panel form-panel" id="card-form"><h2>카드 정보</h2><label class="field">카드 이미지 *<input name="cardImage" type="file" accept="image/png,image/jpeg,image/webp" required /></label><label class="field">카드명 *<input name="name" placeholder="카드 이름을 입력하세요" required value="${esc(f.name)}" /></label><div class="row"><label class="field">그룹<select name="group">${artistOptions}</select></label><label class="field">멤버<select name="memberId">${memberOptions}</select></label></div><div class="row"><label class="field">시즌<select name="seasonName"><option ${f.seasonName === '2025 봄' ? 'selected' : ''}>2025 봄</option><option ${f.seasonName === '2025 여름' ? 'selected' : ''}>2025 여름</option></select></label><label class="field">카드 타입<select name="templateId">${templateOptions}</select></label></div><label class="field">희귀도<select name="rarity"><option value="R" ${f.rarity === 'R' ? 'selected' : ''}>R (레어)</option><option value="SR" ${f.rarity === 'SR' ? 'selected' : ''}>SR (슈퍼 레어)</option><option value="N" ${f.rarity === 'N' ? 'selected' : ''}>N (노멀)</option></select></label><label class="field">사인 메시지<textarea name="signatureText" maxlength="200" placeholder="팬에게 전하고 싶은 메시지를 입력하세요">${esc(f.signatureText)}</textarea><span class="hint">최대 200자 · 다음 단계에서 직접 손글씨를 추가할 수 있어요.</span><div class="toggle-row"><span>보이스 카드 <small class="hint">카드 수집 시 음성이 재생됩니다.</small></span><button type="button" class="toggle ${f.hasVoice ? 'on' : ''}" aria-label="보이스 카드 켜기" aria-pressed="${f.hasVoice}"></button></div><label class="field">발행 수량<input name="issueLimit" type="number" value="${esc(f.issueLimit)}" min="1" required /><span class="hint">발행 수량은 검수 전까지 수정할 수 있습니다.</span></label><div class="bottom-actions"><button type="button" class="secondary" id="save-draft">임시 저장</button><button class="primary" type="submit">다음: 손글씨</button></div></form></div>`;
+}
+
+async function loadStudio() {
+  try {
+    const [catalogResult, cardsResult] = await Promise.all([api('/artist/templates'), api('/artist/cards')]);
+    state.catalog = catalogResult.data;
+    state.cards = cardsResult.data.items;
+    render();
+  } catch (error) {
+    if (error.status === 401 || error.status === 403) {
+      SESSION_TOKEN = '';
+      localStorage.removeItem('fanfolio_session');
+      state.authenticated = false;
+      state.loginError = error.status === 403 ? '아티스트 계정만 스튜디오에 입장할 수 있어요.' : '세션이 만료됐어요. 다시 로그인해 주세요.';
+      render();
+    }
+  }
+}
+
+async function loginArtist(event) {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  if (!state.magicLinkRequested) {
+    const email = form.get('email')?.toString().trim();
+    if (!email) return;
+    state.loginEmail = email;
+    SESSION_TOKEN = '';
+    localStorage.removeItem('fanfolio_session');
+    try {
+      await api('/auth/magic-link/request', { method: 'POST', body: JSON.stringify({ email, purpose: 'login' }) });
+      state.magicLinkRequested = true;
+      state.loginError = `${email}로 로그인 링크를 보냈습니다.`;
+    } catch {
+      state.loginError = '로그인 링크를 보내지 못했습니다. 이메일과 API 상태를 확인해 주세요.';
+    }
+    render();
+    return;
+  }
+  const token = form.get('token')?.toString().trim();
+  if (!token) return;
+  try {
+    await api('/auth/magic-link/verify', { method: 'POST', body: JSON.stringify({ token }) });
+    state.authenticated = true;
+    state.loginError = '';
+    await loadStudio();
+  } catch (error) {
+    SESSION_TOKEN = '';
+    localStorage.removeItem('fanfolio_session');
+    state.authenticated = false;
+    state.loginError = error.status === 403 ? '아티스트 계정만 스튜디오에 입장할 수 있어요.' : '유효하지 않거나 만료된 로그인 링크입니다.';
+    render();
+  }
+}
+
 render();
 if (state.authenticated) loadStudio();

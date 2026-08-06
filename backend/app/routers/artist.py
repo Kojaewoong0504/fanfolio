@@ -8,11 +8,50 @@ from app.core.config import get_settings
 from app.dependencies import ArtistUser, DbSession
 from app.errors import AppError
 from app.image_processing import compose_card_preview
-from app.models import Asset, BackgroundRemovalJob, Card
+from app.models import Artist, Asset, BackgroundRemovalJob, Card, Member
 from app.schemas import ArtistCardRequest, ArtistCardUpdate
 from app.tasks import enqueue_background_removal
 
 router = APIRouter(prefix="/api", tags=["artist"])
+
+
+@router.get("/artist/templates")
+async def list_templates(user: ArtistUser, session: DbSession) -> dict:
+    """Return the studio's selectable templates and the artist catalog.
+
+    Templates are configuration in the MVP, so they are intentionally kept
+    outside the card table. Artists still receive the group/member catalog
+    from the database instead of relying on values baked into the UI.
+    """
+    artists = (await session.scalars(select(Artist).order_by(Artist.name))).all()
+    members = (await session.scalars(select(Member).order_by(Member.name))).all()
+    return {
+        "ok": True,
+        "data": {
+            "items": [
+                {
+                    "id": "template_signature_v1",
+                    "name": "스페셜",
+                    "layoutVersion": "signature-v1",
+                    "status": "active",
+                },
+                {
+                    "id": "template_basic_v1",
+                    "name": "일반",
+                    "layoutVersion": "basic-v1",
+                    "status": "active",
+                },
+            ],
+            "artists": [
+                {"id": artist.id, "name": artist.name, "imageUrl": artist.image_url}
+                for artist in artists
+            ],
+            "members": [
+                {"id": member.id, "artistId": member.artist_id, "name": member.name}
+                for member in members
+            ],
+        },
+    }
 
 
 @router.post("/artist/cards", status_code=status.HTTP_201_CREATED)
