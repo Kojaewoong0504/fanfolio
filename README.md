@@ -215,6 +215,27 @@ docker compose -f docker-compose.stack.yml down -v
 운영에서는 `AUTO_CREATE_SCHEMA=false`를 유지하고 배포 단계에서 `alembic upgrade head`를
 먼저 실행합니다. 앱이 시작할 때 ORM이 임의로 테이블을 만들지 않도록 하는 설정입니다.
 
+### 운영용 컨테이너 배포 템플릿
+
+운영 환경의 비밀번호와 SMTP 자격 증명은 저장소에 커밋하지 않습니다. 예시 환경 파일을
+복사해 실제 값으로 교체한 뒤, TLS reverse proxy가 API 앞단에서 HTTPS를 종료하도록 구성하세요.
+API 포트는 기본적으로 `127.0.0.1:8000`에만 바인딩되어 외부에 직접 노출되지 않습니다.
+
+```bash
+cp .env.production.example .env.production
+# .env.production의 도메인·DB·Redis·SMTP 값을 실제 값으로 교체
+docker compose --env-file .env.production \
+  -f docker-compose.production.example.yml config
+docker compose --env-file .env.production \
+  -f docker-compose.production.example.yml up --build -d
+curl http://127.0.0.1:8000/api/health/ready
+```
+
+`config` 단계가 필수 환경 변수 누락을 먼저 잡고, API 컨테이너가 `alembic upgrade head`
+후 시작합니다. 운영 배포에서는 이미지 태그를 고정하고, PostgreSQL·Redis 볼륨 백업과
+TLS reverse proxy 설정을 별도로 관리하세요. `docker-compose.stack.yml`은 Mailpit과
+개발용 비밀번호를 포함한 로컬 검증용이므로 운영에 사용하지 않습니다.
+
 ## VS Code 개발 환경
 
 프로젝트 루트 폴더를 VS Code로 열면 추천 확장 설치 알림이 표시됩니다. 다음 확장을 설치하세요.
