@@ -177,6 +177,17 @@ Podman을 사용할 때 기본 연결이 여러 개라면 연결 이름을 명�
 COMPOSE_PROVIDER=podman PODMAN_CONNECTION=fanfolio-machine ./scripts/integration-smoke.sh
 ```
 
+`podman compose`가 제공되지 않는 Podman 설치에서는 `podman-compose`를 설치하면
+스크립트가 자동으로 인식합니다. 이미 사용 중인 로컬 포트가 있으면 외부 포트만 바꿀 수
+있습니다(컨테이너 내부 포트와 API 설정은 스크립트가 함께 맞춥니다).
+
+```bash
+python3 -m pip install --user podman-compose
+POSTGRES_HOST_PORT=15432 SMTP_HOST_PORT=11025 MAILPIT_HOST_PORT=18025 \
+REDIS_HOST_PORT=16379 COMPOSE_PROVIDER=podman \
+PODMAN_CONNECTION=fanfolio-machine STOP_SERVICES=1 ./scripts/integration-smoke.sh
+```
+
 API와 Celery까지 컨테이너로 실행하려면 별도의 전체 스택 compose 파일을 사용합니다.
 이 구성은 로컬 검증용이며, 운영에서는 비밀번호·도메인·TLS 설정을 반드시 교체하세요.
 

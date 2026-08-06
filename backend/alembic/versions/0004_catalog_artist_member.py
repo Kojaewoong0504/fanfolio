@@ -8,7 +8,7 @@ from sqlalchemy import inspect
 from alembic import op
 
 revision: str = "0004_catalog_artist_member"
-down_revision: str | None = "0003_notification_email_preferences"
+down_revision: str | None = "0003_notification_email_prefs"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

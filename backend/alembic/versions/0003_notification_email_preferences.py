@@ -7,7 +7,7 @@ from sqlalchemy import inspect
 
 from alembic import op
 
-revision: str = "0003_notification_email_preferences"
+revision: str = "0003_notification_email_prefs"
 down_revision: str | None = "0002_events_and_notifications"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

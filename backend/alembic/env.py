@@ -1,6 +1,8 @@
+import asyncio
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
+from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
 from app.core.config import get_settings
@@ -64,6 +66,14 @@ def run_migrations_online() -> None:
 
     """
     config.set_main_option("sqlalchemy.url", sync_database_url())
+    database_url = config.get_main_option("sqlalchemy.url")
+    if database_url.startswith("postgresql+asyncpg://"):
+        # The application uses asyncpg, so Alembic must enter the async engine
+        # through `run_sync`. Calling a synchronous engine with asyncpg raises
+        # MissingGreenlet before a migration can even start.
+        asyncio.run(run_async_migrations())
+        return
+
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
@@ -71,10 +81,26 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        do_run_migrations(connection)
 
-        with context.begin_transaction():
-            context.run_migrations()
+
+def do_run_migrations(connection) -> None:
+    """Configure Alembic once for both sync and async SQLAlchemy connections."""
+    context.configure(connection=connection, target_metadata=target_metadata)
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+async def run_async_migrations() -> None:
+    """Run PostgreSQL migrations through SQLAlchemy's asyncpg dialect."""
+    connectable = async_engine_from_config(
+        config.get_section(config.config_ini_section, {}),
+        prefix="sqlalchemy.",
+        poolclass=pool.NullPool,
+    )
+    async with connectable.connect() as connection:
+        await connection.run_sync(do_run_migrations)
+    await connectable.dispose()
 
 
 if context.is_offline_mode():

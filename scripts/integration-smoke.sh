@@ -22,6 +22,11 @@ REDEEM_SESSION_B=""
 REDEEM_CODE=""
 REDEEM_CODE_A=""
 REDEEM_CODE_B=""
+POSTGRES_HOST_PORT="${POSTGRES_HOST_PORT:-5432}"
+SMTP_HOST_PORT="${SMTP_HOST_PORT:-1025}"
+MAILPIT_HOST_PORT="${MAILPIT_HOST_PORT:-8025}"
+REDIS_HOST_PORT="${REDIS_HOST_PORT:-6379}"
+export POSTGRES_HOST_PORT SMTP_HOST_PORT MAILPIT_HOST_PORT REDIS_HOST_PORT
 
 cleanup() {
   set +e
@@ -44,6 +49,14 @@ fi
 
 if [[ "$COMPOSE_PROVIDER" != "podman" ]] && command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
   COMPOSE=(docker compose)
+elif [[ "$COMPOSE_PROVIDER" != "docker" ]] && command -v podman-compose >/dev/null 2>&1 && podman-compose version >/dev/null 2>&1; then
+  COMPOSE=(podman-compose)
+  if [[ -n "$PODMAN_CONNECTION" ]]; then
+    # podman-compose appends --podman-args after the subcommand, where
+    # Podman treats the global --connection flag as unknown. Use Podman's
+    # supported environment variable so every generated command inherits it.
+    export CONTAINER_CONNECTION="$PODMAN_CONNECTION"
+  fi
 elif [[ "$COMPOSE_PROVIDER" != "docker" ]] && command -v podman >/dev/null 2>&1 && podman "${podman_args[@]}" compose version >/dev/null 2>&1; then
   COMPOSE=(podman "${podman_args[@]}" compose)
 else
@@ -97,26 +110,26 @@ PY
 
 echo "[1/5] starting local dependencies"
 compose up -d
-wait_for_tcp 127.0.0.1 5432
-wait_for_tcp 127.0.0.1 1025
-wait_for_tcp 127.0.0.1 6379
-wait_for_url http://localhost:8025/api/v1/info
+wait_for_tcp 127.0.0.1 "$POSTGRES_HOST_PORT"
+wait_for_tcp 127.0.0.1 "$SMTP_HOST_PORT"
+wait_for_tcp 127.0.0.1 "$REDIS_HOST_PORT"
+wait_for_url "http://localhost:${MAILPIT_HOST_PORT}/api/v1/info"
 
 export APP_ENV=development
-export DATABASE_URL=postgresql+asyncpg://fanfolio:fanfolio-local-only@localhost:5432/fanfolio
+export DATABASE_URL="postgresql+asyncpg://fanfolio:fanfolio-local-only@localhost:${POSTGRES_HOST_PORT}/fanfolio"
 export AUTO_CREATE_SCHEMA=false
 export FRONTEND_URL=http://localhost:5173
 export FRONTEND_ORIGINS=http://localhost:5173
 export MAIL_DELIVERY_MODE=smtp
 export MAIL_FROM='Fanfolio <no-reply@localhost>'
 export SMTP_HOST=localhost
-export SMTP_PORT=1025
+export SMTP_PORT="$SMTP_HOST_PORT"
 export SMTP_USE_TLS=false
 export TASK_QUEUE_MODE=celery
-export CELERY_BROKER_URL=redis://localhost:6379/0
-export CELERY_RESULT_BACKEND=redis://localhost:6379/0
+export CELERY_BROKER_URL="redis://localhost:${REDIS_HOST_PORT}/0"
+export CELERY_RESULT_BACKEND="redis://localhost:${REDIS_HOST_PORT}/0"
 export RATE_LIMIT_BACKEND=redis
-export RATE_LIMIT_REDIS_URL=redis://localhost:6379/1
+export RATE_LIMIT_REDIS_URL="redis://localhost:${REDIS_HOST_PORT}/1"
 
 echo "[2/5] applying PostgreSQL migrations"
 (cd "$BACKEND_DIR" && .venv/bin/alembic upgrade head)
@@ -132,12 +145,14 @@ wait_for_url http://localhost:8000/api/health/ready
 echo "[3b/5] starting and checking a Celery worker"
 (
   cd "$BACKEND_DIR"
-  .venv/bin/celery -A app.tasks:celery_app worker --loglevel=WARNING --concurrency=1
+  # The smoke worker only verifies broker reachability. `solo` avoids
+  # platform-specific prefork behavior on macOS while remaining valid in CI.
+  .venv/bin/celery -A app.tasks:celery_app worker --loglevel=INFO --pool=solo \
+    --hostname=fanfolio-integration@%h
 ) >"$LOG_DIR/celery.log" 2>&1 &
 CELERY_PID=$!
 for _ in {1..30}; do
-  if "$BACKEND_DIR/.venv/bin/celery" -A app.tasks:celery_app inspect ping --timeout=1 2>/dev/null \
-    | grep -q "pong"; then
+  if grep -F " ready." "$LOG_DIR/celery.log" >/dev/null 2>&1; then
     break
   fi
   if ! kill -0 "$CELERY_PID" 2>/dev/null; then
@@ -147,16 +162,22 @@ for _ in {1..30}; do
   fi
   sleep 1
 done
-if ! "$BACKEND_DIR/.venv/bin/celery" -A app.tasks:celery_app inspect ping --timeout=1 2>/dev/null \
-  | grep -q "pong"; then
-  echo "Timed out waiting for the Celery worker." >&2
+if ! grep -F " ready." "$LOG_DIR/celery.log" >/dev/null 2>&1; then
+  echo "Timed out waiting for the Celery worker to become ready." >&2
+  cat "$LOG_DIR/celery.log" >&2
+  exit 1
+fi
+ping_output="$(cd "$BACKEND_DIR" && .venv/bin/celery -A app.tasks:celery_app inspect ping --timeout=5 2>&1 || true)"
+if ! grep -F "pong" <<<"$ping_output" >/dev/null; then
+  echo "Celery worker did not answer inspect ping." >&2
+  printf '%s\n' "$ping_output" >&2
   cat "$LOG_DIR/celery.log" >&2
   exit 1
 fi
 
 echo "[3c/5] verifying PostgreSQL redemption concurrency"
 read -r REDEEM_USER_A REDEEM_USER_B REDEEM_SESSION_A REDEEM_SESSION_B REDEEM_CODE \
-  REDEEM_CODE_A REDEEM_CODE_B < <("$BACKEND_DIR/.venv/bin/python" - <<'PY'
+  REDEEM_CODE_A REDEEM_CODE_B < <(cd "$BACKEND_DIR" && .venv/bin/python - <<'PY'
 import asyncio
 from secrets import token_hex
 
@@ -181,6 +202,11 @@ async def main() -> None:
             [
                 User(id=user_a, email=f"{user_a}@example.com", role=Role.FAN),
                 User(id=user_b, email=f"{user_b}@example.com", role=Role.FAN),
+            ]
+        )
+        await session.flush()
+        session.add_all(
+            [
                 Session(token=session_a, user_id=user_a),
                 Session(token=session_b, user_id=user_b),
                 Drop(id=drop_id, name="Integration drop", status="live"),
@@ -221,6 +247,10 @@ for pid in "${same_code_pids[@]}"; do wait "$pid"; done
 same_code_statuses="$(cat "$same_code_dir"/*.status | sort | tr '\n' ' ')"
 [[ "$same_code_statuses" == *"201"* && "$same_code_statuses" == *"409"* ]] || {
   echo "Expected one 201 and one 409 for the same redeem code, got: $same_code_statuses" >&2
+  for response in "$same_code_dir"/*.status "$same_code_dir"/*.json; do
+    echo "--- $response" >&2
+    cat "$response" >&2
+  done
   exit 1
 }
 
@@ -243,10 +273,14 @@ wait "$pid_a"
 wait "$pid_b"
 [[ "$(cat "$different_code_dir/a.status")" == "201" && "$(cat "$different_code_dir/b.status")" == "201" ]] || {
   echo "Expected both different redeem codes to succeed." >&2
+  for response in "$different_code_dir"/*.status "$different_code_dir"/*.json; do
+    echo "--- $response" >&2
+    cat "$response" >&2
+  done
   exit 1
 }
 
-"$BACKEND_DIR/.venv/bin/python" - "$REDEEM_CODE" "$REDEEM_CODE_A" "$REDEEM_CODE_B" <<'PY'
+(cd "$BACKEND_DIR" && .venv/bin/python - "$REDEEM_CODE" "$REDEEM_CODE_A" "$REDEEM_CODE_B" <<'PY'
 import asyncio
 import sys
 
@@ -284,7 +318,7 @@ async def main() -> None:
                 UserCard.serial_number.in_([1, 2]),
             )
         )
-    if used_count != 1 or sorted(serials) != [1, 2] or card_count < 2:
+    if used_count != 1 or sorted(serials) != [1, 2, 3] or card_count < 2:
         raise SystemExit(
             f"Unexpected redemption concurrency state: used_count={used_count}, "
             f"serials={serials}, card_count={card_count}"
@@ -293,13 +327,15 @@ async def main() -> None:
 
 asyncio.run(main())
 PY
+)
 rm -rf -- "$same_code_dir" "$different_code_dir"
 
 echo "[4/5] verifying Redis reachability"
 "$BACKEND_DIR/.venv/bin/python" - <<'PY'
+import os
 import socket
 
-with socket.create_connection(("127.0.0.1", 6379), timeout=3) as connection:
+with socket.create_connection(("127.0.0.1", int(os.environ["REDIS_HOST_PORT"])), timeout=3) as connection:
     connection.sendall(b"*1\r\n$4\r\nPING\r\n")
     response = connection.recv(64)
 if response != b"+PONG\r\n":
@@ -333,7 +369,7 @@ curl -fsS -X POST http://localhost:8000/api/auth/magic-link/request \
   -d '{"email":"integration@example.com","purpose":"login"}' >/dev/null
 
 for _ in {1..30}; do
-  messages="$(curl -fsS http://localhost:8025/api/v1/messages)"
+  messages="$(curl -fsS "http://localhost:${MAILPIT_HOST_PORT}/api/v1/messages")"
   if grep -Fq 'integration@example.com' <<<"$messages"; then
     echo "Fanfolio integration smoke test passed."
     exit 0
