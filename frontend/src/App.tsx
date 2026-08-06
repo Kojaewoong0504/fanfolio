@@ -156,6 +156,11 @@ function App() {
     }
   }
 
+  const claimBenefit = async (campaignId: string) => {
+    await apiFetch(`/me/collection/benefits/${encodeURIComponent(campaignId)}/claim`, { method: 'POST' })
+    await refreshCollection()
+  }
+
   if (!signedIn) {
     return <Login onLogin={() => { setSignedIn(true); void refreshCollection() }} />
   }
@@ -177,7 +182,7 @@ function App() {
       </header>
 
       <section className="screen">
-        {tab === 'collection' && <Collection cards={collectionCards} summary={collectionSummary} benefits={collectionBenefits} onSelect={setSelectedCard} onRedeem={() => setShowRedeem(true)} />}
+        {tab === 'collection' && <Collection cards={collectionCards} summary={collectionSummary} benefits={collectionBenefits} onSelect={setSelectedCard} onRedeem={() => setShowRedeem(true)} onClaim={claimBenefit} />}
         {tab === 'discover' && <Discover onSelect={setSelectedCard} />}
         {tab === 'alerts' && <Alerts items={notifications} onRead={markNotificationRead} onReadAll={markAllNotificationsRead} />}
         {tab === 'settings' && currentUser && <Settings user={currentUser} onUserUpdated={setCurrentUser} onLogout={logout} />}
@@ -309,10 +314,23 @@ function Onboarding({ onComplete }: { onComplete: () => void }) {
   return <main className="onboarding-screen"><div className="onboarding-top"><span>‹</span><b>최초 설정</b><small>1 / 1</small></div><div className="progress"><span /></div><p className="eyebrow">WELCOME TO FANFOLIO</p><h1>좋아하는 아티스트를<br />선택해 주세요</h1><p className="muted">관심 있는 카드를 가장 먼저 알려드릴게요.</p><label className="field-label">좋아하는 그룹</label><div className="choice-row">{artists.map(artist => <button className={group === artist.id ? 'choice selected' : 'choice'} key={artist.id} onClick={() => setGroup(artist.id)}>{artist.name}</button>)}</div><label className="field-label">좋아하는 멤버</label><div className="member-row">{members.map(item => <button className={member === item.id ? 'member selected' : 'member'} key={item.id} onClick={() => setMember(item.id)}>{item.name}</button>)}</div><label className="field-label">닉네임</label><input value={nickname} onChange={e => setNickname(e.target.value)} placeholder="닉네임을 입력하세요" maxLength={40} /><button className="primary" onClick={() => void save()} disabled={!nickname.trim() || !group || !member || busy}>{busy ? '저장 중...' : '시작하기'}</button>{message && <p className="form-message error-message">{message}</p>}</main>
 }
 
-function Collection({ cards: collectionCards, summary, benefits, onSelect, onRedeem }: { cards: Card[], summary: CollectionSummary, benefits: CollectionBenefit[], onSelect: (card: Card) => void, onRedeem: () => void }) {
+function Collection({ cards: collectionCards, summary, benefits, onSelect, onRedeem, onClaim }: { cards: Card[], summary: CollectionSummary, benefits: CollectionBenefit[], onSelect: (card: Card) => void, onRedeem: () => void, onClaim: (campaignId: string) => Promise<void> }) {
   const [showAll, setShowAll] = useState(false)
+  const [claimingId, setClaimingId] = useState<string | null>(null)
+  const [claimMessage, setClaimMessage] = useState('')
   const visibleCards = showAll ? collectionCards : collectionCards.slice(0, 4)
-  return <><div className="summary"><div><span className="muted">보유 카드 수</span><strong>{summary.ownedCount} <small>/ {summary.totalSlots}</small></strong><small className="completion-rate">컬렉션 {summary.completionRate}% 완료</small></div><button onClick={onRedeem} className="outline">+ 카드 등록</button></div>{benefits.length > 0 && <section className="benefit-section"><div className="section-heading"><h2>컬렉션 완성 특전</h2></div><div className="benefit-list">{benefits.map(benefit => <article className={`benefit-card ${benefit.status}`} key={`${benefit.artistId ?? 'fanfolio'}-${benefit.seasonName}`}><div><span className="detail-badge">{benefit.status === 'unlocked' ? '해금 완료' : '진행 중'}</span><h3>{benefit.benefit.title}</h3><p>{benefit.benefit.description}</p></div><strong>{benefit.ownedCount}/{benefit.requiredCount}</strong></article>)}</div></section>}<div className="section-heading"><h2>{showAll ? '내 컬렉션' : '최근 수집한 카드'}</h2>{collectionCards.length > 4 && <button onClick={() => setShowAll(value => !value)}>{showAll ? '최근 카드만 보기' : `전체 보기 (${collectionCards.length})`}</button>}</div>{visibleCards.length > 0 ? <div className="card-grid">{visibleCards.map(card => <button className="card-tile" key={card.id} onClick={() => onSelect(card)}><img src={card.image} alt="카드 이미지" /><span>{card.id}</span><b>{card.member}</b></button>)}</div> : null}<div className="empty-slot" onClick={onRedeem}><span>+</span><b>새 카드를 등록하세요</b><small>QR 또는 카드 코드를 사용합니다.</small></div></>
+  const claim = async (benefit: CollectionBenefit) => {
+    if (!benefit.campaignId) return
+    setClaimingId(benefit.campaignId)
+    setClaimMessage('')
+    try {
+      await onClaim(benefit.campaignId)
+      setClaimMessage('특전을 수령했어요.')
+    } catch (error) {
+      setClaimMessage(error instanceof Error ? error.message : '특전을 수령하지 못했습니다.')
+    } finally { setClaimingId(null) }
+  }
+  return <><div className="summary"><div><span className="muted">보유 카드 수</span><strong>{summary.ownedCount} <small>/ {summary.totalSlots}</small></strong><small className="completion-rate">컬렉션 {summary.completionRate}% 완료</small></div><button onClick={onRedeem} className="outline">+ 카드 등록</button></div>{benefits.length > 0 && <section className="benefit-section"><div className="section-heading"><h2>컬렉션 완성 특전</h2></div><div className="benefit-list">{benefits.map(benefit => <article className={`benefit-card ${benefit.status}`} key={`${benefit.campaignId ?? benefit.artistId ?? 'fanfolio'}-${benefit.seasonName}`}><div><span className="detail-badge">{benefit.claimed ? '수령 완료' : benefit.status === 'unlocked' ? '해금 완료' : '진행 중'}</span><h3>{benefit.benefit.title}</h3><p>{benefit.benefit.description}</p></div><div><strong>{benefit.ownedCount}/{benefit.requiredCount}</strong>{benefit.claimable && benefit.campaignId && <button className="outline" onClick={() => void claim(benefit)} disabled={claimingId === benefit.campaignId}>{claimingId === benefit.campaignId ? '수령 중...' : '특전 받기'}</button>}</div></article>)}</div>{claimMessage && <p className="form-message">{claimMessage}</p>}</section>}<div className="section-heading"><h2>{showAll ? '내 컬렉션' : '최근 수집한 카드'}</h2>{collectionCards.length > 4 && <button onClick={() => setShowAll(value => !value)}>{showAll ? '최근 카드만 보기' : `전체 보기 (${collectionCards.length})`}</button>}</div>{visibleCards.length > 0 ? <div className="card-grid">{visibleCards.map(card => <button className="card-tile" key={card.id} onClick={() => onSelect(card)}><img src={card.image} alt="카드 이미지" /><span>{card.id}</span><b>{card.member}</b></button>)}</div> : null}<div className="empty-slot" onClick={onRedeem}><span>+</span><b>새 카드를 등록하세요</b><small>QR 또는 카드 코드를 사용합니다.</small></div></>
 }
 
 function Discover({ onSelect }: { onSelect: (card: Card) => void }) {

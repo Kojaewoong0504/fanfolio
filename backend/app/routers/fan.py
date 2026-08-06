@@ -2,6 +2,7 @@ import asyncio
 import json
 from datetime import UTC, datetime
 from typing import Literal
+from uuid import uuid4
 
 from fastapi import APIRouter, Query, Request, status
 from fastapi.responses import FileResponse, StreamingResponse
@@ -9,7 +10,17 @@ from sqlalchemy import case, desc, func, or_, select, update
 
 from app.dependencies import DbSession, FanUser
 from app.errors import AppError
-from app.models import Artist, Asset, Card, CollectionCampaign, Drop, Member, Notification, UserCard
+from app.models import (
+    Artist,
+    Asset,
+    Card,
+    CollectionBenefitClaim,
+    CollectionCampaign,
+    Drop,
+    Member,
+    Notification,
+    UserCard,
+)
 from app.rate_limit import enforce_rate_limit
 from app.schemas import (
     NotificationPreferencesUpdate,
@@ -17,7 +28,7 @@ from app.schemas import (
     ReadNotification,
     RedemptionRequest,
 )
-from app.services import redeem
+from app.services import record_audit, redeem
 
 router = APIRouter(prefix="/api", tags=["fan"])
 
@@ -120,6 +131,13 @@ async def collection_benefits(user: FanUser, session: DbSession) -> dict:
             artist.id: artist
             for artist in await session.scalars(select(Artist).where(Artist.id.in_(artist_ids)))
         }
+        claims = await session.scalars(
+            select(CollectionBenefitClaim).where(
+                CollectionBenefitClaim.user_id == user.id,
+                CollectionBenefitClaim.campaign_id.in_([campaign.id for campaign in campaigns]),
+            )
+        )
+        claim_by_campaign = {claim.campaign_id: claim for claim in claims}
         return {
             "ok": True,
             "data": {
@@ -140,12 +158,20 @@ async def collection_benefits(user: FanUser, session: DbSession) -> dict:
                             / len(campaign.required_card_ids)
                             * 100
                         ),
-                        "status": (
-                            "unlocked"
-                            if all(
-                                card_id in owned_card_ids for card_id in campaign.required_card_ids
-                            )
-                            else "locked"
+                        "status": "unlocked"
+                        if all(card_id in owned_card_ids for card_id in campaign.required_card_ids)
+                        else "locked",
+                        "claimed": campaign.id in claim_by_campaign,
+                        "claimedAt": (
+                            claim_by_campaign[campaign.id]
+                            .claimed_at.replace(tzinfo=UTC)
+                            .isoformat()
+                            if campaign.id in claim_by_campaign
+                            else None
+                        ),
+                        "claimable": (
+                            all(card_id in owned_card_ids for card_id in campaign.required_card_ids)
+                            and campaign.id not in claim_by_campaign
                         ),
                         "benefit": {
                             "type": "digital_bonus",
@@ -197,6 +223,9 @@ async def collection_benefits(user: FanUser, session: DbSession) -> dict:
                 "ownedCount": owned_count,
                 "completionRate": round(owned_count / required_count * 100),
                 "status": "unlocked" if completed else "locked",
+                "claimed": False,
+                "claimedAt": None,
+                "claimable": False,
                 "benefit": {
                     "type": "digital_bonus",
                     "title": f"{group['artistName']} {group['seasonName']} 완성 특전",
@@ -205,6 +234,60 @@ async def collection_benefits(user: FanUser, session: DbSession) -> dict:
             }
         )
     return {"ok": True, "data": {"items": items}}
+
+
+@router.post("/me/collection/benefits/{campaign_id}/claim", status_code=status.HTTP_201_CREATED)
+async def claim_collection_benefit(campaign_id: str, user: FanUser, session: DbSession) -> dict:
+    campaign = await session.get(CollectionCampaign, campaign_id)
+    if campaign is None:
+        raise AppError(404, "CAMPAIGN_NOT_FOUND", "컬렉션 캠페인을 찾을 수 없습니다.")
+    if campaign.status != "active":
+        raise AppError(409, "CAMPAIGN_NOT_ACTIVE", "현재 수령할 수 없는 캠페인입니다.")
+
+    existing = await session.scalar(
+        select(CollectionBenefitClaim).where(
+            CollectionBenefitClaim.user_id == user.id,
+            CollectionBenefitClaim.campaign_id == campaign.id,
+        )
+    )
+    if existing is not None:
+        raise AppError(409, "BENEFIT_ALREADY_CLAIMED", "이 특전은 이미 수령했습니다.")
+
+    owned_card_ids = set(
+        (await session.scalars(select(UserCard.card_id).where(UserCard.user_id == user.id))).all()
+    )
+    if not all(card_id in owned_card_ids for card_id in campaign.required_card_ids):
+        raise AppError(409, "BENEFIT_NOT_UNLOCKED", "컬렉션을 완성한 뒤 특전을 수령할 수 있습니다.")
+
+    claim = CollectionBenefitClaim(
+        id=f"claim_{uuid4().hex[:12]}",
+        user_id=user.id,
+        campaign_id=campaign.id,
+        claimed_at=datetime.now(UTC),
+    )
+    session.add(claim)
+    await record_audit(
+        session,
+        actor_user_id=user.id,
+        action="collection_benefit.claimed",
+        entity_type="collection_campaign",
+        entity_id=campaign.id,
+        details={"userId": user.id, "claimId": claim.id},
+    )
+    await session.commit()
+    return {
+        "ok": True,
+        "data": {
+            "campaignId": campaign.id,
+            "claimId": claim.id,
+            "claimedAt": claim.claimed_at.isoformat(),
+            "benefit": {
+                "type": "digital_bonus",
+                "title": campaign.benefit_title,
+                "description": campaign.benefit_description,
+            },
+        },
+    }
 
 
 @router.patch("/me/profile")

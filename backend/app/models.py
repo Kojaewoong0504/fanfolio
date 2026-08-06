@@ -142,6 +142,21 @@ class CollectionCampaign(Base):
     status: Mapped[str] = mapped_column(String, default="active")
 
 
+class CollectionBenefitClaim(Base):
+    """One durable, idempotency-safe claim per fan and campaign."""
+
+    __tablename__ = "collection_benefit_claims"
+    __table_args__ = (
+        Index("uq_collection_benefit_claim_user_campaign", "user_id", "campaign_id", unique=True),
+    )
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    campaign_id: Mapped[str] = mapped_column(ForeignKey("collection_campaigns.id"))
+    claimed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
 class Notification(Base):
     __tablename__ = "notifications"
     id: Mapped[str] = mapped_column(String, primary_key=True)

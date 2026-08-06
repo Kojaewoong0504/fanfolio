@@ -111,6 +111,9 @@ def test_collection_benefit_unlocks_when_a_catalog_set_is_complete(
             "ownedCount": 0,
             "completionRate": 0,
             "status": "locked",
+            "claimed": False,
+            "claimedAt": None,
+            "claimable": False,
             "benefit": {
                 "type": "digital_bonus",
                 "title": "드림스케이프 2026 SPRING 완성 특전",
@@ -155,6 +158,9 @@ def test_collection_benefits_use_active_admin_campaign_rules(
             "ownedCount": 0,
             "completionRate": 0,
             "status": "locked",
+            "claimed": False,
+            "claimedAt": None,
+            "claimable": False,
             "benefit": {
                 "type": "digital_bonus",
                 "title": "운영자 지정 특전",
@@ -162,6 +168,44 @@ def test_collection_benefits_use_active_admin_campaign_rules(
             },
         }
     ]
+
+
+def test_fan_can_claim_a_completed_collection_benefit_once(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    campaign = assert_success(
+        actors["admin"].post(
+            "/api/admin/collection-campaigns",
+            json={
+                "name": "완성 특전 지급 캠페인",
+                "artistId": "artist_nova3",
+                "requiredCardIds": ["card_published"],
+                "benefitTitle": "디지털 사인 포토",
+                "benefitDescription": "아티스트의 특별 메시지입니다.",
+            },
+        ),
+        201,
+    )
+    path = f"/api/me/collection/benefits/{campaign['id']}/claim"
+    assert_error(actors["fan"].post(path), 409, "BENEFIT_NOT_UNLOCKED")
+
+    assert_success(
+        actors["fan"].post(
+            "/api/redemptions", json={"code": seeded["codes"]["valid"], "source": "qr"}
+        ),
+        201,
+    )
+    claim = assert_success(actors["fan"].post(path), 201)
+    assert claim["campaignId"] == campaign["id"]
+    assert claim["claimId"].startswith("claim_")
+    assert claim["benefit"]["title"] == "디지털 사인 포토"
+    assert claim["claimedAt"]
+    assert_error(actors["fan"].post(path), 409, "BENEFIT_ALREADY_CLAIMED")
+
+    item = assert_success(actors["fan"].get("/api/me/collection/benefits"))["items"][0]
+    assert item["claimed"] is True
+    assert item["claimable"] is False
+    assert item["claimedAt"] == claim["claimedAt"]
 
 
 def test_owned_card_detail_exposes_handwriting_and_voice_entitlements(

@@ -33,6 +33,9 @@ export type CollectionBenefit = {
   ownedCount: number
   completionRate: number
   status: 'locked' | 'unlocked'
+  claimed: boolean
+  claimedAt: string | null
+  claimable: boolean
   benefit: { type: 'digital_bonus'; title: string; description: string }
 }
 
