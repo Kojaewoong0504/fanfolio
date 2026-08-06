@@ -5,9 +5,9 @@ import { apiFetch, type CollectionCard, type NotificationItem } from './api/clie
 type Tab = 'collection' | 'discover' | 'alerts' | 'settings'
 
 const cards = [
-  { id: '#021', title: '컴백 기념 사인 카드', artist: '드림스케이프', member: '민호', image: '/src/assets/hero.png' },
-  { id: '#022', title: 'NOVA 특별 카드', artist: '드림스케이프', member: '유준', image: '/src/assets/hero.png' },
-  { id: '#023', title: '봄의 시작', artist: '드림스케이프', member: '하린', image: '/src/assets/hero.png' },
+  { id: '#021', userCardId: 'user-card-021', title: '컴백 기념 사인 카드', artist: '드림스케이프', member: '민호', image: '/src/assets/hero.png' },
+  { id: '#022', userCardId: 'user-card-022', title: 'NOVA 특별 카드', artist: '드림스케이프', member: '유준', image: '/src/assets/hero.png' },
+  { id: '#023', userCardId: 'user-card-023', title: '봄의 시작', artist: '드림스케이프', member: '하린', image: '/src/assets/hero.png' },
 ]
 
 type Card = typeof cards[number]
@@ -15,6 +15,7 @@ type Card = typeof cards[number]
 function toCard(card: CollectionCard): Card {
   return {
     id: `#${String(card.serialNumber).padStart(3, '0')}`,
+    userCardId: card.userCardId,
     title: card.name,
     artist: 'Fanfolio 아티스트',
     member: '공식 카드',
@@ -200,7 +201,16 @@ function Alerts({ items, onRead }: { items: NotificationItem[], onRead: (id: str
 
 function Settings({ onLogout }: { onLogout: () => Promise<void> }) { const [busy, setBusy] = useState(false); const logout = async () => { setBusy(true); await onLogout(); setBusy(false) }; return <><div className="profile"><div className="avatar">팬</div><div><b>팬포리오</b><small>fanfolio_1234</small></div><span>›</span></div><div className="settings-list">{['프로필', '계정', '알림 설정', '앱 정보'].map(item => <button key={item}><span>{item}</span><strong>›</strong></button>)}</div><button className="logout" onClick={() => void logout} disabled={busy}>{busy ? '로그아웃 중...' : '로그아웃'}</button></> }
 
-function CardDetail({ card, onClose }: { card: typeof cards[number], onClose: () => void }) { return <aside className="detail-panel"><button onClick={onClose}>닫기</button><img src={card.image} alt="카드 상세" /><dl><div><dt>아티스트</dt><dd>{card.artist}</dd></div><div><dt>멤버</dt><dd>{card.member}</dd></div><div><dt>발행번호</dt><dd>{card.id}</dd></div><div><dt>획득 경로</dt><dd>콘텐츠 코드 #1</dd></div></dl><button className="primary">컬렉션에 추가</button></aside> }
+function CardDetail({ card, onClose }: { card: Card, onClose: () => void }) {
+  const [detail, setDetail] = useState<{ serialNumber: number, acquisitionSource: string, card: { name: string, handwritingImageUrl: string | null, hasVoice: boolean } } | null>(null)
+  useEffect(() => {
+    if (!card.userCardId || card.userCardId.startsWith('user-card-')) return
+    void apiFetch<{ ok: true, data: typeof detail }>(`/me/cards/${card.userCardId}`)
+      .then(result => setDetail(result.data))
+      .catch(() => setDetail(null))
+  }, [card.userCardId])
+  return <aside className="detail-panel"><button onClick={onClose}>닫기</button><img src={card.image} alt="카드 상세" /><dl><div><dt>아티스트</dt><dd>{card.artist}</dd></div><div><dt>멤버</dt><dd>{card.member}</dd></div><div><dt>발행번호</dt><dd>{detail ? `#${String(detail.serialNumber).padStart(3, '0')}` : card.id}</dd></div><div><dt>획득 경로</dt><dd>{detail?.acquisitionSource === 'redeem_code' ? '콘텐츠 코드' : '콘텐츠 코드 #1'}</dd></div></dl>{detail?.card.handwritingImageUrl && <p className="detail-badge">손글씨 특전 포함</p>}{detail?.card.hasVoice && <p className="detail-badge">보이스 특전 포함</p>}<button className="primary">컬렉션에 추가</button></aside>
+}
 
 function RedeemModal({ onClose, onRedeemed }: { onClose: () => void, onRedeemed: () => Promise<void> }) { const [code, setCode] = useState(''); const [message, setMessage] = useState(''); const [saving, setSaving] = useState(false); const redeem = async () => { setSaving(true); setMessage(''); try { await apiFetch('/redemptions', { method: 'POST', body: JSON.stringify({ code, source: 'manual' }) }); await onRedeemed(); setMessage('카드가 컬렉션에 추가되었습니다.'); setCode(''); } catch (error) { setMessage(error instanceof Error ? error.message : '카드 등록에 실패했습니다.'); } finally { setSaving(false) } }; return <div className="modal-backdrop"><div className="modal"><button className="modal-close" onClick={onClose}>×</button><h2>카드 등록</h2><p className="muted">카드 패키지의 QR을 스캔하거나<br />코드를 직접 입력하세요.</p><div className="qr-box"><span>QR</span><b>QR 스캔</b><small>카메라로 코드를 비춰주세요.</small></div><div className="divider">또는 코드 입력</div><input value={code} onChange={e => setCode(e.target.value)} placeholder="예: NOVA-VALID-01" /><button className="primary" disabled={!code || saving} onClick={() => void redeem()}>{saving ? '등록 중...' : '카드 등록하기'}</button>{message && <p className="form-message">{message}</p>}</div></div> }
 

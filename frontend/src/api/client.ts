@@ -16,6 +16,19 @@ export type NotificationItem = {
   readAt: string | null
 }
 
+export type UserCardDetail = {
+  userCardId: string
+  serialNumber: number
+  acquisitionSource: string
+  card: {
+    id: string
+    name: string
+    isOfficial: boolean
+    handwritingImageUrl: string | null
+    hasVoice: boolean
+  }
+}
+
 export class ApiError extends Error {
   status: number
 
