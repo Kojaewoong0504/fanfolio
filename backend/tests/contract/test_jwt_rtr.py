@@ -31,6 +31,26 @@ def test_magic_link_login_returns_access_jwt_and_scoped_refresh_cookie(
     assert_success(me)
 
 
+def test_production_refresh_cookie_supports_cross_origin_frontend(
+    app, seeded: dict[str, object], monkeypatch
+) -> None:
+    """The deployed fan app and API use different origins."""
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "app_env", "production")
+    tokens = seeded["magicLinkTokens"]
+    assert isinstance(tokens, dict)
+
+    response = TestClient(app).post(
+        "/api/auth/magic-link/verify",
+        json={"token": tokens["fan"]},
+        headers={"X-Fanfolio-Client": "fan"},
+    )
+
+    assert "SameSite=none" in response.headers["set-cookie"]
+    assert "Secure" in response.headers["set-cookie"]
+
+
 def test_refresh_rotation_rejects_replay_and_revokes_the_family(
     app, seeded: dict[str, object]
 ) -> None:

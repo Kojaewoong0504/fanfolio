@@ -32,6 +32,11 @@ from app.services import verify_magic_link
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
+def _refresh_cookie_samesite() -> str:
+    """Allow the deployed Vercel fan app to refresh against the Render API."""
+    return "none" if get_settings().app_env == "production" else "lax"
+
+
 def _oauth_frontend_url(error: str | None = None, code: str | None = None) -> str:
     base = get_settings().oauth_frontend_callback_url
     params = {key: value for key, value in {"error": error, "code": code}.items() if value}
@@ -126,7 +131,7 @@ async def oauth_exchange(
         refresh_token,
         httponly=True,
         secure=settings.app_env == "production",
-        samesite="lax",
+        samesite=_refresh_cookie_samesite(),
         path="/",
         max_age=settings.jwt_refresh_ttl_seconds,
     )
@@ -178,7 +183,7 @@ async def verify_magic_link_endpoint(
         refresh_token,
         httponly=True,
         secure=get_settings().app_env == "production",
-        samesite="lax",
+        samesite=_refresh_cookie_samesite(),
         path="/",
         max_age=get_settings().jwt_refresh_ttl_seconds,
     )
@@ -221,7 +226,7 @@ async def refresh_access_token(
         refresh_token,
         httponly=True,
         secure=get_settings().app_env == "production",
-        samesite="lax",
+        samesite=_refresh_cookie_samesite(),
         path="/",
         max_age=get_settings().jwt_refresh_ttl_seconds,
     )
