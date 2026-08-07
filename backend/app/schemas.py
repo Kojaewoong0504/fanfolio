@@ -175,6 +175,12 @@ class ArtistAccountCreate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class AdminAccountCreate(BaseModel):
+    email: EmailStr
+    display_name: str = Field(alias="displayName", min_length=1, max_length=120)
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class AdminArtistProfileUpdate(BaseModel):
     artist_id: str = Field(alias="artistId")
     verification_status: Literal["pending", "verified", "rejected"] = Field(

@@ -99,21 +99,22 @@ async def ensure_admin_bootstrap(session: AsyncSession) -> None:
         raise ValueError("ADMIN_BOOTSTRAP_PASSWORD must be at least 12 characters")
     user = await session.scalar(select(User).where(User.email == email))
     if user is None:
-        session.add(
-            User(
-                id=f"admin_{uuid4().hex}",
-                email=email,
-                role=Role.ADMIN,
-                nickname="운영 관리자",
-                password_hash=hash_password(password),
-                must_change_password=True,
-            )
+        user = User(
+            id=f"admin_{uuid4().hex}",
+            email=email,
+            role=Role.ADMIN,
+            nickname="운영 관리자",
+            password_hash=hash_password(password),
+            must_change_password=False,
         )
+        session.add(user)
     elif user.role != Role.ADMIN:
         raise ValueError("ADMIN_BOOTSTRAP_EMAIL belongs to a non-admin user")
     elif not user.password_hash:
         user.password_hash = hash_password(password)
-        user.must_change_password = True
+    # The bootstrap administrator is trusted to choose their own password
+    # during deployment; only delegated accounts are forced to rotate one.
+    user.must_change_password = False
     await session.commit()
 
 

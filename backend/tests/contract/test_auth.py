@@ -74,6 +74,26 @@ def test_admin_password_login_rejects_artist_client(
     assert_error(response, 403, "ADMIN_CLIENT_REQUIRED")
 
 
+def test_admin_can_issue_another_admin_account_with_one_time_password(
+    actors: dict[str, TestClient], seeded: dict[str, object]
+) -> None:
+    response = actors["admin"].post(
+        "/api/admin/admin-accounts",
+        json={"email": "operator@example.com", "displayName": "운영 담당자"},
+    )
+    data = assert_success(response, 201)
+    assert data["email"] == "operator@example.com"
+    assert data["role"] == "admin"
+    assert len(data["temporaryPassword"]) >= 12
+
+    login = actors["admin"].post(
+        "/api/auth/admin/login",
+        json={"email": "operator@example.com", "password": data["temporaryPassword"]},
+    )
+    login_data = assert_success(login)
+    assert login_data["mustChangePassword"] is True
+
+
 def test_magic_link_request_preserves_signup_purpose(
     client: TestClient, seeded: dict[str, object], monkeypatch: Any
 ) -> None:

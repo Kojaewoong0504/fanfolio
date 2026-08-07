@@ -29,6 +29,7 @@ from app.models import (
 )
 from app.passwords import hash_password
 from app.schemas import (
+    AdminAccountCreate,
     AdminArtistProfileUpdate,
     AdminCardCreate,
     AdminCardReviewRequest,
@@ -638,6 +639,48 @@ async def create_artist_account(
             "role": user.role.value,
             "mustChangePassword": True,
             # Returned only at creation time; it is never persisted in plaintext.
+            "temporaryPassword": temporary_password,
+        },
+    }
+
+
+@router.post("/admin-accounts", status_code=status.HTTP_201_CREATED)
+async def create_admin_account(
+    payload: AdminAccountCreate,
+    admin: AdminUser,
+    session: DbSession,
+) -> dict:
+    email = str(payload.email).lower()
+    existing = await session.scalar(select(User).where(User.email == email))
+    if existing:
+        raise AppError(409, "EMAIL_TAKEN", "이미 등록된 이메일입니다.")
+    temporary_password = token_urlsafe(18)
+    user = User(
+        id=f"admin_{uuid4().hex[:12]}",
+        email=email,
+        nickname=payload.display_name,
+        role=Role.ADMIN,
+        password_hash=hash_password(temporary_password),
+        must_change_password=True,
+    )
+    session.add(user)
+    await record_audit(
+        session,
+        actor_user_id=admin.id,
+        action="admin_account.created",
+        entity_type="user",
+        entity_id=user.id,
+        details={"email": email},
+    )
+    await session.commit()
+    return {
+        "ok": True,
+        "data": {
+            "id": user.id,
+            "email": email,
+            "displayName": user.nickname,
+            "role": user.role.value,
+            "mustChangePassword": True,
             "temporaryPassword": temporary_password,
         },
     }
