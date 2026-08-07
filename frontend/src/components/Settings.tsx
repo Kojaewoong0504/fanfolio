@@ -78,6 +78,15 @@ export function Settings({ user, onUserUpdated, onLogout }: { user: CurrentUser,
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [activePanel])
 
+  useEffect(() => {
+    const avatar = document.querySelector<HTMLElement>('.profile-button .avatar')
+    if (!avatar) return
+    const imageUrl = resolveApiUrl(user.profileImageUrl)
+    avatar.style.backgroundImage = imageUrl ? `url("${imageUrl}")` : ''
+    avatar.classList.toggle('avatar-image', Boolean(imageUrl))
+    avatar.textContent = imageUrl ? '' : (user.nickname ?? '팬').slice(0, 1)
+  }, [user.nickname, user.profileImageUrl])
+
   const logout = async () => { setBusy(true); await onLogout(); setBusy(false) }
   const updateEmailPreference = async (enabled: boolean) => {
     setPreferenceBusy(true)
