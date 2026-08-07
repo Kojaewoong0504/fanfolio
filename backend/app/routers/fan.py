@@ -460,6 +460,11 @@ async def card_detail(user_card_id: str, user: FanUser, session: DbSession) -> d
         voice_asset = await session.get(Asset, card.voice_asset_id)
         if voice_asset and (voice_asset.processed_storage_path or voice_asset.storage_path):
             voice_audio_url = f"/api/me/cards/{uc.id}/voice?client=fan"
+    video_url = None
+    if card.video_asset_id:
+        video_asset = await session.get(Asset, card.video_asset_id)
+        if video_asset and (video_asset.processed_storage_path or video_asset.storage_path):
+            video_url = f"/api/me/cards/{uc.id}/video?client=fan"
     return {
         "ok": True,
         "data": {
@@ -486,6 +491,8 @@ async def card_detail(user_card_id: str, user: FanUser, session: DbSession) -> d
                 "handwritingImageUrl": handwriting_image_url,
                 "hasVoice": card.has_voice and voice_audio_url is not None,
                 "voiceAudioUrl": voice_audio_url,
+                "videoUrl": video_url,
+                "hasVideo": video_url is not None,
             },
             "drop": {"name": drop.name} if drop else None,
             "redeemCode": None,
@@ -531,6 +538,26 @@ async def card_voice(user_card_id: str, user: FanUser, session: DbSession) -> Re
         raise AppError(404, "VOICE_NOT_READY", "보이스 특전이 아직 준비되지 않았습니다.")
     return storage_response(
         configured_asset_storage(), path, media_type=asset.content_type or "audio/mpeg"
+    )
+
+
+@router.get("/me/cards/{user_card_id}/video")
+async def card_video(user_card_id: str, user: FanUser, session: DbSession) -> Response:
+    """Serve a motion layer only after verifying that the fan owns the card."""
+    row = await session.execute(
+        select(UserCard, Card)
+        .join(Card, UserCard.card_id == Card.id)
+        .where(UserCard.id == user_card_id, UserCard.user_id == user.id)
+    )
+    user_card, card = row.one_or_none() or (None, None)
+    if not user_card or not card or not card.video_asset_id:
+        raise AppError(404, "VIDEO_NOT_FOUND", "카드 영상을 찾을 수 없습니다.")
+    asset = await session.get(Asset, card.video_asset_id)
+    path = asset.processed_storage_path or asset.storage_path if asset else None
+    if not path:
+        raise AppError(404, "VIDEO_NOT_READY", "카드 영상이 아직 준비되지 않았습니다.")
+    return storage_response(
+        configured_asset_storage(), path, media_type=asset.content_type or "video/mp4"
     )
 
 

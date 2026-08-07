@@ -166,6 +166,8 @@ export type UserCardDetail = {
     handwritingImageUrl: string | null
     hasVoice: boolean
     voiceAudioUrl: string | null
+    hasVideo: boolean
+    videoUrl: string | null
     imageUrl?: string
     artistId?: string | null
     artistName?: string | null
