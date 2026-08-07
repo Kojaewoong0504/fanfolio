@@ -16,3 +16,4 @@
 .login-mark{background:url('./fanfolio-app-icon.png') center/cover;color:transparent;font-size:0;box-shadow:0 10px 24px #4b37c540}
 .logo{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.logo::before{content:'';display:inline-block;width:28px;height:28px;border-radius:9px;background:url('./fanfolio-app-icon.png') center/cover;box-shadow:0 6px 14px #4b37c52b}.logo span{display:none}.logo small{width:100%}
 .editor-tool span svg{display:block;width:23px;height:23px}.editor-tool.active span svg{filter:drop-shadow(0 3px 5px #5b4edb36)}
+.editor-back-template{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.editor-card.is-back .editor-back-copy{z-index:2;padding:14% 10%}.editor-card.is-back .editor-back-copy strong,.editor-card.is-back .editor-back-copy span,.editor-card.is-back .editor-back-copy small{opacity:.92;text-shadow:0 1px 5px #2e245555}

@@ -10,7 +10,7 @@ const state = {
   cardName: '', jobId: null, preview: null, previewImageSrc: '', signature: '', cards: [],
   form: { name: '드림 스페셜 카드 #5', artistId: 'artist_nova3', memberId: 'member_yuna', seasonName: '2025 봄', templateId: 'template_signature_v1', rarity: 'R', signatureText: '항상 고마워요, 우리 함께해요!', hasVoice: true, voiceAssetId: null, issueLimit: 3000 }, insights: null, profile: null,
   catalog: null, catalogLoaded: false, apiConnected: false, catalogError: '', view: 'editor',
-  editor: { tool: 'photo', side: 'front', template: 'luminous', imageSrc: '', imageName: '', imageScale: 100, imageX: 0, imageY: 0, textX: 0, textY: 0, stickerX: 0, stickerY: 0, background: '#f5efff', filter: 'clean', text: '드림스케이프 · 유나', textColor: '#ffffff', textSize: 24, sticker: 'spark', effect: 'glow', backEffect: 'glow', previewOpen: false, ...readEditorDraft() },
+  editor: { tool: 'photo', side: 'front', template: 'luminous', backTemplateId: 'agency_back_v1', imageSrc: '', imageName: '', imageScale: 100, imageX: 0, imageY: 0, textX: 0, textY: 0, stickerX: 0, stickerY: 0, background: '#f5efff', filter: 'clean', text: '드림스케이프 · 유나', textColor: '#ffffff', textSize: 24, sticker: 'spark', effect: 'glow', backEffect: 'glow', previewOpen: false, ...readEditorDraft() },
 };
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
 
@@ -212,11 +212,14 @@ function editorCardMarkup() {
   const image = e.imageSrc ? `<img class="editor-photo" src="${esc(e.imageSrc)}" alt="카드 사진 미리보기" style="transform:translate(${e.imageX}px,${e.imageY}px) scale(${e.imageScale / 100});filter:${e.filter === 'mono' ? 'grayscale(1)' : e.filter === 'warm' ? 'saturate(1.25) sepia(.18)' : 'none'}" />` : '<div class="editor-photo-empty"><span>사진을 넣어보세요</span><small>권장 1000 × 1500 px</small></div>';
   const front = e.side === 'front';
   const activeEffect = front ? (e.effect || 'none') : (e.backEffect || 'none');
+  const agencyTemplate = (state.catalog?.backTemplates || []).find((template) => template.id === e.backTemplateId);
+  const backTemplateUrl = agencyTemplate?.imageUrl || (e.backTemplateId === 'agency_back_v1' ? './agency-back-template-v1.png' : '');
   const sticker = e.sticker === 'none' ? '' : `<span class="editor-sticker">${e.sticker === 'heart' ? '♥' : e.sticker === 'star' ? '✦' : '✧'}</span>`;
   const textStyle = `color:${esc(e.textColor)};font-size:${e.textSize}px;transform:translate(${e.textX}px,${e.textY}px)`;
   const stickerMarkup = sticker ? sticker.replace('class="editor-sticker"', `class="editor-sticker" data-editor-layer="sticker" style="transform:translate(${e.stickerX}px,${e.stickerY}px)"`) : '';
   const photoMarkup = image.replace('class="editor-photo"', 'class="editor-photo" data-editor-layer="photo"');
-  return `<div class="editor-card ${front ? 'is-front' : 'is-back'} template-${esc(e.template)} effect-${esc(activeEffect)}" style="--editor-bg:${esc(e.background)}">${front ? `${photoMarkup}<div class="editor-sheen"></div><div class="editor-copy" data-editor-layer="text" style="${textStyle}">${esc(e.text)}</div>${stickerMarkup}<span class="editor-card-label">FANFOLIO · SPECIAL EDITION</span>` : '<div class="editor-back-pattern"></div><div class="editor-back-copy"><strong>FANFOLIO</strong><span>공식 디지털 포토카드</span><small>이 카드는 아티스트 스튜디오에서 승인된 기본 뒷면 템플릿입니다.</small></div>'}</div>`;
+  const backMarkup = backTemplateUrl ? `<img class="editor-back-template" src="${esc(backTemplateUrl)}" alt="소속사 기본 뒷면 템플릿" />` : '<div class="editor-back-pattern"></div>';
+  return `<div class="editor-card ${front ? 'is-front' : 'is-back'} template-${esc(e.template)} effect-${esc(activeEffect)}" style="--editor-bg:${esc(e.background)}">${front ? `${photoMarkup}<div class="editor-sheen"></div><div class="editor-copy" data-editor-layer="text" style="${textStyle}">${esc(e.text)}</div>${stickerMarkup}<span class="editor-card-label">FANFOLIO · SPECIAL EDITION</span>` : `${backMarkup}<div class="editor-back-copy"><strong>FANFOLIO</strong><span>공식 디지털 포토카드</span><small>소속사가 제공한 기본 템플릿입니다. 아티스트는 색상과 효과만 조정할 수 있어요.</small></div>`}</div>`;
 }
 
 function editorInspector() {
@@ -251,7 +254,7 @@ function editorDesignConfig(imageAssetId) {
       sticker: { kind: e.sticker || 'none', x: Number(e.stickerX || 0), y: Number(e.stickerY || 0) },
       effect: e.effect || 'none',
     },
-    back: { templateId: 'agency_back_v1', background: e.background || '#f5efff', effect: e.backEffect || 'none' },
+    back: { templateId: e.backTemplateId || 'agency_back_v1', background: e.background || '#f5efff', effect: e.backEffect || 'none' },
   };
 }
 
