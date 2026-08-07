@@ -1,4 +1,10 @@
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '/api'
+const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '/api'
+// The deployed fan app proxies normal API traffic through its own origin so
+// the refresh cookie is first-party. OAuth start remains on the API origin
+// because its provider callback must receive the OAuth state cookie there.
+const isDeployedFanApp = typeof window !== 'undefined' && window.location.hostname === 'fanfolio-fan.vercel.app'
+const apiBaseUrl = isDeployedFanApp ? '/api' : configuredApiBaseUrl
+const oauthApiBaseUrl = configuredApiBaseUrl.startsWith('/') ? apiBaseUrl : configuredApiBaseUrl
 const API_REQUEST_TIMEOUT_MS = 15_000
 
 let accessToken: string | null = null
@@ -61,7 +67,7 @@ export function notificationStreamUrl(): string {
 }
 
 export function oauthStartUrl(provider: 'google' | 'kakao'): string {
-  return `${apiBaseUrl}/auth/oauth/${provider}/start?client=fan`
+  return `${oauthApiBaseUrl}/auth/oauth/${provider}/start?client=fan`
 }
 
 export type CollectionCard = {
