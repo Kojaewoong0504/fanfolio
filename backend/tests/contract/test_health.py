@@ -132,3 +132,19 @@ def test_configured_frontend_origin_is_allowed_for_cookie_requests(client: TestC
 
     assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
     assert response.headers["access-control-allow-credentials"] == "true"
+
+
+def test_production_rejects_state_changing_requests_from_an_untrusted_origin(
+    client: TestClient, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr(get_settings(), "app_env", "production")
+    monkeypatch.setattr(get_settings(), "frontend_origins", "https://fanfolio-fan.vercel.app")
+
+    response = client.post(
+        "/api/auth/magic-link/request",
+        json={"email": "fan@example.com", "purpose": "login"},
+        headers={"Origin": "https://evil.example"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "CSRF_ORIGIN_INVALID"

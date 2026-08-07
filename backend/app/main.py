@@ -42,6 +42,36 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.middleware("http")
+    async def security_middleware(request: Request, call_next):
+        # Cookie-authenticated state changes must originate from one of our
+        # configured frontends. CORS protects JavaScript callers, but an
+        # Origin check also covers cross-site form submissions.
+        if get_settings().app_env == "production" and request.method in {
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+        }:
+            origin = request.headers.get("origin")
+            if origin and origin not in get_settings().allowed_origins:
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "ok": False,
+                        "error": {
+                            "code": "CSRF_ORIGIN_INVALID",
+                            "message": "허용되지 않은 요청 출처입니다.",
+                        },
+                    },
+                )
+
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        return response
+
     @app.exception_handler(AppError)
     async def app_error(_: Request, error: AppError) -> JSONResponse:
         return JSONResponse(
