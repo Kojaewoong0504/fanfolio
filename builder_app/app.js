@@ -10,7 +10,7 @@ const state = {
   cardName: '', jobId: null, preview: null, previewImageSrc: '', signature: '', cards: [],
   form: { name: '드림 스페셜 카드 #5', artistId: 'artist_nova3', memberId: 'member_yuna', seasonName: '2025 봄', templateId: 'template_signature_v1', rarity: 'R', signatureText: '항상 고마워요, 우리 함께해요!', hasVoice: true, voiceAssetId: null, issueLimit: 3000 }, insights: null, profile: null,
   catalog: null, catalogLoaded: false, apiConnected: false, catalogError: '', view: 'editor',
-  editor: { tool: 'photo', side: 'front', template: 'luminous', imageSrc: '', imageName: '', imageScale: 100, imageX: 0, imageY: 0, background: '#f5efff', filter: 'clean', text: '드림스케이프 · 유나', textColor: '#ffffff', textSize: 24, sticker: 'spark', effect: 'glow', ...readEditorDraft() },
+  editor: { tool: 'photo', side: 'front', template: 'luminous', imageSrc: '', imageName: '', imageScale: 100, imageX: 0, imageY: 0, textX: 0, textY: 0, stickerX: 0, stickerY: 0, background: '#f5efff', filter: 'clean', text: '드림스케이프 · 유나', textColor: '#ffffff', textSize: 24, sticker: 'spark', effect: 'glow', ...readEditorDraft() },
 };
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
 
@@ -212,7 +212,10 @@ function editorCardMarkup() {
   const image = e.imageSrc ? `<img class="editor-photo" src="${esc(e.imageSrc)}" alt="카드 사진 미리보기" style="transform:translate(${e.imageX}px,${e.imageY}px) scale(${e.imageScale / 100});filter:${e.filter === 'mono' ? 'grayscale(1)' : e.filter === 'warm' ? 'saturate(1.25) sepia(.18)' : 'none'}" />` : '<div class="editor-photo-empty"><span>사진을 넣어보세요</span><small>권장 1000 × 1500 px</small></div>';
   const front = e.side === 'front';
   const sticker = e.sticker === 'none' ? '' : `<span class="editor-sticker">${e.sticker === 'heart' ? '♥' : e.sticker === 'star' ? '✦' : '✧'}</span>`;
-  return `<div class="editor-card ${front ? 'is-front' : 'is-back'} template-${esc(e.template)} effect-${esc(e.effect)}" style="--editor-bg:${esc(e.background)}">${front ? `${image}<div class="editor-sheen"></div><div class="editor-copy" style="color:${esc(e.textColor)};font-size:${e.textSize}px">${esc(e.text)}</div>${sticker}<span class="editor-card-label">FANFOLIO · SPECIAL EDITION</span>` : '<div class="editor-back-pattern"></div><div class="editor-back-copy"><strong>FANFOLIO</strong><span>공식 디지털 포토카드</span><small>이 카드는 아티스트 스튜디오에서 승인된 기본 뒷면 템플릿입니다.</small></div>'}</div>`;
+  const textStyle = `color:${esc(e.textColor)};font-size:${e.textSize}px;transform:translate(${e.textX}px,${e.textY}px)`;
+  const stickerMarkup = sticker ? sticker.replace('class="editor-sticker"', `class="editor-sticker" data-editor-layer="sticker" style="transform:translate(${e.stickerX}px,${e.stickerY}px)"`) : '';
+  const photoMarkup = image.replace('class="editor-photo"', 'class="editor-photo" data-editor-layer="photo"');
+  return `<div class="editor-card ${front ? 'is-front' : 'is-back'} template-${esc(e.template)} effect-${esc(e.effect)}" style="--editor-bg:${esc(e.background)}">${front ? `${photoMarkup}<div class="editor-sheen"></div><div class="editor-copy" data-editor-layer="text" style="${textStyle}">${esc(e.text)}</div>${stickerMarkup}<span class="editor-card-label">FANFOLIO · SPECIAL EDITION</span>` : '<div class="editor-back-pattern"></div><div class="editor-back-copy"><strong>FANFOLIO</strong><span>공식 디지털 포토카드</span><small>이 카드는 아티스트 스튜디오에서 승인된 기본 뒷면 템플릿입니다.</small></div>'}</div>`;
 }
 
 function editorInspector() {
@@ -232,6 +235,40 @@ function visualEditorView() {
   return `<section class="visual-editor"><div class="editor-toolbar"><div><span class="editor-breadcrumb">카드 만들기 <b>/</b> 비주얼 에디터</span><h2>나만의 특별 카드를 디자인해 보세요</h2><p>앞면은 자유롭게 꾸미고, 뒷면은 소속사 기본 템플릿을 바탕으로 완성합니다.</p></div><div class="editor-toolbar-actions"><span class="draft-status"><i></i> 자동 저장됨</span><button class="secondary" data-editor-action="exit">나중에 계속하기</button><button class="primary" data-editor-action="details">상세 정보 입력 <span>→</span></button></div></div><div class="editor-workspace"><aside class="editor-tools" aria-label="카드 편집 도구">${tools.map(([value, icon, label]) => `<button class="editor-tool ${e.tool === value ? 'active' : ''}" data-editor-tool="${value}"><span>${icon}</span><small>${label}</small></button>`).join('')}</aside><div class="editor-stage-wrap"><div class="stage-header"><span>앞면 미리보기</span><div class="side-switch"><button class="${e.side === 'front' ? 'active' : ''}" data-editor-side="front">앞면</button><button class="${e.side === 'back' ? 'active' : ''}" data-editor-side="back">뒷면</button></div><span class="zoom-label">100%</span></div><div class="visual-editor-stage"><div class="stage-grid"></div>${editorCardMarkup()}<span class="stage-caption">드래그하여 위치를 조정할 수 있어요</span></div><div class="stage-footer"><span><b>Tip</b> 카드의 분위기를 먼저 정한 뒤 사진과 문구를 배치해 보세요.</span><button class="ghost-button" data-editor-action="preview">전체 화면 미리보기 ↗</button></div></div><aside class="editor-inspector"><div class="inspector-heading"><div><span>편집 도구</span><h3>${tools.find(([value]) => value === e.tool)?.[2] || '사진'}</h3></div><span class="inspector-count">${e.side === 'front' ? '앞면' : '뒷면'}</span></div>${editorInspector()}</aside></div></section>`;
 }
 
+function initEditorDrag() {
+  const card = document.querySelector('.editor-card');
+  if (!card) return;
+  card.querySelectorAll('[data-editor-layer]').forEach((layer) => {
+    layer.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      layer.setPointerCapture?.(event.pointerId);
+      const key = layer.dataset.editorLayer;
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const xKey = `${key}X`;
+      const yKey = `${key}Y`;
+      const originX = Number(state.editor[xKey] || 0);
+      const originY = Number(state.editor[yKey] || 0);
+      const move = (moveEvent) => {
+        state.editor[xKey] = Math.round(originX + moveEvent.clientX - startX);
+        state.editor[yKey] = Math.round(originY + moveEvent.clientY - startY);
+        const transform = `translate(${state.editor[xKey]}px,${state.editor[yKey]}px)`;
+        if (key === 'photo') layer.style.transform = `${transform} scale(${state.editor.imageScale / 100})`;
+        else layer.style.transform = transform;
+      };
+      const end = () => {
+        persistEditorDraft();
+        layer.removeEventListener('pointermove', move);
+        layer.removeEventListener('pointerup', end);
+        layer.removeEventListener('pointercancel', end);
+      };
+      layer.addEventListener('pointermove', move);
+      layer.addEventListener('pointerup', end);
+      layer.addEventListener('pointercancel', end);
+    });
+  });
+}
+
 function renderShell(content) {
   const view = state.view || 'create';
   const editorMode = view === 'editor';
@@ -240,6 +277,7 @@ function renderShell(content) {
   app.innerHTML = `<div class="shell ${editorMode ? 'editor-shell' : ''}"><aside class="side"><div class="logo">Fanfolio <span>✦</span><small>아티스트 스튜디오</small></div><nav class="nav"><button data-studio-view="home" class="${view === 'home' ? 'active' : ''}">⌂　스튜디오 홈</button><button data-studio-view="create" class="${view === 'create' || editorMode ? 'active' : ''}">▦　카드 만들기</button><button data-studio-view="cards" class="${view === 'cards' ? 'active' : ''}">◇　내 카드</button><button data-studio-view="feedback" class="${view === 'feedback' ? 'active' : ''}">♡　팬 반응</button><button data-studio-view="settings" class="${view === 'settings' ? 'active' : ''}">⚙　설정</button></nav><div class="profile"><span class="avatar">A</span><div><strong>${esc(state.profile?.nickname || '아티스트')}</strong>ARTIST</div></div></aside><main class="workspace"><header class="top ${editorMode ? 'editor-top' : ''}"><div><p class="kicker">Fanfolio Artist Studio</p><h1 class="title">${title}</h1></div><div class="top-actions"><span class="save-state">${connectionLabel}</span><button class="secondary" id="session-config">세션 설정</button><button class="secondary" id="logout">로그아웃</button></div></header>${editorMode ? visualEditorView() : content}</main></div><div class="toast" id="toast"></div>`;
   bindCommon();
   document.querySelector('input[name="cardImage"]')?.toggleAttribute('required', !state.editor.imageSrc);
+  if (editorMode) initEditorDrag();
   document.querySelector('#new-card')?.addEventListener('click', () => { state.view = 'editor'; state.editingCardId = null; state.cardId = null; state.step = 1; render(); });
 }
 
