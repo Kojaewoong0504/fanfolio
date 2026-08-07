@@ -134,3 +134,5 @@
 .empty-home-shell .home-empty{padding-bottom:28px}
 .detail-action{position:sticky;bottom:-1px;z-index:2;box-shadow:0 -10px 18px #fff}
 .profile-button .avatar{background-size:cover;background-position:center}.profile-button .avatar-image{font-size:0;color:transparent}
+.brand-mark{background-image:url('/fanfolio-app-icon.png');background-size:cover;background-position:center;font-size:0;box-shadow:0 12px 26px #4b37c540}
+.app-header .eyebrow{display:flex;align-items:center;gap:7px}.app-header .eyebrow::before{content:'';display:inline-block;width:18px;height:18px;border-radius:6px;background:url('/fanfolio-app-icon.png') center/cover;box-shadow:0 4px 10px #4b37c52b}
