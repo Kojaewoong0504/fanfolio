@@ -48,6 +48,45 @@ def magic_link_token_hash(token: str) -> str:
     return sha256(token.encode()).hexdigest()
 
 
+async def ensure_demo_catalog(session: AsyncSession) -> None:
+    """Create the small public catalog needed for a fresh MVP deployment.
+
+    This deliberately creates only catalog content. It does not create test
+    users, admin sessions, or redeem codes, so enabling it in a hosted
+    environment cannot grant access or manufacture collectible inventory.
+    """
+    artist_id = "artist_nova3"
+    artist = await session.get(Artist, artist_id)
+    if artist is None:
+        session.add(Artist(id=artist_id, name="드림스케이프", image_url="/src/assets/hero.png"))
+
+    member_rows = (
+        ("member_yuna", "유나"),
+        ("member_minho", "민호"),
+        ("member_jei", "제이"),
+    )
+    for member_id, name in member_rows:
+        if await session.get(Member, member_id) is None:
+            session.add(Member(id=member_id, artist_id=artist_id, name=name))
+
+    if await session.get(Card, "card_demo_published") is None:
+        session.add(
+            Card(
+                id="card_demo_published",
+                name="컴백 기념 사인 카드",
+                status="published",
+                artist_id=artist_id,
+                member_id="member_yuna",
+                season_name="2026 SPRING",
+                rarity="Special",
+                signature_text="오늘 와줘서 고마워",
+                issue_limit=500,
+                image_url="/src/assets/hero.png",
+            )
+        )
+    await session.commit()
+
+
 async def reset_database(session: AsyncSession) -> None:
     for model in (
         BackgroundRemovalJob,

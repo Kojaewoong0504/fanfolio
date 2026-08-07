@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     database_url: str = "sqlite+aiosqlite:///./fanfolio.db"
     auto_create_schema: bool = True
+    seed_demo_catalog: bool = False
     storage_dir: str = "./storage"
     storage_backend: str = "local"
     s3_endpoint_url: str = ""

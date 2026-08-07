@@ -12,6 +12,7 @@ from app.db.session import engine
 from app.errors import AppError
 from app.models import Base
 from app.routers import admin, artist, assets, auth, fan, fixtures, health
+from app.services import ensure_demo_catalog
 
 
 @asynccontextmanager
@@ -20,6 +21,11 @@ async def lifespan(_: FastAPI):
     if get_settings().auto_create_schema:
         async with engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
+    if get_settings().seed_demo_catalog:
+        from app.db.session import SessionLocal
+
+        async with SessionLocal() as session:
+            await ensure_demo_catalog(session)
     yield
     await engine.dispose()
 
