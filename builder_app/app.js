@@ -228,6 +228,17 @@ function editorInspector() {
   return `<div class="inspector-block"><p class="inspector-label">뒷면 템플릿</p><div class="locked-template"><span class="lock-icon">⌁</span><div><strong>소속사 기본 템플릿</strong><small>뒷면 레이아웃은 운영팀이 관리합니다.</small></div></div><p class="inspector-label">색상 조합</p><div class="swatches">${['#f5efff', '#eaf8ff', '#ffeef6', '#f4f1e9'].map((color) => `<button type="button" class="swatch ${e.background === color ? 'selected' : ''}" style="background:${color}" data-editor-value="background" data-value="${color}" aria-label="배경 ${color}"></button>`).join('')}</div><p class="inspector-tip">아티스트는 기본 뒷면의 색상과 효과만 변경할 수 있습니다.</p></div>`;
 }
 
+function studioIcon(name) {
+  const paths = {
+    photo: '<rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8.5" cy="9" r="1.5"/><path d="m4 17 4.5-4 3 2.5 2.5-2 5 4.5"/>',
+    text: '<path d="M5 5h14M12 5v14M8 19h8"/>',
+    sticker: '<path d="m12 3 2.1 5.9L20 11l-5.9 2.1L12 19l-2.1-5.9L4 11l5.9-2.1L12 3Z"/><path d="m19 4 .5 1.5L21 6l-1.5.5L19 8l-.5-1.5L17 6l1.5-.5L19 4Z"/>',
+    effect: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2"/>',
+    back: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 8h8M8 12h8M8 16h5"/>',
+  };
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.photo}</svg>`;
+}
+
 function editorRange(key, label, min, max, step, unit) { const value = state.editor[key]; return `<label class="editor-range"><span>${label}<output>${value}${unit}</output></span><input data-editor-field="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${value}" /></label>`; }
 
 function editorDesignConfig(imageAssetId) {
@@ -263,7 +274,7 @@ function restoreEditorDesign(card) {
 
 function visualEditorView() {
   const e = state.editor;
-  const tools = [['photo', '▧', '사진'], ['text', 'T', '텍스트'], ['sticker', '✦', '스티커'], ['effect', '◌', '효과'], ['back', '▣', '뒷면']];
+  const tools = [['photo', studioIcon('photo'), '사진'], ['text', studioIcon('text'), '텍스트'], ['sticker', studioIcon('sticker'), '스티커'], ['effect', studioIcon('effect'), '효과'], ['back', studioIcon('back'), '뒷면']];
   const preview = e.previewOpen ? `<div class="editor-preview-backdrop" role="presentation"><div class="editor-preview-modal" role="dialog" aria-modal="true" aria-labelledby="editor-preview-title"><div class="editor-preview-heading"><div><span>FANFOLIO · CARD PREVIEW</span><h3 id="editor-preview-title">카드 전체 화면 미리보기</h3></div><button class="modal-close" data-editor-action="close-preview" aria-label="미리보기 닫기">×</button></div><div class="editor-preview-stage"><div class="preview-side-label">${e.side === 'front' ? '앞면' : '뒷면'}</div>${editorCardMarkup()}</div><div class="editor-preview-actions"><button class="secondary" data-editor-action="close-preview">계속 편집하기</button><button class="primary" data-editor-action="details">이 디자인으로 상세 정보 입력 <span>→</span></button></div></div></div>` : '';
   return `<section class="visual-editor"><div class="editor-toolbar"><div><span class="editor-breadcrumb">카드 만들기 <b>/</b> 비주얼 에디터</span><h2>나만의 특별 카드를 디자인해 보세요</h2><p>앞면은 자유롭게 꾸미고, 뒷면은 소속사 기본 템플릿을 바탕으로 완성합니다.</p></div><div class="editor-toolbar-actions"><span class="draft-status"><i></i> 자동 저장됨</span><button class="secondary" data-editor-action="exit">나중에 계속하기</button><button class="primary" data-editor-action="details">상세 정보 입력 <span>→</span></button></div></div><div class="editor-workspace"><aside class="editor-tools" aria-label="카드 편집 도구">${tools.map(([value, icon, label]) => `<button class="editor-tool ${e.tool === value ? 'active' : ''}" data-editor-tool="${value}"><span>${icon}</span><small>${label}</small></button>`).join('')}</aside><div class="editor-stage-wrap"><div class="stage-header"><span>${e.side === 'front' ? '앞면' : '뒷면'} 미리보기</span><div class="side-switch"><button class="${e.side === 'front' ? 'active' : ''}" data-editor-side="front">앞면</button><button class="${e.side === 'back' ? 'active' : ''}" data-editor-side="back">뒷면</button></div><span class="zoom-label">100%</span></div><div class="visual-editor-stage"><div class="stage-grid"></div>${editorCardMarkup()}<span class="stage-caption">드래그하여 위치를 조정할 수 있어요</span></div><div class="stage-footer"><span><b>Tip</b> 카드의 분위기를 먼저 정한 뒤 사진과 문구를 배치해 보세요.</span><button class="ghost-button" data-editor-action="preview">전체 화면 미리보기 ↗</button></div></div><aside class="editor-inspector"><div class="inspector-heading"><div><span>편집 도구</span><h3>${tools.find(([value]) => value === e.tool)?.[2] || '사진'}</h3></div><span class="inspector-count">${e.side === 'front' ? '앞면' : '뒷면'}</span></div>${editorInspector()}</aside></div>${preview}</section>`;
 }
