@@ -32,6 +32,8 @@ class Settings(BaseSettings):
         "http://127.0.0.1:4174,http://127.0.0.1:4175,http://127.0.0.1:5173"
     )
     frontend_url: str = "http://localhost:5173"
+    admin_bootstrap_email: str = ""
+    admin_bootstrap_password: str = ""
     mail_delivery_mode: str = "console"
     mail_from: str = "Fanfolio <no-reply@localhost>"
     jwt_access_secret: str = "dev-access-secret-change-me-32-bytes"

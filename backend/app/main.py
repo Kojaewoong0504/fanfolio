@@ -8,11 +8,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
-from app.db.session import engine
+from app.db.session import SessionLocal, engine
 from app.errors import AppError
 from app.models import Base
 from app.routers import admin, artist, assets, auth, fan, fixtures, health
-from app.services import ensure_demo_catalog
+from app.services import ensure_admin_bootstrap, ensure_demo_catalog
 
 
 @asynccontextmanager
@@ -22,10 +22,11 @@ async def lifespan(_: FastAPI):
         async with engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
     if get_settings().seed_demo_catalog:
-        from app.db.session import SessionLocal
-
         async with SessionLocal() as session:
             await ensure_demo_catalog(session)
+
+    async with SessionLocal() as session:
+        await ensure_admin_bootstrap(session)
     yield
     await engine.dispose()
 

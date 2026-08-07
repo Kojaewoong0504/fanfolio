@@ -141,6 +141,12 @@ refresh 쿠키는 `fanfolio_fan_refresh`, `fanfolio_admin_refresh`, `fanfolio_ar
 Refresh 쿠키와 짧은 수명의 Access JWT를 사용합니다. 비밀번호를 잊은 경우에는 이메일 재설정
 대신 관리자가 계정을 재설정합니다.
 
+관리자 웹은 이메일 매직 링크 대신 이메일·비밀번호 로그인으로 운영합니다. 최초 관리자 계정은
+Render 환경 변수 `ADMIN_BOOTSTRAP_EMAIL`과 `ADMIN_BOOTSTRAP_PASSWORD`를 설정한 뒤 API를
+재시작하면 생성됩니다. 부트스트랩 비밀번호는 최초 로그인에만 사용하도록 `mustChangePassword`가
+설정되며, 첫 로그인 후 새 비밀번호로 변경합니다. 기존 관리자 비밀번호가 있으면 재시작해도
+덮어쓰지 않습니다. 두 환경 변수는 저장소에 커밋하지 말고 Render Secret으로만 등록하세요.
+
 ### 8. Kakao·Google 소셜 로그인 설정
 
 팬 앱 로그인 화면은 Kakao와 Google을 우선 노출하고 이메일 매직 링크를 보조 수단으로 제공합니다.

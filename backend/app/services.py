@@ -34,6 +34,7 @@ from app.models import (
     User,
     UserCard,
 )
+from app.passwords import hash_password
 from app.storage import configured_asset_storage
 
 logger = logging.getLogger(__name__)
@@ -87,6 +88,35 @@ async def ensure_demo_catalog(session: AsyncSession) -> None:
     await session.commit()
 
 
+async def ensure_admin_bootstrap(session: AsyncSession) -> None:
+    """Create the first password admin only when deployment secrets configure it."""
+    settings = get_settings()
+    email = settings.admin_bootstrap_email.strip().lower()
+    password = settings.admin_bootstrap_password
+    if not email or not password:
+        return
+    if len(password) < 12:
+        raise ValueError("ADMIN_BOOTSTRAP_PASSWORD must be at least 12 characters")
+    user = await session.scalar(select(User).where(User.email == email))
+    if user is None:
+        session.add(
+            User(
+                id=f"admin_{uuid4().hex}",
+                email=email,
+                role=Role.ADMIN,
+                nickname="운영 관리자",
+                password_hash=hash_password(password),
+                must_change_password=True,
+            )
+        )
+    elif user.role != Role.ADMIN:
+        raise ValueError("ADMIN_BOOTSTRAP_EMAIL belongs to a non-admin user")
+    elif not user.password_hash:
+        user.password_hash = hash_password(password)
+        user.must_change_password = True
+    await session.commit()
+
+
 async def reset_database(session: AsyncSession) -> None:
     for model in (
         BackgroundRemovalJob,
@@ -120,7 +150,14 @@ async def seed_core(session: AsyncSession) -> dict:
         ("artist", Role.ARTIST),
     ]
     for user_id, role in users:
-        session.add(User(id=user_id, email=f"{user_id}@example.com", role=role))
+        session.add(
+            User(
+                id=user_id,
+                email=f"{user_id}@example.com",
+                role=role,
+                password_hash=hash_password("test-admin-password") if role == Role.ADMIN else None,
+            )
+        )
         session.add(
             Session(
                 token=f"test-session-{user_id.replace('otherFan', 'other-fan')}", user_id=user_id

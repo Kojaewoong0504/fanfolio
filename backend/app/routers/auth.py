@@ -11,6 +11,7 @@ from app.auth_tokens import (
 )
 from app.core.config import get_settings
 from app.dependencies import (
+    AdminUser,
     ArtistUser,
     CurrentUser,
     DbSession,
@@ -33,6 +34,7 @@ from app.oauth import (
 from app.passwords import hash_password, verify_password
 from app.rate_limit import enforce_rate_limit
 from app.schemas import (
+    AdminPasswordLogin,
     ArtistPasswordChange,
     ArtistPasswordLogin,
     MagicLinkRequest,
@@ -49,6 +51,15 @@ def _artist_user_data(user: User) -> dict[str, object]:
     return {
         "id": user.id,
         "username": user.username,
+        "displayName": user.nickname,
+        "role": user.role.value,
+    }
+
+
+def _admin_user_data(user: User) -> dict[str, object]:
+    return {
+        "id": user.id,
+        "email": user.email,
         "displayName": user.nickname,
         "role": user.role.value,
     }
@@ -225,6 +236,62 @@ async def artist_password_login(
             "mustChangePassword": user.must_change_password,
         },
     }
+
+
+@router.post("/admin/login")
+async def admin_password_login(
+    payload: AdminPasswordLogin,
+    request: Request,
+    response: Response,
+    session: DbSession,
+    client: str | None = Header(default=None, alias="X-Fanfolio-Client"),
+) -> dict:
+    if client not in {None, "admin"}:
+        raise AppError(403, "ADMIN_CLIENT_REQUIRED", "관리자 웹 전용 로그인입니다.")
+    email = str(payload.email).lower()
+    client_host = request.client.host if request.client else "unknown"
+    await enforce_rate_limit(
+        f"admin-password:{email}:{client_host}", limit=5, window_seconds=15 * 60
+    )
+    user = await session.scalar(select(User).where(User.email == email, User.role == Role.ADMIN))
+    if user is None or not verify_password(payload.password, user.password_hash):
+        raise AppError(401, "INVALID_CREDENTIALS", "이메일 또는 비밀번호가 올바르지 않습니다.")
+    access_token, refresh_token, _ = await issue_token_pair(session, user, "admin")
+    await session.commit()
+    settings = get_settings()
+    response.set_cookie(
+        refresh_cookie_name("admin"),
+        refresh_token,
+        httponly=True,
+        secure=settings.app_env == "production",
+        samesite=_refresh_cookie_samesite(),
+        path="/",
+        max_age=settings.jwt_refresh_ttl_seconds,
+    )
+    return {
+        "ok": True,
+        "data": {
+            "accessToken": access_token,
+            "user": _admin_user_data(user),
+            "mustChangePassword": user.must_change_password,
+        },
+    }
+
+
+@router.post("/admin/change-password")
+async def change_admin_password(
+    payload: ArtistPasswordChange,
+    user: AdminUser,
+    session: DbSession,
+) -> dict:
+    if not verify_password(payload.current_password, user.password_hash):
+        raise AppError(401, "INVALID_CREDENTIALS", "현재 비밀번호가 올바르지 않습니다.")
+    if payload.current_password == payload.new_password:
+        raise AppError(422, "PASSWORD_UNCHANGED", "새 비밀번호는 현재 비밀번호와 달라야 합니다.")
+    user.password_hash = hash_password(payload.new_password)
+    user.must_change_password = False
+    await session.commit()
+    return {"ok": True, "data": {"mustChangePassword": False}}
 
 
 @router.post("/artist/change-password")

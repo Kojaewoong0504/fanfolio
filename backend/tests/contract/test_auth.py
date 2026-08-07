@@ -28,6 +28,52 @@ def test_magic_link_request_delivers_the_created_token(
     assert delivered[0][1]
 
 
+def test_admin_password_login_and_first_password_change(
+    client: TestClient, seeded: dict[str, object]
+) -> None:
+    login = client.post(
+        "/api/auth/admin/login",
+        headers={"X-Fanfolio-Client": "admin"},
+        json={"email": "admin@example.com", "password": "test-admin-password"},
+    )
+    data = assert_success(login)
+    assert data["user"]["role"] == "admin"
+    assert data["mustChangePassword"] is False
+    access_token = data["accessToken"]
+
+    changed = client.post(
+        "/api/auth/admin/change-password",
+        headers={
+            "X-Fanfolio-Client": "admin",
+            "Authorization": f"Bearer {access_token}",
+        },
+        json={"currentPassword": "test-admin-password", "newPassword": "new-admin-password-123"},
+    )
+    assert_success(changed)
+
+    old_login = client.post(
+        "/api/auth/admin/login",
+        json={"email": "admin@example.com", "password": "test-admin-password"},
+    )
+    assert_error(old_login, 401, "INVALID_CREDENTIALS")
+    new_login = client.post(
+        "/api/auth/admin/login",
+        json={"email": "admin@example.com", "password": "new-admin-password-123"},
+    )
+    assert_success(new_login)
+
+
+def test_admin_password_login_rejects_artist_client(
+    client: TestClient, seeded: dict[str, object]
+) -> None:
+    response = client.post(
+        "/api/auth/admin/login",
+        headers={"X-Fanfolio-Client": "artist"},
+        json={"email": "admin@example.com", "password": "test-admin-password"},
+    )
+    assert_error(response, 403, "ADMIN_CLIENT_REQUIRED")
+
+
 def test_magic_link_request_preserves_signup_purpose(
     client: TestClient, seeded: dict[str, object], monkeypatch: Any
 ) -> None:
