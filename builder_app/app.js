@@ -229,6 +229,37 @@ function editorInspector() {
 
 function editorRange(key, label, min, max, step, unit) { const value = state.editor[key]; return `<label class="editor-range"><span>${label}<output>${value}${unit}</output></span><input data-editor-field="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${value}" /></label>`; }
 
+function editorDesignConfig(imageAssetId) {
+  const e = state.editor;
+  return {
+    version: 1,
+    front: {
+      image: { assetId: imageAssetId, x: Number(e.imageX || 0), y: Number(e.imageY || 0), scale: Number(e.imageScale || 100), filter: e.filter || 'clean' },
+      text: { value: e.text || '', x: Number(e.textX || 0), y: Number(e.textY || 0), size: Number(e.textSize || 24), color: e.textColor || '#ffffff' },
+      sticker: { kind: e.sticker || 'none', x: Number(e.stickerX || 0), y: Number(e.stickerY || 0) },
+      effect: e.effect || 'none',
+    },
+    back: { templateId: 'agency_back_v1', background: e.background || '#f5efff', effect: e.effect || 'none' },
+  };
+}
+
+function restoreEditorDesign(card) {
+  const config = card?.designConfig;
+  if (!config?.front || !config?.back) return;
+  const image = config.front.image || {};
+  const text = config.front.text || {};
+  const sticker = config.front.sticker || {};
+  state.editor = {
+    ...state.editor,
+    imageSrc: card.imageUrl || card.imageAssetUrl || state.editor.imageSrc,
+    imageName: card.name ? `${card.name}.jpg` : state.editor.imageName,
+    imageScale: Number(image.scale ?? state.editor.imageScale), imageX: Number(image.x ?? state.editor.imageX), imageY: Number(image.y ?? state.editor.imageY), filter: image.filter || state.editor.filter,
+    text: text.value ?? state.editor.text, textX: Number(text.x ?? state.editor.textX), textY: Number(text.y ?? state.editor.textY), textSize: Number(text.size ?? state.editor.textSize), textColor: text.color || state.editor.textColor,
+    sticker: sticker.kind || state.editor.sticker, stickerX: Number(sticker.x ?? state.editor.stickerX), stickerY: Number(sticker.y ?? state.editor.stickerY), effect: config.front.effect || config.back.effect || state.editor.effect, background: config.back.background || state.editor.background,
+  };
+  persistEditorDraft();
+}
+
 function visualEditorView() {
   const e = state.editor;
   const tools = [['photo', '▧', '사진'], ['text', 'T', '텍스트'], ['sticker', '✦', '스티커'], ['effect', '◌', '효과'], ['back', '▣', '뒷면']];
@@ -357,6 +388,7 @@ function beginCardEdit(cardId) {
   state.form = { ...state.form, imageAssetId: card.imageAssetId, artistId: card.artistId || state.form.artistId, name: card.name, memberId: card.memberId || '', seasonName: card.seasonName || '', templateId: card.templateId || state.form.templateId, rarity: card.rarity || state.form.rarity, signatureText: card.signatureText || '', hasVoice: Boolean(card.hasVoice), issueLimit: card.issueLimit || state.form.issueLimit };
   state.handwritingTransform = card.handwritingTransform || { x: 68, y: 724, width: 402, rotation: -3 };
   state.form.voiceAssetId = card.voiceAssetId || null;
+  restoreEditorDesign(card);
   state.view = 'create';
   state.step = 1;
   render();
@@ -368,6 +400,36 @@ document.addEventListener('click', (event) => {
   const button = event.target.closest('.card-edit');
   if (button) beginCardEdit(button.dataset.cardId);
 });
+
+document.addEventListener('submit', async (event) => {
+  if (event.target.id !== 'card-form') return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  const form = new FormData(event.target);
+  const imageFile = form.get('cardImage');
+  const editing = Boolean(state.editingCardId);
+  state.form = { ...state.form, artistId: form.get('group'), name: form.get('name'), memberId: form.get('memberId'), seasonName: form.get('seasonName'), templateId: form.get('templateId'), rarity: form.get('rarity'), signatureText: form.get('signatureText'), issueLimit: Number(form.get('issueLimit')) };
+  try {
+    let imageAssetId = state.form.imageAssetId;
+    if (imageFile instanceof File && imageFile.size > 0) imageAssetId = await uploadAsset(imageFile, 'card');
+    if (!imageAssetId) throw new Error('CARD_IMAGE_REQUIRED');
+    const payload = { templateId: state.form.templateId, name: state.form.name, seasonName: state.form.seasonName, rarity: state.form.rarity, imageAssetId, artistId: state.form.artistId, memberId: state.form.memberId, signatureText: state.form.signatureText, hasVoice: state.form.hasVoice, issueLimit: state.form.issueLimit, designConfig: editorDesignConfig(imageAssetId) };
+    const result = editing
+      ? await api(`/artist/cards/${state.editingCardId}`, { method: 'PATCH', body: JSON.stringify(payload) })
+      : await api('/artist/cards', { method: 'POST', body: JSON.stringify(payload) });
+    state.cardId = result.data.id;
+    state.cardName = result.data.name;
+    state.form.imageAssetId = result.data.imageAssetId;
+    state.cards = state.editingCardId ? state.cards.map((card) => card.id === result.data.id ? result.data : card) : [result.data, ...state.cards.filter((card) => card.id !== result.data.id)];
+    state.editingCardId = result.data.id;
+    toast(editing ? '카드를 저장했습니다.' : '카드를 임시 저장했습니다.');
+    state.step = 2;
+    state.view = 'create';
+    render();
+  } catch {
+    toast('카드 이미지 또는 디자인 저장에 실패했습니다. 아티스트 세션과 API 서버를 확인해 주세요.');
+  }
+}, true);
 
 document.addEventListener('submit', async (event) => {
   if (!state.editingCardId || event.target.id !== 'card-form') return;
