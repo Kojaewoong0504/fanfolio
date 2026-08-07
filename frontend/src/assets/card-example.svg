@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 800" role="img" aria-labelledby="title desc">
+  <title id="title">Fanfolio 디지털 카드 예시</title>
+  <desc id="desc">보랏빛 무대 조명과 실루엣으로 표현한 디지털 포토카드</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#1e2048"/><stop offset=".55" stop-color="#6553dc"/><stop offset="1" stop-color="#e7a7ca"/></linearGradient>
+    <radialGradient id="glow"><stop stop-color="#fff" stop-opacity=".8"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+    <linearGradient id="coat" x1="0" x2="1"><stop stop-color="#14152f"/><stop offset=".5" stop-color="#5544ae"/><stop offset="1" stop-color="#181936"/></linearGradient>
+  </defs>
+  <rect width="600" height="800" rx="34" fill="url(#bg)"/>
+  <circle cx="470" cy="120" r="180" fill="url(#glow)" opacity=".42"/>
+  <path d="M0 620 Q140 500 300 620T600 570V800H0Z" fill="#151632" opacity=".62"/>
+  <path d="M75 650 225 255 300 225 375 255 525 650 430 800H170Z" fill="url(#coat)"/>
+  <path d="M215 285 Q300 225 385 285L365 465Q300 525 235 465Z" fill="#d9a4a7"/>
+  <path d="M205 310Q210 190 300 185T395 310Q348 275 300 288T205 310Z" fill="#17172f"/>
+  <path d="M250 455 300 520 350 455 390 800H210Z" fill="#faf8ff" opacity=".22"/>
+  <path d="M125 640 240 520M475 640 360 520" stroke="#d7c9ff" stroke-width="8" opacity=".48"/>
+  <circle cx="88" cy="120" r="7" fill="#fff"/><circle cx="122" cy="92" r="3" fill="#fff"/><circle cx="530" cy="330" r="5" fill="#fff"/>
+  <text x="40" y="70" fill="#fff" font-family="Arial,sans-serif" font-size="20" font-weight="700" letter-spacing="4">FANFOLIO</text>
+  <text x="40" y="735" fill="#fff" font-family="Arial,sans-serif" font-size="19" font-weight="700">COMEBACK MOMENT</text>
+  <text x="40" y="765" fill="#e8ddff" font-family="Arial,sans-serif" font-size="15">DREAMSCAPE · YUNA</text>
+</svg>

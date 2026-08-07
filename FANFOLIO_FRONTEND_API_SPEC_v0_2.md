@@ -108,8 +108,12 @@ Base URL: `/api`
 
 | Method | Endpoint | 권한 | 설명 |
 | --- | --- | --- | --- |
-| POST | `/auth/magic-link/request` | Public | 로그인/회원가입용 매직링크 요청 |
-| POST | `/auth/magic-link/verify` | Public | 매직링크 토큰 검증 및 세션 발급 |
+| GET | `/auth/oauth/{provider}/start?client=fan` | Public | Kakao·Google authorization 시작 |
+| GET | `/auth/oauth/{provider}/callback` | Provider redirect | provider code 검증 후 프론트용 1회성 교환 코드 발급 |
+| POST | `/auth/oauth/exchange` | Public | 1회성 교환 코드 소비 및 JWT/RTR 발급 |
+| POST | `/auth/magic-link/request` | Public | 보조 이메일 로그인/회원가입용 매직링크 요청 |
+| POST | `/auth/magic-link/verify` | Public | 매직링크 토큰 검증 및 JWT/RTR 발급 |
+| POST | `/auth/refresh` | Refresh cookie | access JWT 회전 발급 |
 | POST | `/auth/logout` | Fan+ | 세션 종료 |
 | GET | `/me` | Fan+ | 현재 사용자/역할/온보딩 상태 |
 | PATCH | `/me/profile` | Fan+ | 닉네임, 좋아하는 그룹·멤버 수정 |
@@ -120,6 +124,17 @@ Base URL: `/api`
 ```json
 { "email": "fan@example.com", "purpose": "login" }
 ```
+
+팬 앱 로그인 화면은 소셜 로그인을 우선 노출한다. `{provider}`는 `google` 또는 `kakao`이며,
+callback URL에는 access token을 넣지 않고 1회성 `code`만 전달한다. 프론트는 다음처럼 교환한다.
+
+```json
+{ "code": "...", "client": "fan" }
+```
+
+교환 성공 시 access JWT는 응답으로 받고, refresh JWT는 `HttpOnly` 쿠키로 받는다. 프론트는
+access JWT를 메모리에만 저장하고 `401` 응답에서 `/auth/refresh`를 한 번 호출한 뒤 원 요청을
+재시도한다. Apple 로그인은 후속 단계다.
 
 `PATCH /me/profile`
 

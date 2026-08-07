@@ -33,6 +33,21 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:5173"
     mail_delivery_mode: str = "console"
     mail_from: str = "Fanfolio <no-reply@localhost>"
+    jwt_access_secret: str = "dev-access-secret-change-me-32-bytes"
+    jwt_refresh_secret: str = "dev-refresh-secret-change-me-32-bytes"
+    jwt_issuer: str = "fanfolio"
+    jwt_audience: str = "fanfolio-api"
+    jwt_access_ttl_seconds: int = 600
+    jwt_refresh_ttl_seconds: int = 60 * 60 * 24 * 30
+    oauth_frontend_callback_url: str = "http://localhost:5173/oauth/callback"
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = "http://localhost:8000/api/auth/oauth/google/callback"
+    kakao_client_id: str = ""
+    kakao_client_secret: str = ""
+    kakao_redirect_uri: str = "http://localhost:8000/api/auth/oauth/kakao/callback"
+    oauth_state_ttl_seconds: int = 600
+    oauth_exchange_code_ttl_seconds: int = 60
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_username: str = ""
@@ -93,10 +108,22 @@ class Settings(BaseSettings):
             raise ValueError("RATE_LIMIT_REDIS_URL is required in production")
         if self.download_signing_secret == "dev-only-change-me":
             raise ValueError("DOWNLOAD_SIGNING_SECRET must be changed in production")
+        if self.jwt_access_secret == "dev-access-secret-change-me-32-bytes":
+            raise ValueError("JWT_ACCESS_SECRET must be changed in production")
+        if self.jwt_refresh_secret == "dev-refresh-secret-change-me-32-bytes":
+            raise ValueError("JWT_REFRESH_SECRET must be changed in production")
+        if self.jwt_access_ttl_seconds <= 0 or self.jwt_refresh_ttl_seconds <= 0:
+            raise ValueError("JWT token TTLs must be positive")
         if self.asset_scan_mode != "clamav":
             raise ValueError("ASSET_SCAN_MODE must be clamav in production")
         if not self.clamav_host:
             raise ValueError("CLAMAV_HOST is required when ASSET_SCAN_MODE is clamav")
+        if not self.oauth_frontend_callback_url.startswith("https://"):
+            raise ValueError("OAUTH_FRONTEND_CALLBACK_URL must use HTTPS in production")
+        if self.google_redirect_uri and not self.google_redirect_uri.startswith("https://"):
+            raise ValueError("GOOGLE_REDIRECT_URI must use HTTPS in production")
+        if self.kakao_redirect_uri and not self.kakao_redirect_uri.startswith("https://"):
+            raise ValueError("KAKAO_REDIRECT_URI must use HTTPS in production")
 
 
 @lru_cache

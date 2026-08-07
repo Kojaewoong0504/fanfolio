@@ -8,6 +8,7 @@ from uuid import uuid4
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.db.session import SessionLocal
 from app.errors import AppError
 from app.image_processing import remove_light_background_bytes
@@ -27,6 +28,7 @@ from app.models import (
     Notification,
     RedeemCode,
     RedeemCodeBatch,
+    RefreshToken,
     Role,
     Session,
     User,
@@ -63,6 +65,7 @@ async def reset_database(session: AsyncSession) -> None:
         ArtistProfile,
         Artist,
         MagicLink,
+        RefreshToken,
         Session,
         User,
     ):
@@ -309,7 +312,7 @@ async def notify_fans(session: AsyncSession, *, kind: str, title: str, body: str
                 body=body,
             )
         )
-        if fan.notification_email_enabled:
+        if fan.notification_email_enabled and fan.email:
             try:
                 await deliver_notification_email(fan.email, title, body)
             except MailDeliveryError:
@@ -357,12 +360,14 @@ async def verify_magic_link(session: AsyncSession, *, token: str) -> dict:
 
         link.consumed_at = now()
         session_token = token_urlsafe(32)
-        session.add(Session(token=session_token, user_id=user.id))
+        if get_settings().app_env != "production":
+            session.add(Session(token=session_token, user_id=user.id))
 
         result = {
             "user": {"id": user.id, "email": user.email, "role": user.role.value},
             "onboardingCompleted": user.onboarding_completed,
             "sessionToken": session_token,
+            "userId": user.id,
         }
     return result
 

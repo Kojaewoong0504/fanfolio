@@ -50,6 +50,7 @@ async def me(user: FanUser) -> dict:
         "data": {
             "id": user.id,
             "email": user.email,
+            "profileImageUrl": user.profile_image_url,
             "role": user.role.value,
             "nickname": user.nickname,
             "favoriteArtistIds": user.favorite_artist_ids,
@@ -453,12 +454,12 @@ async def card_detail(user_card_id: str, user: FanUser, session: DbSession) -> d
         if handwriting_asset and (
             handwriting_asset.processed_storage_path or handwriting_asset.storage_path
         ):
-            handwriting_image_url = f"/api/me/cards/{uc.id}/handwriting"
+            handwriting_image_url = f"/api/me/cards/{uc.id}/handwriting?client=fan"
     voice_audio_url = None
     if card.voice_asset_id:
         voice_asset = await session.get(Asset, card.voice_asset_id)
         if voice_asset and (voice_asset.processed_storage_path or voice_asset.storage_path):
-            voice_audio_url = f"/api/me/cards/{uc.id}/voice"
+            voice_audio_url = f"/api/me/cards/{uc.id}/voice?client=fan"
     return {
         "ok": True,
         "data": {
@@ -672,7 +673,14 @@ async def catalog(
 @router.get("/notifications")
 async def notifications(user: FanUser, session: DbSession) -> dict:
     items = (
-        await session.scalars(select(Notification).where(Notification.user_id == user.id))
+        await session.scalars(
+            select(Notification)
+            .where(Notification.user_id == user.id)
+            # The notification center is a reverse-chronological feed. Do not
+            # rely on database insertion order, which is not a contract and
+            # can change after a migration or a different query plan.
+            .order_by(Notification.created_at.desc(), Notification.id.desc())
+        )
     ).all()
     return {
         "ok": True,

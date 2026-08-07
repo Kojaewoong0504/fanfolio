@@ -102,7 +102,27 @@ APP_ENV=test python3 -m uv run pytest tests/contract -q
 
 ## 4. 인증 API
 
-Fanfolio의 회원가입과 로그인은 이메일 매직링크를 같은 흐름으로 사용한다. 비밀번호 API는 만들지 않는다.
+Fanfolio의 팬 회원가입과 로그인은 Kakao·Google 소셜 로그인을 우선 사용하고 이메일 매직링크를
+보조 수단으로 제공한다. 비밀번호 API와 Apple 로그인은 만들지 않는다. OAuth callback은
+access token을 URL에 노출하지 않고 1회성 교환 코드를 프론트에 전달한 뒤 JWT/RTR 발급 API로
+교환한다.
+
+### GET /api/auth/oauth/{provider}/start
+
+`provider`는 `google` 또는 `kakao`, query의 `client`는 현재 `fan`만 허용한다. 서버는 임의의
+CSRF state를 DB digest로 저장하고 provider authorization endpoint로 `302` redirect한다.
+
+### GET /api/auth/oauth/{provider}/callback
+
+provider의 `code`와 state를 검증하고 provider API에서 verified email과 subject를 조회한다.
+provider subject가 이미 연결되어 있으면 기존 User를 사용하고, verified email이 기존 User와
+일치하면 provider identity를 연결하며, 아니면 새 Fan User를 생성한다. 성공 시 프론트 callback
+URL로 `code`만 `302` redirect한다. state·provider profile·교환 실패는 URL의 error로 전달한다.
+
+### POST /api/auth/oauth/exchange
+
+입력: `{ "code": "...", "client": "fan" }`. 서버는 교환 코드를 원자적으로 한 번 소비하고
+access JWT와 HttpOnly refresh 쿠키를 발급한다. 재사용·만료 코드는 `401 SOCIAL_EXCHANGE_INVALID`다.
 
 ### POST /api/auth/magic-link/request
 

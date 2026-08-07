@@ -36,6 +36,11 @@ class MagicLinkVerify(BaseModel):
     token: str = Field(min_length=1)
 
 
+class OAuthExchangeRequest(BaseModel):
+    code: str = Field(min_length=1)
+    client: Literal["fan"] = "fan"
+
+
 class RedemptionRequest(BaseModel):
     code: str = Field(min_length=1)
     source: Literal["qr", "manual"]

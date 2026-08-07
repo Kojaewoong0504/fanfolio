@@ -543,6 +543,7 @@ async def list_users(
                 {
                     "id": user.id,
                     "email": user.email,
+                    "profileImageUrl": user.profile_image_url,
                     "role": user.role.value,
                     "nickname": user.nickname,
                     "onboardingCompleted": user.onboarding_completed,

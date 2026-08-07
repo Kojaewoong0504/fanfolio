@@ -308,12 +308,12 @@ def test_owned_card_detail_exposes_handwriting_and_voice_entitlements(
 
     assert detail["card"]["hasVoice"] is True
     handwriting_url = detail["card"]["handwritingImageUrl"]
-    assert handwriting_url == f"/api/me/cards/{redeemed['userCardId']}/handwriting"
+    assert handwriting_url == f"/api/me/cards/{redeemed['userCardId']}/handwriting?client=fan"
     image = fan.get(handwriting_url)
     assert image.status_code == 200
     assert image.content == b"handwriting"
     voice_url = detail["card"]["voiceAudioUrl"]
-    assert voice_url == f"/api/me/cards/{redeemed['userCardId']}/voice"
+    assert voice_url == f"/api/me/cards/{redeemed['userCardId']}/voice?client=fan"
     audio = fan.get(voice_url)
     assert audio.status_code == 200
     assert audio.content == b"voice"
@@ -501,7 +501,10 @@ def test_catalog_recommends_favorite_members_and_supports_explicit_sorting(
 
 def test_notifications_can_be_marked_as_read(actors: dict[str, TestClient]) -> None:
     fan = actors["fan"]
+    redeemed = fan.post("/api/redemptions", json={"code": "NOVA-VALID-01", "source": "manual"})
+    assert redeemed.status_code == 201, redeemed.text
     notifications = assert_success(fan.get("/api/notifications"))
+    assert notifications["items"][0]["kind"] == "card_redeemed"
     notification_id = notifications["items"][0]["id"]
 
     updated = assert_success(

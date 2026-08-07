@@ -115,6 +115,46 @@ SMTP_USE_TLS=true
 
 사용자가 메일의 링크를 클릭하면 프론트가 `token` 쿼리 파라미터를 자동으로 검증하고 로그인합니다.
 SMTP 연결에 실패하면 API는 `503 MAGIC_LINK_DELIVERY_FAILED`를 반환합니다.
+
+로그인 성공 후 API는 짧은 수명의 access JWT를 응답하고, 회전 가능한 refresh JWT는 HttpOnly
+쿠키로만 저장합니다. access token은 각 프론트 앱의 메모리에만 두며, 만료되면
+`POST /api/auth/refresh`가 refresh token rotation(RTR)을 수행해 새 access/refresh token을
+발급합니다. 이전 refresh token이 다시 사용되면 해당 token family 전체를 폐기합니다.
+운영 환경에서는 아래 JWT 비밀키를 반드시 별도 시크릿으로 주입하고 기본값을 사용하지 마세요.
+
+```bash
+JWT_ACCESS_SECRET=replace-with-a-long-random-secret
+JWT_REFRESH_SECRET=replace-with-another-long-random-secret
+JWT_ISSUER=fanfolio
+JWT_AUDIENCE=fanfolio-api
+JWT_ACCESS_TTL_SECONDS=600
+JWT_REFRESH_TTL_SECONDS=2592000
+```
+
+refresh 쿠키는 `fanfolio_fan_refresh`, `fanfolio_admin_refresh`, `fanfolio_artist_refresh`로
+클라이언트별 분리되며 `Secure`, `HttpOnly`, `SameSite=Lax` 속성을 사용합니다.
+
+### 8. Kakao·Google 소셜 로그인 설정
+
+팬 앱 로그인 화면은 Kakao와 Google을 우선 노출하고 이메일 매직 링크를 보조 수단으로 제공합니다.
+각 provider의 콘솔에 아래 callback URL을 등록한 뒤 환경변수를 설정합니다. OAuth callback은
+access token을 URL에 넣지 않고 1회성 교환 코드만 프론트로 전달하며, 프론트가 이를 API에 교환해
+기존 JWT/RTR 쿠키를 발급받습니다.
+
+```bash
+OAUTH_FRONTEND_CALLBACK_URL=https://app.fanfolio.example/oauth/callback
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_REDIRECT_URI=https://api.fanfolio.example/api/auth/oauth/google/callback
+KAKAO_CLIENT_ID=...
+KAKAO_CLIENT_SECRET=...
+KAKAO_REDIRECT_URI=https://api.fanfolio.example/api/auth/oauth/kakao/callback
+```
+
+Google은 OpenID Connect의 `openid email profile` scope를 사용하고, Kakao는 이메일·닉네임
+동의를 요청합니다. 이메일이 provider에서 검증되지 않은 경우 계정을 만들거나 기존 계정에
+연결하지 않습니다. Apple 로그인은 개발자 프로그램 비용과 별도 운영 설정이 필요하므로 이후
+단계로 남겨 둡니다.
 운영 환경(`APP_ENV=production`)에서는 애플리케이션 시작 시 `FRONTEND_URL`이 HTTPS인지,
 `FRONTEND_ORIGINS`가 비어 있지 않은지, SMTP 설정이 있는지를 검사합니다. 조건을 만족하지
 않으면 안전하지 않은 기본값으로 서버가 시작되지 않습니다.

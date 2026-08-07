@@ -18,9 +18,10 @@ class Role(str, enum.Enum):
 class User(Base):
     __tablename__ = "users"
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    email: Mapped[str] = mapped_column(String, unique=True)
+    email: Mapped[str | None] = mapped_column(String, unique=True, nullable=True)
     role: Mapped[Role] = mapped_column(default=Role.FAN)
     nickname: Mapped[str | None] = mapped_column(String, nullable=True)
+    profile_image_url: Mapped[str | None] = mapped_column(String, nullable=True)
     favorite_artist_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
     favorite_member_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -31,6 +32,80 @@ class Session(Base):
     __tablename__ = "sessions"
     token: Mapped[str] = mapped_column(String, primary_key=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+
+
+class RefreshToken(Base):
+    """Server-side state for a signed refresh JWT and its rotation family."""
+
+    __tablename__ = "refresh_tokens"
+    __table_args__ = (
+        Index("ix_refresh_tokens_family_id", "family_id"),
+        Index("ix_refresh_tokens_user_client", "user_id", "client"),
+        Index("ix_refresh_tokens_token_digest", "token_digest"),
+    )
+
+    jti: Mapped[str] = mapped_column(String, primary_key=True)
+    family_id: Mapped[str] = mapped_column(String, nullable=False)
+    token_digest: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    client: Mapped[str] = mapped_column(String, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    replaced_by_jti: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class SocialAccount(Base):
+    """Verified provider identity linked to one Fanfolio user."""
+
+    __tablename__ = "social_accounts"
+    __table_args__ = (
+        Index("uq_social_accounts_provider_subject", "provider", "subject", unique=True),
+        Index("ix_social_accounts_user_id", "user_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    provider: Mapped[str] = mapped_column(String, nullable=False)
+    subject: Mapped[str] = mapped_column(String, nullable=False)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    email: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class OAuthState(Base):
+    """Short-lived server-side state used to prevent OAuth CSRF."""
+
+    __tablename__ = "oauth_states"
+
+    state_hash: Mapped[str] = mapped_column(String, primary_key=True)
+    provider: Mapped[str] = mapped_column(String, nullable=False)
+    client: Mapped[str] = mapped_column(String, nullable=False)
+    redirect_uri: Mapped[str] = mapped_column(String, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class OAuthExchangeCode(Base):
+    """One-time browser-to-API handoff code; never place app tokens in a URL."""
+
+    __tablename__ = "oauth_exchange_codes"
+
+    code_hash: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    client: Mapped[str] = mapped_column(String, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class MagicLink(Base):

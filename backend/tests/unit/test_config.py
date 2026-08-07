@@ -37,6 +37,11 @@ def test_valid_production_settings_pass_runtime_validation() -> None:
         rate_limit_backend="redis",
         download_signing_secret="production-secret-from-environment",
         asset_scan_mode="clamav",
+        jwt_access_secret="production-access-secret-from-environment",
+        jwt_refresh_secret="production-refresh-secret-from-environment",
+        oauth_frontend_callback_url="https://app.fanfolio.example/oauth/callback",
+        google_redirect_uri="https://api.fanfolio.example/api/auth/oauth/google/callback",
+        kakao_redirect_uri="https://api.fanfolio.example/api/auth/oauth/kakao/callback",
     )
 
     settings.validate_runtime()
@@ -134,6 +139,8 @@ def test_production_settings_require_asset_scanning() -> None:
         rate_limit_backend="redis",
         download_signing_secret="production-secret-from-environment",
         asset_scan_mode="basic",
+        jwt_access_secret="production-access-secret-from-environment",
+        jwt_refresh_secret="production-refresh-secret-from-environment",
     )
 
     try:

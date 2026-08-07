@@ -29,4 +29,5 @@ backend/*.sqlite3
 # Local runtime artifacts
 fanfolio.db
 storage/
+output/
 .playwright-cli/

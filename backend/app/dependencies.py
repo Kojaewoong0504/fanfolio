@@ -4,6 +4,8 @@ from fastapi import Cookie, Depends, Header, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth_tokens import AuthTokenError, decode_access_token
+from app.core.config import get_settings
 from app.db.session import get_session
 from app.errors import AppError
 from app.models import Role, Session, User
@@ -16,10 +18,21 @@ SESSION_COOKIE_BY_CLIENT = {
     "artist": "fanfolio_artist_session",
 }
 
+REFRESH_COOKIE_BY_CLIENT = {
+    "fan": "fanfolio_fan_refresh",
+    "admin": "fanfolio_admin_refresh",
+    "artist": "fanfolio_artist_refresh",
+}
+
 
 def session_cookie_name(client: str | None) -> str:
     """Keep browser sessions isolated when the local apps share one host."""
     return SESSION_COOKIE_BY_CLIENT.get(client or "", "fanfolio_session")
+
+
+def refresh_cookie_name(client: str | None) -> str:
+    """Keep refresh-token cookies isolated between the three local apps."""
+    return REFRESH_COOKIE_BY_CLIENT.get(client or "", "fanfolio_refresh")
 
 
 async def current_user(
@@ -31,8 +44,20 @@ async def current_user(
     client_header: str | None = Header(default=None, alias="X-Fanfolio-Client"),
     client_query: str | None = Query(default=None, alias="client"),
     session_header: str | None = Header(default=None, alias="X-Fanfolio-Session"),
+    authorization: str | None = Header(default=None),
 ) -> User:
     client = client_header or client_query
+    if authorization:
+        scheme, _, raw_token = authorization.partition(" ")
+        if scheme.lower() != "bearer" or not raw_token:
+            raise AuthTokenError()
+        claims = decode_access_token(raw_token, expected_client=client or "")
+        user = await session.get(User, str(claims["sub"]))
+        if not user or user.role.value != claims.get("role"):
+            raise AuthTokenError()
+        return user
+    if get_settings().app_env == "production":
+        raise AppError(401, "AUTH_REQUIRED", "로그인이 필요합니다.")
     scoped_token = {
         "fan": fanfolio_fan_session,
         "admin": fanfolio_admin_session,
@@ -82,9 +107,22 @@ async def optional_current_user(
     client_header: str | None = Header(default=None, alias="X-Fanfolio-Client"),
     client_query: str | None = Query(default=None, alias="client"),
     session_header: str | None = Header(default=None, alias="X-Fanfolio-Session"),
+    authorization: str | None = Header(default=None),
 ) -> User | None:
     """Resolve a session when present, without rejecting signed-link requests."""
     client = client_header or client_query
+    if authorization:
+        scheme, _, raw_token = authorization.partition(" ")
+        if scheme.lower() != "bearer" or not raw_token:
+            return None
+        try:
+            claims = decode_access_token(raw_token, expected_client=client or "")
+        except AuthTokenError:
+            return None
+        user = await session.get(User, str(claims["sub"]))
+        return user if user and user.role.value == claims.get("role") else None
+    if get_settings().app_env == "production":
+        return None
     scoped_token = {
         "fan": fanfolio_fan_session,
         "admin": fanfolio_admin_session,

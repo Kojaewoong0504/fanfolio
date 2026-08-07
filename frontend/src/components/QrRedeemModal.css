@@ -1,20 +1,273 @@
 .qr-photo-upload {
-  display: block;
-  margin: 0 0 18px;
-  padding: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 11px;
+  width: 100%;
+  min-height: 62px;
+  margin: 0;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: 15px;
   background: #fff;
-  color: var(--violet);
-  font-size: 12px;
-  text-align: center;
+  color: var(--ink);
+  font-size: inherit;
+  font-weight: 400;
+  text-align: left;
+  transition: border-color .18s ease, background .18s ease, box-shadow .18s ease;
   cursor: pointer;
 }
 
-.qr-photo-upload input {
-  display: block;
-  width: 100%;
-  margin-top: 7px;
-  font-size: 11px;
+.redeem-modal {
+  padding: 24px 22px 30px;
+  max-height: min(88vh, 760px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid #ffffffaa;
+  box-shadow: 0 -18px 48px #1d1b3b22;
+}
+
+.redeem-modal-header {
+  position: sticky;
+  top: -24px;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin: -24px -22px 0;
+  padding: 24px 22px 10px;
+  background: linear-gradient(#fff 78%, #ffffffee);
+}
+
+.redeem-modal-header .eyebrow {
+  margin: 0;
+}
+
+.redeem-modal-header h2 {
+  margin: 5px 0 0;
+}
+
+.redeem-modal-header .modal-close {
+  position: static;
+  flex: 0 0 44px;
+  margin: -8px -10px 0 8px;
+}
+
+.redeem-modal h2 {
+  margin-top: 5px;
+}
+
+.redeem-methods {
+  display: grid;
+  gap: 9px;
+  margin-top: 22px;
+}
+
+.redeem-method-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0 2px 2px;
+  border-bottom: 1px solid #f0eef7;
+  padding-bottom: 9px;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.redeem-method-heading span {
   color: var(--muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.redeem-method {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  min-height: 62px;
+  padding: 10px 13px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.redeem-method:hover,
+.redeem-method:focus-visible,
+.redeem-method.selected {
+  border-color: #aaa1ef;
+  background: #faf9ff;
+  box-shadow: 0 5px 14px #6654df12;
+  outline: none;
+}
+
+.redeem-method.selected::after {
+  position: absolute;
+  top: 8px;
+  right: 9px;
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--violet);
+  color: #fff;
+  content: '✓';
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.redeem-method.selected > strong {
+  margin-right: 18px;
+}
+
+.redeem-method-icon {
+  display: grid;
+  flex: 0 0 34px;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: #f0efff;
+  color: var(--violet);
+  font-size: 19px;
+  font-weight: 800;
+}
+
+.redeem-method-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.redeem-method > span:nth-child(2) {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.redeem-method b {
+  font-size: 12px;
+}
+
+.redeem-method small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.redeem-method > strong {
+  color: #9b97b8;
+  font-size: 22px;
+  font-weight: 400;
+}
+
+.qr-box {
+  display: flex;
+  margin: 0;
+  padding: 10px 13px;
+  border-style: solid;
+  color: var(--ink);
+}
+
+.qr-box > span:first-child:not(.redeem-method-icon),
+.qr-box > b,
+.qr-box > small {
+  display: none;
+}
+
+.redeem-scanner {
+  margin: 0;
+  grid-column: 1 / -1;
+}
+
+.redeem-scanner video {
+  height: 230px;
+}
+
+.redeem-code-field {
+  margin-top: 4px;
+  padding: 12px 13px 13px;
+  border: 1px solid #dedaf4;
+  border-radius: 15px;
+  background: #faf9ff;
+}
+
+.redeem-code-field .field-label {
+  margin: 0 0 7px;
+}
+
+.redeem-code-field input {
+  border-color: #d7d2f2;
+}
+
+.redeem-code-field small {
+  display: block;
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.redeem-modal .primary {
+  margin-top: 14px;
+}
+
+.redeem-modal .form-message {
+  scroll-margin-bottom: 24px;
+}
+
+.qr-photo-upload input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.qr-photo-upload:focus-within {
+  border-color: #aaa1ef;
+  background: #faf9ff;
+  box-shadow: 0 5px 14px #6654df12;
+  outline: 3px solid #8ea8ff;
+  outline-offset: 2px;
+}
+
+.qr-photo-upload:hover {
+  border-color: #aaa1ef;
+  background: #faf9ff;
+  box-shadow: 0 5px 14px #6654df12;
+}
+
+.qr-photo-upload .redeem-method-icon {
+  flex: 0 0 34px;
+}
+
+@media (max-width: 430px) {
+  .redeem-modal {
+    padding: 22px 18px calc(28px + env(safe-area-inset-bottom));
+  }
+
+  .redeem-modal-header {
+    top: -22px;
+    margin: -22px -18px 0;
+    padding: 22px 18px 10px;
+  }
+
+  .redeem-methods {
+    gap: 10px;
+  }
+
+  .redeem-method {
+    min-height: 68px;
+  }
+
+  .redeem-modal {
+    max-height: min(88dvh, 760px);
+  }
 }
