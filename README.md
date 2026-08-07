@@ -151,10 +151,11 @@ KAKAO_CLIENT_SECRET=...
 KAKAO_REDIRECT_URI=https://api.fanfolio.example/api/auth/oauth/kakao/callback
 ```
 
-Google은 OpenID Connect의 `openid email profile` scope를 사용하고, Kakao는 이메일·닉네임
-동의를 요청합니다. 이메일이 provider에서 검증되지 않은 경우 계정을 만들거나 기존 계정에
-연결하지 않습니다. Apple 로그인은 개발자 프로그램 비용과 별도 운영 설정이 필요하므로 이후
-단계로 남겨 둡니다.
+Google은 OpenID Connect의 `openid email profile` scope를 사용합니다. Kakao는 개인 개발자
+앱에서 제공이 보장되지 않는 이메일 대신 회원번호를 고유 식별자로 사용하고, 닉네임·프로필
+이미지를 선택 동의로 요청합니다. Kakao 이메일이 없는 계정도 로그인할 수 있으며 계정에는
+`email: null`로 저장됩니다. Apple 로그인은 개발자 프로그램 비용과 별도 운영 설정이 필요하므로
+이후 단계로 남겨 둡니다.
 운영 환경(`APP_ENV=production`)에서는 애플리케이션 시작 시 `FRONTEND_URL`이 HTTPS인지,
 `FRONTEND_ORIGINS`가 비어 있지 않은지, SMTP 설정이 있는지를 검사합니다. 조건을 만족하지
 않으면 안전하지 않은 기본값으로 서버가 시작되지 않습니다.
@@ -170,7 +171,27 @@ open http://localhost:8025
 팬·관리자·아티스트 로그인 링크를 요청하면 메일이 Mailpit 화면에 도착합니다. SMTP 포트는
 `1025`, 웹 확인 화면은 `8025`이며 외부 SMTP 계정 없이도 링크 생성부터 수신까지 확인할 수 있습니다.
 
-### 8. PostgreSQL·SMTP·Redis 통합 환경
+### Vercel 모노레포 배포
+
+이 저장소는 세 개의 프론트 앱을 하나의 Git 저장소에서 관리합니다. Vercel 프로젝트를 세 개
+만들고 프로젝트별 `Root Directory`만 다르게 지정하면 됩니다.
+
+| Vercel 프로젝트 | Root Directory | 용도 |
+| --- | --- | --- |
+| fanfolio-fan | `frontend` | 팬 앱 |
+| fanfolio-admin | `admin_app` | 관리자 웹 |
+| fanfolio-studio | `builder_app` | 아티스트 카드 스튜디오 |
+
+`frontend`는 `Vite` preset과 `npm run build`를 사용하고 Output Directory는 `dist`로 설정합니다.
+`admin_app`과 `builder_app`은 정적 HTML/JavaScript 앱이므로 각각 Root Directory만 지정해도
+배포할 수 있습니다. 세 프로젝트 모두 같은 저장소의 `main` 브랜치를 연결합니다.
+
+FastAPI는 Vercel 프론트 프로젝트와 분리된 API 서버로 배포합니다. 배포 후 각 Vercel 프로젝트의
+환경변수에 `VITE_API_BASE_URL=https://api.example.com/api`를 설정하고, 백엔드의
+`FRONTEND_URL`, `FRONTEND_ORIGINS`, `OAUTH_FRONTEND_CALLBACK_URL`에는 실제 팬 앱 도메인을
+등록합니다. 운영 OAuth Callback도 각 provider 콘솔에 HTTPS 주소로 등록해야 합니다.
+
+### 9. PostgreSQL·SMTP·Redis 통합 환경
 
 Docker 또는 Podman Compose를 사용할 수 있다면 세 외부 의존성을 한 번에 실행할 수 있습니다.
 이 구성의 비밀번호와 포트는 로컬 개발 전용이며 운영 환경에서 재사용하지 마세요.

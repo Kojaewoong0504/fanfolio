@@ -12,9 +12,10 @@
 !.env.example
 !.env.*.example
 
-# Frontend
-frontend/node_modules/
-frontend/dist/
+# JavaScript dependencies and build output
+**/node_modules/
+**/dist/
+.vercel/
 
 # Backend
 backend/.venv/
