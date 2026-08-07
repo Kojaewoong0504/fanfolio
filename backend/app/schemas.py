@@ -133,6 +133,8 @@ class AdminCardCreate(BaseModel):
     signature_text: str | None = Field(default=None, alias="signatureText", max_length=200)
     handwriting_asset_id: str | None = Field(default=None, alias="handwritingAssetId")
     voice_asset_id: str | None = Field(default=None, alias="voiceAssetId")
+    video_asset_id: str | None = Field(default=None, alias="videoAssetId")
+    design_config: dict | None = Field(default=None, alias="designConfig")
     handwriting_transform: dict[str, float] | None = Field(
         default=None, alias="handwritingTransform"
     )
@@ -153,6 +155,8 @@ class AdminCardUpdate(BaseModel):
     signature_text: str | None = Field(default=None, alias="signatureText", max_length=200)
     handwriting_asset_id: str | None = Field(default=None, alias="handwritingAssetId")
     voice_asset_id: str | None = Field(default=None, alias="voiceAssetId")
+    video_asset_id: str | None = Field(default=None, alias="videoAssetId")
+    design_config: dict | None = Field(default=None, alias="designConfig")
     handwriting_transform: dict[str, float] | None = Field(
         default=None, alias="handwritingTransform"
     )
@@ -232,6 +236,8 @@ class ArtistCardRequest(BaseModel):
     member_id: str | None = Field(default=None, alias="memberId")
     signature_text: str | None = Field(default=None, alias="signatureText", max_length=200)
     voice_asset_id: str | None = Field(default=None, alias="voiceAssetId")
+    video_asset_id: str | None = Field(default=None, alias="videoAssetId")
+    design_config: dict | None = Field(default=None, alias="designConfig")
     has_voice: bool = Field(default=False, alias="hasVoice")
     issue_limit: int = Field(alias="issueLimit", gt=0)
     model_config = ConfigDict(populate_by_name=True)
@@ -248,6 +254,8 @@ class ArtistCardUpdate(BaseModel):
     signature_text: str | None = Field(default=None, alias="signatureText", max_length=200)
     handwriting_asset_id: str | None = Field(default=None, alias="handwritingAssetId")
     voice_asset_id: str | None = Field(default=None, alias="voiceAssetId")
+    video_asset_id: str | None = Field(default=None, alias="videoAssetId")
+    design_config: dict | None = Field(default=None, alias="designConfig")
     handwriting_transform: dict[str, float] | None = Field(
         default=None, alias="handwritingTransform"
     )
@@ -265,7 +273,9 @@ class UploadPresignRequest(BaseModel):
         "audio/mpeg",
         "audio/mp4",
         "audio/wav",
+        "video/mp4",
+        "video/webm",
         "application/pdf",
     ] = Field(alias="contentType")
-    purpose: Literal["card", "handwriting", "voice", "collection_benefit"]
+    purpose: Literal["card", "handwriting", "voice", "video", "collection_benefit"]
     model_config = ConfigDict(populate_by_name=True)

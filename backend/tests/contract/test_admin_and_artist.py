@@ -300,6 +300,44 @@ def test_artist_can_update_card_assets_and_read_a_preview(
     assert preview["layers"]["handwriting"]["assetId"] == seeded["ids"]["handwritingAssetId"]
 
 
+def test_artist_card_persists_finish_design_and_video_layer(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    artist = actors["artist"]
+    design = {
+        "version": 2,
+        "front": {
+            "effect": "holographic",
+            "effectIntensity": 0.82,
+            "effectAngle": 135,
+            "image": {"assetId": seeded["ids"]["imageAssetId"], "filter": "clean"},
+        },
+        "back": {"effect": "sparkle", "background": "#f5efff"},
+    }
+    draft = assert_success(
+        artist.post(
+            "/api/artist/cards",
+            json={
+                "templateId": seeded["ids"]["templateId"],
+                "name": "홀로그램 영상 카드",
+                "seasonName": "2026 SUMMER",
+                "rarity": "UR",
+                "imageAssetId": seeded["ids"]["imageAssetId"],
+                "videoAssetId": seeded["ids"]["imageAssetId"],
+                "designConfig": design,
+                "issueLimit": 100,
+            },
+        ),
+        201,
+    )
+    assert draft["videoAssetId"] == seeded["ids"]["imageAssetId"]
+    assert draft["designConfig"]["front"]["effect"] == "holographic"
+
+    preview = assert_success(artist.post(f"/api/artist/cards/{draft['id']}/preview"))
+    assert preview["layers"]["video"]["assetId"] == seeded["ids"]["imageAssetId"]
+    assert preview["layers"]["effects"]["front"]["style"] == "holographic"
+
+
 def test_fan_cannot_read_artist_card_preview(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:

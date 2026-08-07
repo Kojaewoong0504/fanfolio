@@ -266,6 +266,8 @@ def admin_card_data(card: Card) -> dict:
         "signatureText": card.signature_text,
         "handwritingAssetId": card.handwriting_asset_id,
         "voiceAssetId": card.voice_asset_id,
+        "videoAssetId": card.video_asset_id,
+        "designConfig": card.design_config,
         "handwritingTransform": card.handwriting_transform,
         "hasVoice": card.has_voice,
         "sourceImageUrl": f"/api/admin/cards/{card.id}/image" if card.image_asset_id else None,
@@ -281,6 +283,7 @@ async def validate_admin_assets(values: dict, session: DbSession) -> None:
         "image_asset_id",
         "handwriting_asset_id",
         "voice_asset_id",
+        "video_asset_id",
         "benefit_asset_id",
     ):
         asset_id = values.get(field)
