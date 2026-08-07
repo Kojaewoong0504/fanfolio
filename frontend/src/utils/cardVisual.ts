@@ -1,11 +1,11 @@
 import type { SyntheticEvent } from 'react'
-import cardExample from '../assets/card-example.svg'
-import cardExampleBlue from '../assets/card-example-blue.svg'
-import cardExamplePink from '../assets/card-example-pink.svg'
+import cardYuna from '../assets/card-yuna-lavender.jpg'
+import cardMinho from '../assets/card-minho-midnight.jpg'
+import cardJay from '../assets/card-jay-rosegold.jpg'
 
 export function demoCardImage(imageUrl: string, seed = ''): string {
   if (!imageUrl.includes('hero.png')) return imageUrl
-  const variants = [cardExample, cardExampleBlue, cardExamplePink]
+  const variants = [cardYuna, cardMinho, cardJay]
   const hash = Array.from(seed).reduce((total, character) => total + character.charCodeAt(0), 0)
   return variants[hash % variants.length]
 }
