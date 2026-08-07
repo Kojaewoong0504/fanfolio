@@ -6,7 +6,7 @@ const editorDraftKey = 'fanfolio.artist-studio.editor-draft';
 function readEditorDraft() { try { const value = JSON.parse(localStorage.getItem(editorDraftKey) || 'null'); if (!value || typeof value !== 'object') return {}; const { previewOpen, ...draft } = value; return draft; } catch { return {}; } }
 function persistEditorDraft() { try { const { previewOpen, ...draft } = state.editor; localStorage.setItem(editorDraftKey, JSON.stringify(draft)); } catch { /* large images or restricted storage must not block editing */ } }
 const state = {
-  authenticated: false, loginError: '', loginEmail: '', magicLinkRequested: false, step: 1, cardId: null, assetId: null,
+  authenticated: false, loginError: '', loginUsername: '', loginPassword: '', mustChangePassword: false, step: 1, cardId: null, assetId: null,
   cardName: '', jobId: null, preview: null, previewImageSrc: '', signature: '', cards: [],
   form: { name: '드림 스페셜 카드 #5', artistId: 'artist_nova3', memberId: 'member_yuna', seasonName: '2025 봄', templateId: 'template_signature_v1', rarity: 'R', signatureText: '항상 고마워요, 우리 함께해요!', hasVoice: true, voiceAssetId: null, issueLimit: 3000 }, insights: null, profile: null,
   catalog: null, catalogLoaded: false, apiConnected: false, catalogError: '', view: 'editor',
@@ -22,7 +22,7 @@ async function editorImageFile() {
 }
 
 function absoluteApiUrl(path) { if (!path) return ''; if (/^(https?:|blob:|data:)/.test(path)) return path; return `${API_BASE.replace(/\/api$/, '')}${path}`; }
-function loginView() { const step = state.magicLinkRequested ? '<label class="field">로그인 토큰<input name="token" type="password" autocomplete="one-time-code" placeholder="이메일의 로그인 토큰" required /></label><button class="primary" type="submit">스튜디오 입장</button>' : '<label class="field">아티스트 이메일<input name="email" type="email" autocomplete="email" placeholder="artist@fanfolio.com" required /></label><button class="primary" type="submit">로그인 링크 받기</button>'; return `<main class="login-page"><div class="login-card"><p class="kicker">Fanfolio Artist Studio</p><div class="login-mark">✦</div><h1>아티스트 스튜디오 로그인</h1><p class="hint">아티스트 이메일로 받은 로그인 링크를 사용합니다.</p><form id="login-form" class="login-form">${step}</form>${state.loginError ? `<p class="login-error" role="alert">${esc(state.loginError)}</p>` : ''}</div></main>`; }
+function loginView() { const step = state.mustChangePassword ? '<p class="login-step-title">처음 로그인하셨습니다</p><p class="hint">보안을 위해 임시 비밀번호를 새 비밀번호로 변경해 주세요.</p><label class="field">현재 비밀번호<input name="currentPassword" type="password" autocomplete="current-password" required /></label><label class="field">새 비밀번호<input name="newPassword" type="password" autocomplete="new-password" minlength="12" placeholder="12자 이상" required /></label><button class="primary" type="submit">새 비밀번호 저장</button>' : '<label class="field">스튜디오 아이디<input name="username" autocomplete="username" placeholder="artist-studio" required /></label><label class="field">비밀번호<input name="password" type="password" autocomplete="current-password" required /></label><button class="primary" type="submit">스튜디오 입장</button>'; return `<main class="login-page"><div class="login-card"><p class="kicker">Fanfolio Artist Studio</p><div class="login-mark">✦</div><h1>${state.mustChangePassword ? '새 비밀번호 설정' : '아티스트 스튜디오 로그인'}</h1>${state.mustChangePassword ? '' : '<p class="hint">운영팀에서 발급받은 아이디와 비밀번호로 입장합니다.</p>'}<form id="login-form" class="login-form">${step}</form>${state.loginError ? `<p class="login-error" role="alert">${esc(state.loginError)}</p>` : ''}</div></main>`; }
 
 function shell(content) {
   const connectionLabel = state.apiConnected ? '● API 연결됨' : '○ API 연결 대기';
@@ -56,14 +56,14 @@ function renderCardForm() {
 function handwritingForm() { return `${steps()}<div class="handwriting-layout"><div class="panel"><h2>손글씨를 추가해 보세요</h2><p class="hint">직접 쓰거나 손글씨 이미지를 업로드하면 카드에 자연스럽게 합성됩니다.</p><div class="pad"><canvas id="signature-pad" width="760" height="420" aria-label="손글씨 입력 영역"></canvas><div class="pad-tools"><button class="secondary" id="clear-pad">지우기</button><span class="hint">손가락 또는 마우스로 작성</span></div></div><div style="height:12px"></div><label class="secondary" style="display:block;text-align:center">손글씨 이미지 업로드<input id="signature-file" type="file" accept="image/png,image/jpeg" hidden /></label><div style="height:12px"></div><button class="primary" id="remove-bg">배경 제거 요청</button><div id="job-area"></div></div><div class="panel"><h2>투명 손글씨 미리보기</h2><div class="handwriting-result" id="signature-result">${state.signature ? `<img src="${esc(state.signature)}" alt="입력한 손글씨 미리보기" />` : '<span class="hint">손글씨를 입력하면 여기에 표시됩니다.</span>'}</div><div style="height:15px"></div><div class="notice">배경 제거는 이미지 처리 작업으로 진행됩니다. 요청 후 결과가 준비되면 투명 PNG로 카드에 배치할 수 있습니다.</div><div class="bottom-actions" style="margin-top:18px"><button class="secondary" id="back-card">이전</button><button class="primary" id="next-review">다음: 미리보기</button></div></div></div>`; }
 function review() { const metadata = state.preview?.metadata || {}; return `${steps()}<div class="review"><div class="panel preview-panel"><h2>검수 카드</h2>${cardPreview(metadata.name || state.cardName, state.previewImageSrc)}<span class="badge">특별 카드 · ${esc(metadata.rarity || state.form.rarity)}</span></div><div class="panel"><h2>공개 전 확인</h2><div class="checklist"><div class="check"><span>카드 정보 확인</span><span class="ok">확인 완료 ✓</span></div><div class="check"><span>이미지 및 메시지 확인</span><span class="ok">확인 완료 ✓</span></div><div class="check"><span>보이스 파일 확인</span><span class="ok">${metadata.hasVoice ? '확인 완료 ✓' : '사용 안 함'}</span></div><div class="check"><span>발행 수량 확인</span><span class="ok">${esc(metadata.issueLimit || state.form.issueLimit)}장</span></div></div><div style="height:18px"></div><label class="field"><span>검수 메모</span><textarea id="review-note" maxlength="500" placeholder="운영팀에 전달할 메모가 있나요?"></textarea></label><div class="notice" style="margin-top:15px">검수 요청 후 운영팀 확인을 거쳐 공개됩니다. 공개 전에는 언제든 임시 저장 카드에서 수정할 수 있습니다.</div><div class="bottom-actions" style="margin-top:18px"><button class="secondary" id="back-signature">이전</button><button class="primary" id="submit-review">검수 요청하기</button></div></div></div>`; }
 function complete() { return `${steps()}<div class="panel complete"><div class="complete-icon">✓</div><h2>검수 요청을 보냈어요</h2><p class="hint">운영팀 확인이 완료되면 카드가 공개됩니다.</p><div style="height:18px"></div><button class="primary" id="studio-home">스튜디오 홈으로 이동</button></div>`; }
-function render() { if (!state.authenticated) { app.innerHTML = loginView(); document.querySelector('#login-form')?.addEventListener('submit', loginArtist); return; } if (state.step === 1) shell(cardForm()); if (state.step === 2) shell(handwritingForm()); if (state.step === 3) shell(review()); if (state.step === 4) shell(complete()); if (state.step === 2) initCanvas(); }
+function render() { if (!state.authenticated || state.mustChangePassword) { app.innerHTML = loginView(); document.querySelector('#login-form')?.addEventListener('submit', loginArtist); return; } if (state.step === 1) shell(cardForm()); if (state.step === 2) shell(handwritingForm()); if (state.step === 3) shell(review()); if (state.step === 4) shell(complete()); if (state.step === 2) initCanvas(); }
 function toast(message) { const el = document.querySelector('#toast'); if (!el) return; el.textContent = message; el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 2500); }
 async function refreshAccessToken() { if (refreshInFlight) return refreshInFlight; refreshInFlight = fetch(`${API_BASE}/auth/refresh`, { method: 'POST', credentials: 'include', headers: { 'X-Fanfolio-Client': 'artist' } }).then(async (response) => { if (!response.ok) throw new Error(`REFRESH ${response.status}`); const body = await response.json(); ACCESS_TOKEN = body.data.accessToken; return ACCESS_TOKEN; }).finally(() => { refreshInFlight = null; }); return refreshInFlight; }
 async function api(path, options = {}, allowRefresh = true) { const response = await fetch(`${API_BASE}${path}`, { ...options, credentials: 'include', headers: { ...(options.body ? { 'Content-Type': 'application/json' } : {}), 'X-Fanfolio-Client': 'artist', ...(ACCESS_TOKEN ? { Authorization: `Bearer ${ACCESS_TOKEN}` } : {}), ...(options.headers || {}) } }); if (response.status === 401 && allowRefresh && !path.startsWith('/auth/')) { try { await refreshAccessToken(); return api(path, options, false); } catch { ACCESS_TOKEN = ''; } } if (!response.ok) { const error = new Error(`API ${response.status}`); error.status = response.status; throw error; } return response.status === 204 ? null : response.json(); }
 async function loginArtist(event) { event.preventDefault(); const form = new FormData(event.currentTarget); if (!state.magicLinkRequested) { const email = form.get('email')?.toString().trim(); if (!email) return; state.loginEmail = email; ACCESS_TOKEN = ''; try { await api('/auth/magic-link/request', { method: 'POST', body: JSON.stringify({ email, purpose: 'login' }) }); state.magicLinkRequested = true; state.loginError = `${email}로 로그인 링크를 보냈습니다.`; } catch { state.loginError = '로그인 링크를 보내지 못했습니다. 이메일과 API 상태를 확인해 주세요.'; } render(); return; } const token = form.get('token')?.toString().trim(); if (!token) return; try { const loginResult = await api('/auth/magic-link/verify', { method: 'POST', body: JSON.stringify({ token }) }); ACCESS_TOKEN = loginResult.data.accessToken; const result = await api('/artist/cards'); state.cards = result.data.items; state.authenticated = true; state.loginError = ''; render(); } catch (error) { ACCESS_TOKEN = ''; state.authenticated = false; state.loginError = error.status === 403 ? '아티스트 계정만 스튜디오에 입장할 수 있어요.' : '유효하지 않거나 만료된 로그인 링크입니다.'; render(); } }
 async function loadStudio() { try { const result = await api('/artist/cards'); state.cards = result.data.items; } catch (error) { if (error.status === 401 || error.status === 403) { ACCESS_TOKEN = ''; state.authenticated = false; state.loginError = error.status === 403 ? '아티스트 계정만 스튜디오에 입장할 수 있어요.' : '세션이 만료됐어요. 다시 로그인해 주세요.'; render(); } } }
 function bindCommon() { document.querySelector('#studio-home')?.addEventListener('click', () => { state.step = 1; state.preview = null; render(); }); document.querySelector('#logout')?.addEventListener('click', logoutArtist); document.querySelector('#session-config')?.addEventListener('click', () => toast('로그인 토큰은 보안을 위해 브라우저 메모리에만 보관됩니다.')); document.querySelector('.toggle')?.addEventListener('click', (event) => { state.form.hasVoice = !state.form.hasVoice; event.currentTarget.classList.toggle('on', state.form.hasVoice); event.currentTarget.setAttribute('aria-pressed', String(state.form.hasVoice)); }); }
-async function logoutArtist() { try { await api('/auth/logout', { method: 'POST' }); } catch { /* 세션이 이미 만료된 경우에도 로컬 상태는 정리한다. */ } try { localStorage.removeItem(editorDraftKey); } catch { /* optional draft cleanup */ } ACCESS_TOKEN = ''; state.authenticated = false; state.loginError = ''; render(); }
+async function logoutArtist() { try { await api('/auth/logout', { method: 'POST' }); } catch { /* 세션이 이미 만료된 경우에도 로컬 상태는 정리한다. */ } try { localStorage.removeItem(editorDraftKey); } catch { /* optional draft cleanup */ } ACCESS_TOKEN = ''; state.authenticated = false; state.mustChangePassword = false; state.loginError = ''; render(); }
 function initCanvas() { const canvas = document.querySelector('#signature-pad'); const context = canvas.getContext('2d'); context.strokeStyle = '#29234f'; context.lineWidth = 5; context.lineCap = 'round'; let drawing = false; const point = (event) => { const box = canvas.getBoundingClientRect(); return { x: (event.clientX - box.left) * canvas.width / box.width, y: (event.clientY - box.top) * canvas.height / box.height }; }; canvas.addEventListener('pointerdown', (event) => { drawing = true; canvas.setPointerCapture?.(event.pointerId); const p = point(event); context.beginPath(); context.moveTo(p.x, p.y); }); canvas.addEventListener('pointermove', (event) => { if (!drawing) return; const p = point(event); context.lineTo(p.x, p.y); context.stroke(); updateSignature(); }); canvas.addEventListener('pointerup', () => { drawing = false; }); document.querySelector('#clear-pad').addEventListener('click', () => { context.clearRect(0, 0, canvas.width, canvas.height); state.signature = ''; updateSignature(); }); document.querySelector('#signature-file').addEventListener('change', (event) => { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { const image = new Image(); image.onload = () => { context.clearRect(0, 0, canvas.width, canvas.height); context.drawImage(image, 80, 60, 600, 300); updateSignature(); }; image.src = reader.result; }; reader.readAsDataURL(file); }); document.querySelector('#remove-bg').addEventListener('click', requestBackgroundRemoval); document.querySelector('#back-card').addEventListener('click', () => { state.step = 1; render(); }); document.querySelector('#next-review').addEventListener('click', loadPreview); }
 function updateSignature() { const canvas = document.querySelector('#signature-pad'); state.signature = canvas.toDataURL('image/png'); document.querySelector('#signature-result').innerHTML = `<img src="${esc(state.signature)}" alt="입력한 손글씨 미리보기" />`; }
 async function uploadAsset(file, purpose) { if (!(file instanceof File) || file.size === 0) file = await editorImageFile(); if (!file) throw new Error('UPLOAD_FILE_REQUIRED'); const presigned = await api('/uploads/presign', { method: 'POST', body: JSON.stringify({ fileName: file.name, contentType: file.type, purpose }) }); const directUpload = presigned.data.uploadMode === 'direct'; const upload = await fetch(absoluteApiUrl(presigned.data.uploadUrl), { method: 'PUT', body: file, credentials: directUpload ? 'omit' : 'include', headers: { 'Content-Type': file.type, ...(directUpload ? {} : { 'X-Fanfolio-Client': 'artist', ...(ACCESS_TOKEN ? { Authorization: `Bearer ${ACCESS_TOKEN}` } : {}) }) } }); if (!upload.ok) throw new Error(`UPLOAD ${upload.status}`); if (presigned.data.completeUrl) await api(presigned.data.completeUrl.replace(/^\/api/, ''), { method: 'POST' }); return presigned.data.assetId; }
@@ -156,33 +156,38 @@ async function loadProfile() {
 async function loginArtistWithCatalog(event) {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
-  if (!state.magicLinkRequested) {
-    const email = form.get('email')?.toString().trim();
-    if (!email) return;
-    state.loginEmail = email;
-    ACCESS_TOKEN = '';
+  if (state.mustChangePassword) {
+    const currentPassword = form.get('currentPassword')?.toString();
+    const newPassword = form.get('newPassword')?.toString();
+    if (!currentPassword || !newPassword) return;
     try {
-      await api('/auth/magic-link/request', { method: 'POST', body: JSON.stringify({ email, purpose: 'login' }) });
-      state.magicLinkRequested = true;
-      state.loginError = `${email}로 로그인 링크를 보냈습니다.`;
-    } catch {
-      state.loginError = '로그인 링크를 보내지 못했습니다. 이메일과 API 상태를 확인해 주세요.';
+      await api('/auth/artist/change-password', { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) });
+      state.mustChangePassword = false;
+      state.loginError = '';
+      await loadStudio();
+    } catch (error) {
+      state.loginError = error.status === 422 ? '새 비밀번호는 12자 이상이어야 합니다.' : '비밀번호를 변경하지 못했습니다. 현재 비밀번호를 확인해 주세요.';
+      render();
     }
-    render();
     return;
   }
-  const token = form.get('token')?.toString().trim();
-  if (!token) return;
+  const username = form.get('username')?.toString().trim();
+  const password = form.get('password')?.toString();
+  if (!username || !password) return;
+  state.loginUsername = username;
+  ACCESS_TOKEN = '';
   try {
-    const loginResult = await api('/auth/magic-link/verify', { method: 'POST', body: JSON.stringify({ token }) });
+    const loginResult = await api('/auth/artist/login', { method: 'POST', body: JSON.stringify({ username, password }) });
     ACCESS_TOKEN = loginResult.data.accessToken;
+    state.mustChangePassword = Boolean(loginResult.data.mustChangePassword);
     state.authenticated = true;
     state.loginError = '';
-    await loadStudio();
+    if (state.mustChangePassword) render();
+    else await loadStudio();
   } catch (error) {
     ACCESS_TOKEN = '';
     state.authenticated = false;
-    state.loginError = error.status === 403 ? '아티스트 계정만 스튜디오에 입장할 수 있어요.' : '유효하지 않거나 만료된 로그인 링크입니다.';
+    state.loginError = error.status === 403 ? '아티스트 스튜디오 전용 계정으로 로그인해 주세요.' : '아이디 또는 비밀번호가 올바르지 않습니다.';
     render();
   }
 }

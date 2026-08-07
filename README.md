@@ -134,6 +134,13 @@ JWT_REFRESH_TTL_SECONDS=2592000
 refresh 쿠키는 `fanfolio_fan_refresh`, `fanfolio_admin_refresh`, `fanfolio_artist_refresh`로
 클라이언트별 분리되며 `Secure`, `HttpOnly`, `SameSite=Lax` 속성을 사용합니다.
 
+아티스트 스튜디오는 팬 앱과 달리 이메일·소셜 인증을 사용하지 않습니다. 관리자가
+`POST /api/admin/artist-accounts`로 개인별 스튜디오 아이디를 발급하면 생성 응답에 임시
+비밀번호가 한 번만 반환됩니다. 아티스트는 스튜디오에서 아이디와 임시 비밀번호로 로그인한
+뒤 새 비밀번호를 설정합니다. 비밀번호는 서버에 scrypt 해시로만 저장하고, 계정별 아티스트
+Refresh 쿠키와 짧은 수명의 Access JWT를 사용합니다. 비밀번호를 잊은 경우에는 이메일 재설정
+대신 관리자가 계정을 재설정합니다.
+
 ### 8. Kakao·Google 소셜 로그인 설정
 
 팬 앱 로그인 화면은 Kakao와 Google을 우선 노출하고 이메일 매직 링크를 보조 수단으로 제공합니다.

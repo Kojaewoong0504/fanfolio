@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Cookie, Header, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 
 from app.auth_tokens import (
     AuthTokenError,
@@ -10,10 +10,16 @@ from app.auth_tokens import (
     rotate_refresh_token,
 )
 from app.core.config import get_settings
-from app.dependencies import CurrentUser, DbSession, refresh_cookie_name, session_cookie_name
+from app.dependencies import (
+    ArtistUser,
+    CurrentUser,
+    DbSession,
+    refresh_cookie_name,
+    session_cookie_name,
+)
 from app.errors import AppError
 from app.mailer import MailDeliveryError, deliver_magic_link
-from app.models import RefreshToken, Session, User
+from app.models import RefreshToken, Role, Session, User
 from app.oauth import (
     authorization_url,
     consume_oauth_state,
@@ -24,12 +30,28 @@ from app.oauth import (
     state_matches_cookie,
     upsert_social_user,
 )
+from app.passwords import hash_password, verify_password
 from app.rate_limit import enforce_rate_limit
-from app.schemas import MagicLinkRequest, MagicLinkVerify, OAuthExchangeRequest
+from app.schemas import (
+    ArtistPasswordChange,
+    ArtistPasswordLogin,
+    MagicLinkRequest,
+    MagicLinkVerify,
+    OAuthExchangeRequest,
+)
 from app.services import request_magic_link as create_magic_link
 from app.services import verify_magic_link
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+def _artist_user_data(user: User) -> dict[str, object]:
+    return {
+        "id": user.id,
+        "username": user.username,
+        "displayName": user.nickname,
+        "role": user.role.value,
+    }
 
 
 def _refresh_cookie_samesite() -> str:
@@ -162,6 +184,63 @@ async def request_magic_link(
             "로그인 링크를 보내지 못했습니다. 잠시 후 다시 시도해 주세요.",
         ) from error
     return {"ok": True, "data": {"delivery": "queued"}}
+
+
+@router.post("/artist/login")
+async def artist_password_login(
+    payload: ArtistPasswordLogin,
+    request: Request,
+    response: Response,
+    session: DbSession,
+    client: str | None = Header(default=None, alias="X-Fanfolio-Client"),
+) -> dict:
+    if client not in {None, "artist"}:
+        raise AppError(403, "ARTIST_CLIENT_REQUIRED", "아티스트 스튜디오 전용 로그인입니다.")
+    client_host = request.client.host if request.client else "unknown"
+    await enforce_rate_limit(
+        f"artist-password:{payload.username.lower()}:{client_host}", limit=5, window_seconds=15 * 60
+    )
+    user = await session.scalar(
+        select(User).where(User.username == payload.username.lower(), User.role == Role.ARTIST)
+    )
+    if user is None or not verify_password(payload.password, user.password_hash):
+        raise AppError(401, "INVALID_CREDENTIALS", "아이디 또는 비밀번호가 올바르지 않습니다.")
+    access_token, refresh_token, _ = await issue_token_pair(session, user, "artist")
+    await session.commit()
+    settings = get_settings()
+    response.set_cookie(
+        refresh_cookie_name("artist"),
+        refresh_token,
+        httponly=True,
+        secure=settings.app_env == "production",
+        samesite=_refresh_cookie_samesite(),
+        path="/",
+        max_age=settings.jwt_refresh_ttl_seconds,
+    )
+    return {
+        "ok": True,
+        "data": {
+            "accessToken": access_token,
+            "user": _artist_user_data(user),
+            "mustChangePassword": user.must_change_password,
+        },
+    }
+
+
+@router.post("/artist/change-password")
+async def change_artist_password(
+    payload: ArtistPasswordChange,
+    user: ArtistUser,
+    session: DbSession,
+) -> dict:
+    if not verify_password(payload.current_password, user.password_hash):
+        raise AppError(401, "INVALID_CREDENTIALS", "현재 비밀번호가 올바르지 않습니다.")
+    if payload.current_password == payload.new_password:
+        raise AppError(422, "PASSWORD_UNCHANGED", "새 비밀번호는 현재 비밀번호와 달라야 합니다.")
+    user.password_hash = hash_password(payload.new_password)
+    user.must_change_password = False
+    await session.commit()
+    return {"ok": True, "data": {"mustChangePassword": False}}
 
 
 @router.post("/magic-link/verify")

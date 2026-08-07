@@ -36,6 +36,17 @@ class MagicLinkVerify(BaseModel):
     token: str = Field(min_length=1)
 
 
+class ArtistPasswordLogin(BaseModel):
+    username: str = Field(min_length=3, max_length=80, pattern=r"^[a-zA-Z0-9._-]+$")
+    password: str = Field(min_length=1, max_length=200)
+
+
+class ArtistPasswordChange(BaseModel):
+    current_password: str = Field(alias="currentPassword", min_length=1, max_length=200)
+    new_password: str = Field(alias="newPassword", min_length=12, max_length=200)
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class OAuthExchangeRequest(BaseModel):
     code: str = Field(min_length=1)
     client: Literal["fan"] = "fan"
@@ -151,6 +162,12 @@ class AssetTransformUpdate(BaseModel):
 
 class AdminUserRoleUpdate(BaseModel):
     role: Literal["fan", "artist", "admin"]
+
+
+class ArtistAccountCreate(BaseModel):
+    username: str = Field(min_length=3, max_length=80, pattern=r"^[a-zA-Z0-9._-]+$")
+    display_name: str = Field(alias="displayName", min_length=1, max_length=120)
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class AdminArtistProfileUpdate(BaseModel):

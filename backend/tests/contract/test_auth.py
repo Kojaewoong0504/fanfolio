@@ -215,3 +215,64 @@ def test_logout_invalidates_the_server_session(actors: dict[str, TestClient]) ->
     fan = actors["fan"]
     assert fan.post("/api/auth/logout").status_code == 204
     assert_error(fan.get("/api/me/collection"), 401, "AUTH_REQUIRED")
+
+
+def test_admin_can_issue_an_artist_login_and_artist_can_change_the_temporary_password(
+    actors: dict[str, TestClient],
+) -> None:
+    issued = actors["admin"].post(
+        "/api/admin/artist-accounts",
+        json={"username": "dreamscape-studio", "displayName": "드림스케이프 담당자"},
+    )
+    account = assert_success(issued, 201)
+    assert account["username"] == "dreamscape-studio"
+    assert account["temporaryPassword"]
+
+    login = actors["admin"].post(
+        "/api/auth/artist/login",
+        json={"username": "dreamscape-studio", "password": account["temporaryPassword"]},
+    )
+    login_data = assert_success(login)
+    assert login_data["mustChangePassword"] is True
+    assert login_data["user"]["role"] == "artist"
+    access_token = login_data["accessToken"]
+    assert access_token
+
+    changed = actors["admin"].post(
+        "/api/auth/artist/change-password",
+        headers={"Authorization": f"Bearer {access_token}", "X-Fanfolio-Client": "artist"},
+        json={
+            "currentPassword": account["temporaryPassword"],
+            "newPassword": "Safer-password-2026!",
+        },
+    )
+    assert_success(changed)
+
+    old_login = actors["admin"].post(
+        "/api/auth/artist/login",
+        json={"username": "dreamscape-studio", "password": account["temporaryPassword"]},
+    )
+    assert_error(old_login, 401, "INVALID_CREDENTIALS")
+
+    new_login = actors["admin"].post(
+        "/api/auth/artist/login",
+        json={"username": "dreamscape-studio", "password": "Safer-password-2026!"},
+    )
+    assert_success(new_login)
+
+
+def test_artist_password_login_rejects_fan_and_admin_clients(
+    actors: dict[str, TestClient],
+) -> None:
+    issued = actors["admin"].post(
+        "/api/admin/artist-accounts",
+        json={"username": "private-studio", "displayName": "Private Studio"},
+    )
+    account = assert_success(issued, 201)
+
+    response = actors["admin"].post(
+        "/api/auth/artist/login",
+        headers={"X-Fanfolio-Client": "fan"},
+        json={"username": "private-studio", "password": account["temporaryPassword"]},
+    )
+    assert_error(response, 403, "ARTIST_CLIENT_REQUIRED")

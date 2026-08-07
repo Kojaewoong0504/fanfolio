@@ -19,6 +19,9 @@ class User(Base):
     __tablename__ = "users"
     id: Mapped[str] = mapped_column(String, primary_key=True)
     email: Mapped[str | None] = mapped_column(String, unique=True, nullable=True)
+    username: Mapped[str | None] = mapped_column(String, unique=True, nullable=True)
+    password_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
     role: Mapped[Role] = mapped_column(default=Role.FAN)
     nickname: Mapped[str | None] = mapped_column(String, nullable=True)
     profile_image_url: Mapped[str | None] = mapped_column(String, nullable=True)

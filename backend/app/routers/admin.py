@@ -2,6 +2,7 @@ import asyncio
 import csv
 from datetime import UTC, datetime
 from io import BytesIO, StringIO
+from secrets import token_urlsafe
 from uuid import uuid4
 from zipfile import ZIP_DEFLATED, ZipFile
 
@@ -26,12 +27,14 @@ from app.models import (
     Role,
     User,
 )
+from app.passwords import hash_password
 from app.schemas import (
     AdminArtistProfileUpdate,
     AdminCardCreate,
     AdminCardReviewRequest,
     AdminCardUpdate,
     AdminUserRoleUpdate,
+    ArtistAccountCreate,
     CodeBatchRequest,
     CollectionCampaignCreate,
     CollectionCampaignUpdate,
@@ -595,6 +598,49 @@ async def update_user_role(
     )
     await session.commit()
     return {"ok": True, "data": {"id": user.id, "role": user.role.value}}
+
+
+@router.post("/artist-accounts", status_code=status.HTTP_201_CREATED)
+async def create_artist_account(
+    payload: ArtistAccountCreate,
+    admin: AdminUser,
+    session: DbSession,
+) -> dict:
+    username = payload.username.lower()
+    existing = await session.scalar(select(User).where(User.username == username))
+    if existing:
+        raise AppError(409, "USERNAME_TAKEN", "이미 사용 중인 아이디입니다.")
+    temporary_password = token_urlsafe(18)
+    user = User(
+        id=f"artist_{uuid4().hex[:12]}",
+        username=username,
+        nickname=payload.display_name,
+        role=Role.ARTIST,
+        password_hash=hash_password(temporary_password),
+        must_change_password=True,
+    )
+    session.add(user)
+    await record_audit(
+        session,
+        actor_user_id=admin.id,
+        action="artist_account.created",
+        entity_type="user",
+        entity_id=user.id,
+        details={"username": username},
+    )
+    await session.commit()
+    return {
+        "ok": True,
+        "data": {
+            "id": user.id,
+            "username": username,
+            "displayName": user.nickname,
+            "role": user.role.value,
+            "mustChangePassword": True,
+            # Returned only at creation time; it is never persisted in plaintext.
+            "temporaryPassword": temporary_password,
+        },
+    }
 
 
 def artist_profile_data(user: User, profile: ArtistProfile | None, artist: Artist | None) -> dict:
