@@ -3,8 +3,8 @@ let ACCESS_TOKEN = '';
 let refreshInFlight = null;
 const app = document.querySelector('#app');
 const editorDraftKey = 'fanfolio.artist-studio.editor-draft';
-function readEditorDraft() { try { const value = JSON.parse(localStorage.getItem(editorDraftKey) || 'null'); return value && typeof value === 'object' ? value : {}; } catch { return {}; } }
-function persistEditorDraft() { try { localStorage.setItem(editorDraftKey, JSON.stringify(state.editor)); } catch { /* large images or restricted storage must not block editing */ } }
+function readEditorDraft() { try { const value = JSON.parse(localStorage.getItem(editorDraftKey) || 'null'); if (!value || typeof value !== 'object') return {}; const { previewOpen, ...draft } = value; return draft; } catch { return {}; } }
+function persistEditorDraft() { try { const { previewOpen, ...draft } = state.editor; localStorage.setItem(editorDraftKey, JSON.stringify(draft)); } catch { /* large images or restricted storage must not block editing */ } }
 const state = {
   authenticated: false, loginError: '', loginEmail: '', magicLinkRequested: false, step: 1, cardId: null, assetId: null,
   cardName: '', jobId: null, preview: null, previewImageSrc: '', signature: '', cards: [],
