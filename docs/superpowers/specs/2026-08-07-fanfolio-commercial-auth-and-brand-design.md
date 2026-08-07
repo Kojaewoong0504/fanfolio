@@ -2,7 +2,7 @@
 
 ## 1. 목적
 
-현재 Fanfolio의 고정 fixture 매직 링크는 계약 테스트에는 적합하지만 실제 사용자가 로그인하기에는 불편하다. 이 설계는 카카오·Google 소셜 로그인을 주 경로로 만들고, 이메일 로그인과 회원가입을 보조 경로로 제공하며, 운영 배포에서 안전하게 확장할 수 있는 인증 경계를 정의한다.
+현재 Fanfolio의 고정 fixture 매직 링크와 DB 세션 토큰은 계약 테스트에는 적합하지만 실제 상용 인증으로는 부족하다. 이 설계는 카카오·Google 소셜 로그인을 주 경로로 만들고, 이메일 로그인과 회원가입을 보조 경로로 제공하며, 짧은 수명의 JWT access token과 refresh token rotation(RTR)을 사용해 운영 배포에서 안전하게 확장할 수 있는 인증 경계를 정의한다.
 
 Apple 로그인은 초기 범위에서 제외한다. 다만 provider adapter 계약을 유지해 추후 별도 provider를 추가할 수 있어야 한다.
 
@@ -31,13 +31,14 @@ Apple 로그인은 초기 범위에서 제외한다. 다만 provider adapter 계
 
 ### 성공 기준
 
-1. 신규 사용자는 카카오 또는 Google 버튼 한 번으로 인증 provider로 이동하고, callback 후 Fanfolio 세션을 받는다.
+1. 신규 사용자는 카카오 또는 Google 버튼 한 번으로 인증 provider로 이동하고, callback 후 Fanfolio JWT access token과 refresh token을 받는다.
 2. 이미 연결된 provider identity면 기존 계정으로 로그인하고, 이메일만 일치하는 별도 계정은 자동 병합하지 않으며 명시적인 계정 연결 절차를 요구한다.
 3. 최초 로그인 사용자는 인증 이후 한 번만 온보딩으로 이동한다.
 4. 이메일 경로는 회원가입→인증→로그인, 로그인, 비밀번호 재설정이 각각 명확한 상태를 보여준다.
 5. provider 키가 없는 개발 환경에서도 mock provider 또는 fixture로 전체 UI와 callback 테스트를 실행할 수 있다.
 6. production 설정이 누락되면 서버가 안전하지 않은 기본값으로 기동하지 않는다.
-7. 인증 성공·실패·로그아웃 후에도 팬/관리자/아티스트 세션 쿠키가 서로 섞이지 않는다.
+7. 인증 성공·실패·로그아웃 후에도 팬/관리자/아티스트 refresh-token cookie가 서로 섞이지 않는다.
+8. access token은 짧은 TTL로 만료되고, refresh token은 매번 새 토큰으로 교체되며 이전 토큰 재사용 시 token family 전체가 폐기된다.
 
 ## 3. 사용자 경험
 
@@ -111,11 +112,16 @@ POST /api/auth/password/forgot
 POST /api/auth/password/reset
 POST /api/auth/magic-link/request       # 보조 경로
 POST /api/auth/magic-link/verify        # 보조 경로
+POST /api/auth/refresh                   # RTR: refresh cookie를 교체하고 access JWT 반환
+POST /api/auth/logout                    # 현재 refresh family 폐기
 GET  /api/auth/me
-POST /api/auth/logout
 ```
 
-OAuth state와 nonce는 서버가 생성하고 짧은 TTL로 저장한다. callback에서는 state, nonce, redirect URI, provider issuer와 token signature를 검증한다. provider access token은 Fanfolio 세션 대신 사용하지 않으며, 필요 시 암호화된 provider identity 정보만 저장한다.
+OAuth state와 nonce는 서버가 생성하고 짧은 TTL로 저장한다. callback에서는 state, nonce, redirect URI, provider issuer와 token signature를 검증한다. provider access token은 Fanfolio 토큰 대신 사용하지 않으며, 필요 시 암호화된 provider identity 정보만 저장한다.
+
+access JWT는 5~15분 TTL을 사용하고 frontend 메모리에만 보관한다. frontend는 API 요청에 `Authorization: Bearer <access>`를 붙이며, 401이 발생하면 동시에 한 번만 `/api/auth/refresh`를 호출한 뒤 원래 요청을 재시도한다. refresh token은 `HttpOnly`, `Secure`(운영), `SameSite=Lax` cookie에만 둔다.
+
+refresh token은 서명된 JWT이면서 DB의 token family 레코드와 함께 검증한다. DB에는 refresh JWT 원문이 아니라 SHA-256 digest, `jti`, `family_id`, `user_id`, `client`, 만료시각, 사용시각, 폐기시각, 교체된 jti를 저장한다. 이미 사용된 refresh token이 다시 제출되면 해당 family의 모든 토큰을 폐기한다.
 
 ### 데이터 모델
 
@@ -123,7 +129,8 @@ OAuth state와 nonce는 서버가 생성하고 짧은 TTL로 저장한다. callb
 - `oauth_identities`: `provider`, `subject`, `user_id`, `email_at_link`, `created_at`, unique(provider, subject)
 - `email_verification_tokens`: 해시된 토큰, 목적, 만료시각, 소비시각
 - `password_reset_tokens`: 해시된 1회 토큰, 만료시각, 소비시각
-- 기존 `sessions`: client scope와 HttpOnly 쿠키 정책 유지
+- `refresh_tokens`: refresh digest, jti, family_id, user_id, client, expires_at, used_at, revoked_at, replaced_by_jti
+- 기존 `sessions`: migration 기간의 fixture/legacy 호환용으로만 유지하고 신규 로그인에는 사용하지 않음
 
 이메일 주소만으로 소셜 계정을 자동 병합하지 않는다. 기존 이메일 계정에 provider를 연결하려면 현재 계정으로 로그인한 뒤 별도의 `계정 연결` 절차를 거치게 한다. 이는 탈취된 provider 이메일 주장으로 계정이 합쳐지는 위험을 줄인다.
 
@@ -135,6 +142,7 @@ OAuth state와 nonce는 서버가 생성하고 짧은 TTL로 저장한다. callb
 - provider 키가 없으면 mock callback을 사용
 - Mailpit 또는 ConsoleMailer로 이메일 확인
 - `FRONTEND_URL`, callback URL은 localhost만 허용
+- development 전용 JWT secret을 사용하되 테스트에서 명시적으로 주입
 
 ### 스테이징
 
@@ -146,7 +154,8 @@ OAuth state와 nonce는 서버가 생성하고 짧은 TTL로 저장한다. callb
 ### 운영
 
 - HTTPS 강제
-- Secure, HttpOnly, SameSite=Lax 세션 쿠키
+- access JWT는 메모리 보관, refresh JWT는 Secure·HttpOnly·SameSite=Lax cookie
+- `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `JWT_ISSUER`, `JWT_AUDIENCE`, `JWT_ACCESS_TTL_SECONDS`, `JWT_REFRESH_TTL_SECONDS`를 secrets manager에서 주입
 - Redis 기반 rate limit과 state 저장
 - SMTP 또는 transactional email provider
 - secrets manager에서 provider secret 주입
@@ -181,6 +190,9 @@ Fanfolio의 기존 보라색 UI와 카드 컬렉션 이미지를 이어받되, �
 - 비밀번호 재설정 만료·재사용
 - provider 장애와 이메일 provider 장애
 - client별 세션 쿠키 격리
+- access JWT의 issuer, audience, type, exp, iat, jti 검증
+- refresh token rotation 성공·재사용 감지·family 폐기
+- refresh cookie의 client scope와 logout 폐기
 
 ### 프론트 브라우저 테스트
 
@@ -201,11 +213,14 @@ Fanfolio의 기존 보라색 UI와 카드 컬렉션 이미지를 이어받되, �
 
 ## 8. 단계별 구현 순서
 
-1. 로그인 화면을 소셜 우선 UI로 재구성하고 provider 미설정 상태를 명확히 표시한다.
-2. 백엔드 provider adapter, state/nonce 저장, OAuth identity 모델과 migration을 추가한다.
-3. Google과 카카오 callback을 연결한다.
-4. 이메일 비밀번호 회원가입·인증·로그인·재설정을 연결한다.
-5. 개발 mock/Mailpit과 staging/production 환경 문서를 추가한다.
-6. 브랜드 master와 favicon 파생 파일을 만들고 로그인 화면, `index.html`, PWA metadata에 적용한다.
-7. 계약 테스트, 브라우저 E2E, 배포 preflight를 통과시킨다.
-8. Apple adapter는 동일 계약으로 별도 후속 작업으로 추가한다.
+1. JWT/RTR 토큰 서비스, refresh token 모델·migration, client별 cookie 경계를 추가한다.
+2. 로그인·refresh·logout을 JWT access + RTR로 전환하고 기존 API dependency가 Bearer token을 검증하게 한다.
+3. 로그인 화면을 소셜 우선 UI로 재구성하고 provider 미설정 상태를 명확히 표시한다.
+4. 백엔드 provider adapter, state/nonce 저장, OAuth identity 모델과 migration을 추가한다.
+5. Google과 카카오 callback을 연결한다.
+6. 이메일 비밀번호 회원가입·인증·로그인·재설정을 연결한다.
+7. frontend API client의 메모리 access token, 401 단일 refresh, 요청 재시도를 추가한다.
+8. 개발 mock/Mailpit과 staging/production 환경 문서를 추가한다.
+9. 브랜드 master와 favicon 파생 파일을 만들고 로그인 화면, `index.html`, PWA metadata에 적용한다.
+10. 계약 테스트, 브라우저 E2E, 배포 preflight를 통과시킨다.
+11. Apple adapter는 동일 계약으로 별도 후속 작업으로 추가한다.
