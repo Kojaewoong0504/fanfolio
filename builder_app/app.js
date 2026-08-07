@@ -246,7 +246,7 @@ function renderShell(content) {
 document.addEventListener('click', (event) => {
   if (!state.authenticated) return;
   const tool = event.target.closest('[data-editor-tool]');
-  if (tool) { state.editor.tool = tool.dataset.editorTool; if (state.editor.tool === 'back') state.editor.side = 'back'; else if (state.editor.side === 'back') state.editor.side = 'front'; persistEditorDraft(); render(); return; }
+  if (tool) { state.editor.tool = tool.dataset.editorTool; if (state.editor.tool === 'back') state.editor.side = 'back'; else if (state.editor.side === 'back' && ['photo', 'text', 'sticker'].includes(state.editor.tool)) state.editor.side = 'front'; persistEditorDraft(); render(); return; }
   const side = event.target.closest('[data-editor-side]');
   if (side) { state.editor.side = side.dataset.editorSide; state.editor.tool = state.editor.side === 'back' ? 'back' : 'photo'; persistEditorDraft(); render(); return; }
   const choice = event.target.closest('[data-editor-value]');
