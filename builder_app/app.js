@@ -10,7 +10,7 @@ const state = {
   cardName: '', jobId: null, preview: null, previewImageSrc: '', signature: '', cards: [],
   form: { name: '드림 스페셜 카드 #5', artistId: 'artist_nova3', memberId: 'member_yuna', seasonName: '2025 봄', templateId: 'template_signature_v1', rarity: 'R', signatureText: '항상 고마워요, 우리 함께해요!', hasVoice: true, voiceAssetId: null, issueLimit: 3000 }, insights: null, profile: null,
   catalog: null, catalogLoaded: false, apiConnected: false, catalogError: '', view: 'editor',
-  editor: { tool: 'photo', side: 'front', template: 'luminous', imageSrc: '', imageName: '', imageScale: 100, imageX: 0, imageY: 0, textX: 0, textY: 0, stickerX: 0, stickerY: 0, background: '#f5efff', filter: 'clean', text: '드림스케이프 · 유나', textColor: '#ffffff', textSize: 24, sticker: 'spark', effect: 'glow', previewOpen: false, ...readEditorDraft() },
+  editor: { tool: 'photo', side: 'front', template: 'luminous', imageSrc: '', imageName: '', imageScale: 100, imageX: 0, imageY: 0, textX: 0, textY: 0, stickerX: 0, stickerY: 0, background: '#f5efff', filter: 'clean', text: '드림스케이프 · 유나', textColor: '#ffffff', textSize: 24, sticker: 'spark', effect: 'glow', backEffect: 'glow', previewOpen: false, ...readEditorDraft() },
 };
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
 
@@ -211,11 +211,12 @@ function editorCardMarkup() {
   const e = state.editor;
   const image = e.imageSrc ? `<img class="editor-photo" src="${esc(e.imageSrc)}" alt="카드 사진 미리보기" style="transform:translate(${e.imageX}px,${e.imageY}px) scale(${e.imageScale / 100});filter:${e.filter === 'mono' ? 'grayscale(1)' : e.filter === 'warm' ? 'saturate(1.25) sepia(.18)' : 'none'}" />` : '<div class="editor-photo-empty"><span>사진을 넣어보세요</span><small>권장 1000 × 1500 px</small></div>';
   const front = e.side === 'front';
+  const activeEffect = front ? (e.effect || 'none') : (e.backEffect || 'none');
   const sticker = e.sticker === 'none' ? '' : `<span class="editor-sticker">${e.sticker === 'heart' ? '♥' : e.sticker === 'star' ? '✦' : '✧'}</span>`;
   const textStyle = `color:${esc(e.textColor)};font-size:${e.textSize}px;transform:translate(${e.textX}px,${e.textY}px)`;
   const stickerMarkup = sticker ? sticker.replace('class="editor-sticker"', `class="editor-sticker" data-editor-layer="sticker" style="transform:translate(${e.stickerX}px,${e.stickerY}px)"`) : '';
   const photoMarkup = image.replace('class="editor-photo"', 'class="editor-photo" data-editor-layer="photo"');
-  return `<div class="editor-card ${front ? 'is-front' : 'is-back'} template-${esc(e.template)} effect-${esc(e.effect)}" style="--editor-bg:${esc(e.background)}">${front ? `${photoMarkup}<div class="editor-sheen"></div><div class="editor-copy" data-editor-layer="text" style="${textStyle}">${esc(e.text)}</div>${stickerMarkup}<span class="editor-card-label">FANFOLIO · SPECIAL EDITION</span>` : '<div class="editor-back-pattern"></div><div class="editor-back-copy"><strong>FANFOLIO</strong><span>공식 디지털 포토카드</span><small>이 카드는 아티스트 스튜디오에서 승인된 기본 뒷면 템플릿입니다.</small></div>'}</div>`;
+  return `<div class="editor-card ${front ? 'is-front' : 'is-back'} template-${esc(e.template)} effect-${esc(activeEffect)}" style="--editor-bg:${esc(e.background)}">${front ? `${photoMarkup}<div class="editor-sheen"></div><div class="editor-copy" data-editor-layer="text" style="${textStyle}">${esc(e.text)}</div>${stickerMarkup}<span class="editor-card-label">FANFOLIO · SPECIAL EDITION</span>` : '<div class="editor-back-pattern"></div><div class="editor-back-copy"><strong>FANFOLIO</strong><span>공식 디지털 포토카드</span><small>이 카드는 아티스트 스튜디오에서 승인된 기본 뒷면 템플릿입니다.</small></div>'}</div>`;
 }
 
 function editorInspector() {
@@ -223,7 +224,7 @@ function editorInspector() {
   if (e.tool === 'photo') return `<div class="inspector-block"><p class="inspector-label">사진 소스</p><label class="upload-drop"><input id="editor-photo-input" type="file" accept="image/*" capture="environment" /><span class="upload-icon">＋</span><strong>${e.imageSrc ? '사진 바꾸기' : '사진 업로드'}</strong><small>파일을 선택하거나 모바일에서 바로 촬영하세요</small></label>${e.imageSrc ? `<p class="selected-file">${esc(e.imageName || '선택한 사진')} <button type="button" class="text-button" data-editor-action="remove-photo">삭제</button></p>` : ''}<p class="inspector-label">사진 조정</p>${editorRange('imageScale', '크기', 70, 140, 1, '%')}${editorRange('imageX', '가로 위치', -80, 80, 1, 'px')}${editorRange('imageY', '세로 위치', -100, 100, 1, 'px')}<label class="field compact-field">필터<select data-editor-field="filter"><option value="clean" ${e.filter === 'clean' ? 'selected' : ''}>선명하게</option><option value="warm" ${e.filter === 'warm' ? 'selected' : ''}>따뜻한 필름</option><option value="mono" ${e.filter === 'mono' ? 'selected' : ''}>모노크롬</option></select></label></div>`;
   if (e.tool === 'text') return `<div class="inspector-block"><p class="inspector-label">카드 문구</p><label class="field compact-field"><span>텍스트</span><textarea data-editor-field="text" maxlength="60" rows="3">${esc(e.text)}</textarea></label>${editorRange('textSize', '크기', 14, 42, 1, 'px')}<label class="field compact-field"><span>색상</span><input data-editor-field="textColor" type="color" value="${esc(e.textColor)}" /></label><p class="inspector-tip">사진 위 문구는 카드 앞면에만 표시됩니다.</p></div>`;
   if (e.tool === 'sticker') return `<div class="inspector-block"><p class="inspector-label">스티커</p><div class="choice-grid">${[['spark', '✧', '빛'], ['star', '✦', '별'], ['heart', '♥', '하트'], ['none', '—', '없음']].map(([value, icon, label]) => `<button type="button" class="choice ${e.sticker === value ? 'selected' : ''}" data-editor-value="sticker" data-value="${value}"><b>${icon}</b><span>${label}</span></button>`).join('')}</div><p class="inspector-tip">스티커는 샘플 배치이며, 다음 단계에서 정밀 위치를 조정할 수 있습니다.</p></div>`;
-  if (e.tool === 'effect') return `<div class="inspector-block"><p class="inspector-label">분위기</p><div class="choice-list">${[['glow', 'Aurora Glow', '은은한 빛 번짐'], ['grain', 'Soft Grain', '필름 질감'], ['none', 'Clean', '효과 없음']].map(([value, title, desc]) => `<button type="button" class="effect-choice ${e.effect === value ? 'selected' : ''}" data-editor-value="effect" data-value="${value}"><span class="effect-dot effect-${value}"></span><span><b>${title}</b><small>${desc}</small></span><i>›</i></button>`).join('')}</div></div>`;
+  if (e.tool === 'effect') { const effectKey = e.side === 'back' ? 'backEffect' : 'effect'; const currentEffect = e[effectKey] || 'none'; return `<div class="inspector-block"><p class="inspector-label">${e.side === 'back' ? '뒷면 분위기' : '앞면 분위기'}</p><div class="choice-list">${[['glow', 'Aurora Glow', '은은한 빛 번짐'], ['grain', 'Soft Grain', '필름 질감'], ['none', 'Clean', '효과 없음']].map(([value, title, desc]) => `<button type="button" class="effect-choice ${currentEffect === value ? 'selected' : ''}" data-editor-value="${effectKey}" data-value="${value}"><span class="effect-dot effect-${value}"></span><span><b>${title}</b><small>${desc}</small></span><i>›</i></button>`).join('')}</div></div>`; }
   return `<div class="inspector-block"><p class="inspector-label">뒷면 템플릿</p><div class="locked-template"><span class="lock-icon">⌁</span><div><strong>소속사 기본 템플릿</strong><small>뒷면 레이아웃은 운영팀이 관리합니다.</small></div></div><p class="inspector-label">색상 조합</p><div class="swatches">${['#f5efff', '#eaf8ff', '#ffeef6', '#f4f1e9'].map((color) => `<button type="button" class="swatch ${e.background === color ? 'selected' : ''}" style="background:${color}" data-editor-value="background" data-value="${color}" aria-label="배경 ${color}"></button>`).join('')}</div><p class="inspector-tip">아티스트는 기본 뒷면의 색상과 효과만 변경할 수 있습니다.</p></div>`;
 }
 
@@ -239,7 +240,7 @@ function editorDesignConfig(imageAssetId) {
       sticker: { kind: e.sticker || 'none', x: Number(e.stickerX || 0), y: Number(e.stickerY || 0) },
       effect: e.effect || 'none',
     },
-    back: { templateId: 'agency_back_v1', background: e.background || '#f5efff', effect: e.effect || 'none' },
+    back: { templateId: 'agency_back_v1', background: e.background || '#f5efff', effect: e.backEffect || 'none' },
   };
 }
 
@@ -255,7 +256,7 @@ function restoreEditorDesign(card) {
     imageName: card.name ? `${card.name}.jpg` : state.editor.imageName,
     imageScale: Number(image.scale ?? state.editor.imageScale), imageX: Number(image.x ?? state.editor.imageX), imageY: Number(image.y ?? state.editor.imageY), filter: image.filter || state.editor.filter,
     text: text.value ?? state.editor.text, textX: Number(text.x ?? state.editor.textX), textY: Number(text.y ?? state.editor.textY), textSize: Number(text.size ?? state.editor.textSize), textColor: text.color || state.editor.textColor,
-    sticker: sticker.kind || state.editor.sticker, stickerX: Number(sticker.x ?? state.editor.stickerX), stickerY: Number(sticker.y ?? state.editor.stickerY), effect: config.front.effect || config.back.effect || state.editor.effect, background: config.back.background || state.editor.background,
+    sticker: sticker.kind || state.editor.sticker, stickerX: Number(sticker.x ?? state.editor.stickerX), stickerY: Number(sticker.y ?? state.editor.stickerY), effect: config.front.effect || state.editor.effect, backEffect: config.back.effect || state.editor.backEffect, background: config.back.background || state.editor.background,
   };
   persistEditorDraft();
 }
