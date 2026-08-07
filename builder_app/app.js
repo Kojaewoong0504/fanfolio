@@ -320,9 +320,25 @@ function renderShell(content) {
   const connectionLabel = state.apiConnected ? '● API 연결됨' : '○ API 연결 대기';
   app.innerHTML = `<div class="shell ${editorMode ? 'editor-shell' : ''}"><aside class="side"><div class="logo">Fanfolio <span>✦</span><small>아티스트 스튜디오</small></div><nav class="nav"><button data-studio-view="home" class="${view === 'home' ? 'active' : ''}">⌂　스튜디오 홈</button><button data-studio-view="create" class="${view === 'create' || editorMode ? 'active' : ''}">▦　카드 만들기</button><button data-studio-view="cards" class="${view === 'cards' ? 'active' : ''}">◇　내 카드</button><button data-studio-view="feedback" class="${view === 'feedback' ? 'active' : ''}">♡　팬 반응</button><button data-studio-view="settings" class="${view === 'settings' ? 'active' : ''}">⚙　설정</button></nav><div class="profile"><span class="avatar">A</span><div><strong>${esc(state.profile?.nickname || '아티스트')}</strong>ARTIST</div></div></aside><main class="workspace"><header class="top ${editorMode ? 'editor-top' : ''}"><div><p class="kicker">Fanfolio Artist Studio</p><h1 class="title">${title}</h1></div><div class="top-actions"><span class="save-state">${connectionLabel}</span><button class="secondary" id="session-config">세션 설정</button><button class="secondary" id="logout">로그아웃</button></div></header>${editorMode ? visualEditorView() : content}</main></div><div class="toast" id="toast"></div>`;
   bindCommon();
+  enhanceCardImageField();
   document.querySelector('input[name="cardImage"]')?.toggleAttribute('required', !state.editor.imageSrc);
   if (editorMode) initEditorDrag();
   document.querySelector('#new-card')?.addEventListener('click', () => { state.view = 'editor'; state.editingCardId = null; state.cardId = null; state.step = 1; render(); });
+}
+
+function enhanceCardImageField() {
+  const input = document.querySelector('input[name="cardImage"]');
+  const field = input?.closest('.field');
+  if (!field) return;
+  const labelText = [...field.childNodes].find((node) => node.nodeType === Node.TEXT_NODE);
+  if (labelText) labelText.textContent = state.editor.imageSrc ? '에디터 사진' : '카드 이미지 *';
+  let hint = field.querySelector('.editor-image-hint');
+  if (state.editor.imageSrc && !hint) {
+    hint = document.createElement('span');
+    hint.className = 'hint editor-image-hint';
+    hint.textContent = '비주얼 에디터에서 선택한 사진이 자동으로 연결됩니다. 필요하면 여기서 교체할 수 있어요.';
+    field.append(hint);
+  }
 }
 
 document.addEventListener('click', (event) => {
