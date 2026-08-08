@@ -483,6 +483,7 @@ async def card_detail(user_card_id: str, user: FanUser, session: DbSession) -> d
                 "handwrittenMessage": None,
                 "issueLimit": card.issue_limit,
                 "status": card.status,
+                "designConfig": card.design_config,
                 "imageUrl": card_image_url(card),
                 "artistId": artist.id if artist else card.artist_id,
                 "artistName": artist.name if artist else None,

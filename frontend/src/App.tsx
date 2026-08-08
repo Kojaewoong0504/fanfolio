@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import './App.css'
 import cardExample from './assets/card-example.svg'
 import cardExampleBlue from './assets/card-example-blue.svg'
@@ -940,12 +940,17 @@ function RevealCard({ userCardId, onClose }: { userCardId: string, onClose: () =
     try { window.sessionStorage.setItem(revealStorageKey(userCardId), '1') } catch { /* optional reveal-state cache */ }
   }
 
+  const configuredEffect = detail?.card.designConfig?.front?.effect ?? 'none'
+  const revealEffect = ['holographic', 'prismatic', 'foil', 'sparkle'].includes(configuredEffect) ? configuredEffect : 'none'
+  const configuredIntensity = Number(detail?.card.designConfig?.front?.effectIntensity ?? 0)
+  const revealEffectStyle = { '--reveal-effect-intensity': String(Math.max(0, Math.min(1, configuredIntensity > 1 ? configuredIntensity / 100 : configuredIntensity))) } as CSSProperties
+
   return <main className="reveal-screen">
     <button ref={closeButtonRef} type="button" className="reveal-close" onClick={onClose}>닫기</button>
     <p className="eyebrow">{revealed ? '카드 공개 완료' : '새 카드 도착'}</p>
     <h1>{revealed ? '새 카드가 컬렉션에 추가됐어요' : '카드가 도착했어요'}</h1>
     <p className="muted">{revealed ? '나만의 디지털 컬렉션에서 확인해 보세요.' : '카드 정보를 확인한 뒤 공개할 수 있어요.'}</p>
-    <div className={revealed ? 'reveal-card revealed' : 'reveal-card'}>
+    <div className={`reveal-card ${revealed ? 'revealed' : ''} reveal-effect-${revealEffect}`} style={revealEffectStyle}>
       <img src={demoCardImage(resolveApiUrl(detail?.card.imageUrl ?? cardExample))} alt="등록된 공식 카드" onError={event => keepCardVisual(event, userCardId)} />
       {revealed && <span className="official-badge">공식 카드</span>}
     </div>

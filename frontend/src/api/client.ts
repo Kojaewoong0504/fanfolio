@@ -163,6 +163,10 @@ export type UserCardDetail = {
     handwrittenMessage: string | null
     issueLimit: number | null
     status: string
+    designConfig?: {
+      front?: { effect?: string; effectIntensity?: number }
+      back?: { effect?: string }
+    } | null
     handwritingImageUrl: string | null
     hasVoice: boolean
     voiceAudioUrl: string | null

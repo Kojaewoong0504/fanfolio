@@ -277,6 +277,7 @@ def test_owned_card_detail_exposes_handwriting_and_voice_entitlements(
                 "memberId": "member_yuna",
                 "handwritingAssetId": seeded["ids"]["handwritingAssetId"],
                 "voiceAssetId": voice_asset["assetId"],
+                "designConfig": {"front": {"effect": "holographic", "effectIntensity": 0.82}},
                 "hasVoice": True,
             },
         ),
@@ -307,6 +308,7 @@ def test_owned_card_detail_exposes_handwriting_and_voice_entitlements(
     detail = assert_success(fan.get(f"/api/me/cards/{redeemed['userCardId']}"))
 
     assert detail["card"]["hasVoice"] is True
+    assert detail["card"]["designConfig"]["front"]["effect"] == "holographic"
     handwriting_url = detail["card"]["handwritingImageUrl"]
     assert handwriting_url == f"/api/me/cards/{redeemed['userCardId']}/handwriting?client=fan"
     image = fan.get(handwriting_url)
