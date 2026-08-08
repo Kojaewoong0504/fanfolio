@@ -234,7 +234,7 @@ function editorCardMarkup() {
   const textStyle = `color:${esc(e.textColor)};font-size:${e.textSize}px;transform:translate(${e.textX}px,${e.textY}px)`;
   const stickerMarkup = sticker ? sticker.replace('class="editor-sticker"', `class="editor-sticker" data-editor-layer="sticker" style="transform:translate(${e.stickerX}px,${e.stickerY}px)"`) : '';
   const photoMarkup = image.replace('class="editor-photo"', 'class="editor-photo" data-editor-layer="photo"');
-  const videoMarkup = front && e.videoSrc ? `<video class="editor-video-layer" src="${esc(e.videoSrc)}" autoplay muted loop playsinline aria-label="카드 영상 레이어"></video>` : '';
+  const videoMarkup = front && e.videoSrc ? `<video class="editor-video-layer" src="${esc(e.videoSrc)}" autoplay muted loop playsinline crossorigin="use-credentials" aria-label="카드 영상 레이어"></video>` : '';
   const backMarkup = backTemplateUrl ? `<img class="editor-back-template" src="${esc(backTemplateUrl)}" alt="소속사 기본 뒷면 템플릿" />` : '<div class="editor-back-pattern"></div>';
   return `<div class="editor-card ${front ? 'is-front' : 'is-back'} template-${esc(e.template)} effect-${esc(activeEffect)}" style="--editor-bg:${esc(e.background)};--effect-intensity:${Number(e.effectIntensity || 0) / 100};--effect-angle:${Number(e.effectAngle || 135)}deg">${front ? `${photoMarkup}${videoMarkup}<div class="editor-sheen"></div><div class="editor-copy" data-editor-layer="text" style="${textStyle}">${esc(e.text)}</div>${stickerMarkup}<span class="editor-card-label">FANFOLIO · SPECIAL EDITION</span>` : `${backMarkup}<div class="editor-back-copy"><strong>FANFOLIO</strong><span>공식 디지털 포토카드</span><small>소속사가 제공한 기본 템플릿입니다. 아티스트는 색상과 효과만 조정할 수 있어요.</small></div>`}</div>`;
 }
@@ -287,8 +287,10 @@ function restoreEditorDesign(card) {
   const sticker = config.front.sticker || {};
   state.editor = {
     ...state.editor,
-    imageSrc: card.imageUrl || card.imageAssetUrl || state.editor.imageSrc,
+    imageSrc: card.imageUrl ? absoluteApiUrl(card.imageUrl) : card.imageAssetUrl || state.editor.imageSrc,
     imageName: card.name ? `${card.name}.jpg` : state.editor.imageName,
+    videoSrc: card.videoUrl ? absoluteApiUrl(card.videoUrl) : state.editor.videoSrc,
+    videoName: card.videoAssetId ? `${card.name || 'card'}-motion.mp4` : state.editor.videoName,
     imageScale: Number(image.scale ?? state.editor.imageScale), imageX: Number(image.x ?? state.editor.imageX), imageY: Number(image.y ?? state.editor.imageY), filter: image.filter || state.editor.filter,
     text: text.value ?? state.editor.text, textX: Number(text.x ?? state.editor.textX), textY: Number(text.y ?? state.editor.textY), textSize: Number(text.size ?? state.editor.textSize), textColor: text.color || state.editor.textColor,
     sticker: sticker.kind || state.editor.sticker, stickerX: Number(sticker.x ?? state.editor.stickerX), stickerY: Number(sticker.y ?? state.editor.stickerY), effect: config.front.effect || state.editor.effect, effectIntensity: Number(config.front.effectIntensity ?? state.editor.effectIntensity), effectAngle: Number(config.front.effectAngle ?? state.editor.effectAngle), videoAssetId: config.front.videoAssetId || state.editor.videoAssetId, backEffect: config.back.effect || state.editor.backEffect, background: config.back.background || state.editor.background,

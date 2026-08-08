@@ -240,6 +240,8 @@ access JWT를 메모리에만 저장하고 `401` 응답에서 `/auth/refresh`를
 | GET | `/artist/cards` | 내 카드 목록(초안/검수 중/공개) |
 | POST | `/artist/cards` | 특별 카드 초안 생성 |
 | GET | `/artist/cards/{cardId}` | 카드 편집 데이터 조회 |
+| GET | `/artist/cards/{cardId}/image` | 소유한 카드 초안의 원본 이미지 스트리밍 |
+| GET | `/artist/cards/{cardId}/video` | 소유한 카드 초안의 모션 레이어 스트리밍 |
 | PATCH | `/artist/cards/{cardId}` | 카드 내용/자산/손글씨 배치 수정 |
 | POST | `/artist/cards/{cardId}/preview` | 팬 화면용 렌더 미리보기 생성/조회 |
 | POST | `/artist/cards/{cardId}/submit-review` | 공개 검수 요청 |

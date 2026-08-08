@@ -203,11 +203,17 @@ def card_data(card: Card) -> dict:
         "rarity": card.rarity,
         "artistId": card.artist_id,
         "imageAssetId": card.image_asset_id,
+        "imageUrl": (
+            f"/api/artist/cards/{card.id}/image?client=artist" if card.image_asset_id else None
+        ),
         "memberId": card.member_id,
         "signatureText": card.signature_text,
         "handwritingAssetId": card.handwriting_asset_id,
         "voiceAssetId": card.voice_asset_id,
         "videoAssetId": card.video_asset_id,
+        "videoUrl": (
+            f"/api/artist/cards/{card.id}/video?client=artist" if card.video_asset_id else None
+        ),
         "designConfig": card.design_config,
         "handwritingTransform": card.handwriting_transform,
         "hasVoice": card.has_voice,
@@ -233,6 +239,36 @@ async def owned_asset(asset_id: str, user: ArtistUser, session: DbSession) -> As
 async def get_card(card_id: str, user: ArtistUser, session: DbSession) -> dict:
     card = await owned_card(card_id, user, session)
     return {"ok": True, "data": card_data(card)}
+
+
+@router.get("/artist/cards/{card_id}/image")
+async def card_image(card_id: str, user: ArtistUser, session: DbSession) -> Response:
+    """Serve an artist-owned card image while editing a draft."""
+    card = await owned_card(card_id, user, session)
+    if not card.image_asset_id:
+        raise AppError(404, "CARD_IMAGE_NOT_FOUND", "카드 이미지를 찾을 수 없습니다.")
+    asset = await owned_asset(card.image_asset_id, user, session)
+    path = asset.processed_storage_path or asset.storage_path
+    if not path:
+        raise AppError(404, "CARD_IMAGE_NOT_READY", "카드 이미지가 아직 준비되지 않았습니다.")
+    return storage_response(
+        configured_asset_storage(), path, media_type=asset.content_type or "image/png"
+    )
+
+
+@router.get("/artist/cards/{card_id}/video")
+async def card_video(card_id: str, user: ArtistUser, session: DbSession) -> Response:
+    """Serve an artist-owned motion layer while editing a draft."""
+    card = await owned_card(card_id, user, session)
+    if not card.video_asset_id:
+        raise AppError(404, "VIDEO_NOT_FOUND", "카드 영상을 찾을 수 없습니다.")
+    asset = await owned_asset(card.video_asset_id, user, session)
+    path = asset.processed_storage_path or asset.storage_path
+    if not path:
+        raise AppError(404, "VIDEO_NOT_READY", "카드 영상이 아직 준비되지 않았습니다.")
+    return storage_response(
+        configured_asset_storage(), path, media_type=asset.content_type or "video/mp4"
+    )
 
 
 @router.patch("/artist/cards/{card_id}")

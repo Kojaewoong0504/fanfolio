@@ -338,6 +338,34 @@ def test_artist_card_persists_finish_design_and_video_layer(
     assert preview["layers"]["effects"]["front"]["style"] == "holographic"
 
 
+def test_artist_can_reload_owned_media_for_card_editing(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    artist = actors["artist"]
+    asset_id = seeded["ids"]["imageAssetId"]
+    artist.put(f"/api/uploads/{asset_id}/content", content=b"media").raise_for_status()
+    draft = assert_success(
+        artist.post(
+            "/api/artist/cards",
+            json={
+                "templateId": seeded["ids"]["templateId"],
+                "name": "재편집 가능한 모션 카드",
+                "seasonName": "2026 SUMMER",
+                "rarity": "UR",
+                "imageAssetId": asset_id,
+                "videoAssetId": asset_id,
+                "issueLimit": 10,
+            },
+        ),
+        201,
+    )
+
+    assert draft["imageUrl"].endswith(f"/artist/cards/{draft['id']}/image?client=artist")
+    assert draft["videoUrl"].endswith(f"/artist/cards/{draft['id']}/video?client=artist")
+    assert artist.get(draft["imageUrl"]).content == b"media"
+    assert artist.get(draft["videoUrl"]).content == b"media"
+
+
 def test_fan_cannot_read_artist_card_preview(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:
