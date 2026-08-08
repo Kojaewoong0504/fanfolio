@@ -234,7 +234,8 @@ function editorCardMarkup() {
   const textStyle = `color:${esc(e.textColor)};font-size:${e.textSize}px;transform:translate(${e.textX}px,${e.textY}px)`;
   const stickerMarkup = sticker ? sticker.replace('class="editor-sticker"', `class="editor-sticker" data-editor-layer="sticker" style="transform:translate(${e.stickerX}px,${e.stickerY}px)"`) : '';
   const photoMarkup = image.replace('class="editor-photo"', 'class="editor-photo" data-editor-layer="photo"');
-  const videoMarkup = front && e.videoSrc ? `<video class="editor-video-layer" src="${esc(e.videoSrc)}" autoplay muted loop playsinline crossorigin="use-credentials" aria-label="카드 영상 레이어"></video>` : '';
+  const motionAttributes = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'muted loop playsinline' : 'autoplay muted loop playsinline';
+  const videoMarkup = front && e.videoSrc ? `<video class="editor-video-layer" src="${esc(e.videoSrc)}" ${motionAttributes} crossorigin="use-credentials" aria-label="카드 영상 레이어"></video>` : '';
   const backMarkup = backTemplateUrl ? `<img class="editor-back-template" src="${esc(backTemplateUrl)}" alt="소속사 기본 뒷면 템플릿" />` : '<div class="editor-back-pattern"></div>';
   return `<div class="editor-card ${front ? 'is-front' : 'is-back'} template-${esc(e.template)} effect-${esc(activeEffect)}" style="--editor-bg:${esc(e.background)};--effect-intensity:${Number(e.effectIntensity || 0) / 100};--effect-angle:${Number(e.effectAngle || 135)}deg">${front ? `${photoMarkup}${videoMarkup}<div class="editor-sheen"></div><div class="editor-copy" data-editor-layer="text" style="${textStyle}">${esc(e.text)}</div>${stickerMarkup}<span class="editor-card-label">FANFOLIO · SPECIAL EDITION</span>` : `${backMarkup}<div class="editor-back-copy"><strong>FANFOLIO</strong><span>공식 디지털 포토카드</span><small>소속사가 제공한 기본 템플릿입니다. 아티스트는 색상과 효과만 조정할 수 있어요.</small></div>`}</div>`;
 }
