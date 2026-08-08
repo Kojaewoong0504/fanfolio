@@ -10,7 +10,7 @@ const state = {
   cardName: '', jobId: null, preview: null, previewImageSrc: '', signature: '', cards: [],
   form: { name: '드림 스페셜 카드 #5', artistId: 'artist_nova3', memberId: 'member_yuna', seasonName: '2025 봄', templateId: 'template_signature_v1', rarity: 'R', signatureText: '항상 고마워요, 우리 함께해요!', hasVoice: true, voiceAssetId: null, issueLimit: 3000 }, insights: null, profile: null,
   catalog: null, catalogLoaded: false, apiConnected: false, catalogError: '', view: 'editor',
-  editor: { tool: 'photo', side: 'front', template: 'luminous', backTemplateId: 'agency_back_v1', imageSrc: '', imageName: '', videoSrc: '', videoName: '', videoAssetId: null, imageScale: 100, imageX: 0, imageY: 0, textX: 0, textY: 0, stickerX: 0, stickerY: 0, background: '#f5efff', filter: 'clean', text: '드림스케이프 · 유나', textColor: '#ffffff', textSize: 24, sticker: 'spark', effect: 'holographic', effectIntensity: 78, effectAngle: 135, backEffect: 'sparkle', previewOpen: false, ...readEditorDraft() },
+  editor: { tool: 'photo', side: 'front', template: 'luminous', backTemplateId: 'agency_back_v1', imageSrc: '', imageName: '', videoSrc: '', videoName: '', videoAssetId: null, imageScale: 100, imageX: 0, imageY: 0, textX: 0, textY: 0, stickerX: 0, stickerY: 0, background: '#f5efff', filter: 'clean', text: '드림스케이프 · 유나', textColor: '#ffffff', textSize: 24, sticker: 'spark', effect: 'holographic', effectIntensity: 78, effectAngle: 135, backEffect: 'sparkle', firstRun: true, previewOpen: false, ...readEditorDraft() },
 };
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
 
@@ -71,7 +71,18 @@ async function uploadVoiceAsset(file) { try { state.form.voiceAssetId = await up
 async function requestBackgroundRemoval() { const area = document.querySelector('#job-area'); area.innerHTML = '<div class="job"><span class="spinner"></span> 손글씨를 업로드하고 배경 제거를 요청하는 중...</div>'; try { const blob = await new Promise((resolve) => document.querySelector('#signature-pad').toBlob(resolve, 'image/png')); state.assetId = await uploadAsset(new File([blob], 'handwriting.png', { type: 'image/png' }), 'handwriting'); const result = await api(`/assets/${state.assetId}/background-removal`, { method: 'POST' }); state.jobId = result.data.jobId; await api(`/artist/cards/${state.cardId}`, { method: 'PATCH', body: JSON.stringify({ signatureText: state.form.signatureText, handwritingAssetId: state.assetId, handwritingTransform: { x: 68, y: 724, width: 402, rotation: -3 } }) }); area.innerHTML = `<div class="job"><span class="ok">✓</span> 작업이 등록되었습니다 · ${esc(result.data.status)}</div>`; pollBackgroundRemoval(); } catch { area.innerHTML = '<div class="notice">업로드 또는 배경 제거 요청에 실패했습니다. 아티스트 세션과 API 서버를 확인해 주세요.</div>'; } }
 async function pollBackgroundRemoval() { for (let attempt = 0; attempt < 10; attempt += 1) { await new Promise((resolve) => setTimeout(resolve, 1000)); try { const result = await api(`/background-removal-jobs/${state.jobId}`); if (result.data.status === 'completed') { document.querySelector('#job-area').innerHTML = '<div class="job"><span class="ok">✓</span> 투명 손글씨가 준비되었습니다.</div>'; return; } if (result.data.status === 'failed') { document.querySelector('#job-area').innerHTML = '<div class="notice">손글씨 배경 제거에 실패했습니다. 다른 이미지를 사용해 주세요.</div>'; return; } } catch { return; } } }
 async function loadPreview() { if (!state.cardId) { toast('먼저 카드 정보를 저장해 주세요.'); return; } try { const result = await api(`/artist/cards/${state.cardId}/preview`, { method: 'POST' }); state.preview = result.data; if (state.previewImageSrc) URL.revokeObjectURL(state.previewImageSrc); state.previewImageSrc = ''; if (result.data.previewImageUrl) { const image = await fetch(absoluteApiUrl(result.data.previewImageUrl), { credentials: 'include', headers: { 'X-Fanfolio-Client': 'artist', ...(ACCESS_TOKEN ? { Authorization: `Bearer ${ACCESS_TOKEN}` } : {}) } }); if (!image.ok) throw new Error(`PREVIEW_IMAGE ${image.status}`); state.previewImageSrc = URL.createObjectURL(await image.blob()); } state.step = 3; render(); } catch { toast('카드 미리보기를 불러오지 못했습니다.'); } }
-document.addEventListener('change', (event) => { if (event.target.matches('select[name="group"]')) { state.form.artistId = event.target.value; state.form.memberId = ''; render(); } });
+document.addEventListener('change', (event) => {
+  if (event.target.matches('select[name="group"]')) { state.form.artistId = event.target.value; state.form.memberId = ''; render(); }
+  if (event.target.matches('select[name="rarity"]')) {
+    const effectByRarity = { N: 'none', R: 'foil', SR: 'holographic', UR: 'prismatic' };
+    const rarity = event.target.value;
+    state.form.rarity = rarity;
+    state.editor.effect = effectByRarity[rarity] || state.editor.effect;
+    state.editor.effectIntensity = rarity === 'UR' ? 88 : rarity === 'SR' ? 80 : rarity === 'R' ? 58 : 0;
+    persistEditorDraft();
+    render();
+  }
+});
 document.addEventListener('submit', async (event) => { if (event.target.id !== 'card-form') return; event.preventDefault(); const form = new FormData(event.target); const imageFile = form.get('cardImage'); state.form = { ...state.form, artistId: form.get('group'), name: form.get('name'), memberId: form.get('memberId'), seasonName: form.get('seasonName'), templateId: form.get('templateId'), rarity: form.get('rarity'), signatureText: form.get('signatureText'), issueLimit: Number(form.get('issueLimit')) }; try { const imageAssetId = await uploadAsset(imageFile, 'card'); const result = await api('/artist/cards', { method: 'POST', body: JSON.stringify({ templateId: state.form.templateId, name: state.form.name, seasonName: state.form.seasonName, rarity: state.form.rarity, imageAssetId, artistId: state.form.artistId, memberId: state.form.memberId, signatureText: state.form.signatureText, hasVoice: state.form.hasVoice, issueLimit: state.form.issueLimit }) }); state.cardId = result.data.id; state.cardName = result.data.name; state.cards = [result.data, ...state.cards.filter((card) => card.id !== result.data.id)]; toast('카드를 임시 저장했습니다.'); state.step = 2; render(); } catch { toast('카드 이미지 업로드 또는 저장에 실패했습니다. 아티스트 세션과 API 서버를 확인해 주세요.'); } });
 document.addEventListener('click', async (event) => { if (event.target.id === 'save-draft') toast('카드 정보는 다음 단계로 이동할 때 API에 저장됩니다.'); if (event.target.id === 'submit-review') { if (!state.cardId) { toast('먼저 카드 정보를 저장해 주세요.'); return; } try { await api(`/artist/cards/${state.cardId}/submit-review`, { method: 'POST' }); state.step = 4; render(); } catch { toast('검수 요청에 실패했습니다. 아티스트 세션과 API 서버를 확인해 주세요.'); } } if (event.target.id === 'back-signature') { state.step = 2; render(); } });
 // 카드 생성에 필요한 카탈로그와 템플릿은 API 응답만 사용합니다.
@@ -287,9 +298,19 @@ function restoreEditorDesign(card) {
 
 function visualEditorView() {
   const e = state.editor;
+  if (e.firstRun !== false) return editorStartView();
   const tools = [['photo', studioIcon('photo'), '사진'], ['text', studioIcon('text'), '텍스트'], ['sticker', studioIcon('sticker'), '스티커'], ['effect', studioIcon('effect'), '효과'], ['back', studioIcon('back'), '뒷면']];
   const preview = e.previewOpen ? `<div class="editor-preview-backdrop" role="presentation"><div class="editor-preview-modal" role="dialog" aria-modal="true" aria-labelledby="editor-preview-title"><div class="editor-preview-heading"><div><span>FANFOLIO · CARD PREVIEW</span><h3 id="editor-preview-title">카드 전체 화면 미리보기</h3></div><button class="modal-close" data-editor-action="close-preview" aria-label="미리보기 닫기">×</button></div><div class="editor-preview-stage"><div class="preview-side-label">${e.side === 'front' ? '앞면' : '뒷면'}</div>${editorCardMarkup()}</div><div class="editor-preview-actions"><button class="secondary" data-editor-action="close-preview">계속 편집하기</button><button class="primary" data-editor-action="details">이 디자인으로 상세 정보 입력 <span>→</span></button></div></div></div>` : '';
   return `<section class="visual-editor"><div class="editor-toolbar"><div><span class="editor-breadcrumb">카드 만들기 <b>/</b> 비주얼 에디터</span><h2>나만의 특별 카드를 디자인해 보세요</h2><p>앞면은 자유롭게 꾸미고, 뒷면은 소속사 기본 템플릿을 바탕으로 완성합니다.</p></div><div class="editor-toolbar-actions"><span class="draft-status"><i></i> 자동 저장됨</span><button class="secondary" data-editor-action="exit">나중에 계속하기</button><button class="primary" data-editor-action="details">상세 정보 입력 <span>→</span></button></div></div><div class="editor-workspace"><aside class="editor-tools" aria-label="카드 편집 도구">${tools.map(([value, icon, label]) => `<button class="editor-tool ${e.tool === value ? 'active' : ''}" data-editor-tool="${value}"><span>${icon}</span><small>${label}</small></button>`).join('')}</aside><div class="editor-stage-wrap"><div class="stage-header"><span>${e.side === 'front' ? '앞면' : '뒷면'} 미리보기</span><div class="side-switch"><button class="${e.side === 'front' ? 'active' : ''}" data-editor-side="front">앞면</button><button class="${e.side === 'back' ? 'active' : ''}" data-editor-side="back">뒷면</button></div><span class="zoom-label">100%</span></div><div class="visual-editor-stage"><div class="stage-grid"></div>${editorCardMarkup()}<span class="stage-caption">드래그하여 위치를 조정할 수 있어요</span></div><div class="stage-footer"><span><b>Tip</b> 카드의 분위기를 먼저 정한 뒤 사진과 문구를 배치해 보세요.</span><button class="ghost-button" data-editor-action="preview">전체 화면 미리보기 ↗</button></div></div><aside class="editor-inspector"><div class="inspector-heading"><div><span>편집 도구</span><h3>${tools.find(([value]) => value === e.tool)?.[2] || '사진'}</h3></div><span class="inspector-count">${e.side === 'front' ? '앞면' : '뒷면'}</span></div>${editorInspector()}</aside></div>${preview}</section>`;
+}
+
+function editorStartView() {
+  const presets = [
+    ['signature', '사인 포토카드', '따뜻한 사진과 손글씨 중심', 'foil', 'R', 'template_signature_v1', '✍'],
+    ['holographic', '홀로그램 스페셜', '각도에 따라 무지개빛이 움직이는 카드', 'holographic', 'SR', 'template_signature_v1', '✦'],
+    ['motion', '모션 컬렉터 카드', '짧은 영상을 카드 위에 겹쳐 표현', 'prismatic', 'UR', 'template_signature_v1', '▶'],
+  ];
+  return `<section class="editor-start"><div class="editor-start-copy"><span class="editor-breadcrumb">카드 만들기 <b>/</b> 빠른 시작</span><p class="editor-kicker">FANFOLIO CARD RECIPE</p><h2>어떤 카드부터 만들어 볼까요?</h2><p>카드의 목적을 고르면 기본 분위기와 희귀도 효과를 자동으로 준비해 드려요. 다음 화면에서 원하는 대로 세밀하게 편집할 수 있습니다.</p></div><div class="preset-grid">${presets.map(([id, title, desc, effect, rarity, template, icon]) => `<button type="button" class="preset-card preset-${id}" data-editor-preset="${id}"><span class="preset-icon">${icon}</span><span class="preset-rarity">${rarity} · ${effect === 'holographic' ? 'HOLO' : effect === 'prismatic' ? 'MOTION' : 'SIGNATURE'}</span><strong>${title}</strong><small>${desc}</small><span class="preset-arrow">시작하기&nbsp; →</span></button>`).join('')}</div><div class="editor-start-footer"><span><b>처음이라면</b> 사인 포토카드로 시작해 보세요.</span><button type="button" class="text-button" data-editor-action="skip-start">빈 캔버스로 시작</button></div></section>`;
 }
 
 function initEditorDrag() {
@@ -334,6 +355,7 @@ function renderShell(content) {
   app.innerHTML = `<div class="shell ${editorMode ? 'editor-shell' : ''}"><aside class="side"><div class="logo"><img class="studio-brand-icon" src="./fanfolio-app-icon.png" alt="" /><b>FANFOLIO</b><small>아티스트 스튜디오</small></div><nav class="nav"><button data-studio-view="home" class="${view === 'home' ? 'active' : ''}">⌂　스튜디오 홈</button><button data-studio-view="create" class="${view === 'create' || editorMode ? 'active' : ''}">▦　카드 만들기</button><button data-studio-view="cards" class="${view === 'cards' ? 'active' : ''}">◇　내 카드</button><button data-studio-view="feedback" class="${view === 'feedback' ? 'active' : ''}">♡　팬 반응</button><button data-studio-view="settings" class="${view === 'settings' ? 'active' : ''}">⚙　설정</button></nav><div class="profile"><span class="avatar">A</span><div><strong>${esc(state.profile?.nickname || '아티스트')}</strong>ARTIST</div></div></aside><main class="workspace"><header class="top ${editorMode ? 'editor-top' : ''}"><div><p class="kicker">Fanfolio Artist Studio</p><h1 class="title">${title}</h1></div><div class="top-actions"><span class="save-state">${connectionLabel}</span><button class="secondary" id="session-config">세션 설정</button><button class="secondary" id="logout">로그아웃</button></div></header>${editorMode ? visualEditorView() : content}</main></div><div class="toast" id="toast"></div>`;
   bindCommon();
   enhanceCardImageField();
+  enhanceRarityField();
   document.querySelector('input[name="cardImage"]')?.toggleAttribute('required', !state.editor.imageSrc);
   if (editorMode) initEditorDrag();
   document.querySelector('#new-card')?.addEventListener('click', () => { state.view = 'editor'; state.editingCardId = null; state.cardId = null; state.step = 1; render(); });
@@ -354,6 +376,16 @@ function enhanceCardImageField() {
   }
 }
 
+function enhanceRarityField() {
+  const select = document.querySelector('select[name="rarity"]');
+  if (!select || select.querySelector('option[value="UR"]')) return;
+  const option = document.createElement('option');
+  option.value = 'UR';
+  option.textContent = 'UR (울트라 레어)';
+  select.insertBefore(option, select.querySelector('option[value="N"]') || null);
+  if (state.form.rarity === 'UR') select.value = 'UR';
+}
+
 document.addEventListener('click', (event) => {
   if (!state.authenticated) return;
   const tool = event.target.closest('[data-editor-tool]');
@@ -363,6 +395,21 @@ document.addEventListener('click', (event) => {
   const choice = event.target.closest('[data-editor-value]');
   if (choice) { state.editor[choice.dataset.editorValue] = choice.dataset.value; persistEditorDraft(); render(); return; }
   const action = event.target.closest('[data-editor-action]')?.dataset.editorAction;
+  const preset = event.target.closest('[data-editor-preset]')?.dataset.editorPreset;
+  if (preset) {
+    const presets = {
+      signature: { effect: 'foil', rarity: 'R', intensity: 58, text: '드림스케이프 · 유나' },
+      holographic: { effect: 'holographic', rarity: 'SR', intensity: 82, text: 'SPECIAL HOLOGRAPHIC' },
+      motion: { effect: 'prismatic', rarity: 'UR', intensity: 76, text: 'MOTION COLLECTOR' },
+    };
+    const selected = presets[preset] || presets.signature;
+    state.editor = { ...state.editor, firstRun: false, effect: selected.effect, effectIntensity: selected.intensity, text: selected.text };
+    state.form.rarity = selected.rarity;
+    persistEditorDraft();
+    render();
+    return;
+  }
+  if (action === 'skip-start') { state.editor.firstRun = false; persistEditorDraft(); render(); return; }
   if (action === 'details') { state.view = 'create'; render(); return; }
   if (action === 'exit') { state.view = 'cards'; shell(studioCardsView()); return; }
   if (action === 'remove-photo') { state.editor.imageSrc = ''; state.editor.imageName = ''; persistEditorDraft(); render(); return; }
