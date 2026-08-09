@@ -491,7 +491,7 @@ document.addEventListener('click', (event) => {
   const layerSelect = event.target.closest('[data-editor-layer-select]');
   if (layerSelect) { state.editor.selectedLayer = layerSelect.dataset.editorLayerSelect; state.editor.tool = state.editor.selectedLayer === 'text' ? 'text' : state.editor.selectedLayer === 'sticker' ? 'sticker' : 'photo'; render(); return; }
   const tool = event.target.closest('[data-editor-tool]');
-  if (tool) { rememberEditorChange(); state.editor.tool = tool.dataset.editorTool; if (state.editor.tool === 'back') state.editor.side = 'back'; else if (state.editor.side === 'back' && ['photo', 'text', 'sticker'].includes(state.editor.tool)) state.editor.side = 'front'; persistEditorDraft(); render(); return; }
+  if (tool) { rememberEditorChange(); state.editor.tool = tool.dataset.editorTool; if (state.editor.tool === 'back') state.editor.side = 'back'; else if (state.editor.side === 'back' && ['photo', 'text', 'sticker', 'background'].includes(state.editor.tool)) state.editor.side = 'front'; persistEditorDraft(); render(); return; }
   const side = event.target.closest('[data-editor-side]');
   if (side) { rememberEditorChange(); state.editor.side = side.dataset.editorSide; state.editor.tool = state.editor.side === 'back' ? 'back' : 'photo'; persistEditorDraft(); render(); return; }
   const choice = event.target.closest('[data-editor-value]');
