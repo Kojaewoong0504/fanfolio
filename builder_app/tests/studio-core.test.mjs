@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 
 import {
   buildCardPayload,
@@ -139,4 +140,21 @@ test('serializes handwriting state and transform into the shared design contract
     width: 520,
     rotation: -4,
   })
+})
+
+test('hosted studio routes authentication through its same-origin API proxy', async () => {
+  const source = await readFile(new URL('../app.js', import.meta.url), 'utf8')
+  assert.doesNotMatch(source, /https:\/\/fanfolio-api\.onrender\.com\/api/)
+  assert.match(source, /:\s*'\/api'/)
+
+  const config = JSON.parse(
+    await readFile(new URL('../vercel.json', import.meta.url), 'utf8'),
+  )
+  assert.ok(
+    config.routes.some(
+      (route) =>
+        route.src === '/api/(.*)' &&
+        route.dest === 'https://fanfolio-api.onrender.com/api/$1',
+    ),
+  )
 })

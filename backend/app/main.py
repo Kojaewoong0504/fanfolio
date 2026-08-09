@@ -49,6 +49,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.allowed_origins,
+        allow_origin_regex=settings.allowed_origin_regex,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -65,8 +66,9 @@ def create_app() -> FastAPI:
             "PATCH",
             "DELETE",
         }:
+            request_settings = get_settings()
             origin = request.headers.get("origin")
-            if origin and origin not in get_settings().allowed_origins:
+            if origin and not request_settings.is_origin_allowed(origin):
                 return JSONResponse(
                     status_code=403,
                     content={

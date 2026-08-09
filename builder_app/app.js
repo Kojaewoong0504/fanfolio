@@ -5,16 +5,16 @@ import {
   studioDashboard,
 } from './studio-core.js'
 
-const localApiQuery = ['localhost', '127.0.0.1'].includes(window.location.hostname)
+const isLocalHost = ['localhost', '127.0.0.1'].includes(window.location.hostname)
+const localApiQuery = isLocalHost
   ? new URLSearchParams(window.location.search).get('api')
   : ''
 
-const API_BASE =
-  localApiQuery ||
-  localStorage.getItem('fanfolio_api_base') ||
-  (['localhost', '127.0.0.1'].includes(window.location.hostname)
-    ? 'http://localhost:8000/api'
-    : 'https://fanfolio-api.onrender.com/api')
+const API_BASE = isLocalHost
+  ? localApiQuery ||
+    localStorage.getItem('fanfolio_api_base') ||
+    'http://localhost:8000/api'
+  : '/api'
 
 const DRAFT_KEY = 'fanfolio_artist_special_card_draft_v2'
 const app = document.querySelector('#app')

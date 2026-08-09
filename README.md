@@ -227,9 +227,17 @@ open http://localhost:8025
 배포할 수 있습니다. 세 프로젝트 모두 같은 저장소의 `main` 브랜치를 연결합니다.
 
 FastAPI는 Vercel 프론트 프로젝트와 분리된 API 서버로 배포합니다. 배포 후 각 Vercel 프로젝트의
-환경변수에 `VITE_API_BASE_URL=https://api.example.com/api`를 설정하고, 백엔드의
+`/api` 요청은 각 앱의 `vercel.json`을 통해 FastAPI로 프록시됩니다. 백엔드의
 `FRONTEND_URL`, `FRONTEND_ORIGINS`, `OAUTH_FRONTEND_CALLBACK_URL`에는 실제 팬 앱 도메인을
 등록합니다. 운영 OAuth Callback도 각 provider 콘솔에 HTTPS 주소로 등록해야 합니다.
+
+브랜치마다 바뀌는 Vercel 프리뷰 주소를 안전하게 허용하려면 Render에 프로젝트와 팀 도메인을
+분리해 등록합니다. 원시 정규식을 직접 받지 않고 아래 값으로 제한된 허용 규칙을 생성합니다.
+
+```bash
+FRONTEND_PREVIEW_PROJECTS=fanfolio-fan,fanfolio-admin,fanfolio-studio
+FRONTEND_PREVIEW_DOMAIN=kojaewoong0504s-projects.vercel.app
+```
 
 ### 9. PostgreSQL·SMTP·Redis 통합 환경
 

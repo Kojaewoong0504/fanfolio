@@ -1,4 +1,7 @@
-const API_BASE = window.localStorage.getItem('fanfolio_api_base') || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:8000/api' : 'https://fanfolio-api.onrender.com/api');
+const isLocalHost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+const API_BASE = isLocalHost
+  ? window.localStorage.getItem('fanfolio_api_base') || 'http://localhost:8000/api'
+  : '/api';
 let ACCESS_TOKEN = '';
 let refreshInFlight = null;
 const app = document.querySelector('#app');

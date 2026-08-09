@@ -1,3 +1,4 @@
+import re
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -31,6 +32,8 @@ class Settings(BaseSettings):
         "http://localhost:4174,http://localhost:4175,http://localhost:5173,"
         "http://127.0.0.1:4174,http://127.0.0.1:4175,http://127.0.0.1:5173"
     )
+    frontend_preview_projects: str = ""
+    frontend_preview_domain: str = ""
     frontend_url: str = "http://localhost:5173"
     admin_bootstrap_email: str = ""
     admin_bootstrap_password: str = ""
@@ -69,6 +72,40 @@ class Settings(BaseSettings):
     def allowed_origins(self) -> list[str]:
         """Parse the comma-separated browser origins used by CORS."""
         return [origin.strip() for origin in self.frontend_origins.split(",") if origin.strip()]
+
+    @property
+    def allowed_preview_projects(self) -> list[str]:
+        """Return project slugs that may create trusted Vercel preview origins."""
+        return [
+            project.strip()
+            for project in self.frontend_preview_projects.split(",")
+            if project.strip()
+        ]
+
+    @property
+    def allowed_origin_regex(self) -> str | None:
+        """Build a narrowly scoped preview regex from validated names.
+
+        Operators configure project and team names instead of writing a raw
+        regular expression. This avoids accidentally opening credentialed
+        CORS to arbitrary origins while still supporting ephemeral previews.
+        """
+        projects = self.allowed_preview_projects
+        domain = self.frontend_preview_domain.strip()
+        if not projects or not domain:
+            return None
+        project_pattern = "|".join(re.escape(project) for project in projects)
+        return (
+            rf"^https://(?:{project_pattern})(?:-[a-z0-9-]+)?-"
+            rf"{re.escape(domain)}$"
+        )
+
+    def is_origin_allowed(self, origin: str) -> bool:
+        """Apply the same allow rule to CORS and CSRF origin validation."""
+        if origin in self.allowed_origins:
+            return True
+        pattern = self.allowed_origin_regex
+        return bool(pattern and re.fullmatch(pattern, origin))
 
     @property
     def async_database_url(self) -> str:
@@ -121,6 +158,19 @@ class Settings(BaseSettings):
             raise ValueError("FRONTEND_ORIGINS cannot use a wildcard in production")
         if any(not origin.startswith("https://") for origin in self.allowed_origins):
             raise ValueError("FRONTEND_ORIGINS must use HTTPS in production")
+        preview_projects = self.allowed_preview_projects
+        preview_domain = self.frontend_preview_domain.strip()
+        if bool(preview_projects) != bool(preview_domain):
+            raise ValueError(
+                "FRONTEND_PREVIEW_PROJECTS and FRONTEND_PREVIEW_DOMAIN must be set together"
+            )
+        if preview_domain:
+            if not preview_domain.endswith(".vercel.app") or not re.fullmatch(
+                r"[a-z0-9-]+(?:\.[a-z0-9-]+)+", preview_domain
+            ):
+                raise ValueError("FRONTEND_PREVIEW_DOMAIN must be a Vercel team domain")
+            if any(not re.fullmatch(r"[a-z0-9-]+", project) for project in preview_projects):
+                raise ValueError("FRONTEND_PREVIEW_PROJECTS must contain Vercel project slugs")
         if self.app_env == "staging":
             # Staging still enforces durable identity, HTTPS, explicit schema
             # migration, and strong token secrets. SMTP, Redis, ClamAV, and

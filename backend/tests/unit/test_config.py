@@ -10,6 +10,23 @@ def test_frontend_origins_are_parsed_without_empty_values() -> None:
     assert settings.allowed_origins == ["https://app.example", "http://localhost:5173"]
 
 
+def test_scoped_vercel_preview_origin_regex_allows_only_the_project_team() -> None:
+    settings = Settings(
+        app_env="test",
+        frontend_origins="https://fanfolio-admin-one.vercel.app",
+        frontend_preview_projects="fanfolio-fan,fanfolio-admin,fanfolio-studio",
+        frontend_preview_domain="kojaewoong0504s-projects.vercel.app",
+    )
+
+    assert settings.is_origin_allowed(
+        "https://fanfolio-admin-git-feature-auth-abc123-kojaewoong0504s-projects.vercel.app"
+    )
+    assert not settings.is_origin_allowed("https://fanfolio-admin.attacker.example")
+    assert not settings.is_origin_allowed(
+        "https://fanfolio-admin-git-feature-auth-abc123-other-team.vercel.app"
+    )
+
+
 def test_database_backend_name_does_not_expose_connection_details() -> None:
     settings = Settings(
         database_url="postgresql+asyncpg://user:secret@example.com/fanfolio",

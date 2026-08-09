@@ -14,3 +14,19 @@ test('admin can issue a one-time replacement password for an existing account', 
   assert.match(source, /\/artist-accounts\/\$\{[^}]+\}\/reset-password/)
   assert.match(source, /data-artist-reset/)
 })
+
+test('hosted admin routes authentication through its same-origin API proxy', async () => {
+  assert.doesNotMatch(source, /https:\/\/fanfolio-api\.onrender\.com\/api/)
+  assert.match(source, /:\s*'\/api'/)
+
+  const config = JSON.parse(
+    await readFile(new URL('../vercel.json', import.meta.url), 'utf8'),
+  )
+  assert.ok(
+    config.routes.some(
+      (route) =>
+        route.src === '/api/(.*)' &&
+        route.dest === 'https://fanfolio-api.onrender.com/api/$1',
+    ),
+  )
+})

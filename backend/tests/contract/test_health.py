@@ -4,6 +4,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from app.core.config import get_settings
+from app.main import create_app
 from app.routers import health
 from tests.conftest import assert_success
 
@@ -166,3 +167,43 @@ def test_production_rejects_state_changing_requests_from_an_untrusted_origin(
 
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "CSRF_ORIGIN_INVALID"
+
+
+def test_scoped_vercel_preview_origin_passes_cors_and_csrf_checks(
+    monkeypatch: Any,
+) -> None:
+    preview_origin = (
+        "https://fanfolio-admin-git-feature-auth-abc123-kojaewoong0504s-projects.vercel.app"
+    )
+    monkeypatch.setenv(
+        "FRONTEND_PREVIEW_PROJECTS",
+        "fanfolio-fan,fanfolio-admin,fanfolio-studio",
+    )
+    monkeypatch.setenv(
+        "FRONTEND_PREVIEW_DOMAIN",
+        "kojaewoong0504s-projects.vercel.app",
+    )
+    get_settings.cache_clear()
+
+    try:
+        with TestClient(create_app()) as preview_client:
+            preflight = preview_client.options(
+                "/api/auth/admin/login",
+                headers={
+                    "Origin": preview_origin,
+                    "Access-Control-Request-Method": "POST",
+                    "Access-Control-Request-Headers": "content-type,x-fanfolio-client",
+                },
+            )
+            rejected_payload = preview_client.post(
+                "/api/auth/magic-link/request",
+                json={"email": "not-email"},
+                headers={"Origin": preview_origin},
+            )
+    finally:
+        get_settings.cache_clear()
+
+    assert preflight.status_code == 200
+    assert preflight.headers["access-control-allow-origin"] == preview_origin
+    assert rejected_payload.status_code == 422
+    assert rejected_payload.json()["error"]["code"] == "VALIDATION_ERROR"
