@@ -6,6 +6,13 @@ from pathlib import Path
 import pytest
 
 
+def test_alembic_uses_the_same_render_postgres_normalization_as_the_app() -> None:
+    backend_dir = Path(__file__).parents[2]
+    source = (backend_dir / "alembic/env.py").read_text(encoding="utf-8")
+
+    assert "get_settings().async_database_url" in source
+
+
 def test_alembic_upgrade_creates_the_current_schema(tmp_path: Path) -> None:
     database_path = tmp_path / "migration.db"
     backend_dir = Path(__file__).parents[2]

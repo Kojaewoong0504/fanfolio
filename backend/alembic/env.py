@@ -21,8 +21,8 @@ target_metadata = Base.metadata
 
 
 def sync_database_url() -> str:
-    """Alembic runs synchronously, so remove the async SQLite driver name."""
-    url = get_settings().database_url
+    """Use the application's normalized URL, with sync SQLite as the exception."""
+    url = get_settings().async_database_url
     if url.startswith("sqlite+aiosqlite://"):
         return url.replace("sqlite+aiosqlite://", "sqlite://", 1)
     return url
