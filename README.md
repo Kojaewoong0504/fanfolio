@@ -149,6 +149,15 @@ Render 환경 변수 `ADMIN_BOOTSTRAP_EMAIL`과 `ADMIN_BOOTSTRAP_PASSWORD`를 �
 초기 관리자가 발급 화면에서 임시 비밀번호를 확인해 안전한 경로로 전달합니다. 두 환경 변수는
 저장소에 커밋하지 말고 Render Secret으로만 등록하세요.
 
+Render에서 API를 운영할 때 `DATABASE_URL`은 반드시 Render PostgreSQL 또는 외부 관리형
+PostgreSQL의 `postgresql+asyncpg://...` 주소를 사용해야 합니다. SQLite 파일(`./fanfolio.db`)은
+Render 인스턴스의 재배포·재시작 때 보존된다는 보장이 없으므로 아티스트 계정, 카드, 세션이
+사라질 수 있습니다. 현재 API는 production에서 SQLite URL을 발견하면 시작을 거부합니다.
+컨테이너도 기본적으로 `APP_ENV=production`, `AUTO_CREATE_SCHEMA=false`로 시작하므로, 로컬에서
+실행할 때는 `APP_ENV=development AUTO_CREATE_SCHEMA=true`를 명시적으로 덮어쓰세요.
+Render의 API 서비스와 PostgreSQL을 같은 프로젝트에 연결하고, `DATABASE_URL`을 Secret으로
+등록한 뒤 마이그레이션 로그에 `alembic upgrade head`가 성공했는지 확인하세요.
+
 ### 8. Kakao·Google 소셜 로그인 설정
 
 팬 앱 로그인 화면은 Kakao와 Google을 우선 노출하고 이메일 매직 링크를 보조 수단으로 제공합니다.

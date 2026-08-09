@@ -325,6 +325,19 @@ def test_admin_can_issue_an_artist_login_and_artist_can_change_the_temporary_pas
         json={"username": "dreamscape-studio", "password": "Safer-password-2026!"},
     )
     assert_success(new_login)
+    assert "fanfolio_artist_refresh" in new_login.cookies
+
+    refreshed = actors["admin"].post("/api/auth/refresh", headers={"X-Fanfolio-Client": "artist"})
+    refreshed_data = assert_success(refreshed)
+    assert refreshed_data["accessToken"]
+    restored = actors["admin"].get(
+        "/api/artist/cards",
+        headers={
+            "X-Fanfolio-Client": "artist",
+            "Authorization": f"Bearer {refreshed_data['accessToken']}",
+        },
+    )
+    assert restored.status_code == 200, restored.text
 
 
 def test_artist_password_login_rejects_fan_and_admin_clients(

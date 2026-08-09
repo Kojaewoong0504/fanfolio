@@ -81,6 +81,11 @@ class Settings(BaseSettings):
             return self.database_url.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
         return self.database_url
 
+    @property
+    def database_backend(self) -> str:
+        """Return only the driver name for safe startup diagnostics."""
+        return self.async_database_url.split("://", 1)[0]
+
     def validate_runtime(self) -> None:
         """Fail fast when a production process would start with unsafe defaults."""
         if self.storage_backend not in {"local", "s3"}:
@@ -91,6 +96,8 @@ class Settings(BaseSettings):
             raise ValueError("UPLOAD_CLEANUP_INTERVAL_SECONDS must be positive")
         if self.app_env != "production":
             return
+        if not self.async_database_url.startswith("postgresql+asyncpg://"):
+            raise ValueError("DATABASE_URL must use durable PostgreSQL storage in production")
         if self.auto_create_schema:
             raise ValueError("AUTO_CREATE_SCHEMA must be false in production; run Alembic first")
         if not self.frontend_url.startswith("https://"):

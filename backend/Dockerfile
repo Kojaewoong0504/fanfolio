@@ -17,7 +17,9 @@ COPY --chown=fanfolio:fanfolio backend/alembic ./alembic
 COPY --chown=fanfolio:fanfolio backend/alembic.ini ./alembic.ini
 
 ENV PATH="/app/.venv/bin:$PATH" \
-    PYTHONUNBUFFERED="1"
+    PYTHONUNBUFFERED="1" \
+    APP_ENV="production" \
+    AUTO_CREATE_SCHEMA="false"
 
 USER fanfolio
 

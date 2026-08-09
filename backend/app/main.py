@@ -1,5 +1,6 @@
 """Application composition: routes are deliberately kept out of this module."""
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -14,14 +15,23 @@ from app.models import Base
 from app.routers import admin, artist, assets, auth, fan, fixtures, health
 from app.services import ensure_admin_bootstrap, ensure_demo_catalog
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     # `lifespan` replaces the older startup/shutdown event decorators.
-    if get_settings().auto_create_schema:
+    settings = get_settings()
+    logger.info(
+        "Fanfolio API starting: app_env=%s database_backend=%s storage_backend=%s",
+        settings.app_env,
+        settings.database_backend,
+        settings.storage_backend,
+    )
+    if settings.auto_create_schema:
         async with engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
-    if get_settings().seed_demo_catalog:
+    if settings.seed_demo_catalog:
         async with SessionLocal() as session:
             await ensure_demo_catalog(session)
 
