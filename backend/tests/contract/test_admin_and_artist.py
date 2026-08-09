@@ -196,6 +196,40 @@ def test_artist_review_persists_note_for_complete_voice_and_motion_assets(
     assert detail["reviewNote"] == "모션과 보이스 타이밍을 함께 확인해 주세요."
 
 
+def test_artist_can_preview_an_owned_voice_asset(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    artist = actors["artist"]
+    voice_asset = _upload_artist_asset(
+        artist,
+        file_name="recorded-voice.webm",
+        content_type="audio/webm",
+        purpose="voice",
+        content=b"recorded-voice",
+    )
+    draft = assert_success(
+        artist.post(
+            "/api/artist/cards",
+            json={
+                "templateId": seeded["ids"]["templateId"],
+                "name": "녹음 보이스 카드",
+                "seasonName": "2026 SUMMER",
+                "rarity": "SR",
+                "imageAssetId": seeded["ids"]["imageAssetId"],
+                "voiceAssetId": voice_asset["assetId"],
+                "hasVoice": True,
+                "issueLimit": 300,
+            },
+        ),
+        201,
+    )
+
+    assert draft["voiceUrl"] == f"/api/artist/cards/{draft['id']}/voice?client=artist"
+    preview = artist.get(draft["voiceUrl"])
+    assert preview.status_code == 200
+    assert preview.content == b"recorded-voice"
+
+
 def test_artist_card_rejects_an_unknown_member(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:

@@ -224,6 +224,9 @@ def card_data(card: Card) -> dict:
             else None
         ),
         "voiceAssetId": card.voice_asset_id,
+        "voiceUrl": (
+            f"/api/artist/cards/{card.id}/voice?client=artist" if card.voice_asset_id else None
+        ),
         "videoAssetId": card.video_asset_id,
         "videoUrl": (
             f"/api/artist/cards/{card.id}/video?client=artist" if card.video_asset_id else None
@@ -283,6 +286,21 @@ async def card_video(card_id: str, user: ArtistUser, session: DbSession) -> Resp
         raise AppError(404, "VIDEO_NOT_READY", "카드 영상이 아직 준비되지 않았습니다.")
     return storage_response(
         configured_asset_storage(), path, media_type=asset.content_type or "video/mp4"
+    )
+
+
+@router.get("/artist/cards/{card_id}/voice")
+async def card_voice(card_id: str, user: ArtistUser, session: DbSession) -> Response:
+    """Serve an artist-owned voice recording while editing a draft."""
+    card = await owned_card(card_id, user, session)
+    if not card.voice_asset_id:
+        raise AppError(404, "VOICE_NOT_FOUND", "보이스 파일을 찾을 수 없습니다.")
+    asset = await owned_asset(card.voice_asset_id, user, session)
+    path = asset.processed_storage_path or asset.storage_path
+    if not path:
+        raise AppError(404, "VOICE_NOT_READY", "보이스 파일이 아직 준비되지 않았습니다.")
+    return storage_response(
+        configured_asset_storage(), path, media_type=asset.content_type or "audio/mpeg"
     )
 
 

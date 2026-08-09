@@ -95,6 +95,29 @@ def test_artist_can_presign_and_upload_an_asset(
     assert completed["status"] == "ready"
 
 
+def test_artist_can_upload_browser_recorded_webm_voice(
+    actors: dict[str, TestClient],
+) -> None:
+    asset = assert_success(
+        actors["artist"].post(
+            "/api/uploads/presign",
+            json={
+                "fileName": "browser-recording.webm",
+                "contentType": "audio/webm",
+                "purpose": "voice",
+            },
+        ),
+        201,
+    )
+
+    uploaded = actors["artist"].put(
+        asset["uploadUrl"],
+        content=b"browser-recording",
+        headers={"Content-Type": "audio/webm"},
+    )
+    assert uploaded.status_code == 204, uploaded.text
+
+
 def test_upload_rejects_expired_urls_and_oversized_content(
     actors: dict[str, TestClient], monkeypatch: Any
 ) -> None:

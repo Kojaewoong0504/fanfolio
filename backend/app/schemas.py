@@ -282,6 +282,7 @@ class UploadPresignRequest(BaseModel):
         "audio/mpeg",
         "audio/mp4",
         "audio/wav",
+        "audio/webm",
         "video/mp4",
         "video/webm",
         "application/pdf",
