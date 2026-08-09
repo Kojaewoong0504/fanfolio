@@ -28,3 +28,20 @@
 #editor-signature-pad{display:block;width:100%;height:132px;margin-top:8px;border:1px dashed #b8b1ef;border-radius:13px;background:repeating-linear-gradient(0deg,#fbfaff 0 31px,#ebe8f9 32px);touch-action:none;cursor:crosshair}
 .signature-pad-actions{display:flex;align-items:center;gap:8px;margin-top:9px}.signature-pad-actions .secondary,.upload-inline{border:1px solid #e7e4f0;border-radius:9px;background:#fff;color:#6258c8;padding:8px 10px;font-size:10px;cursor:pointer}.upload-inline input{display:none}
 .layer-list{grid-template-columns:repeat(4,1fr)}
+.layout-editorial .editor-photo{inset:8% 8% 31%;width:84%;height:61%;border-radius:10px}
+.layout-editorial .editor-copy{left:12%;right:12%;bottom:13%;font-size:18px}
+.layout-editorial .editor-card-label{bottom:6%}
+.layout-polaroid{background:linear-gradient(145deg,#fffdf7 0%,var(--editor-bg) 100%)}
+.layout-polaroid .editor-photo{inset:8% 8% 25%;width:84%;height:67%;border-radius:5px;box-shadow:0 4px 12px #342a4a1a}
+.layout-polaroid .editor-sheen{opacity:.18}
+.layout-polaroid .editor-copy{left:12%;right:12%;bottom:10%;color:#29263f;text-shadow:none;font-size:16px}
+.layout-polaroid .editor-card-label{bottom:4%;color:#29263f99}
+.layout-choice-list{display:grid;gap:7px;margin-top:12px}
+.layout-choice{display:flex;align-items:center;gap:10px;width:100%;padding:10px;border:1px solid #ebe9f2;border-radius:11px;background:#fff;text-align:left;color:#77738a;cursor:pointer}
+.layout-choice>b{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;background:#f0edff;color:#6256d8;font-size:17px}
+.layout-choice>span{flex:1}
+.layout-choice strong,.layout-choice small{display:block}
+.layout-choice strong{font-size:11px;color:#4f4b64}
+.layout-choice small{margin-top:3px;color:#9d99aa;font-size:9px}
+.layout-choice>i{font-style:normal;color:#aaa5b7}
+.layout-choice.selected{border-color:#978cf0;background:#f6f3ff}
