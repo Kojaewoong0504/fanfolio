@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 from fastapi import APIRouter, status
 from sqlalchemy import text
@@ -12,6 +13,7 @@ from app.storage import configured_asset_storage
 from app.upload_safety import _scan_with_clamav
 
 router = APIRouter(tags=["health"])
+logger = logging.getLogger(__name__)
 
 
 async def _check_task_queue() -> None:
@@ -68,6 +70,11 @@ async def readiness() -> dict:
         await _check_task_queue()
         await check_rate_limit_backend()
     except (OSError, RuntimeError, ValueError, SQLAlchemyError) as error:
+        # Render needs a useful reason for a 503, but connection strings and
+        # provider error messages must never be copied into public responses
+        # or logs. The exception type is enough to identify the failing class
+        # of dependency (storage, Redis, configuration, or database).
+        logger.warning("Fanfolio readiness check failed: %s", type(error).__name__)
         raise AppError(
             status.HTTP_503_SERVICE_UNAVAILABLE,
             "SERVICE_NOT_READY",

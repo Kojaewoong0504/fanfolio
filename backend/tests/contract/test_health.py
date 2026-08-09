@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -125,6 +126,23 @@ def test_readiness_returns_service_unavailable_when_task_broker_is_down(
 
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "SERVICE_NOT_READY"
+
+
+def test_readiness_logs_only_the_safe_dependency_error_type(
+    client: TestClient, monkeypatch: Any, caplog: Any
+) -> None:
+    async def failed_check_rate_limit_backend() -> None:
+        raise OSError("redis://user:secret@example.com:6379/1")
+
+    monkeypatch.setattr(health, "check_rate_limit_backend", failed_check_rate_limit_backend)
+
+    with caplog.at_level(logging.WARNING, logger="app.routers.health"):
+        response = client.get("/api/health/ready")
+
+    assert response.status_code == 503
+    assert "OSError" in caplog.text
+    assert "secret" not in caplog.text
+    assert "redis://" not in caplog.text
 
 
 def test_configured_frontend_origin_is_allowed_for_cookie_requests(client: TestClient) -> None:

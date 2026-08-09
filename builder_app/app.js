@@ -5,8 +5,8 @@ const app = document.querySelector('#app');
 const editorDraftKey = 'fanfolio.artist-studio.editor-draft';
 const editorHistory = { past: [], future: [] };
 function readEditorDraft() { try { const value = JSON.parse(localStorage.getItem(editorDraftKey) || 'null'); if (!value || typeof value !== 'object') return {}; const { previewOpen, ...draft } = value; return draft; } catch { return {}; } }
-function persistEditorDraft() { try { const { previewOpen, ...draft } = state.editor; localStorage.setItem(editorDraftKey, JSON.stringify(draft)); } catch { /* large images or restricted storage must not block editing */ } }
-function editorSnapshot() { const { previewOpen, ...draft } = state.editor; return JSON.stringify(draft); }
+function persistEditorDraft() { try { const { previewOpen, selectedLayer, ...draft } = state.editor; localStorage.setItem(editorDraftKey, JSON.stringify(draft)); } catch { /* large images or restricted storage must not block editing */ } }
+function editorSnapshot() { const { previewOpen, selectedLayer, ...draft } = state.editor; return JSON.stringify(draft); }
 function rememberEditorChange() { const snapshot = editorSnapshot(); if (editorHistory.past.at(-1) !== snapshot) editorHistory.past.push(snapshot); editorHistory.future = []; if (editorHistory.past.length > 40) editorHistory.past.shift(); }
 function restoreEditorSnapshot(snapshot) { state.editor = { ...state.editor, ...JSON.parse(snapshot), previewOpen: false }; persistEditorDraft(); render(); }
 function undoEditorChange() { const previous = editorHistory.past.pop(); if (!previous) return toast('되돌릴 변경 사항이 없습니다.'); editorHistory.future.push(editorSnapshot()); restoreEditorSnapshot(previous); }
@@ -16,7 +16,7 @@ const state = {
   cardName: '', jobId: null, preview: null, previewImageSrc: '', signature: '', cards: [],
   form: { name: '드림 스페셜 카드 #5', artistId: 'artist_nova3', memberId: 'member_yuna', seasonName: '2025 봄', templateId: 'template_signature_v1', rarity: 'R', signatureText: '항상 고마워요, 우리 함께해요!', hasVoice: true, voiceAssetId: null, issueLimit: 3000 }, insights: null, profile: null,
   catalog: null, catalogLoaded: false, apiConnected: false, catalogError: '', view: 'editor',
-  editor: { tool: 'photo', side: 'front', template: 'luminous', backTemplateId: 'agency_back_v1', imageSrc: '', imageName: '', videoSrc: '', videoName: '', videoAssetId: null, imageScale: 100, imageX: 0, imageY: 0, textX: 0, textY: 0, stickerX: 0, stickerY: 0, zoom: 100, background: '#f5efff', filter: 'clean', text: '드림스케이프 · 유나', textColor: '#ffffff', textSize: 24, sticker: 'spark', effect: 'holographic', effectIntensity: 78, effectAngle: 135, backEffect: 'sparkle', firstRun: true, previewOpen: false, ...readEditorDraft() },
+  editor: { tool: 'photo', side: 'front', template: 'luminous', backTemplateId: 'agency_back_v1', imageSrc: '', imageName: '', videoSrc: '', videoName: '', videoAssetId: null, imageScale: 100, imageX: 0, imageY: 0, textX: 0, textY: 0, stickerX: 0, stickerY: 0, zoom: 100, background: '#f5efff', filter: 'clean', text: '드림스케이프 · 유나', textColor: '#ffffff', textSize: 24, sticker: 'spark', effect: 'holographic', effectIntensity: 78, effectAngle: 135, backEffect: 'sparkle', selectedLayer: 'photo', snapToGrid: true, firstRun: true, previewOpen: false, ...readEditorDraft() },
 };
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
 
@@ -231,28 +231,40 @@ function settingsView() {
 
 function editorCardMarkup() {
   const e = state.editor;
-  const image = e.imageSrc ? `<img class="editor-photo" src="${esc(e.imageSrc)}" alt="카드 사진 미리보기" style="transform:translate(${e.imageX}px,${e.imageY}px) scale(${e.imageScale / 100});filter:${e.filter === 'mono' ? 'grayscale(1)' : e.filter === 'warm' ? 'saturate(1.25) sepia(.18)' : 'none'}" />` : '<div class="editor-photo-empty"><span>사진을 넣어보세요</span><small>권장 1000 × 1500 px</small></div>';
+  const selected = (layer) => e.selectedLayer === layer ? ' editor-layer-selected' : '';
+  const image = e.imageSrc ? `<img class="editor-photo${selected('photo')}" data-editor-layer="photo" src="${esc(e.imageSrc)}" alt="카드 사진 미리보기" style="transform:translate(${e.imageX}px,${e.imageY}px) scale(${e.imageScale / 100});filter:${e.filter === 'mono' ? 'grayscale(1)' : e.filter === 'warm' ? 'saturate(1.25) sepia(.18)' : 'none'}" />` : `<div class="editor-photo-empty${selected('photo')}" data-editor-layer="photo"><span>사진을 넣어보세요</span><small>권장 1000 × 1500 px</small></div>`;
   const front = e.side === 'front';
   const activeEffect = front ? (e.effect || 'none') : (e.backEffect || 'none');
   const agencyTemplate = (state.catalog?.backTemplates || []).find((template) => template.id === e.backTemplateId);
   const backTemplateUrl = agencyTemplate?.imageUrl || (e.backTemplateId === 'agency_back_v1' ? './agency-back-template-v1.png' : '');
   const sticker = e.sticker === 'none' ? '' : `<span class="editor-sticker">${e.sticker === 'heart' ? '♥' : e.sticker === 'star' ? '✦' : '✧'}</span>`;
   const textStyle = `color:${esc(e.textColor)};font-size:${e.textSize}px;transform:translate(${e.textX}px,${e.textY}px)`;
-  const stickerMarkup = sticker ? sticker.replace('class="editor-sticker"', `class="editor-sticker" data-editor-layer="sticker" style="transform:translate(${e.stickerX}px,${e.stickerY}px)"`) : '';
-  const photoMarkup = image.replace('class="editor-photo"', 'class="editor-photo" data-editor-layer="photo"');
+  const stickerMarkup = sticker ? sticker.replace('class="editor-sticker"', `class="editor-sticker${selected('sticker')}" data-editor-layer="sticker" style="transform:translate(${e.stickerX}px,${e.stickerY}px)"`) : '';
+  const photoMarkup = image;
   const motionAttributes = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'muted loop playsinline' : 'autoplay muted loop playsinline';
   const videoMarkup = front && e.videoSrc ? `<video class="editor-video-layer" src="${esc(e.videoSrc)}" ${motionAttributes} crossorigin="use-credentials" aria-label="카드 영상 레이어"></video>` : '';
   const backMarkup = backTemplateUrl ? `<img class="editor-back-template" src="${esc(backTemplateUrl)}" alt="소속사 기본 뒷면 템플릿" />` : '<div class="editor-back-pattern"></div>';
-  return `<div class="editor-card ${front ? 'is-front' : 'is-back'} template-${esc(e.template)} effect-${esc(activeEffect)}" style="--editor-bg:${esc(e.background)};--effect-intensity:${Number(e.effectIntensity || 0) / 100};--effect-angle:${Number(e.effectAngle || 135)}deg">${front ? `${photoMarkup}${videoMarkup}<div class="editor-sheen"></div><div class="editor-copy" data-editor-layer="text" style="${textStyle}">${esc(e.text)}</div>${stickerMarkup}<span class="editor-card-label">FANFOLIO · SPECIAL EDITION</span>` : `${backMarkup}<div class="editor-back-copy"><strong>FANFOLIO</strong><span>공식 디지털 포토카드</span><small>소속사가 제공한 기본 템플릿입니다. 아티스트는 색상과 효과만 조정할 수 있어요.</small></div>`}</div>`;
+  return `<div class="editor-card ${front ? 'is-front' : 'is-back'} template-${esc(e.template)} effect-${esc(activeEffect)}" style="--editor-bg:${esc(e.background)};--effect-intensity:${Number(e.effectIntensity || 0) / 100};--effect-angle:${Number(e.effectAngle || 135)}deg">${front ? `${photoMarkup}${videoMarkup}<div class="editor-sheen"></div><div class="editor-copy${selected('text')}" data-editor-layer="text" style="${textStyle}">${esc(e.text)}</div>${stickerMarkup}<span class="editor-card-label">FANFOLIO · SPECIAL EDITION</span>` : `${backMarkup}<div class="editor-back-copy"><strong>FANFOLIO</strong><span>공식 디지털 포토카드</span><small>소속사가 제공한 기본 템플릿입니다. 아티스트는 색상과 효과만 조정할 수 있어요.</small></div>`}</div>`;
 }
 
-function editorInspector() {
+function editorLayerControls() {
+  const e = state.editor;
+  const layers = [['photo', '사진'], ['text', '문구'], ['sticker', '스티커']];
+  const current = layers.find(([value]) => value === e.selectedLayer)?.[1] || '사진';
+  return `<div class="layer-controls"><div class="layer-controls-heading"><span>레이어</span><small>선택: ${current}</small></div><div class="layer-list">${layers.map(([value, label]) => `<button type="button" class="layer-chip ${e.selectedLayer === value ? 'selected' : ''}" data-editor-layer-select="${value}">${value === 'photo' ? '▧' : value === 'text' ? 'T' : '✦'}<span>${label}</span></button>`).join('')}</div><div class="layer-actions"><button type="button" data-editor-action="align-x">가로 중앙</button><button type="button" data-editor-action="align-y">세로 중앙</button><button type="button" data-editor-action="reset-position">위치 초기화</button></div><label class="snap-toggle"><input type="checkbox" data-editor-action="toggle-snap" ${e.snapToGrid ? 'checked' : ''} /> <span>스냅 가이드</span><small>드래그 시 4px 단위</small></label></div>`;
+}
+
+function editorInspectorBody() {
   const e = state.editor;
   if (e.tool === 'photo') return `<div class="inspector-block"><p class="inspector-label">사진 소스</p><label class="upload-drop"><input id="editor-photo-input" type="file" accept="image/*" capture="environment" /><span class="upload-icon">＋</span><strong>${e.imageSrc ? '사진 바꾸기' : '사진 업로드'}</strong><small>파일을 선택하거나 모바일에서 바로 촬영하세요</small></label>${e.imageSrc ? `<p class="selected-file">${esc(e.imageName || '선택한 사진')} <button type="button" class="text-button" data-editor-action="remove-photo">삭제</button></p>` : ''}<p class="inspector-label">영상 레이어</p><label class="upload-drop compact-upload"><input id="editor-video-input" type="file" accept="video/mp4,video/webm" /><span class="upload-icon">▶</span><strong>${e.videoSrc ? '영상 바꾸기' : '짧은 영상 추가'}</strong><small>MP4/WebM · 카드 위에 반복 재생되는 영상으로 표시됩니다.</small></label>${e.videoSrc ? `<p class="selected-file">${esc(e.videoName || '선택한 영상')} <button type="button" class="text-button" data-editor-action="remove-video">삭제</button></p>` : ''}<p class="inspector-label">사진 조정</p>${editorRange('imageScale', '크기', 70, 140, 1, '%')}${editorRange('imageX', '가로 위치', -80, 80, 1, 'px')}${editorRange('imageY', '세로 위치', -100, 100, 1, 'px')}<label class="field compact-field">필터<select data-editor-field="filter"><option value="clean" ${e.filter === 'clean' ? 'selected' : ''}>선명하게</option><option value="warm" ${e.filter === 'warm' ? 'selected' : ''}>따뜻한 필름</option><option value="mono" ${e.filter === 'mono' ? 'selected' : ''}>모노크롬</option></select></label></div>`;
   if (e.tool === 'text') return `<div class="inspector-block"><p class="inspector-label">카드 문구</p><label class="field compact-field"><span>텍스트</span><textarea data-editor-field="text" maxlength="60" rows="3">${esc(e.text)}</textarea></label>${editorRange('textSize', '크기', 14, 42, 1, 'px')}${editorRange('textX', '가로 위치', -100, 100, 1, 'px')}${editorRange('textY', '세로 위치', -160, 160, 1, 'px')}<label class="field compact-field"><span>색상</span><input data-editor-field="textColor" type="color" value="${esc(e.textColor)}" /></label><p class="inspector-tip">캔버스에서 문구를 직접 드래그하거나 위치 슬라이더로 정밀 조정할 수 있어요.</p></div>`;
   if (e.tool === 'sticker') return `<div class="inspector-block"><p class="inspector-label">스티커</p><div class="choice-grid">${[['spark', '✧', '빛'], ['star', '✦', '별'], ['heart', '♥', '하트'], ['none', '—', '없음']].map(([value, icon, label]) => `<button type="button" class="choice ${e.sticker === value ? 'selected' : ''}" data-editor-value="sticker" data-value="${value}"><b>${icon}</b><span>${label}</span></button>`).join('')}</div>${editorRange('stickerX', '가로 위치', -120, 120, 1, 'px')}${editorRange('stickerY', '세로 위치', -180, 180, 1, 'px')}<p class="inspector-tip">스티커를 캔버스에서 드래그하거나 위치 슬라이더로 배치할 수 있어요.</p></div>`;
   if (e.tool === 'effect') { const effectKey = e.side === 'back' ? 'backEffect' : 'effect'; const currentEffect = e[effectKey] || 'none'; const allowed = e.side === 'back' ? ['sparkle', 'foil', 'grain', 'none'] : ['holographic', 'prismatic', 'foil', 'sparkle', 'none']; const labels = { holographic: ['Holographic', '각도에 따라 무지개빛이 움직여요'], prismatic: ['Prismatic', '프리즘처럼 색이 분산돼요'], foil: ['Metallic Foil', '금속 포일처럼 반사돼요'], sparkle: ['Sparkle', '희귀도 높은 카드의 반짝임'], grain: ['Soft Grain', '필름 질감'], none: ['Clean', '효과 없음'] }; return `<div class="inspector-block"><p class="inspector-label">${e.side === 'back' ? '뒷면 분위기' : '희귀도 마감 효과'}</p><div class="choice-list">${allowed.map((value) => [value, ...(labels[value] || [value, '템플릿 허용 효과'])]).map(([value, title, desc]) => `<button type="button" class="effect-choice ${currentEffect === value ? 'selected' : ''}" data-editor-value="${effectKey}" data-value="${value}"><span class="effect-dot effect-${value}"></span><span><b>${title}</b><small>${desc}</small></span><i>›</i></button>`).join('')}</div>${e.side === 'front' ? `${editorRange('effectIntensity', '빛의 강도', 0, 100, 1, '%')}${editorRange('effectAngle', '반사 각도', 0, 360, 1, '°')}<p class="inspector-tip">실물 포토카드의 포일·홀로그램 마감처럼 디지털 카드 위에 적용됩니다. 미리보기에서 움직임을 확인하세요.</p>` : ''}</div>`; }
   const template = selectedBackTemplate(); const allowedBackgrounds = template?.allowedBackgrounds || ['#f5efff', '#eaf8ff', '#ffeef6', '#f4f1e9']; return `<div class="inspector-block"><p class="inspector-label">뒷면 템플릿</p><div class="locked-template"><span class="lock-icon">⌁</span><div><strong>${esc(template?.name || '소속사 기본 템플릿')}</strong><small>뒷면 레이아웃은 운영팀이 관리합니다.</small></div></div><p class="inspector-label">색상 조합</p><div class="swatches">${allowedBackgrounds.map((color) => `<button type="button" class="swatch ${e.background === color ? 'selected' : ''}" style="background:${color}" data-editor-value="background" data-value="${color}" aria-label="배경 ${color}"></button>`).join('')}</div><p class="inspector-tip">아티스트는 기본 뒷면의 색상과 효과만 변경할 수 있습니다.</p></div>`;
+}
+
+function editorInspector() {
+  return `${state.editor.side === 'front' ? editorLayerControls() : ''}${editorInspectorBody()}`;
 }
 
 function studioIcon(name) {
@@ -271,6 +283,16 @@ function selectedBackTemplate() {
 }
 
 function editorRange(key, label, min, max, step, unit) { const value = state.editor[key]; return `<label class="editor-range"><span>${label}<output>${value}${unit}</output></span><input data-editor-field="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${value}" /></label>`; }
+
+function editorLayerPositionKeys() {
+  const layer = state.editor.selectedLayer || 'photo';
+  return layer === 'text' ? ['textX', 'textY'] : layer === 'sticker' ? ['stickerX', 'stickerY'] : ['imageX', 'imageY'];
+}
+
+function alignEditorLayer(axis) {
+  const [xKey, yKey] = editorLayerPositionKeys();
+  state.editor[axis === 'x' ? xKey : yKey] = 0;
+}
 
 function editorDesignConfig(imageAssetId) {
   const e = state.editor;
@@ -331,6 +353,7 @@ function initEditorDrag() {
       rememberEditorChange();
       layer.setPointerCapture?.(event.pointerId);
       const key = layer.dataset.editorLayer;
+      state.editor.selectedLayer = key;
       const startX = event.clientX;
       const startY = event.clientY;
       const xKey = `${key}X`;
@@ -338,8 +361,9 @@ function initEditorDrag() {
       const originX = Number(state.editor[xKey] || 0);
       const originY = Number(state.editor[yKey] || 0);
       const move = (moveEvent) => {
-        state.editor[xKey] = Math.round(originX + moveEvent.clientX - startX);
-        state.editor[yKey] = Math.round(originY + moveEvent.clientY - startY);
+        const grid = state.editor.snapToGrid && !moveEvent.shiftKey ? 4 : 1;
+        state.editor[xKey] = Math.round((originX + moveEvent.clientX - startX) / grid) * grid;
+        state.editor[yKey] = Math.round((originY + moveEvent.clientY - startY) / grid) * grid;
         const transform = `translate(${state.editor[xKey]}px,${state.editor[yKey]}px)`;
         if (key === 'photo') layer.style.transform = `${transform} scale(${state.editor.imageScale / 100})`;
         else layer.style.transform = transform;
@@ -373,6 +397,8 @@ function renderShell(content) {
 }
 
 function enhanceEditorControls() {
+  const draftStatus = document.querySelector('.draft-status');
+  if (draftStatus) draftStatus.innerHTML = '<i></i> 이 기기에 초안 저장됨';
   const actions = document.querySelector('.editor-toolbar-actions');
   if (actions && !actions.querySelector('[data-editor-action="undo"]')) {
     actions.insertAdjacentHTML('afterbegin', '<button class="icon-action" data-editor-action="undo" aria-label="되돌리기" title="되돌리기">↶</button><button class="icon-action" data-editor-action="redo" aria-label="다시 실행" title="다시 실행">↷</button>');
@@ -383,7 +409,22 @@ function enhanceEditorControls() {
   }
   const card = document.querySelector('.visual-editor-stage .editor-card');
   if (card) card.style.transform = `scale(${Number(state.editor.zoom || 100) / 100})`;
+  document.querySelector('[data-editor-action="undo"]')?.toggleAttribute('disabled', editorHistory.past.length === 0);
+  document.querySelector('[data-editor-action="redo"]')?.toggleAttribute('disabled', editorHistory.future.length === 0);
 }
+
+document.addEventListener('keydown', (event) => {
+  if (!state.authenticated) return;
+  const modifier = event.metaKey || event.ctrlKey;
+  if (modifier && event.key.toLowerCase() === 'z') {
+    event.preventDefault();
+    if (event.shiftKey) redoEditorChange(); else undoEditorChange();
+  }
+  if (event.key === 'Escape' && state.editor.previewOpen) {
+    state.editor.previewOpen = false;
+    render();
+  }
+});
 
 function enhanceCardImageField() {
   const input = document.querySelector('input[name="cardImage"]');
@@ -412,6 +453,8 @@ function enhanceRarityField() {
 
 document.addEventListener('click', (event) => {
   if (!state.authenticated) return;
+  const layerSelect = event.target.closest('[data-editor-layer-select]');
+  if (layerSelect) { state.editor.selectedLayer = layerSelect.dataset.editorLayerSelect; state.editor.tool = state.editor.selectedLayer === 'text' ? 'text' : state.editor.selectedLayer === 'sticker' ? 'sticker' : 'photo'; render(); return; }
   const tool = event.target.closest('[data-editor-tool]');
   if (tool) { rememberEditorChange(); state.editor.tool = tool.dataset.editorTool; if (state.editor.tool === 'back') state.editor.side = 'back'; else if (state.editor.side === 'back' && ['photo', 'text', 'sticker'].includes(state.editor.tool)) state.editor.side = 'front'; persistEditorDraft(); render(); return; }
   const side = event.target.closest('[data-editor-side]');
@@ -437,6 +480,9 @@ document.addEventListener('click', (event) => {
   if (action === 'skip-start') { rememberEditorChange(); state.editor.firstRun = false; persistEditorDraft(); render(); return; }
   if (action === 'undo') { undoEditorChange(); return; }
   if (action === 'redo') { redoEditorChange(); return; }
+  if (action === 'align-x' || action === 'align-y') { rememberEditorChange(); alignEditorLayer(action === 'align-x' ? 'x' : 'y'); persistEditorDraft(); render(); return; }
+  if (action === 'reset-position') { rememberEditorChange(); const [xKey, yKey] = editorLayerPositionKeys(); state.editor[xKey] = 0; state.editor[yKey] = 0; persistEditorDraft(); render(); return; }
+  if (action === 'toggle-snap') { state.editor.snapToGrid = event.target.checked; persistEditorDraft(); return; }
   if (action === 'zoom-in' || action === 'zoom-out' || action === 'zoom-reset') {
     rememberEditorChange();
     const current = Number(state.editor.zoom || 100);
