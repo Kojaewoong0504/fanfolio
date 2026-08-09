@@ -119,6 +119,46 @@ def test_artist_can_submit_special_card_for_review_but_not_publish_it(
     assert_error(artist.post(f"/api/admin/cards/{draft['id']}/publish"), 403, "FORBIDDEN")
 
 
+def test_artist_card_rejects_creative_layers_owned_by_another_account(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    admin_asset = assert_success(
+        actors["admin"].post(
+            "/api/uploads/presign",
+            json={
+                "fileName": "foreign-sticker.png",
+                "contentType": "image/png",
+                "purpose": "handwriting",
+            },
+        ),
+        201,
+    )
+
+    response = actors["artist"].post(
+        "/api/artist/cards",
+        json={
+            "templateId": seeded["ids"]["templateId"],
+            "name": "레이어 소유권 확인 카드",
+            "seasonName": "2026 SPRING",
+            "rarity": "Special",
+            "imageAssetId": seeded["ids"]["imageAssetId"],
+            "designConfig": {
+                "creativeLayers": [
+                    {
+                        "id": "foreign-layer",
+                        "type": "sticker",
+                        "side": "front",
+                        "assetId": admin_asset["assetId"],
+                    }
+                ]
+            },
+            "issueLimit": 100,
+        },
+    )
+
+    assert_error(response, 404, "ASSET_NOT_FOUND")
+
+
 def test_artist_review_rejects_enabled_voice_without_an_uploaded_asset(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:

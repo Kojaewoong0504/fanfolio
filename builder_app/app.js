@@ -125,6 +125,7 @@ function initialEditor() {
     inspectorOpen: false,
     drawingColor: '#6b58ef',
     drawingSize: 7,
+    drawingDraftSrc: '',
     effect: 'holographic',
     effectPreset: 'aurora',
     effectIntensity: 0.58,
@@ -208,16 +209,12 @@ function persistDraft() {
     Object.entries(state.editor).filter(
       ([key, value]) =>
         !key.endsWith('File') &&
-        !(key.endsWith('Src') && typeof value === 'string' && value.startsWith('blob:')) &&
-        !(key === 'handwritingSrc' && typeof value === 'string' && value.startsWith('data:')),
+        !(key.endsWith('Src') && typeof value === 'string' && value.startsWith('blob:')),
     ),
   )
   editor.layers = (state.editor.layers || []).map(({ file, ...layer }) => ({
     ...layer,
-    src:
-      typeof layer.src === 'string' && /^(blob:|data:)/.test(layer.src)
-        ? undefined
-        : layer.src,
+    src: layer.src?.startsWith('blob:') ? undefined : layer.src,
   }))
   try {
     localStorage.setItem(
@@ -1069,6 +1066,15 @@ async function sourceToFile(source, name, fallbackType = 'image/png') {
   return new File([blob], name, { type: blob.type || fallbackType })
 }
 
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.addEventListener('load', () => resolve(String(reader.result || '')))
+    reader.addEventListener('error', () => reject(new Error('파일을 미리 볼 수 없습니다.')))
+    reader.readAsDataURL(file)
+  })
+}
+
 async function ensureAsset(kind) {
   const idKey = `${kind}AssetId`
   const fileKey = `${kind}File`
@@ -1203,6 +1209,16 @@ async function openCard(cardId) {
       }
     }),
   )
+  await Promise.all(
+    state.editor.layers.map(async (layer) => {
+      if (!layer.assetId) return
+      try {
+        layer.src = await fetchProtectedBlob(`/assets/${layer.assetId}/content`)
+      } catch {
+        // A missing layer never prevents the rest of an owned draft from reopening.
+      }
+    }),
+  )
   if (state.editor.handwritingSrc) {
     const handwritingLayer = state.editor.layers.find((layer) => layer.type === 'handwriting')
     if (handwritingLayer) {
@@ -1247,10 +1263,10 @@ function replaceObjectUrl(key, file) {
   state.editor[key] = URL.createObjectURL(file)
 }
 
-function handleUpload(kind, file) {
+async function handleUpload(kind, file) {
   if (!file) return
   if (kind === 'sticker') {
-    const src = URL.createObjectURL(file)
+    const src = await fileToDataUrl(file)
     upsertCreativeLayer('sticker', {
       src,
       file,
@@ -1281,6 +1297,7 @@ function handleUpload(kind, file) {
     state.editor.videoEnabled = true
   }
   if (kind === 'handwriting') {
+    state.editor.handwritingSrc = await fileToDataUrl(file)
     state.editor.handwritingEnabled = true
     state.editor.handwritingNeedsRemoval = file.type !== 'image/png'
     upsertCreativeLayer('handwriting', {
@@ -1395,6 +1412,13 @@ function initDrawingPad() {
   context.lineWidth = Number(state.editor.drawingSize || 7)
   context.lineCap = 'round'
   context.lineJoin = 'round'
+  if (state.editor.drawingDraftSrc) {
+    const image = new Image()
+    image.addEventListener('load', () => {
+      context.drawImage(image, 0, 0, canvas.width, canvas.height)
+    })
+    image.src = state.editor.drawingDraftSrc
+  }
   let drawing = false
   const point = (event) => {
     const box = canvas.getBoundingClientRect()
@@ -1417,7 +1441,10 @@ function initDrawingPad() {
     context.stroke()
   })
   const finish = () => {
+    if (!drawing) return
     drawing = false
+    state.editor.drawingDraftSrc = canvas.toDataURL('image/png')
+    markDirty()
   }
   canvas.addEventListener('pointerup', finish)
   canvas.addEventListener('pointercancel', finish)
@@ -1439,6 +1466,7 @@ function initInteractiveCards() {
     if (reduceMotion) return
     const move = (event) => {
       if (event.target.closest?.('.creative-layer')) return
+      if (event.pointerType === 'touch') return
       const box = card.getBoundingClientRect()
       const x = Math.max(0, Math.min(1, (event.clientX - box.left) / box.width))
       const y = Math.max(0, Math.min(1, (event.clientY - box.top) / box.height))
@@ -1452,6 +1480,7 @@ function initInteractiveCards() {
     }
     card.addEventListener('pointerdown', (event) => {
       if (event.target.closest?.('.creative-layer')) return
+      if (event.pointerType === 'touch') return
       card.setPointerCapture?.(event.pointerId)
       move(event)
     })
@@ -1759,11 +1788,13 @@ app.addEventListener('click', async (event) => {
   if (action === 'clear-drawing') {
     const canvas = document.querySelector('#drawing-pad')
     canvas?.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height)
+    state.editor.drawingDraftSrc = ''
+    markDirty()
   }
   if (action === 'add-drawing-layer') {
     const canvas = document.querySelector('#drawing-pad')
     if (canvas) {
-      const src = canvas.toDataURL('image/png')
+      const src = state.editor.drawingDraftSrc || canvas.toDataURL('image/png')
       upsertCreativeLayer('drawing', {
         src,
         file: null,
@@ -1815,10 +1846,14 @@ app.addEventListener('click', async (event) => {
   if (action === 'remove-background') requestBackgroundRemoval()
 })
 
-app.addEventListener('change', (event) => {
+app.addEventListener('change', async (event) => {
   const upload = event.target.closest('[data-upload]')
   if (upload) {
-    handleUpload(upload.dataset.upload, upload.files?.[0])
+    try {
+      await handleUpload(upload.dataset.upload, upload.files?.[0])
+    } catch (error) {
+      notify(error.message || '파일을 불러오지 못했습니다.', 'error')
+    }
     return
   }
   const editorField = event.target.dataset.editor

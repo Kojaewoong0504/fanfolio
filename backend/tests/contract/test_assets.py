@@ -118,6 +118,35 @@ def test_artist_can_upload_browser_recorded_webm_voice(
     assert uploaded.status_code == 204, uploaded.text
 
 
+def test_artist_can_reopen_an_owned_creative_layer_asset(
+    actors: dict[str, TestClient],
+) -> None:
+    asset = assert_success(
+        actors["artist"].post(
+            "/api/uploads/presign",
+            json={
+                "fileName": "artist-sticker.png",
+                "contentType": "image/png",
+                "purpose": "handwriting",
+            },
+        ),
+        201,
+    )
+    uploaded = actors["artist"].put(asset["uploadUrl"], content=PNG_1X1)
+    assert uploaded.status_code == 204, uploaded.text
+
+    reopened = actors["artist"].get(f"/api/assets/{asset['assetId']}/content")
+
+    assert reopened.status_code == 200, reopened.text
+    assert reopened.content == PNG_1X1
+    assert reopened.headers["content-type"].startswith("image/png")
+    assert_error(
+        actors["fan"].get(f"/api/assets/{asset['assetId']}/content"),
+        403,
+        "FORBIDDEN",
+    )
+
+
 def test_upload_rejects_expired_urls_and_oversized_content(
     actors: dict[str, TestClient], monkeypatch: Any
 ) -> None:

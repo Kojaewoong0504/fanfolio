@@ -120,6 +120,7 @@ async def create_card(payload: ArtistCardRequest, user: ArtistUser, session: DbS
         await owned_asset(payload.video_asset_id, user, session)
     if payload.handwriting_asset_id:
         await owned_asset(payload.handwriting_asset_id, user, session)
+    await validate_creative_layer_assets(payload.design_config, user, session)
     artist_id = await resolve_catalog_ids(
         artist_id=payload.artist_id, member_id=payload.member_id, session=session
     )
@@ -253,6 +254,29 @@ async def owned_asset(asset_id: str, user: ArtistUser, session: DbSession) -> As
     return asset
 
 
+async def validate_creative_layer_assets(
+    design_config: dict | None, user: ArtistUser, session: DbSession
+) -> None:
+    """Reject malformed or cross-account artwork references before card save."""
+    if not design_config or "creativeLayers" not in design_config:
+        return
+    layers = design_config["creativeLayers"]
+    if not isinstance(layers, list) or len(layers) > 50:
+        raise AppError(422, "INVALID_CREATIVE_LAYERS", "카드 레이어 구성을 확인해 주세요.")
+    for layer in layers:
+        if not isinstance(layer, dict):
+            raise AppError(422, "INVALID_CREATIVE_LAYERS", "카드 레이어 구성을 확인해 주세요.")
+        asset_id = layer.get("assetId")
+        if asset_id is not None:
+            if not isinstance(asset_id, str) or not asset_id:
+                raise AppError(
+                    422,
+                    "INVALID_CREATIVE_LAYERS",
+                    "카드 레이어 자산 정보를 확인해 주세요.",
+                )
+            await owned_asset(asset_id, user, session)
+
+
 @router.get("/artist/cards/{card_id}")
 async def get_card(card_id: str, user: ArtistUser, session: DbSession) -> dict:
     card = await owned_card(card_id, user, session)
@@ -327,6 +351,8 @@ async def update_card(
     if card.status not in {"draft", "changes_requested"}:
         raise AppError(409, "INVALID_CARD_STATUS", "현재 상태에서는 카드를 수정할 수 없습니다.")
     values = payload.model_dump(exclude_unset=True, by_alias=False)
+    if "design_config" in values:
+        await validate_creative_layer_assets(values["design_config"], user, session)
     for asset_field in (
         "image_asset_id",
         "handwriting_asset_id",

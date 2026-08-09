@@ -248,9 +248,22 @@ test('studio shell exposes adaptive navigation, a mobile inspector, and interact
   assert.match(source, /data-action="close-inspector"/)
   assert.match(source, /data-hologram-card/)
   assert.match(source, /initInteractiveCards/)
+  assert.match(source, /drawingDraftSrc/)
+  assert.match(source, /fetchProtectedBlob\(`\/assets\/\$\{layer\.assetId\}\/content`\)/)
+  assert.match(source, /event\.pointerType === 'touch'/)
   assert.match(css, /\.studio-shell\.sidebar-collapsed/)
   assert.match(css, /\.sidebar-footer\s*\{[\s\S]*?margin-top:\s*auto/)
   assert.match(css, /\.editor-inspector\.open/)
+  assert.match(css, /\.editor-card\s*\{[\s\S]*?touch-action:\s*pan-y/)
   assert.match(css, /--tilt-x/)
   assert.match(css, /touch-action:\s*none/)
+})
+
+test('local creative drafts keep recoverable image data across a refresh', async () => {
+  const source = await readFile(new URL('../app.js', import.meta.url), 'utf8')
+
+  assert.doesNotMatch(source, /key === 'handwritingSrc'[\s\S]{0,120}startsWith\('data:'\)/)
+  assert.match(source, /layer\.src\?\.startsWith\('blob:'\)[\s\S]{0,80}undefined[\s\S]{0,80}layer\.src/)
+  assert.match(source, /drawingDraftSrc = canvas\.toDataURL\('image\/png'\)/)
+  assert.match(source, /context\.drawImage\(image, 0, 0, canvas\.width, canvas\.height\)/)
 })

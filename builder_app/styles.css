@@ -3166,7 +3166,7 @@ input[type='range'] {
 }
 
 .editor-card {
-  touch-action: none;
+  touch-action: pan-y;
   transform: rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
   transform-style: preserve-3d;
   transition: transform 220ms ease, box-shadow 220ms ease;

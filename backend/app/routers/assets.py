@@ -148,6 +148,23 @@ async def get_transparent_asset(asset_id: str, user: CurrentUser, session: DbSes
     )
 
 
+@router.get("/assets/{asset_id}/content")
+async def get_owned_asset_content(asset_id: str, user: CurrentUser, session: DbSession) -> Response:
+    """Serve a reusable creative layer only to its admin or artist owner."""
+    require_upload_role(user)
+    asset = await session.get(Asset, asset_id)
+    if not asset or asset.owner_id != user.id:
+        raise AppError(404, "ASSET_NOT_FOUND", "자산을 찾을 수 없습니다.")
+    path = asset.processed_storage_path or asset.storage_path
+    if not path:
+        raise AppError(404, "ASSET_NOT_READY", "자산이 아직 준비되지 않았습니다.")
+    return storage_response(
+        configured_asset_storage(),
+        path,
+        media_type=asset.content_type or "application/octet-stream",
+    )
+
+
 @router.patch("/assets/{asset_id}/transform")
 async def update_asset_transform(
     asset_id: str,
