@@ -27,6 +27,14 @@ state.editor.stickerRotate ||= 0;
 state.editor.stickerOpacity ??= 100;
 state.editor.imageRotate ||= 0;
 state.editor.imageOpacity ??= 100;
+state.editor.signatureSrc ||= '';
+state.editor.signatureName ||= '';
+state.editor.signatureX ||= 0;
+state.editor.signatureY ||= 0;
+state.editor.signatureScale ||= 100;
+state.editor.signatureRotate ||= 0;
+state.editor.signatureOpacity ??= 100;
+state.editor.signatureAssetId ||= null;
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
 
 async function editorImageFile() {
@@ -34,6 +42,13 @@ async function editorImageFile() {
   const response = await fetch(state.editor.imageSrc);
   const blob = await response.blob();
   return new File([blob], state.editor.imageName || 'fanfolio-editor-card.png', { type: blob.type || 'image/png' });
+}
+
+async function editorSignatureFile() {
+  if (!state.editor.signatureSrc || !state.editor.signatureSrc.startsWith('data:')) return null;
+  const response = await fetch(state.editor.signatureSrc);
+  const blob = await response.blob();
+  return new File([blob], state.editor.signatureName || 'fanfolio-handwriting.png', { type: blob.type || 'image/png' });
 }
 
 function absoluteApiUrl(path) { if (!path) return ''; if (/^(https?:|blob:|data:)/.test(path)) return path; return `${API_BASE.replace(/\/api$/, '')}${path}`; }
@@ -249,18 +264,19 @@ function editorCardMarkup() {
   const sticker = e.sticker === 'none' ? '' : `<span class="editor-sticker">${e.sticker === 'heart' ? '♥' : e.sticker === 'star' ? '✦' : '✧'}</span>`;
   const textStyle = `color:${esc(e.textColor)};font-size:${e.textSize}px;font-weight:${Number(e.textWeight || 800)};text-align:${esc(e.textAlign || 'left')};opacity:${Number(e.textOpacity ?? 100) / 100};transform:translate(${e.textX}px,${e.textY}px) rotate(${Number(e.textRotate || 0)}deg)`;
   const stickerMarkup = sticker ? sticker.replace('class="editor-sticker"', `class="editor-sticker${selected('sticker')}" data-editor-layer="sticker" style="transform:translate(${e.stickerX}px,${e.stickerY}px) scale(${Number(e.stickerScale || 100) / 100}) rotate(${Number(e.stickerRotate || 0)}deg);opacity:${Number(e.stickerOpacity ?? 100) / 100}"`) : '';
+  const signatureMarkup = front && e.signatureSrc ? `<img class="editor-signature${selected('signature')}" data-editor-layer="signature" src="${esc(e.signatureSrc)}" alt="손글씨 레이어" style="transform:translate(${e.signatureX}px,${e.signatureY}px) scale(${Number(e.signatureScale || 100) / 100}) rotate(${Number(e.signatureRotate || 0)}deg);opacity:${Number(e.signatureOpacity ?? 100) / 100}" />` : '';
   const photoMarkup = image;
   const motionAttributes = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'muted loop playsinline' : 'autoplay muted loop playsinline';
   const videoMarkup = front && e.videoSrc ? `<video class="editor-video-layer" src="${esc(e.videoSrc)}" ${motionAttributes} crossorigin="use-credentials" aria-label="카드 영상 레이어"></video>` : '';
   const backMarkup = backTemplateUrl ? `<img class="editor-back-template" src="${esc(backTemplateUrl)}" alt="소속사 기본 뒷면 템플릿" />` : '<div class="editor-back-pattern"></div>';
-  return `<div class="editor-card ${front ? 'is-front' : 'is-back'} template-${esc(e.template)} effect-${esc(activeEffect)}" style="--editor-bg:${esc(e.background)};--effect-intensity:${Number(e.effectIntensity || 0) / 100};--effect-angle:${Number(e.effectAngle || 135)}deg">${front ? `${photoMarkup}${videoMarkup}<div class="editor-sheen"></div><div class="editor-copy${selected('text')}" data-editor-layer="text" style="${textStyle}">${esc(e.text)}</div>${stickerMarkup}<span class="editor-card-label">FANFOLIO · SPECIAL EDITION</span>` : `${backMarkup}<div class="editor-back-copy"><strong>FANFOLIO</strong><span>공식 디지털 포토카드</span><small>소속사가 제공한 기본 템플릿입니다. 아티스트는 색상과 효과만 조정할 수 있어요.</small></div>`}</div>`;
+  return `<div class="editor-card ${front ? 'is-front' : 'is-back'} template-${esc(e.template)} effect-${esc(activeEffect)}" style="--editor-bg:${esc(e.background)};--effect-intensity:${Number(e.effectIntensity || 0) / 100};--effect-angle:${Number(e.effectAngle || 135)}deg">${front ? `${photoMarkup}${videoMarkup}<div class="editor-sheen"></div><div class="editor-copy${selected('text')}" data-editor-layer="text" style="${textStyle}">${esc(e.text)}</div>${stickerMarkup}${signatureMarkup}<span class="editor-card-label">FANFOLIO · SPECIAL EDITION</span>` : `${backMarkup}<div class="editor-back-copy"><strong>FANFOLIO</strong><span>공식 디지털 포토카드</span><small>소속사가 제공한 기본 템플릿입니다. 아티스트는 색상과 효과만 조정할 수 있어요.</small></div>`}</div>`;
 }
 
 function editorLayerControls() {
   const e = state.editor;
-  const layers = [['photo', '사진'], ['text', '문구'], ['sticker', '스티커']];
+  const layers = [['photo', '사진'], ['text', '문구'], ['sticker', '스티커'], ['signature', '손글씨']];
   const current = layers.find(([value]) => value === e.selectedLayer)?.[1] || '사진';
-  return `<div class="layer-controls"><div class="layer-controls-heading"><span>레이어</span><small>선택: ${current}</small></div><div class="layer-list">${layers.map(([value, label]) => `<button type="button" class="layer-chip ${e.selectedLayer === value ? 'selected' : ''}" data-editor-layer-select="${value}">${value === 'photo' ? '▧' : value === 'text' ? 'T' : '✦'}<span>${label}</span></button>`).join('')}</div><div class="layer-actions"><button type="button" data-editor-action="align-x">가로 중앙</button><button type="button" data-editor-action="align-y">세로 중앙</button><button type="button" data-editor-action="reset-position">위치 초기화</button></div><label class="snap-toggle"><input type="checkbox" data-editor-action="toggle-snap" ${e.snapToGrid ? 'checked' : ''} /> <span>스냅 가이드</span><small>드래그 4px · 방향키 1px · Shift 10px</small></label></div>`;
+  return `<div class="layer-controls"><div class="layer-controls-heading"><span>레이어</span><small>선택: ${current}</small></div><div class="layer-list">${layers.map(([value, label]) => `<button type="button" class="layer-chip ${e.selectedLayer === value ? 'selected' : ''}" data-editor-layer-select="${value}">${value === 'photo' ? '▧' : value === 'text' ? 'T' : value === 'sticker' ? '✦' : '✍'}<span>${label}</span></button>`).join('')}</div><div class="layer-actions"><button type="button" data-editor-action="align-x">가로 중앙</button><button type="button" data-editor-action="align-y">세로 중앙</button><button type="button" data-editor-action="reset-position">위치 초기화</button></div><label class="snap-toggle"><input type="checkbox" data-editor-action="toggle-snap" ${e.snapToGrid ? 'checked' : ''} /> <span>스냅 가이드</span><small>드래그 4px · 방향키 1px · Shift 10px</small></label></div>`;
 }
 
 function editorInspectorBody() {
@@ -268,6 +284,7 @@ function editorInspectorBody() {
   if (e.tool === 'photo') return `<div class="inspector-block"><p class="inspector-label">사진 소스</p><label class="upload-drop"><input id="editor-photo-input" type="file" accept="image/*" capture="environment" /><span class="upload-icon">＋</span><strong>${e.imageSrc ? '사진 바꾸기' : '사진 업로드'}</strong><small>파일을 선택하거나 모바일에서 바로 촬영하세요</small></label>${e.imageSrc ? `<p class="selected-file">${esc(e.imageName || '선택한 사진')} <button type="button" class="text-button" data-editor-action="remove-photo">삭제</button></p>` : ''}<p class="inspector-label">영상 레이어</p><label class="upload-drop compact-upload"><input id="editor-video-input" type="file" accept="video/mp4,video/webm" /><span class="upload-icon">▶</span><strong>${e.videoSrc ? '영상 바꾸기' : '짧은 영상 추가'}</strong><small>MP4/WebM · 카드 위에 반복 재생되는 영상으로 표시됩니다.</small></label>${e.videoSrc ? `<p class="selected-file">${esc(e.videoName || '선택한 영상')} <button type="button" class="text-button" data-editor-action="remove-video">삭제</button></p>` : ''}<p class="inspector-label">사진 조정</p>${editorRange('imageScale', '크기', 70, 140, 1, '%')}${editorRange('imageX', '가로 위치', -80, 80, 1, 'px')}${editorRange('imageY', '세로 위치', -100, 100, 1, 'px')}<label class="field compact-field">필터<select data-editor-field="filter"><option value="clean" ${e.filter === 'clean' ? 'selected' : ''}>선명하게</option><option value="warm" ${e.filter === 'warm' ? 'selected' : ''}>따뜻한 필름</option><option value="mono" ${e.filter === 'mono' ? 'selected' : ''}>모노크롬</option></select></label></div>`;
   if (e.tool === 'text') return `<div class="inspector-block"><p class="inspector-label">카드 문구</p><label class="field compact-field"><span>텍스트</span><textarea data-editor-field="text" maxlength="60" rows="3">${esc(e.text)}</textarea></label>${editorRange('textSize', '크기', 14, 42, 1, 'px')}${editorRange('textX', '가로 위치', -100, 100, 1, 'px')}${editorRange('textY', '세로 위치', -160, 160, 1, 'px')}<label class="field compact-field"><span>색상</span><input data-editor-field="textColor" type="color" value="${esc(e.textColor)}" /></label><p class="inspector-tip">캔버스에서 문구를 직접 드래그하거나 위치 슬라이더로 정밀 조정할 수 있어요.</p></div>`;
   if (e.tool === 'sticker') return `<div class="inspector-block"><p class="inspector-label">스티커</p><div class="choice-grid">${[['spark', '✧', '빛'], ['star', '✦', '별'], ['heart', '♥', '하트'], ['none', '—', '없음']].map(([value, icon, label]) => `<button type="button" class="choice ${e.sticker === value ? 'selected' : ''}" data-editor-value="sticker" data-value="${value}"><b>${icon}</b><span>${label}</span></button>`).join('')}</div>${editorRange('stickerX', '가로 위치', -120, 120, 1, 'px')}${editorRange('stickerY', '세로 위치', -180, 180, 1, 'px')}<p class="inspector-tip">스티커를 캔버스에서 드래그하거나 위치 슬라이더로 배치할 수 있어요.</p></div>`;
+  if (e.tool === 'handwriting') return `<div class="inspector-block"><p class="inspector-label">손글씨 레이어</p><p class="inspector-tip">카드 위에서 직접 쓰거나 PNG 이미지를 불러오세요. 배경 제거가 필요한 이미지는 기존 손글씨 단계에서 처리할 수 있습니다.</p><canvas id="editor-signature-pad" width="720" height="300" aria-label="에디터 손글씨 입력 영역"></canvas><div class="signature-pad-actions"><button type="button" class="secondary" data-editor-action="clear-editor-signature">지우기</button><label class="upload-inline">이미지 불러오기<input id="editor-signature-input" type="file" accept="image/png,image/jpeg,image/webp" /></label></div>${e.signatureSrc ? `<p class="selected-file">${esc(e.signatureName || '직접 작성한 손글씨')} <button type="button" class="text-button" data-editor-action="clear-editor-signature">삭제</button></p>` : '<p class="inspector-tip">손글씨는 현재 기기의 카드 초안에 자동 저장됩니다.</p>'}</div>`;
   if (e.tool === 'background') { const colors = ['#f5efff', '#eaf8ff', '#ffeef6', '#f4f1e9', '#17152b', '#1e293b']; return `<div class="inspector-block"><p class="inspector-label">앞면 배경</p><p class="inspector-tip">사진이 없는 영역의 기본 색상과 카드 전체 분위기를 정합니다.</p><div class="swatches background-swatches">${colors.map((color) => `<button type="button" class="swatch ${e.background === color ? 'selected' : ''}" style="background:${color}" data-editor-value="background" data-value="${color}" aria-label="배경 ${color}"></button>`).join('')}</div><label class="field compact-field"><span>사용자 지정 색상</span><input data-editor-field="background" type="color" value="${esc(e.background)}" /></label></div>`; }
   if (e.tool === 'effect') { const effectKey = e.side === 'back' ? 'backEffect' : 'effect'; const currentEffect = e[effectKey] || 'none'; const allowed = e.side === 'back' ? ['sparkle', 'foil', 'grain', 'none'] : ['holographic', 'prismatic', 'foil', 'sparkle', 'none']; const labels = { holographic: ['Holographic', '각도에 따라 무지개빛이 움직여요'], prismatic: ['Prismatic', '프리즘처럼 색이 분산돼요'], foil: ['Metallic Foil', '금속 포일처럼 반사돼요'], sparkle: ['Sparkle', '희귀도 높은 카드의 반짝임'], grain: ['Soft Grain', '필름 질감'], none: ['Clean', '효과 없음'] }; return `<div class="inspector-block"><p class="inspector-label">${e.side === 'back' ? '뒷면 분위기' : '희귀도 마감 효과'}</p><div class="choice-list">${allowed.map((value) => [value, ...(labels[value] || [value, '템플릿 허용 효과'])]).map(([value, title, desc]) => `<button type="button" class="effect-choice ${currentEffect === value ? 'selected' : ''}" data-editor-value="${effectKey}" data-value="${value}"><span class="effect-dot effect-${value}"></span><span><b>${title}</b><small>${desc}</small></span><i>›</i></button>`).join('')}</div>${e.side === 'front' ? `${editorRange('effectIntensity', '빛의 강도', 0, 100, 1, '%')}${editorRange('effectAngle', '반사 각도', 0, 360, 1, '°')}<p class="inspector-tip">실물 포토카드의 포일·홀로그램 마감처럼 디지털 카드 위에 적용됩니다. 미리보기에서 움직임을 확인하세요.</p>` : ''}</div>`; }
   const template = selectedBackTemplate(); const allowedBackgrounds = template?.allowedBackgrounds || ['#f5efff', '#eaf8ff', '#ffeef6', '#f4f1e9']; return `<div class="inspector-block"><p class="inspector-label">뒷면 템플릿</p><div class="locked-template"><span class="lock-icon">⌁</span><div><strong>${esc(template?.name || '소속사 기본 템플릿')}</strong><small>뒷면 레이아웃은 운영팀이 관리합니다.</small></div></div><p class="inspector-label">색상 조합</p><div class="swatches">${allowedBackgrounds.map((color) => `<button type="button" class="swatch ${e.background === color ? 'selected' : ''}" style="background:${color}" data-editor-value="background" data-value="${color}" aria-label="배경 ${color}"></button>`).join('')}</div><p class="inspector-tip">아티스트는 기본 뒷면의 색상과 효과만 변경할 수 있습니다.</p></div>`;
@@ -282,6 +299,7 @@ function editorToolEnhancements() {
   if (e.tool === 'photo') return `<div class="inspector-block"><p class="inspector-label">사진 스타일</p>${editorRange('imageRotate', '회전', -180, 180, 1, '°')}${editorRange('imageOpacity', '투명도', 20, 100, 1, '%')}</div>`;
   if (e.tool === 'text') return `<div class="inspector-block"><p class="inspector-label">문구 스타일</p><div class="inline-choice"><button type="button" class="mini-choice ${e.textAlign === 'left' ? 'selected' : ''}" data-editor-value="textAlign" data-value="left">왼쪽</button><button type="button" class="mini-choice ${e.textAlign === 'center' ? 'selected' : ''}" data-editor-value="textAlign" data-value="center">가운데</button><button type="button" class="mini-choice ${e.textAlign === 'right' ? 'selected' : ''}" data-editor-value="textAlign" data-value="right">오른쪽</button></div>${editorRange('textWeight', '굵기', 400, 900, 100, '')}${editorRange('textRotate', '회전', -180, 180, 1, '°')}${editorRange('textOpacity', '투명도', 20, 100, 1, '%')}</div>`;
   if (e.tool === 'sticker') return `<div class="inspector-block"><p class="inspector-label">스티커 스타일</p>${editorRange('stickerScale', '크기', 50, 180, 1, '%')}${editorRange('stickerRotate', '회전', -180, 180, 1, '°')}${editorRange('stickerOpacity', '투명도', 20, 100, 1, '%')}</div>`;
+  if (e.tool === 'handwriting') return `<div class="inspector-block"><p class="inspector-label">손글씨 스타일</p>${editorRange('signatureScale', '크기', 50, 180, 1, '%')}${editorRange('signatureRotate', '회전', -180, 180, 1, '°')}${editorRange('signatureOpacity', '투명도', 20, 100, 1, '%')}</div>`;
   return '';
 }
 
@@ -293,6 +311,7 @@ function studioIcon(name) {
     effect: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2"/>',
     back: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 8h8M8 12h8M8 16h5"/>',
     background: '<circle cx="12" cy="12" r="8.5"/><path d="M7 16c2-3 4-4 6-2s3 2 4 0M8 8h.01M16 9h.01"/>',
+    handwriting: '<path d="M4 17c3 1 4-8 6-8 2 0 0 7 2 7 2 0 3-5 4-5 2 0 1 5 4 4"/><path d="M4 20h16"/>',
   };
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.photo}</svg>`;
 }
@@ -301,12 +320,12 @@ function selectedBackTemplate() {
   return (state.catalog?.backTemplates || []).find((template) => template.id === state.editor.backTemplateId) || null;
 }
 
-function editorFieldUnit(key) { return ['imageScale', 'textOpacity', 'stickerScale', 'stickerOpacity'].includes(key) ? '%' : ['textRotate', 'stickerRotate'].includes(key) ? '°' : key === 'textWeight' ? '' : 'px'; }
+function editorFieldUnit(key) { return ['imageScale', 'textOpacity', 'stickerScale', 'stickerOpacity', 'signatureScale', 'signatureOpacity'].includes(key) ? '%' : ['textRotate', 'stickerRotate', 'signatureRotate'].includes(key) ? '°' : key === 'textWeight' ? '' : 'px'; }
 function editorRange(key, label, min, max, step, unit) { const value = state.editor[key]; return `<label class="editor-range"><span>${label}<output>${value}${unit}</output></span><input data-editor-field="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${value}" /></label>`; }
 
 function editorLayerPositionKeys() {
   const layer = state.editor.selectedLayer || 'photo';
-  return layer === 'text' ? ['textX', 'textY'] : layer === 'sticker' ? ['stickerX', 'stickerY'] : ['imageX', 'imageY'];
+  return layer === 'text' ? ['textX', 'textY'] : layer === 'sticker' ? ['stickerX', 'stickerY'] : layer === 'signature' ? ['signatureX', 'signatureY'] : ['imageX', 'imageY'];
 }
 
 function alignEditorLayer(axis) {
@@ -322,6 +341,7 @@ function editorDesignConfig(imageAssetId) {
       image: { assetId: imageAssetId, x: Number(e.imageX || 0), y: Number(e.imageY || 0), scale: Number(e.imageScale || 100), rotate: Number(e.imageRotate || 0), opacity: Number(e.imageOpacity ?? 100), filter: e.filter || 'clean' },
       text: { value: e.text || '', x: Number(e.textX || 0), y: Number(e.textY || 0), size: Number(e.textSize || 24), color: e.textColor || '#ffffff', align: e.textAlign || 'left', weight: Number(e.textWeight || 800), rotate: Number(e.textRotate || 0), opacity: Number(e.textOpacity ?? 100) },
       sticker: { kind: e.sticker || 'none', x: Number(e.stickerX || 0), y: Number(e.stickerY || 0), scale: Number(e.stickerScale || 100), rotate: Number(e.stickerRotate || 0), opacity: Number(e.stickerOpacity ?? 100) },
+      signature: { assetId: e.signatureAssetId || null, x: Number(e.signatureX || 0), y: Number(e.signatureY || 0), scale: Number(e.signatureScale || 100), rotate: Number(e.signatureRotate || 0), opacity: Number(e.signatureOpacity ?? 100) },
       effect: e.effect || 'none', effectIntensity: Number(e.effectIntensity || 0), effectAngle: Number(e.effectAngle || 135), videoAssetId: e.videoAssetId || null,
     },
     back: { templateId: e.backTemplateId || 'agency_back_v1', background: e.background || '#f5efff', effect: e.backEffect || 'none' },
@@ -340,9 +360,12 @@ function restoreEditorDesign(card) {
     imageName: card.name ? `${card.name}.jpg` : state.editor.imageName,
     videoSrc: card.videoUrl ? absoluteApiUrl(card.videoUrl) : state.editor.videoSrc,
     videoName: card.videoAssetId ? `${card.name || 'card'}-motion.mp4` : state.editor.videoName,
+    signatureSrc: card.handwritingUrl ? absoluteApiUrl(card.handwritingUrl) : state.editor.signatureSrc,
+    signatureName: card.handwritingAssetId ? `${card.name || 'card'}-handwriting.png` : state.editor.signatureName,
+    signatureAssetId: card.handwritingAssetId || state.editor.signatureAssetId,
     imageScale: Number(image.scale ?? state.editor.imageScale), imageX: Number(image.x ?? state.editor.imageX), imageY: Number(image.y ?? state.editor.imageY), imageRotate: Number(image.rotate ?? state.editor.imageRotate), imageOpacity: Number(image.opacity ?? state.editor.imageOpacity), filter: image.filter || state.editor.filter,
     text: text.value ?? state.editor.text, textX: Number(text.x ?? state.editor.textX), textY: Number(text.y ?? state.editor.textY), textSize: Number(text.size ?? state.editor.textSize), textColor: text.color || state.editor.textColor, textAlign: text.align || state.editor.textAlign, textWeight: Number(text.weight ?? state.editor.textWeight), textRotate: Number(text.rotate ?? state.editor.textRotate), textOpacity: Number(text.opacity ?? state.editor.textOpacity),
-    sticker: sticker.kind || state.editor.sticker, stickerX: Number(sticker.x ?? state.editor.stickerX), stickerY: Number(sticker.y ?? state.editor.stickerY), stickerScale: Number(sticker.scale ?? state.editor.stickerScale), stickerRotate: Number(sticker.rotate ?? state.editor.stickerRotate), stickerOpacity: Number(sticker.opacity ?? state.editor.stickerOpacity), effect: config.front.effect || state.editor.effect, effectIntensity: Number(config.front.effectIntensity ?? state.editor.effectIntensity), effectAngle: Number(config.front.effectAngle ?? state.editor.effectAngle), videoAssetId: config.front.videoAssetId || state.editor.videoAssetId, backEffect: config.back.effect || state.editor.backEffect, background: config.back.background || state.editor.background,
+    sticker: sticker.kind || state.editor.sticker, stickerX: Number(sticker.x ?? state.editor.stickerX), stickerY: Number(sticker.y ?? state.editor.stickerY), stickerScale: Number(sticker.scale ?? state.editor.stickerScale), stickerRotate: Number(sticker.rotate ?? state.editor.stickerRotate), stickerOpacity: Number(sticker.opacity ?? state.editor.stickerOpacity), signatureAssetId: config.front.signature?.assetId || state.editor.signatureAssetId, signatureX: Number(config.front.signature?.x ?? state.editor.signatureX), signatureY: Number(config.front.signature?.y ?? state.editor.signatureY), signatureScale: Number(config.front.signature?.scale ?? state.editor.signatureScale), signatureRotate: Number(config.front.signature?.rotate ?? state.editor.signatureRotate), signatureOpacity: Number(config.front.signature?.opacity ?? state.editor.signatureOpacity), effect: config.front.effect || state.editor.effect, effectIntensity: Number(config.front.effectIntensity ?? state.editor.effectIntensity), effectAngle: Number(config.front.effectAngle ?? state.editor.effectAngle), videoAssetId: config.front.videoAssetId || state.editor.videoAssetId, backEffect: config.back.effect || state.editor.backEffect, background: config.back.background || state.editor.background,
   };
   persistEditorDraft();
 }
@@ -350,7 +373,7 @@ function restoreEditorDesign(card) {
 function visualEditorView() {
   const e = state.editor;
   if (e.firstRun !== false) return editorStartView();
-  const tools = [['photo', studioIcon('photo'), '사진'], ['text', studioIcon('text'), '텍스트'], ['sticker', studioIcon('sticker'), '스티커'], ['effect', studioIcon('effect'), '효과'], ['background', studioIcon('background'), '배경'], ['back', studioIcon('back'), '뒷면']];
+  const tools = [['photo', studioIcon('photo'), '사진'], ['text', studioIcon('text'), '텍스트'], ['sticker', studioIcon('sticker'), '스티커'], ['handwriting', studioIcon('handwriting'), '손글씨'], ['effect', studioIcon('effect'), '효과'], ['background', studioIcon('background'), '배경'], ['back', studioIcon('back'), '뒷면']];
   const preview = e.previewOpen ? `<div class="editor-preview-backdrop" role="presentation"><div class="editor-preview-modal" role="dialog" aria-modal="true" aria-labelledby="editor-preview-title"><div class="editor-preview-heading"><div><span>FANFOLIO · CARD PREVIEW</span><h3 id="editor-preview-title">카드 전체 화면 미리보기</h3></div><button class="modal-close" data-editor-action="close-preview" aria-label="미리보기 닫기">×</button></div><div class="editor-preview-stage"><div class="preview-side-label">${e.side === 'front' ? '앞면' : '뒷면'}</div>${editorCardMarkup()}</div><div class="editor-preview-actions"><button class="secondary" data-editor-action="close-preview">계속 편집하기</button><button class="primary" data-editor-action="details">이 디자인으로 상세 정보 입력 <span>→</span></button></div></div></div>` : '';
   return `<section class="visual-editor"><div class="editor-toolbar"><div><span class="editor-breadcrumb">카드 만들기 <b>/</b> 비주얼 에디터</span><h2>나만의 특별 카드를 디자인해 보세요</h2><p>앞면은 자유롭게 꾸미고, 뒷면은 소속사 기본 템플릿을 바탕으로 완성합니다.</p></div><div class="editor-toolbar-actions"><span class="draft-status"><i></i> 자동 저장됨</span><button class="secondary" data-editor-action="exit">나중에 계속하기</button><button class="primary" data-editor-action="details">상세 정보 입력 <span>→</span></button></div></div><div class="editor-workspace"><aside class="editor-tools" aria-label="카드 편집 도구">${tools.map(([value, icon, label]) => `<button class="editor-tool ${e.tool === value ? 'active' : ''}" data-editor-tool="${value}"><span>${icon}</span><small>${label}</small></button>`).join('')}</aside><div class="editor-stage-wrap"><div class="stage-header"><span>${e.side === 'front' ? '앞면' : '뒷면'} 미리보기</span><div class="side-switch"><button class="${e.side === 'front' ? 'active' : ''}" data-editor-side="front">앞면</button><button class="${e.side === 'back' ? 'active' : ''}" data-editor-side="back">뒷면</button></div><span class="zoom-label">100%</span></div><div class="visual-editor-stage"><div class="stage-grid"></div>${editorCardMarkup()}<span class="stage-caption">드래그하여 위치를 조정할 수 있어요</span></div><div class="stage-footer"><span><b>Tip</b> 카드의 분위기를 먼저 정한 뒤 사진과 문구를 배치해 보세요.</span><button class="ghost-button" data-editor-action="preview">전체 화면 미리보기 ↗</button></div></div><aside class="editor-inspector"><div class="inspector-heading"><div><span>편집 도구</span><h3>${tools.find(([value]) => value === e.tool)?.[2] || '사진'}</h3></div><span class="inspector-count">${e.side === 'front' ? '앞면' : '뒷면'}</span></div>${editorInspector()}</aside></div>${preview}</section>`;
 }
@@ -412,7 +435,7 @@ function renderShell(content) {
   enhanceCardImageField();
   enhanceRarityField();
   document.querySelector('input[name="cardImage"]')?.toggleAttribute('required', !state.editor.imageSrc);
-  if (editorMode) initEditorDrag();
+  if (editorMode) { initEditorDrag(); initEditorSignaturePad(); }
   document.querySelector('#new-card')?.addEventListener('click', () => { state.view = 'editor'; state.editingCardId = null; state.cardId = null; state.step = 1; render(); });
 }
 
@@ -431,6 +454,53 @@ function enhanceEditorControls() {
   if (card) card.style.transform = `scale(${Number(state.editor.zoom || 100) / 100})`;
   document.querySelector('[data-editor-action="undo"]')?.toggleAttribute('disabled', editorHistory.past.length === 0);
   document.querySelector('[data-editor-action="redo"]')?.toggleAttribute('disabled', editorHistory.future.length === 0);
+}
+
+function initEditorSignaturePad() {
+  const canvas = document.querySelector('#editor-signature-pad');
+  if (!canvas || canvas.dataset.initialized) return;
+  canvas.dataset.initialized = 'true';
+  const context = canvas.getContext('2d');
+  context.strokeStyle = '#29234f';
+  context.lineWidth = 7;
+  context.lineCap = 'round';
+  context.lineJoin = 'round';
+  const drawExisting = () => {
+    if (!state.editor.signatureSrc) return;
+    const image = new Image();
+    image.onload = () => context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    image.src = state.editor.signatureSrc;
+  };
+  drawExisting();
+  let drawing = false;
+  const point = (event) => {
+    const box = canvas.getBoundingClientRect();
+    return { x: (event.clientX - box.left) * canvas.width / box.width, y: (event.clientY - box.top) * canvas.height / box.height };
+  };
+  canvas.addEventListener('pointerdown', (event) => {
+    drawing = true;
+    canvas.setPointerCapture?.(event.pointerId);
+    const start = point(event);
+    context.beginPath();
+    context.moveTo(start.x, start.y);
+  });
+  canvas.addEventListener('pointermove', (event) => {
+    if (!drawing) return;
+    const next = point(event);
+    context.lineTo(next.x, next.y);
+    context.stroke();
+  });
+  const finish = () => {
+    if (!drawing) return;
+    drawing = false;
+    state.editor.signatureSrc = canvas.toDataURL('image/png');
+    state.editor.signatureName = '직접 작성한 손글씨';
+    state.editor.signatureAssetId = null;
+    persistEditorDraft();
+    render();
+  };
+  canvas.addEventListener('pointerup', finish);
+  canvas.addEventListener('pointercancel', finish);
 }
 
 document.addEventListener('keydown', (event) => {
@@ -492,9 +562,9 @@ function enhanceRarityField() {
 document.addEventListener('click', (event) => {
   if (!state.authenticated) return;
   const layerSelect = event.target.closest('[data-editor-layer-select]');
-  if (layerSelect) { state.editor.selectedLayer = layerSelect.dataset.editorLayerSelect; state.editor.tool = state.editor.selectedLayer === 'text' ? 'text' : state.editor.selectedLayer === 'sticker' ? 'sticker' : 'photo'; render(); return; }
+  if (layerSelect) { state.editor.selectedLayer = layerSelect.dataset.editorLayerSelect; state.editor.tool = state.editor.selectedLayer === 'text' ? 'text' : state.editor.selectedLayer === 'sticker' ? 'sticker' : state.editor.selectedLayer === 'signature' ? 'handwriting' : 'photo'; render(); return; }
   const tool = event.target.closest('[data-editor-tool]');
-  if (tool) { rememberEditorChange(); state.editor.tool = tool.dataset.editorTool; if (state.editor.tool === 'back') state.editor.side = 'back'; else if (state.editor.side === 'back' && ['photo', 'text', 'sticker', 'background'].includes(state.editor.tool)) state.editor.side = 'front'; persistEditorDraft(); render(); return; }
+  if (tool) { rememberEditorChange(); state.editor.tool = tool.dataset.editorTool; if (state.editor.tool === 'back') state.editor.side = 'back'; else if (state.editor.side === 'back' && ['photo', 'text', 'sticker', 'handwriting', 'background'].includes(state.editor.tool)) state.editor.side = 'front'; if (['photo', 'text', 'sticker', 'handwriting'].includes(state.editor.tool)) state.editor.selectedLayer = state.editor.tool === 'handwriting' ? 'signature' : state.editor.tool; persistEditorDraft(); render(); return; }
   const side = event.target.closest('[data-editor-side]');
   if (side) { rememberEditorChange(); state.editor.side = side.dataset.editorSide; state.editor.tool = state.editor.side === 'back' ? 'back' : 'photo'; persistEditorDraft(); render(); return; }
   const choice = event.target.closest('[data-editor-value]');
@@ -533,6 +603,7 @@ document.addEventListener('click', (event) => {
   if (action === 'exit') { state.view = 'cards'; shell(studioCardsView()); return; }
   if (action === 'remove-photo') { state.editor.imageSrc = ''; state.editor.imageName = ''; persistEditorDraft(); render(); return; }
   if (action === 'remove-video') { state.editor.videoSrc = ''; state.editor.videoName = ''; state.editor.videoAssetId = null; persistEditorDraft(); render(); return; }
+  if (action === 'clear-editor-signature') { rememberEditorChange(); state.editor.signatureSrc = ''; state.editor.signatureName = ''; state.editor.signatureAssetId = null; persistEditorDraft(); render(); return; }
   if (action === 'preview') { state.editor.previewOpen = true; render(); return; }
   if (action === 'close-preview') { state.editor.previewOpen = false; render(); return; }
 });
@@ -555,6 +626,14 @@ document.addEventListener('change', (event) => {
     void uploadAsset(file, 'video').then(async (assetId) => { state.editor.videoAssetId = assetId; persistEditorDraft(); if (state.cardId) await api(`/artist/cards/${state.cardId}`, { method: 'PATCH', body: JSON.stringify({ videoAssetId: assetId, designConfig: editorDesignConfig(state.form.imageAssetId) }) }); toast('영상 레이어를 업로드했습니다.'); }).catch(() => toast('영상 업로드에 실패했습니다.'));
     render();
   }
+  const signatureInput = event.target.closest('#editor-signature-input');
+  if (signatureInput?.files?.[0]) {
+    const file = signatureInput.files[0];
+    if (!file.type.startsWith('image/')) { toast('PNG, JPG 또는 WebP 이미지만 사용할 수 있어요.'); return; }
+    const reader = new FileReader();
+    reader.onload = () => { state.editor.signatureSrc = reader.result; state.editor.signatureName = file.name; state.editor.signatureAssetId = null; persistEditorDraft(); render(); };
+    reader.readAsDataURL(file);
+  }
   const field = event.target.closest('[data-editor-field]');
   if (field && field.type !== 'range') { rememberEditorChange(); state.editor[field.dataset.editorField] = field.value; persistEditorDraft(); render(); }
 });
@@ -571,6 +650,7 @@ document.addEventListener('input', (event) => {
   if (key === 'textColor') document.querySelector('.editor-copy')?.style.setProperty('color', field.value);
   if (['textAlign', 'textWeight', 'textOpacity', 'textRotate'].includes(key)) { const copy = document.querySelector('.editor-copy'); if (copy) { copy.style.textAlign = state.editor.textAlign; copy.style.fontWeight = state.editor.textWeight; copy.style.opacity = Number(state.editor.textOpacity ?? 100) / 100; copy.style.transform = `translate(${state.editor.textX}px,${state.editor.textY}px) rotate(${state.editor.textRotate || 0}deg)`; } }
   if (['stickerScale', 'stickerRotate', 'stickerOpacity'].includes(key)) { const sticker = document.querySelector('.editor-sticker'); if (sticker) { sticker.style.opacity = Number(state.editor.stickerOpacity ?? 100) / 100; sticker.style.transform = `translate(${state.editor.stickerX}px,${state.editor.stickerY}px) scale(${Number(state.editor.stickerScale || 100) / 100}) rotate(${state.editor.stickerRotate || 0}deg)`; } }
+  if (['signatureScale', 'signatureRotate', 'signatureOpacity'].includes(key)) { const signature = document.querySelector('.editor-signature'); if (signature) { signature.style.opacity = Number(state.editor.signatureOpacity ?? 100) / 100; signature.style.transform = `translate(${state.editor.signatureX}px,${state.editor.signatureY}px) scale(${Number(state.editor.signatureScale || 100) / 100}) rotate(${state.editor.signatureRotate || 0}deg)`; } }
   if (['imageScale', 'imageX', 'imageY', 'imageRotate', 'imageOpacity', 'filter'].includes(key)) { const image = document.querySelector('.editor-photo'); if (image) { image.style.transform = `translate(${state.editor.imageX}px,${state.editor.imageY}px) scale(${state.editor.imageScale / 100}) rotate(${state.editor.imageRotate || 0}deg)`; image.style.opacity = Number(state.editor.imageOpacity ?? 100) / 100; image.style.filter = state.editor.filter === 'mono' ? 'grayscale(1)' : state.editor.filter === 'warm' ? 'saturate(1.25) sepia(.18)' : 'none'; } }
 });
 
@@ -638,7 +718,8 @@ document.addEventListener('submit', async (event) => {
     let imageAssetId = state.form.imageAssetId;
     if (imageFile instanceof File && imageFile.size > 0) imageAssetId = await uploadAsset(imageFile, 'card');
     if (!imageAssetId) throw new Error('CARD_IMAGE_REQUIRED');
-    const payload = { templateId: state.form.templateId, name: state.form.name, seasonName: state.form.seasonName, rarity: state.form.rarity, imageAssetId, artistId: state.form.artistId, memberId: state.form.memberId, signatureText: state.form.signatureText, hasVoice: state.form.hasVoice, issueLimit: state.form.issueLimit, videoAssetId: state.editor.videoAssetId, designConfig: editorDesignConfig(imageAssetId) };
+    if (!state.editor.signatureAssetId && state.editor.signatureSrc) state.editor.signatureAssetId = await uploadAsset(await editorSignatureFile(), 'handwriting');
+    const payload = { templateId: state.form.templateId, name: state.form.name, seasonName: state.form.seasonName, rarity: state.form.rarity, imageAssetId, artistId: state.form.artistId, memberId: state.form.memberId, signatureText: state.form.signatureText, handwritingAssetId: state.editor.signatureAssetId, handwritingTransform: { x: Number(state.editor.signatureX || 0), y: Number(state.editor.signatureY || 0), width: Number(state.editor.signatureScale || 100), rotation: Number(state.editor.signatureRotate || 0) }, hasVoice: state.form.hasVoice, issueLimit: state.form.issueLimit, videoAssetId: state.editor.videoAssetId, designConfig: editorDesignConfig(imageAssetId) };
     const result = editing
       ? await api(`/artist/cards/${state.editingCardId}`, { method: 'PATCH', body: JSON.stringify(payload) })
       : await api('/artist/cards', { method: 'POST', body: JSON.stringify(payload) });

@@ -354,6 +354,7 @@ def test_artist_can_reload_owned_media_for_card_editing(
                 "rarity": "UR",
                 "imageAssetId": asset_id,
                 "videoAssetId": asset_id,
+                "handwritingAssetId": asset_id,
                 "issueLimit": 10,
             },
         ),
@@ -362,8 +363,12 @@ def test_artist_can_reload_owned_media_for_card_editing(
 
     assert draft["imageUrl"].endswith(f"/artist/cards/{draft['id']}/image?client=artist")
     assert draft["videoUrl"].endswith(f"/artist/cards/{draft['id']}/video?client=artist")
+    assert draft["handwritingUrl"].endswith(
+        f"/artist/cards/{draft['id']}/handwriting?client=artist"
+    )
     assert artist.get(draft["imageUrl"]).content == b"media"
     assert artist.get(draft["videoUrl"]).content == b"media"
+    assert artist.get(draft["handwritingUrl"]).content == b"media"
 
 
 def test_fan_cannot_read_artist_card_preview(

@@ -113,6 +113,8 @@ async def create_card(payload: ArtistCardRequest, user: ArtistUser, session: DbS
         await owned_asset(payload.voice_asset_id, user, session)
     if payload.video_asset_id:
         await owned_asset(payload.video_asset_id, user, session)
+    if payload.handwriting_asset_id:
+        await owned_asset(payload.handwriting_asset_id, user, session)
     artist_id = await resolve_catalog_ids(
         artist_id=payload.artist_id, member_id=payload.member_id, session=session
     )
@@ -129,6 +131,8 @@ async def create_card(payload: ArtistCardRequest, user: ArtistUser, session: DbS
         rarity=payload.rarity,
         image_asset_id=payload.image_asset_id,
         signature_text=payload.signature_text,
+        handwriting_asset_id=payload.handwriting_asset_id,
+        handwriting_transform=payload.handwriting_transform,
         voice_asset_id=payload.voice_asset_id,
         video_asset_id=payload.video_asset_id,
         design_config=payload.design_config,
@@ -209,6 +213,11 @@ def card_data(card: Card) -> dict:
         "memberId": card.member_id,
         "signatureText": card.signature_text,
         "handwritingAssetId": card.handwriting_asset_id,
+        "handwritingUrl": (
+            f"/api/artist/cards/{card.id}/handwriting?client=artist"
+            if card.handwriting_asset_id
+            else None
+        ),
         "voiceAssetId": card.voice_asset_id,
         "videoAssetId": card.video_asset_id,
         "videoUrl": (
@@ -268,6 +277,21 @@ async def card_video(card_id: str, user: ArtistUser, session: DbSession) -> Resp
         raise AppError(404, "VIDEO_NOT_READY", "카드 영상이 아직 준비되지 않았습니다.")
     return storage_response(
         configured_asset_storage(), path, media_type=asset.content_type or "video/mp4"
+    )
+
+
+@router.get("/artist/cards/{card_id}/handwriting")
+async def card_handwriting(card_id: str, user: ArtistUser, session: DbSession) -> Response:
+    """Serve the artist-owned handwriting layer while editing a draft."""
+    card = await owned_card(card_id, user, session)
+    if not card.handwriting_asset_id:
+        raise AppError(404, "HANDWRITING_NOT_FOUND", "손글씨 레이어를 찾을 수 없습니다.")
+    asset = await owned_asset(card.handwriting_asset_id, user, session)
+    path = asset.processed_storage_path or asset.storage_path
+    if not path:
+        raise AppError(404, "HANDWRITING_NOT_READY", "손글씨 레이어가 아직 준비되지 않았습니다.")
+    return storage_response(
+        configured_asset_storage(), path, media_type=asset.content_type or "image/png"
     )
 
 

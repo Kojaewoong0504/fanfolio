@@ -23,3 +23,8 @@
 .editor-tool span svg{display:block;width:23px;height:23px}.editor-tool.active span svg{filter:drop-shadow(0 3px 5px #5b4edb36)}
 .editor-back-template{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.editor-card.is-back .editor-back-copy{z-index:2;padding:14% 10%}.editor-card.is-back .editor-back-copy strong,.editor-card.is-back .editor-back-copy span,.editor-card.is-back .editor-back-copy small{opacity:.92;text-shadow:0 1px 5px #2e245555}
 @media(prefers-reduced-motion:reduce){.editor-card.effect-holographic::before,.editor-card.effect-prismatic::before,.editor-card.effect-foil::before,.editor-card.effect-sparkle::before{animation:none}.preset-card{transition:none}}
+/* Editor handwriting layer: editable like a real canvas object while remaining touch-friendly. */
+.editor-signature{position:absolute;z-index:4;left:16%;top:45%;width:68%;height:auto;max-height:32%;object-fit:contain;transform-origin:center;filter:drop-shadow(0 3px 5px #2d235833)}
+#editor-signature-pad{display:block;width:100%;height:132px;margin-top:8px;border:1px dashed #b8b1ef;border-radius:13px;background:repeating-linear-gradient(0deg,#fbfaff 0 31px,#ebe8f9 32px);touch-action:none;cursor:crosshair}
+.signature-pad-actions{display:flex;align-items:center;gap:8px;margin-top:9px}.signature-pad-actions .secondary,.upload-inline{border:1px solid #e7e4f0;border-radius:9px;background:#fff;color:#6258c8;padding:8px 10px;font-size:10px;cursor:pointer}.upload-inline input{display:none}
+.layer-list{grid-template-columns:repeat(4,1fr)}

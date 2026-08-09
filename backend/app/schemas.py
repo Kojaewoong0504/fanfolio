@@ -235,6 +235,10 @@ class ArtistCardRequest(BaseModel):
     artist_id: str | None = Field(default=None, alias="artistId")
     member_id: str | None = Field(default=None, alias="memberId")
     signature_text: str | None = Field(default=None, alias="signatureText", max_length=200)
+    handwriting_asset_id: str | None = Field(default=None, alias="handwritingAssetId")
+    handwriting_transform: dict[str, float] | None = Field(
+        default=None, alias="handwritingTransform"
+    )
     voice_asset_id: str | None = Field(default=None, alias="voiceAssetId")
     video_asset_id: str | None = Field(default=None, alias="videoAssetId")
     design_config: dict | None = Field(default=None, alias="designConfig")
