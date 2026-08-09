@@ -18,6 +18,13 @@ const state = {
   catalog: null, catalogLoaded: false, apiConnected: false, catalogError: '', view: 'editor',
   editor: { tool: 'photo', side: 'front', template: 'luminous', backTemplateId: 'agency_back_v1', imageSrc: '', imageName: '', videoSrc: '', videoName: '', videoAssetId: null, imageScale: 100, imageX: 0, imageY: 0, textX: 0, textY: 0, stickerX: 0, stickerY: 0, zoom: 100, background: '#f5efff', filter: 'clean', text: '드림스케이프 · 유나', textColor: '#ffffff', textSize: 24, sticker: 'spark', effect: 'holographic', effectIntensity: 78, effectAngle: 135, backEffect: 'sparkle', selectedLayer: 'photo', snapToGrid: true, firstRun: true, previewOpen: false, ...readEditorDraft() },
 };
+state.editor.textAlign ||= 'left';
+state.editor.textWeight ||= 800;
+state.editor.textRotate ||= 0;
+state.editor.textOpacity ??= 100;
+state.editor.stickerScale ||= 100;
+state.editor.stickerRotate ||= 0;
+state.editor.stickerOpacity ??= 100;
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
 
 async function editorImageFile() {
@@ -238,8 +245,8 @@ function editorCardMarkup() {
   const agencyTemplate = (state.catalog?.backTemplates || []).find((template) => template.id === e.backTemplateId);
   const backTemplateUrl = agencyTemplate?.imageUrl || (e.backTemplateId === 'agency_back_v1' ? './agency-back-template-v1.png' : '');
   const sticker = e.sticker === 'none' ? '' : `<span class="editor-sticker">${e.sticker === 'heart' ? '♥' : e.sticker === 'star' ? '✦' : '✧'}</span>`;
-  const textStyle = `color:${esc(e.textColor)};font-size:${e.textSize}px;transform:translate(${e.textX}px,${e.textY}px)`;
-  const stickerMarkup = sticker ? sticker.replace('class="editor-sticker"', `class="editor-sticker${selected('sticker')}" data-editor-layer="sticker" style="transform:translate(${e.stickerX}px,${e.stickerY}px)"`) : '';
+  const textStyle = `color:${esc(e.textColor)};font-size:${e.textSize}px;font-weight:${Number(e.textWeight || 800)};text-align:${esc(e.textAlign || 'left')};opacity:${Number(e.textOpacity ?? 100) / 100};transform:translate(${e.textX}px,${e.textY}px) rotate(${Number(e.textRotate || 0)}deg)`;
+  const stickerMarkup = sticker ? sticker.replace('class="editor-sticker"', `class="editor-sticker${selected('sticker')}" data-editor-layer="sticker" style="transform:translate(${e.stickerX}px,${e.stickerY}px) scale(${Number(e.stickerScale || 100) / 100}) rotate(${Number(e.stickerRotate || 0)}deg);opacity:${Number(e.stickerOpacity ?? 100) / 100}"`) : '';
   const photoMarkup = image;
   const motionAttributes = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'muted loop playsinline' : 'autoplay muted loop playsinline';
   const videoMarkup = front && e.videoSrc ? `<video class="editor-video-layer" src="${esc(e.videoSrc)}" ${motionAttributes} crossorigin="use-credentials" aria-label="카드 영상 레이어"></video>` : '';
@@ -264,7 +271,14 @@ function editorInspectorBody() {
 }
 
 function editorInspector() {
-  return `${state.editor.side === 'front' ? editorLayerControls() : ''}${editorInspectorBody()}`;
+  return `${state.editor.side === 'front' ? editorLayerControls() : ''}${editorInspectorBody()}${editorToolEnhancements()}`;
+}
+
+function editorToolEnhancements() {
+  const e = state.editor;
+  if (e.tool === 'text') return `<div class="inspector-block"><p class="inspector-label">문구 스타일</p><div class="inline-choice"><button type="button" class="mini-choice ${e.textAlign === 'left' ? 'selected' : ''}" data-editor-value="textAlign" data-value="left">왼쪽</button><button type="button" class="mini-choice ${e.textAlign === 'center' ? 'selected' : ''}" data-editor-value="textAlign" data-value="center">가운데</button><button type="button" class="mini-choice ${e.textAlign === 'right' ? 'selected' : ''}" data-editor-value="textAlign" data-value="right">오른쪽</button></div>${editorRange('textWeight', '굵기', 400, 900, 100, '')}${editorRange('textRotate', '회전', -180, 180, 1, '°')}${editorRange('textOpacity', '투명도', 20, 100, 1, '%')}</div>`;
+  if (e.tool === 'sticker') return `<div class="inspector-block"><p class="inspector-label">스티커 스타일</p>${editorRange('stickerScale', '크기', 50, 180, 1, '%')}${editorRange('stickerRotate', '회전', -180, 180, 1, '°')}${editorRange('stickerOpacity', '투명도', 20, 100, 1, '%')}</div>`;
+  return '';
 }
 
 function studioIcon(name) {
@@ -282,6 +296,7 @@ function selectedBackTemplate() {
   return (state.catalog?.backTemplates || []).find((template) => template.id === state.editor.backTemplateId) || null;
 }
 
+function editorFieldUnit(key) { return ['imageScale', 'textOpacity', 'stickerScale', 'stickerOpacity'].includes(key) ? '%' : ['textRotate', 'stickerRotate'].includes(key) ? '°' : key === 'textWeight' ? '' : 'px'; }
 function editorRange(key, label, min, max, step, unit) { const value = state.editor[key]; return `<label class="editor-range"><span>${label}<output>${value}${unit}</output></span><input data-editor-field="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${value}" /></label>`; }
 
 function editorLayerPositionKeys() {
@@ -300,8 +315,8 @@ function editorDesignConfig(imageAssetId) {
     version: 2,
     front: {
       image: { assetId: imageAssetId, x: Number(e.imageX || 0), y: Number(e.imageY || 0), scale: Number(e.imageScale || 100), filter: e.filter || 'clean' },
-      text: { value: e.text || '', x: Number(e.textX || 0), y: Number(e.textY || 0), size: Number(e.textSize || 24), color: e.textColor || '#ffffff' },
-      sticker: { kind: e.sticker || 'none', x: Number(e.stickerX || 0), y: Number(e.stickerY || 0) },
+      text: { value: e.text || '', x: Number(e.textX || 0), y: Number(e.textY || 0), size: Number(e.textSize || 24), color: e.textColor || '#ffffff', align: e.textAlign || 'left', weight: Number(e.textWeight || 800), rotate: Number(e.textRotate || 0), opacity: Number(e.textOpacity ?? 100) },
+      sticker: { kind: e.sticker || 'none', x: Number(e.stickerX || 0), y: Number(e.stickerY || 0), scale: Number(e.stickerScale || 100), rotate: Number(e.stickerRotate || 0), opacity: Number(e.stickerOpacity ?? 100) },
       effect: e.effect || 'none', effectIntensity: Number(e.effectIntensity || 0), effectAngle: Number(e.effectAngle || 135), videoAssetId: e.videoAssetId || null,
     },
     back: { templateId: e.backTemplateId || 'agency_back_v1', background: e.background || '#f5efff', effect: e.backEffect || 'none' },
@@ -321,8 +336,8 @@ function restoreEditorDesign(card) {
     videoSrc: card.videoUrl ? absoluteApiUrl(card.videoUrl) : state.editor.videoSrc,
     videoName: card.videoAssetId ? `${card.name || 'card'}-motion.mp4` : state.editor.videoName,
     imageScale: Number(image.scale ?? state.editor.imageScale), imageX: Number(image.x ?? state.editor.imageX), imageY: Number(image.y ?? state.editor.imageY), filter: image.filter || state.editor.filter,
-    text: text.value ?? state.editor.text, textX: Number(text.x ?? state.editor.textX), textY: Number(text.y ?? state.editor.textY), textSize: Number(text.size ?? state.editor.textSize), textColor: text.color || state.editor.textColor,
-    sticker: sticker.kind || state.editor.sticker, stickerX: Number(sticker.x ?? state.editor.stickerX), stickerY: Number(sticker.y ?? state.editor.stickerY), effect: config.front.effect || state.editor.effect, effectIntensity: Number(config.front.effectIntensity ?? state.editor.effectIntensity), effectAngle: Number(config.front.effectAngle ?? state.editor.effectAngle), videoAssetId: config.front.videoAssetId || state.editor.videoAssetId, backEffect: config.back.effect || state.editor.backEffect, background: config.back.background || state.editor.background,
+    text: text.value ?? state.editor.text, textX: Number(text.x ?? state.editor.textX), textY: Number(text.y ?? state.editor.textY), textSize: Number(text.size ?? state.editor.textSize), textColor: text.color || state.editor.textColor, textAlign: text.align || state.editor.textAlign, textWeight: Number(text.weight ?? state.editor.textWeight), textRotate: Number(text.rotate ?? state.editor.textRotate), textOpacity: Number(text.opacity ?? state.editor.textOpacity),
+    sticker: sticker.kind || state.editor.sticker, stickerX: Number(sticker.x ?? state.editor.stickerX), stickerY: Number(sticker.y ?? state.editor.stickerY), stickerScale: Number(sticker.scale ?? state.editor.stickerScale), stickerRotate: Number(sticker.rotate ?? state.editor.stickerRotate), stickerOpacity: Number(sticker.opacity ?? state.editor.stickerOpacity), effect: config.front.effect || state.editor.effect, effectIntensity: Number(config.front.effectIntensity ?? state.editor.effectIntensity), effectAngle: Number(config.front.effectAngle ?? state.editor.effectAngle), videoAssetId: config.front.videoAssetId || state.editor.videoAssetId, backEffect: config.back.effect || state.editor.backEffect, background: config.back.background || state.editor.background,
   };
   persistEditorDraft();
 }
@@ -528,9 +543,11 @@ document.addEventListener('input', (event) => {
   state.editor[key] = field.type === 'range' ? Number(field.value) : field.value;
   persistEditorDraft();
   const output = field.closest('label')?.querySelector('output');
-  if (output && field.type === 'range') output.textContent = `${field.value}${key === 'textSize' ? 'px' : key === 'imageScale' ? '%' : 'px'}`;
+  if (output && field.type === 'range') output.textContent = `${field.value}${editorFieldUnit(key)}`;
   if (key === 'text') { const copy = document.querySelector('.editor-copy'); if (copy) copy.textContent = field.value; }
   if (key === 'textColor') document.querySelector('.editor-copy')?.style.setProperty('color', field.value);
+  if (['textAlign', 'textWeight', 'textOpacity', 'textRotate'].includes(key)) { const copy = document.querySelector('.editor-copy'); if (copy) { copy.style.textAlign = state.editor.textAlign; copy.style.fontWeight = state.editor.textWeight; copy.style.opacity = Number(state.editor.textOpacity ?? 100) / 100; copy.style.transform = `translate(${state.editor.textX}px,${state.editor.textY}px) rotate(${state.editor.textRotate || 0}deg)`; } }
+  if (['stickerScale', 'stickerRotate', 'stickerOpacity'].includes(key)) { const sticker = document.querySelector('.editor-sticker'); if (sticker) { sticker.style.opacity = Number(state.editor.stickerOpacity ?? 100) / 100; sticker.style.transform = `translate(${state.editor.stickerX}px,${state.editor.stickerY}px) scale(${Number(state.editor.stickerScale || 100) / 100}) rotate(${state.editor.stickerRotate || 0}deg)`; } }
   if (['imageScale', 'imageX', 'imageY', 'filter'].includes(key)) { const image = document.querySelector('.editor-photo'); if (image) { image.style.transform = `translate(${state.editor.imageX}px,${state.editor.imageY}px) scale(${state.editor.imageScale / 100})`; image.style.filter = state.editor.filter === 'mono' ? 'grayscale(1)' : state.editor.filter === 'warm' ? 'saturate(1.25) sepia(.18)' : 'none'; } }
 });
 
