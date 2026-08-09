@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type SyntheticEvent } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type SyntheticEvent } from 'react'
 import { apiFetch, resolveApiUrl, type UserCardDetail } from '../api/client'
 import hologramTexture from '../assets/hologram-aurora-texture.jpg'
 import type { Card } from '../types'
@@ -92,7 +92,46 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
     '--hologram-opacity': hasHologram ? String(0.18 + effectIntensity * 0.34) : '0',
     '--hologram-shift': `${Math.round(18 + effectIntensity * 18)}px`,
     '--hologram-texture': `url("${hologramTexture}")`,
-  } as CSSProperties & Record<'--hologram-opacity' | '--hologram-shift' | '--hologram-texture', string>
+    '--hologram-tilt-x': '0deg',
+    '--hologram-tilt-y': '0deg',
+    '--hologram-light-x': '50%',
+    '--hologram-light-y': '42%',
+    '--hologram-drag-x': '0px',
+    '--hologram-drag-y': '0px',
+  } as CSSProperties & Record<'--hologram-opacity' | '--hologram-shift' | '--hologram-texture' | '--hologram-tilt-x' | '--hologram-tilt-y' | '--hologram-light-x' | '--hologram-light-y' | '--hologram-drag-x' | '--hologram-drag-y', string>
+  const handleHologramMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!hasHologram || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const element = event.currentTarget
+    const box = element.getBoundingClientRect()
+    const x = Math.max(0, Math.min(1, (event.clientX - box.left) / box.width))
+    const y = Math.max(0, Math.min(1, (event.clientY - box.top) / box.height))
+    element.style.setProperty('--hologram-tilt-x', `${((0.5 - y) * 10).toFixed(2)}deg`)
+    element.style.setProperty('--hologram-tilt-y', `${((x - 0.5) * 12).toFixed(2)}deg`)
+    element.style.setProperty('--hologram-light-x', `${Math.round(x * 100)}%`)
+    element.style.setProperty('--hologram-light-y', `${Math.round(y * 100)}%`)
+    element.style.setProperty('--hologram-drag-x', `${Math.round((x - 0.5) * 24)}px`)
+    element.style.setProperty('--hologram-drag-y', `${Math.round((y - 0.5) * 18)}px`)
+  }
+  const handleHologramStart = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!hasHologram) return
+    event.currentTarget.setPointerCapture(event.pointerId)
+    handleHologramMove(event)
+  }
+  const handleHologramReset = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const element = event.currentTarget
+    element.style.setProperty('--hologram-tilt-x', '0deg')
+    element.style.setProperty('--hologram-tilt-y', '0deg')
+    element.style.setProperty('--hologram-light-x', '50%')
+    element.style.setProperty('--hologram-light-y', '42%')
+    element.style.setProperty('--hologram-drag-x', '0px')
+    element.style.setProperty('--hologram-drag-y', '0px')
+  }
+  const handleHologramEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    handleHologramReset(event)
+  }
   const voiceAudioUrl = detail?.card.hasVoice && detail.card.voiceAudioUrl ? resolveApiUrl(detail.card.voiceAudioUrl) : ''
   const videoUrl = detail?.card.hasVideo && detail.card.videoUrl ? resolveApiUrl(detail.card.videoUrl) : ''
   const hasSpecialMedia = Boolean(voiceAudioUrl || videoUrl)
@@ -106,7 +145,7 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
         </button>
       </div>
       {detailLoading && <p className="detail-loading" role="status" aria-live="polite">카드 상세 정보를 확인하는 중이에요…</p>}
-      <div className={hasHologram ? 'detail-media hologram' : 'detail-media'} style={hologramStyle}>
+      <div className={hasHologram ? 'detail-media hologram interactive' : 'detail-media'} style={hologramStyle} onPointerDown={handleHologramStart} onPointerMove={handleHologramMove} onPointerUp={handleHologramEnd} onPointerLeave={handleHologramReset} onPointerCancel={handleHologramReset}>
         <img src={imageFor(resolveApiUrl(imageUrl), card.id)} alt="카드 상세" onError={imageError} />
         <span className="official-badge">공식 카드</span>
       </div>

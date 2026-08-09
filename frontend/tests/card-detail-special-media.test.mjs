@@ -40,3 +40,18 @@ test('card detail applies designConfig hologram styling with reduced-motion supp
   assert.match(cssSource, /@media\(prefers-reduced-motion:reduce\)[\s\S]*\.detail-media\.hologram::before/)
   assert.match(cssSource, /animation-name:none/)
 })
+
+test('owned hologram cards react to pointer and touch movement instead of only auto-rotating', () => {
+  assert.match(detailSource, /handleHologramMove/)
+  assert.match(detailSource, /handleHologramReset/)
+  assert.match(detailSource, /onPointerDown=\{handleHologramStart\}/)
+  assert.match(detailSource, /onPointerMove=\{handleHologramMove\}/)
+  assert.match(detailSource, /onPointerUp=\{handleHologramEnd\}/)
+  assert.match(detailSource, /onPointerLeave=\{handleHologramReset\}/)
+  assert.match(detailSource, /onPointerCancel=\{handleHologramReset\}/)
+  assert.match(detailSource, /--hologram-tilt-x/)
+  assert.match(detailSource, /--hologram-light-x/)
+  assert.match(cssSource, /rotateX\(var\(--hologram-tilt-x\)/)
+  assert.match(cssSource, /touch-action:none/)
+  assert.match(cssSource, /prefers-reduced-motion:reduce[\s\S]*--hologram-tilt-x:0deg/)
+})

@@ -4,7 +4,10 @@ import { readFile } from 'node:fs/promises'
 
 import {
   buildCardPayload,
+  buildDesignConfig,
   navigationState,
+  normalizeCreativeLayer,
+  responsiveStudioMode,
   reviewReadiness,
   studioDashboard,
 } from '../studio-core.js'
@@ -157,4 +160,97 @@ test('hosted studio routes authentication through its same-origin API proxy', as
         route.dest === 'https://fanfolio-api.onrender.com/api/$1',
     ),
   )
+})
+
+test('selects a deliberate studio layout for laptop, tablet, and phone widths', () => {
+  assert.equal(responsiveStudioMode(1280), 'desktop')
+  assert.equal(responsiveStudioMode(900), 'tablet')
+  assert.equal(responsiveStudioMode(430), 'phone')
+})
+
+test('normalizes creative layers for touch-safe front and back editing', () => {
+  assert.deepEqual(
+    normalizeCreativeLayer({
+      id: 'layer-drawing',
+      type: 'drawing',
+      side: 'back',
+      assetId: 'asset_drawing',
+      x: 112,
+      y: -8,
+      width: 140,
+      rotation: 225,
+      opacity: 1.4,
+      color: '#ff4fa3',
+    }),
+    {
+      id: 'layer-drawing',
+      type: 'drawing',
+      side: 'back',
+      assetId: 'asset_drawing',
+      x: 100,
+      y: 0,
+      width: 100,
+      rotation: 180,
+      opacity: 1,
+      color: '#ff4fa3',
+    },
+  )
+})
+
+test('serializes creative layer metadata without browser-only files or URLs', () => {
+  const config = buildDesignConfig({
+    editor: {
+      layers: [
+        {
+          id: 'layer-sticker',
+          type: 'sticker',
+          side: 'front',
+          assetId: 'asset_sticker',
+          src: 'blob:https://studio.example/sticker',
+          file: { name: 'sticker.png' },
+          x: 76,
+          y: 24,
+          width: 28,
+          rotation: -12,
+          opacity: 0.84,
+          color: '#ffffff',
+        },
+      ],
+    },
+  })
+
+  assert.deepEqual(config.creativeLayers, [
+    {
+      id: 'layer-sticker',
+      type: 'sticker',
+      side: 'front',
+      assetId: 'asset_sticker',
+      x: 76,
+      y: 24,
+      width: 28,
+      rotation: -12,
+      opacity: 0.84,
+      color: '#ffffff',
+    },
+  ])
+  assert.equal('src' in config.creativeLayers[0], false)
+  assert.equal('file' in config.creativeLayers[0], false)
+})
+
+test('studio shell exposes adaptive navigation, a mobile inspector, and interactive cards', async () => {
+  const source = await readFile(new URL('../app.js', import.meta.url), 'utf8')
+  const css = await readFile(new URL('../styles.css', import.meta.url), 'utf8')
+
+  assert.match(source, /data-action="toggle-sidebar"/)
+  assert.match(source, /class="sidebar-footer"/)
+  assert.match(source, /class="mobile-editor-actions"/)
+  assert.match(source, /mobile-inspector-backdrop/)
+  assert.match(source, /data-action="close-inspector"/)
+  assert.match(source, /data-hologram-card/)
+  assert.match(source, /initInteractiveCards/)
+  assert.match(css, /\.studio-shell\.sidebar-collapsed/)
+  assert.match(css, /\.sidebar-footer\s*\{[\s\S]*?margin-top:\s*auto/)
+  assert.match(css, /\.editor-inspector\.open/)
+  assert.match(css, /--tilt-x/)
+  assert.match(css, /touch-action:\s*none/)
 })

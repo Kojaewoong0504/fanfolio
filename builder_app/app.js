@@ -1,6 +1,8 @@
 import {
   buildCardPayload,
   navigationState,
+  normalizeCreativeLayer,
+  responsiveStudioMode,
   reviewReadiness,
   studioDashboard,
 } from './studio-core.js'
@@ -17,6 +19,7 @@ const API_BASE = isLocalHost
   : '/api'
 
 const DRAFT_KEY = 'fanfolio_artist_special_card_draft_v2'
+const SIDEBAR_KEY = 'fanfolio_artist_studio_sidebar_collapsed'
 const app = document.querySelector('#app')
 let ACCESS_TOKEN = ''
 let refreshInFlight = null
@@ -117,6 +120,11 @@ function initialEditor() {
     handwritingEnabled: false,
     handwritingNeedsRemoval: false,
     handwritingTransform: { x: 96, y: 1010, width: 520, rotation: -4 },
+    layers: [],
+    selectedLayerId: null,
+    inspectorOpen: false,
+    drawingColor: '#6b58ef',
+    drawingSize: 7,
     effect: 'holographic',
     effectPreset: 'aurora',
     effectIntensity: 0.58,
@@ -139,6 +147,8 @@ function readDraft() {
 }
 
 const savedDraft = readDraft()
+const savedSidebarPreference = localStorage.getItem(SIDEBAR_KEY)
+const initialViewportMode = responsiveStudioMode(window.innerWidth)
 const state = {
   loading: true,
   authenticated: false,
@@ -155,6 +165,11 @@ const state = {
   selectedRecipe: savedDraft?.selectedRecipe || 'voice',
   form: { ...initialForm(), ...(savedDraft?.form || {}) },
   editor: { ...initialEditor(), ...(savedDraft?.editor || {}) },
+  viewportMode: initialViewportMode,
+  sidebarCollapsed:
+    savedSidebarPreference === null
+      ? initialViewportMode === 'tablet'
+      : savedSidebarPreference === 'true',
   reviewNote: '',
   saveStatus: 'saved',
   busy: false,
@@ -197,6 +212,13 @@ function persistDraft() {
         !(key === 'handwritingSrc' && typeof value === 'string' && value.startsWith('data:')),
     ),
   )
+  editor.layers = (state.editor.layers || []).map(({ file, ...layer }) => ({
+    ...layer,
+    src:
+      typeof layer.src === 'string' && /^(blob:|data:)/.test(layer.src)
+        ? undefined
+        : layer.src,
+  }))
   try {
     localStorage.setItem(
       DRAFT_KEY,
@@ -371,24 +393,27 @@ function shell(content, title, activeView = state.view) {
     ['feedback', 'monitoring', '팬 반응'],
     ['settings', 'settings', '설정'],
   ]
-  return `<div class="studio-shell">
+  const sidebarCollapsed = state.viewportMode !== 'phone' && state.sidebarCollapsed
+  return `<div class="studio-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}" data-viewport-mode="${state.viewportMode}">
     <aside class="studio-sidebar">
-      ${brand()}
+      <div class="sidebar-head">${brand()}<button type="button" class="sidebar-toggle" data-action="toggle-sidebar" aria-label="${sidebarCollapsed ? '사이드바 펼치기' : '사이드바 접기'}" aria-expanded="${!sidebarCollapsed}">${icon(sidebarCollapsed ? 'right_panel_open' : 'left_panel_close')}</button></div>
       <nav aria-label="스튜디오 주요 메뉴">
         ${navigation
           .map(
-            ([view, symbol, label]) => `<button type="button" data-nav="${view}" class="${activeView === view ? 'active' : ''}">
+            ([view, symbol, label]) => `<button type="button" data-nav="${view}" class="${activeView === view ? 'active' : ''}" aria-label="${label}" title="${label}" ${activeView === view ? 'aria-current="page"' : ''}>
               ${icon(symbol)}<span>${label}</span>
             </button>`,
           )
           .join('')}
       </nav>
-      <div class="studio-sidebar-note">${icon('campaign')}<div><strong>콘텐츠 가이드</strong><span>팬에게 공개되기 전 운영팀 검수를 거쳐요.</span></div></div>
-      <button type="button" class="profile-chip" data-nav="settings">
-        <span class="profile-avatar">${esc((state.profile?.nickname || '아').slice(0, 1))}</span>
-        <span><strong>${esc(state.profile?.nickname || '아티스트')}</strong><small>${esc(state.profile?.username || 'ARTIST')}</small></span>
-        ${icon('chevron_right')}
-      </button>
+      <div class="sidebar-footer">
+        <div class="studio-sidebar-note">${icon('campaign')}<div><strong>콘텐츠 가이드</strong><span>팬에게 공개되기 전 운영팀 검수를 거쳐요.</span></div></div>
+        <button type="button" class="profile-chip" data-nav="settings" aria-label="프로필과 설정" title="프로필과 설정">
+          <span class="profile-avatar">${esc((state.profile?.nickname || '아').slice(0, 1))}</span>
+          <span><strong>${esc(state.profile?.nickname || '아티스트')}</strong><small>${esc(state.profile?.username || 'ARTIST')}</small></span>
+          ${icon('chevron_right')}
+        </button>
+      </div>
     </aside>
     <main class="studio-main">
       <header class="studio-topbar">
@@ -473,6 +498,61 @@ function createView() {
   </section>`
 }
 
+function selectedCreativeLayer() {
+  return (state.editor.layers || []).find((layer) => layer.id === state.editor.selectedLayerId) || null
+}
+
+function upsertCreativeLayer(type, values = {}) {
+  const layers = state.editor.layers || []
+  const existingIndex = values.id
+    ? layers.findIndex((layer) => layer.id === values.id)
+    : type === 'handwriting'
+      ? layers.findIndex((layer) => layer.type === 'handwriting')
+      : -1
+  const current = existingIndex >= 0 ? layers[existingIndex] : null
+  const layer = {
+    ...(current || {}),
+    id: current?.id || values.id || `${type}-${Date.now()}`,
+    type,
+    side: values.side || current?.side || state.editor.side || 'front',
+    x: values.x ?? current?.x ?? 62,
+    y: values.y ?? current?.y ?? 58,
+    width: values.width ?? current?.width ?? (type === 'sticker' ? 26 : 42),
+    rotation: values.rotation ?? current?.rotation ?? 0,
+    opacity: values.opacity ?? current?.opacity ?? 1,
+    color: values.color || current?.color || state.editor.drawingColor || '#ffffff',
+    zIndex: values.zIndex ?? current?.zIndex ?? layers.length + 1,
+    src: values.src || current?.src || '',
+    file: values.file ?? current?.file ?? null,
+    assetId: values.assetId ?? current?.assetId ?? null,
+  }
+  const nextLayers = [...layers]
+  if (existingIndex >= 0) nextLayers.splice(existingIndex, 1, layer)
+  else nextLayers.push(layer)
+  state.editor.layers = nextLayers
+  state.editor.selectedLayerId = layer.id
+  return layer
+}
+
+function creativeLayerMarkup(layer) {
+  if (!layer.src) return ''
+  const normalized = normalizeCreativeLayer(layer)
+  const selected = state.editor.selectedLayerId === layer.id
+  const style = `--layer-x:${normalized.x}%;--layer-y:${normalized.y}%;--layer-width:${normalized.width}%;--layer-rotation:${normalized.rotation}deg;--layer-opacity:${normalized.opacity};--layer-color:${normalized.color};--layer-image:url('${esc(layer.src)}');--layer-z:${normalized.zIndex || 4}`
+  const content = layer.type === 'sticker'
+    ? `<img src="${esc(layer.src)}" alt="" draggable="false" />`
+    : '<span class="creative-layer-mask" aria-hidden="true"></span>'
+  return `<button type="button" class="creative-layer layer-${esc(layer.type)} ${selected ? 'selected' : ''}" data-layer-id="${esc(layer.id)}" style="${style}" aria-label="${layer.type === 'sticker' ? '스티커' : layer.type === 'drawing' ? '그림' : '손글씨'} 레이어${selected ? ' 선택됨' : ''}">${content}<span class="layer-selection" aria-hidden="true"></span></button>`
+}
+
+function creativeLayersMarkup(side) {
+  return (state.editor.layers || [])
+    .filter((layer) => layer.side === side)
+    .sort((left, right) => Number(left.zIndex || 0) - Number(right.zIndex || 0))
+    .map(creativeLayerMarkup)
+    .join('')
+}
+
 function cardVisual({ fan = false } = {}) {
   const editor = state.editor
   const isBack = editor.side === 'back' && !fan
@@ -480,17 +560,15 @@ function cardVisual({ fan = false } = {}) {
     ? `<video src="${esc(editor.videoSrc)}" muted loop playsinline preload="metadata" ${fan ? 'controls' : 'autoplay'}></video>`
     : `<img class="card-photo" src="${esc(editor.imageSrc || sampleAssets.aurora)}" alt="${esc(state.form.name)} 카드 이미지" />`
   const effectOpacity = Number(editor.effectIntensity || 0)
-  const handwriting = editor.handwritingEnabled && editor.handwritingSrc
-    ? `<img class="handwriting-layer" src="${esc(editor.handwritingSrc)}" alt="적용된 손글씨" style="--handwriting-width:${Number(editor.handwritingTransform?.width || 520) / 10}%;--handwriting-rotation:${Number(editor.handwritingTransform?.rotation || 0)}deg" />`
-    : ''
+  const tiltStyle = '--tilt-x:0deg;--tilt-y:0deg;--light-x:50%;--light-y:42%;--foil-shift-x:0px;--foil-shift-y:0px'
   if (isBack) {
-    return `<div class="editor-card back-card"><img src="./agency-back-template-v1.png" alt="Fanfolio 공식 카드 뒷면" /><div class="back-card-meta"><strong>${esc(state.form.name)}</strong><span>OFFICIAL DIGITAL COLLECTIBLE</span></div></div>`
+    return `<div class="editor-card back-card" data-hologram-card style="${tiltStyle};--back-color:${esc(editor.background || '#0b1033')}"><img src="./agency-back-template-v1.png" alt="Fanfolio 공식 카드 뒷면" />${creativeLayersMarkup('back')}<div class="back-card-meta"><strong>${esc(state.form.name)}</strong><span>OFFICIAL DIGITAL COLLECTIBLE</span></div></div>`
   }
-  return `<div class="editor-card ${editor.effectMotion ? 'effect-motion' : ''}" style="--effect-opacity:${effectOpacity};--effect-angle:${Number(editor.effectAngle || 135)}deg">
+  return `<div class="editor-card ${editor.effectMotion ? 'effect-motion' : ''}" data-hologram-card style="${tiltStyle};--effect-opacity:${effectOpacity};--effect-angle:${Number(editor.effectAngle || 135)}deg">
     ${media}
     ${editor.effect !== 'none' ? `<img class="hologram-layer preset-${esc(editor.effectPreset)}" src="./assets/hologram-aurora-texture.jpg" alt="" />` : ''}
     <div class="card-vignette" aria-hidden="true"></div>
-    ${handwriting}
+    ${creativeLayersMarkup('front')}
     <div class="card-caption"><span>${esc(state.form.seasonName || 'FANFOLIO EDITION')}</span><strong>${esc(state.form.name || '새 특별 카드')}</strong><small>${esc(state.form.rarity || 'SR')} · OFFICIAL</small></div>
   </div>`
 }
@@ -498,6 +576,8 @@ function cardVisual({ fan = false } = {}) {
 const editorTools = [
   ['photo', 'image', '사진'],
   ['handwriting', 'draw', '손글씨'],
+  ['drawing', 'gesture', '그림'],
+  ['sticker', 'interests', '스티커'],
   ['voice', 'graphic_eq', '보이스'],
   ['motion', 'movie', '모션'],
   ['hologram', 'auto_awesome', '홀로그램'],
@@ -506,6 +586,25 @@ const editorTools = [
 
 function uploadBox(kind, accept, title, description) {
   return `<label class="upload-box"><input type="file" data-upload="${kind}" accept="${accept}" /><span class="upload-icon">${icon('upload_file')}</span><strong>${title}</strong><small>${description}</small></label>`
+}
+
+function layerControls() {
+  const layer = selectedCreativeLayer()
+  if (!layer) {
+    return `<div class="layer-empty">${icon('select')}<span><strong>카드 위 레이어를 선택해 주세요.</strong><small>선택한 손글씨·그림·스티커의 위치와 크기를 조절할 수 있어요.</small></span></div>`
+  }
+  const normalized = normalizeCreativeLayer(layer)
+  return `<div class="layer-controls">
+    <div class="layer-controls-heading"><span><strong>${layer.type === 'sticker' ? '스티커' : layer.type === 'drawing' ? '그림' : '손글씨'} 레이어</strong><small>카드 위에서 직접 끌어 이동할 수도 있어요.</small></span><button type="button" class="icon-button small danger" data-action="delete-layer" aria-label="선택 레이어 삭제">${icon('delete')}</button></div>
+    <label class="compact-field">표시 면<select data-layer-field="side"><option value="front" ${normalized.side === 'front' ? 'selected' : ''}>앞면</option><option value="back" ${normalized.side === 'back' ? 'selected' : ''}>뒷면</option></select></label>
+    ${layer.type === 'sticker' ? '' : `<label class="compact-field">색상<input type="color" value="${normalized.color}" data-layer-field="color" /></label>`}
+    <div class="range-group"><label>가로 위치 <output>${Math.round(normalized.x)}%</output></label><input type="range" min="0" max="100" step="1" value="${normalized.x}" data-layer-field="x" /></div>
+    <div class="range-group"><label>세로 위치 <output>${Math.round(normalized.y)}%</output></label><input type="range" min="0" max="100" step="1" value="${normalized.y}" data-layer-field="y" /></div>
+    <div class="range-group"><label>크기 <output>${Math.round(normalized.width)}%</output></label><input type="range" min="8" max="100" step="1" value="${normalized.width}" data-layer-field="width" /></div>
+    <div class="range-group"><label>회전 <output>${Math.round(normalized.rotation)}°</output></label><input type="range" min="-180" max="180" step="1" value="${normalized.rotation}" data-layer-field="rotation" /></div>
+    <div class="range-group"><label>투명도 <output>${Math.round(normalized.opacity * 100)}%</output></label><input type="range" min="0.1" max="1" step="0.01" value="${normalized.opacity}" data-layer-field="opacity" /></div>
+    <div class="inline-actions layer-actions"><button type="button" class="secondary-button compact" data-action="duplicate-layer">${icon('content_copy')} 복제</button><button type="button" class="secondary-button compact" data-action="bring-layer-front">${icon('flip_to_front')} 맨 앞으로</button></div>
+  </div>`
 }
 
 function photoInspector() {
@@ -528,8 +627,19 @@ function handwritingInspector() {
   ${uploadBox('handwriting', 'image/png,image/jpeg,image/webp', '손글씨 이미지 업로드', '투명 PNG는 바로 사용, 사진은 배경 제거')}
   ${hasWriting && state.editor.handwritingNeedsRemoval ? `<button type="button" class="secondary-button full" data-action="remove-background">${icon('background_replace')} 배경 제거 요청</button>` : ''}
   ${state.jobStatus ? `<p class="job-status">${icon('progress_activity')} ${esc(state.jobStatus)}</p>` : ''}
-  <div class="range-group"><label>크기 <output>${Number(state.editor.handwritingTransform.width)}px</output></label><input type="range" min="180" max="760" step="10" value="${Number(state.editor.handwritingTransform.width)}" data-transform="width" /></div>
-  <div class="range-group"><label>회전 <output>${Number(state.editor.handwritingTransform.rotation)}°</output></label><input type="range" min="-24" max="24" step="1" value="${Number(state.editor.handwritingTransform.rotation)}" data-transform="rotation" /></div>`
+  ${layerControls()}`
+}
+
+function drawingInspector() {
+  return `<div class="inspector-section"><span class="inspector-label">아티스트 드로잉</span><p class="inspector-description">펜, 손가락, 마우스로 자유롭게 그리고 투명 레이어로 올려보세요.</p>
+    <div class="drawing-options"><label>펜 색상<input type="color" value="${esc(state.editor.drawingColor)}" data-editor="drawingColor" /></label><label>굵기<input type="range" min="2" max="24" step="1" value="${Number(state.editor.drawingSize)}" data-editor="drawingSize" /></label></div>
+    <canvas id="drawing-pad" width="560" height="420" aria-label="아티스트 그림 입력 영역"></canvas>
+    <div class="inline-actions"><button type="button" class="secondary-button compact" data-action="clear-drawing">${icon('ink_eraser')} 비우기</button><button type="button" class="primary-button compact" data-action="add-drawing-layer">${icon('add_photo_alternate')} 그림 레이어 추가</button></div>
+  </div>${layerControls()}`
+}
+
+function stickerInspector() {
+  return `<div class="inspector-section"><span class="inspector-label">나만의 스티커</span><p class="inspector-description">아티스트가 직접 만든 투명 PNG나 WebP를 올려 카드 양면에 배치할 수 있어요.</p>${uploadBox('sticker', 'image/png,image/webp', '스티커 이미지 업로드', '투명 PNG 또는 WebP 권장')}</div>${layerControls()}`
 }
 
 function voiceInspector() {
@@ -569,13 +679,16 @@ function hologramInspector() {
 
 function backInspector() {
   return `<div class="inspector-section"><span class="inspector-label">공식 뒷면 템플릿</span><button type="button" class="back-template active"><img src="./agency-back-template-v1.png" alt="Fanfolio 공식 뒷면 템플릿" /><span>${icon('verified')}<strong>소속사 공식 템플릿</strong><small>로고와 인증 영역이 보호됩니다.</small></span></button></div>
-  <div class="info-card">${icon('lock')}<span><strong>브랜드 보호 영역</strong><small>뒷면 인증 마크와 발행 정보는 공개 시 자동으로 생성됩니다.</small></span></div>`
+  <label class="compact-field">뒷면 바탕색<input type="color" value="${esc(state.editor.background || '#0b1033')}" data-editor="background" /></label>
+  <div class="info-card">${icon('lock')}<span><strong>브랜드 보호 영역</strong><small>뒷면 인증 마크와 발행 정보는 공개 시 자동으로 생성됩니다.</small></span></div>${layerControls()}`
 }
 
 function editorInspector() {
   return {
     photo: photoInspector,
     handwriting: handwritingInspector,
+    drawing: drawingInspector,
+    sticker: stickerInspector,
     voice: voiceInspector,
     motion: motionInspector,
     hologram: hologramInspector,
@@ -595,14 +708,17 @@ function editorProgress() {
 }
 
 function designStage() {
-  return `<section class="editor-design">
-    <aside class="tool-rail" aria-label="카드 편집 도구">${editorTools.map(([tool, symbol, label]) => `<button type="button" data-tool="${tool}" class="${state.editor.tool === tool ? 'active' : ''}">${icon(symbol)}<span>${label}</span></button>`).join('')}</aside>
+  const inspectorOpen = Boolean(state.editor.inspectorOpen)
+  return `<section class="editor-design ${inspectorOpen ? 'inspector-open' : ''}">
+    <aside class="tool-rail" aria-label="카드 편집 도구">${editorTools.map(([tool, symbol, label]) => `<button type="button" data-tool="${tool}" class="${state.editor.tool === tool ? 'active' : ''}" aria-pressed="${state.editor.tool === tool}" title="${label}">${icon(symbol)}<span>${label}</span></button>`).join('')}</aside>
     <div class="editor-canvas-area">
       <div class="canvas-toolbar"><div class="side-switch"><button type="button" data-side="front" class="${state.editor.side === 'front' ? 'active' : ''}">앞면</button><button type="button" data-side="back" class="${state.editor.side === 'back' ? 'active' : ''}">뒷면</button></div><span>${icon('info')} 실제 팬 화면과 유사한 비율이에요.</span></div>
       <div class="editor-stage">${cardVisual()}<span class="stage-shadow" aria-hidden="true"></span></div>
-      <div class="canvas-caption"><span>${icon('touch_app')} 도구를 선택해 사진과 특별 기능을 편집하세요.</span><button type="button" class="text-button" data-action="open-fan-preview">전체 화면 미리보기 ${icon('open_in_full')}</button></div>
+      <div class="canvas-caption"><span>${icon('touch_app')} 카드를 기울이거나 레이어를 직접 움직여 보세요.</span><div><button type="button" class="text-button mobile-tool-settings" data-action="open-inspector">${icon('tune')} 도구 설정</button><button type="button" class="text-button" data-action="open-fan-preview">전체 화면 미리보기 ${icon('open_in_full')}</button></div></div>
     </div>
-    <aside class="editor-inspector"><div class="inspector-heading"><div><span>EDIT TOOL</span><h3>${editorTools.find(([tool]) => tool === state.editor.tool)?.[2] || '사진'}</h3></div><span class="inspector-side">${state.editor.side === 'front' ? '앞면' : '뒷면'}</span></div><div class="inspector-body">${editorInspector()}</div></aside>
+    <button type="button" class="mobile-inspector-backdrop" data-action="close-inspector" aria-label="도구 설정 닫기"></button>
+    <aside class="editor-inspector ${inspectorOpen ? 'open' : ''}" aria-label="선택한 편집 도구 설정"><div class="inspector-heading"><div><span>EDIT TOOL</span><h3>${editorTools.find(([tool]) => tool === state.editor.tool)?.[2] || '사진'}</h3></div><div><span class="inspector-side">${state.editor.side === 'front' ? '앞면' : '뒷면'}</span><button type="button" class="inspector-close" data-action="close-inspector" aria-label="도구 설정 닫기">${icon('close')}</button></div></div><div class="inspector-body">${editorInspector()}</div></aside>
+    <div class="mobile-editor-actions"><button type="button" class="secondary-button" data-action="save-draft">${icon('save')} 저장</button><button type="button" class="primary-button" data-action="go-details">다음 ${icon('arrow_forward')}</button></div>
   </section>`
 }
 
@@ -741,6 +857,13 @@ function afterRender() {
   hydrateCardImages()
   if (state.view === 'editor' && state.stage === 'design' && state.editor.tool === 'handwriting') {
     initHandwritingPad()
+  }
+  if (state.view === 'editor' && state.stage === 'design' && state.editor.tool === 'drawing') {
+    initDrawingPad()
+  }
+  if (state.view === 'editor' && state.stage === 'design') {
+    initInteractiveCards()
+    initCreativeLayerInteractions()
   }
 }
 
@@ -964,6 +1087,23 @@ async function ensureAsset(kind) {
   return assetId
 }
 
+async function ensureCreativeLayerAssets() {
+  for (const layer of state.editor.layers || []) {
+    if (layer.assetId) continue
+    if (layer.type === 'handwriting' && state.editor.handwritingAssetId) {
+      layer.assetId = state.editor.handwritingAssetId
+      continue
+    }
+    if (!layer.src) continue
+    const file = layer.file || await sourceToFile(
+      layer.src,
+      `${layer.type}-${Date.now()}.png`,
+      'image/png',
+    )
+    layer.assetId = await uploadAsset(file, 'handwriting')
+  }
+}
+
 async function saveDraft({ quiet = false, nextStage = null } = {}) {
   if (state.busy) return null
   state.busy = true
@@ -976,6 +1116,7 @@ async function saveDraft({ quiet = false, nextStage = null } = {}) {
     if (state.editor.handwritingEnabled && state.editor.handwritingSrc) {
       await ensureAsset('handwriting')
     }
+    await ensureCreativeLayerAssets()
     state.form.hasVoice = state.editor.voiceEnabled
     const payload = buildCardPayload({ form: state.form, editor: state.editor })
     const result = state.cardId
@@ -1031,6 +1172,13 @@ async function openCard(cardId) {
     effectMotion: card.designConfig?.front?.effectMotion ?? true,
     videoLoop: card.designConfig?.video?.loop ?? true,
     handwritingTransform: card.handwritingTransform || initialEditor().handwritingTransform,
+    layers: Array.isArray(card.designConfig?.creativeLayers)
+      ? card.designConfig.creativeLayers.map((layer) => ({ ...layer, src: '', file: null }))
+      : [],
+    selectedLayerId: null,
+    inspectorOpen: false,
+    background: card.designConfig?.back?.background || '#0b1033',
+    backTemplateId: card.designConfig?.back?.templateId || 'agency_back_v1',
   }
   state.cardId = card.id
   state.editingCardId = card.id
@@ -1055,6 +1203,21 @@ async function openCard(cardId) {
       }
     }),
   )
+  if (state.editor.handwritingSrc) {
+    const handwritingLayer = state.editor.layers.find((layer) => layer.type === 'handwriting')
+    if (handwritingLayer) {
+      handwritingLayer.src = state.editor.handwritingSrc
+      handwritingLayer.assetId = card.handwritingAssetId
+    } else {
+      upsertCreativeLayer('handwriting', {
+        src: state.editor.handwritingSrc,
+        assetId: card.handwritingAssetId,
+        side: 'front',
+        width: Math.min(72, Number(card.handwritingTransform?.width || 520) / 10),
+        rotation: Number(card.handwritingTransform?.rotation || 0),
+      })
+    }
+  }
   persistDraft()
   render()
 }
@@ -1086,6 +1249,20 @@ function replaceObjectUrl(key, file) {
 
 function handleUpload(kind, file) {
   if (!file) return
+  if (kind === 'sticker') {
+    const src = URL.createObjectURL(file)
+    upsertCreativeLayer('sticker', {
+      src,
+      file,
+      assetId: null,
+      side: state.editor.side,
+      width: 28,
+    })
+    state.editor.inspectorOpen = true
+    markDirty()
+    render()
+    return
+  }
   const srcKey = `${kind}Src`
   const fileKey = `${kind}File`
   const idKey = `${kind}AssetId`
@@ -1106,6 +1283,14 @@ function handleUpload(kind, file) {
   if (kind === 'handwriting') {
     state.editor.handwritingEnabled = true
     state.editor.handwritingNeedsRemoval = file.type !== 'image/png'
+    upsertCreativeLayer('handwriting', {
+      src: state.editor.handwritingSrc,
+      file,
+      assetId: null,
+      side: state.editor.side,
+      color: '#171a3a',
+      width: 46,
+    })
   }
   markDirty()
   render()
@@ -1187,11 +1372,134 @@ function initHandwritingPad() {
     state.editor.handwritingAssetId = null
     state.editor.handwritingEnabled = true
     state.editor.handwritingNeedsRemoval = false
+    const layer = upsertCreativeLayer('handwriting', {
+      src: state.editor.handwritingSrc,
+      file: null,
+      assetId: null,
+      color: '#171a3a',
+      width: 46,
+    })
+    layer.side = state.editor.side
     markDirty()
     render()
   }
   canvas.addEventListener('pointerup', finish)
   canvas.addEventListener('pointercancel', finish)
+}
+
+function initDrawingPad() {
+  const canvas = document.querySelector('#drawing-pad')
+  if (!canvas) return
+  const context = canvas.getContext('2d')
+  context.strokeStyle = state.editor.drawingColor || '#6b58ef'
+  context.lineWidth = Number(state.editor.drawingSize || 7)
+  context.lineCap = 'round'
+  context.lineJoin = 'round'
+  let drawing = false
+  const point = (event) => {
+    const box = canvas.getBoundingClientRect()
+    return {
+      x: ((event.clientX - box.left) / box.width) * canvas.width,
+      y: ((event.clientY - box.top) / box.height) * canvas.height,
+    }
+  }
+  canvas.addEventListener('pointerdown', (event) => {
+    drawing = true
+    canvas.setPointerCapture?.(event.pointerId)
+    const current = point(event)
+    context.beginPath()
+    context.moveTo(current.x, current.y)
+  })
+  canvas.addEventListener('pointermove', (event) => {
+    if (!drawing) return
+    const current = point(event)
+    context.lineTo(current.x, current.y)
+    context.stroke()
+  })
+  const finish = () => {
+    drawing = false
+  }
+  canvas.addEventListener('pointerup', finish)
+  canvas.addEventListener('pointercancel', finish)
+}
+
+function resetInteractiveCard(card) {
+  card.style.setProperty('--tilt-x', '0deg')
+  card.style.setProperty('--tilt-y', '0deg')
+  card.style.setProperty('--light-x', '50%')
+  card.style.setProperty('--light-y', '42%')
+  card.style.setProperty('--foil-shift-x', '0px')
+  card.style.setProperty('--foil-shift-y', '0px')
+  card.classList.remove('is-tilting')
+}
+
+function initInteractiveCards() {
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  document.querySelectorAll('[data-hologram-card]').forEach((card) => {
+    if (reduceMotion) return
+    const move = (event) => {
+      if (event.target.closest?.('.creative-layer')) return
+      const box = card.getBoundingClientRect()
+      const x = Math.max(0, Math.min(1, (event.clientX - box.left) / box.width))
+      const y = Math.max(0, Math.min(1, (event.clientY - box.top) / box.height))
+      card.style.setProperty('--tilt-x', `${((0.5 - y) * 12).toFixed(2)}deg`)
+      card.style.setProperty('--tilt-y', `${((x - 0.5) * 14).toFixed(2)}deg`)
+      card.style.setProperty('--light-x', `${Math.round(x * 100)}%`)
+      card.style.setProperty('--light-y', `${Math.round(y * 100)}%`)
+      card.style.setProperty('--foil-shift-x', `${Math.round((x - 0.5) * 30)}px`)
+      card.style.setProperty('--foil-shift-y', `${Math.round((y - 0.5) * 24)}px`)
+      card.classList.add('is-tilting')
+    }
+    card.addEventListener('pointerdown', (event) => {
+      if (event.target.closest?.('.creative-layer')) return
+      card.setPointerCapture?.(event.pointerId)
+      move(event)
+    })
+    card.addEventListener('pointermove', move)
+    card.addEventListener('pointerleave', () => resetInteractiveCard(card))
+    card.addEventListener('pointercancel', () => resetInteractiveCard(card))
+    card.addEventListener('pointerup', (event) => {
+      card.releasePointerCapture?.(event.pointerId)
+      if (event.pointerType !== 'mouse') resetInteractiveCard(card)
+    })
+  })
+}
+
+function initCreativeLayerInteractions() {
+  document.querySelectorAll('.creative-layer[data-layer-id]').forEach((element) => {
+    element.addEventListener('pointerdown', (event) => {
+      event.stopPropagation()
+      const layer = (state.editor.layers || []).find(
+        (item) => item.id === element.dataset.layerId,
+      )
+      const card = element.closest('.editor-card')
+      if (!layer || !card) return
+      state.editor.selectedLayerId = layer.id
+      document.querySelectorAll('.creative-layer.selected').forEach((item) => item.classList.remove('selected'))
+      element.classList.add('selected')
+      element.setPointerCapture?.(event.pointerId)
+      const box = card.getBoundingClientRect()
+      const start = { clientX: event.clientX, clientY: event.clientY, x: Number(layer.x), y: Number(layer.y) }
+      const move = (moveEvent) => {
+        moveEvent.preventDefault()
+        layer.x = Math.max(0, Math.min(100, start.x + ((moveEvent.clientX - start.clientX) / box.width) * 100))
+        layer.y = Math.max(0, Math.min(100, start.y + ((moveEvent.clientY - start.clientY) / box.height) * 100))
+        element.style.setProperty('--layer-x', `${layer.x}%`)
+        element.style.setProperty('--layer-y', `${layer.y}%`)
+      }
+      const finish = (finishEvent) => {
+        element.releasePointerCapture?.(finishEvent.pointerId)
+        element.removeEventListener('pointermove', move)
+        element.removeEventListener('pointerup', finish)
+        element.removeEventListener('pointercancel', finish)
+        markDirty()
+        render()
+      }
+      element.addEventListener('pointermove', move)
+      element.addEventListener('pointerup', finish)
+      element.addEventListener('pointercancel', finish)
+    })
+  })
 }
 
 async function requestBackgroundRemoval() {
@@ -1216,6 +1524,10 @@ async function pollBackgroundRemoval(jobId) {
     const result = await api(`/background-removal-jobs/${jobId}`)
     if (result.data.status === 'completed') {
       state.editor.handwritingSrc = await fetchProtectedBlob(result.data.transparentImageUrl)
+      upsertCreativeLayer('handwriting', {
+        src: state.editor.handwritingSrc,
+        assetId: state.editor.handwritingAssetId,
+      })
       state.editor.handwritingNeedsRemoval = false
       state.jobStatus = '투명 손글씨가 준비됐어요.'
       markDirty()
@@ -1306,7 +1618,8 @@ app.addEventListener('click', async (event) => {
   const tool = event.target.closest('[data-tool]')
   if (tool) {
     state.editor.tool = tool.dataset.tool
-    state.editor.side = tool.dataset.tool === 'back' ? 'back' : 'front'
+    if (tool.dataset.tool === 'back') state.editor.side = 'back'
+    state.editor.inspectorOpen = true
     render()
     return
   }
@@ -1314,7 +1627,22 @@ app.addEventListener('click', async (event) => {
   if (side) {
     state.editor.side = side.dataset.side
     if (state.editor.side === 'back') state.editor.tool = 'back'
+    if (state.editor.side === 'front' && state.editor.tool === 'back') state.editor.tool = 'photo'
     render()
+    return
+  }
+  const layerElement = event.target.closest('[data-layer-id]')
+  if (layerElement) {
+    const layer = (state.editor.layers || []).find(
+      (item) => item.id === layerElement.dataset.layerId,
+    )
+    if (layer) {
+      state.editor.selectedLayerId = layer.id
+      state.editor.side = layer.side
+      state.editor.tool = layer.type
+      state.editor.inspectorOpen = true
+      render()
+    }
     return
   }
   const stage = event.target.closest('[data-editor-stage]')
@@ -1357,6 +1685,11 @@ app.addEventListener('click', async (event) => {
   }
   const action = event.target.closest('[data-action]')?.dataset.action
   if (!action) return
+  if (action === 'toggle-sidebar') {
+    state.sidebarCollapsed = !state.sidebarCollapsed
+    localStorage.setItem(SIDEBAR_KEY, String(state.sidebarCollapsed))
+    render()
+  }
   if (action === 'logout') logoutArtist()
   if (action === 'help') notify('사진 → 특별 기능 → 카드 정보 → 팬 미리보기 → 검수 순서로 진행해 주세요.')
   if (action === 'exit-editor') navigate('cards')
@@ -1367,6 +1700,14 @@ app.addEventListener('click', async (event) => {
   }
   if (action === 'open-fan-preview') {
     state.stage = 'preview'
+    render()
+  }
+  if (action === 'open-inspector') {
+    state.editor.inspectorOpen = true
+    render()
+  }
+  if (action === 'close-inspector') {
+    state.editor.inspectorOpen = false
     render()
   }
   if (action === 'go-review') {
@@ -1410,8 +1751,66 @@ app.addEventListener('click', async (event) => {
     state.editor.handwritingFile = null
     state.editor.handwritingAssetId = null
     state.form.handwritingAssetId = null
+    state.editor.layers = (state.editor.layers || []).filter((layer) => layer.type !== 'handwriting')
+    state.editor.selectedLayerId = null
     markDirty()
     render()
+  }
+  if (action === 'clear-drawing') {
+    const canvas = document.querySelector('#drawing-pad')
+    canvas?.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height)
+  }
+  if (action === 'add-drawing-layer') {
+    const canvas = document.querySelector('#drawing-pad')
+    if (canvas) {
+      const src = canvas.toDataURL('image/png')
+      upsertCreativeLayer('drawing', {
+        src,
+        file: null,
+        assetId: null,
+        side: state.editor.side,
+        color: state.editor.drawingColor,
+        width: 48,
+      })
+      markDirty()
+      render()
+    }
+  }
+  if (action === 'delete-layer') {
+    const selected = selectedCreativeLayer()
+    if (selected?.src?.startsWith('blob:')) URL.revokeObjectURL(selected.src)
+    state.editor.layers = (state.editor.layers || []).filter(
+      (layer) => layer.id !== state.editor.selectedLayerId,
+    )
+    if (selected?.type === 'handwriting') {
+      state.editor.handwritingSrc = ''
+      state.editor.handwritingAssetId = null
+      state.form.handwritingAssetId = null
+    }
+    state.editor.selectedLayerId = null
+    markDirty()
+    render()
+  }
+  if (action === 'duplicate-layer') {
+    const selected = selectedCreativeLayer()
+    if (selected) {
+      upsertCreativeLayer(selected.type, {
+        ...selected,
+        id: `${selected.type}-${Date.now()}`,
+        x: Math.min(100, Number(selected.x) + 6),
+        y: Math.min(100, Number(selected.y) + 6),
+      })
+      markDirty()
+      render()
+    }
+  }
+  if (action === 'bring-layer-front') {
+    const selected = selectedCreativeLayer()
+    if (selected) {
+      selected.zIndex = Math.max(0, ...(state.editor.layers || []).map((layer) => Number(layer.zIndex || 0))) + 1
+      markDirty()
+      render()
+    }
   }
   if (action === 'remove-background') requestBackgroundRemoval()
 })
@@ -1425,6 +1824,18 @@ app.addEventListener('change', (event) => {
   const editorField = event.target.dataset.editor
   if (editorField) {
     state.editor[editorField] = event.target.type === 'checkbox' ? event.target.checked : event.target.value
+    markDirty()
+    render()
+    return
+  }
+  const layerField = event.target.dataset.layerField
+  if (layerField) {
+    const layer = selectedCreativeLayer()
+    if (!layer) return
+    layer[layerField] = ['x', 'y', 'width', 'rotation', 'opacity', 'zIndex'].includes(layerField)
+      ? Number(event.target.value)
+      : event.target.value
+    if (layerField === 'side') state.editor.side = layer.side
     markDirty()
     render()
   }
@@ -1448,6 +1859,17 @@ app.addEventListener('input', (event) => {
     markDirty()
     render()
   }
+  const layerField = event.target.dataset.layerField
+  if (layerField) {
+    const layer = selectedCreativeLayer()
+    if (layer) {
+      layer[layerField] = ['x', 'y', 'width', 'rotation', 'opacity', 'zIndex'].includes(layerField)
+        ? Number(event.target.value)
+        : event.target.value
+      markDirty()
+      render()
+    }
+  }
   const transformField = event.target.dataset.transform
   if (transformField) {
     state.editor.handwritingTransform[transformField] = Number(event.target.value)
@@ -1457,6 +1879,18 @@ app.addEventListener('input', (event) => {
   if (event.target.matches('[data-review-note]')) {
     state.reviewNote = event.target.value
   }
+})
+
+let responsiveRenderTimer = null
+window.addEventListener('resize', () => {
+  window.clearTimeout(responsiveRenderTimer)
+  responsiveRenderTimer = window.setTimeout(() => {
+    const nextMode = responsiveStudioMode(window.innerWidth)
+    if (nextMode === state.viewportMode) return
+    state.viewportMode = nextMode
+    if (savedSidebarPreference === null) state.sidebarCollapsed = nextMode === 'tablet'
+    render()
+  }, 120)
 })
 
 async function bootstrap() {

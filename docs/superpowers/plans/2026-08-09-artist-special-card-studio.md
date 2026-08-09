@@ -468,3 +468,84 @@ Confirm only intended source, migration, tests, plan and generated brand assets 
 
 Use a Lore-format commit that records media constraints, rejected external embeds, full test commands and any browser limitation.
 
+### Task 11: Add adaptive studio navigation and editor layout
+
+**Files:**
+- Modify: `builder_app/studio-core.js`
+- Modify: `builder_app/tests/studio-core.test.mjs`
+- Modify: `builder_app/app.js`
+- Modify: `builder_app/styles.css`
+
+- [ ] **Step 1: Write failing responsive-mode and source-contract tests**
+
+Assert `responsiveStudioMode(1280) === 'desktop'`, `responsiveStudioMode(900) === 'tablet'`, and `responsiveStudioMode(430) === 'phone'`. Assert the shell exposes `toggle-sidebar`, an accessible collapsed label, a sidebar footer, a mobile inspector sheet, and a mobile editor action bar.
+
+- [ ] **Step 2: Run `npm --prefix builder_app test` and confirm RED**
+
+Expected: missing `responsiveStudioMode` export and missing adaptive shell markers.
+
+- [ ] **Step 3: Implement adaptive navigation**
+
+Persist the desktop/tablet collapsed preference, keep the profile in a sidebar footer, expose labels as tooltips when collapsed, use bottom navigation on phones, and open editor properties as a bottom sheet on phones.
+
+- [ ] **Step 4: Implement laptop, tablet, and phone editor grids**
+
+Use a three-pane desktop grid, compact three-pane tablet grid, and canvas-first single-column phone layout. Constrain back-template previews and keep all touch controls at least 44px.
+
+- [ ] **Step 5: Run studio tests and syntax checks**
+
+Run `npm --prefix builder_app test` and `node --check builder_app/app.js`; expected exit 0.
+
+### Task 12: Add front/back creative layers
+
+**Files:**
+- Modify: `builder_app/studio-core.js`
+- Modify: `builder_app/tests/studio-core.test.mjs`
+- Modify: `builder_app/app.js`
+- Modify: `builder_app/styles.css`
+
+- [ ] **Step 1: Write failing layer normalization and serialization tests**
+
+Cover `handwriting`, `drawing`, and `sticker` layers with `side`, `x`, `y`, `width`, `rotation`, `opacity`, and `color`. Verify transient browser URLs and `File` values are not written to `designConfig`.
+
+- [ ] **Step 2: Run studio tests and confirm RED**
+
+Expected: missing layer exports and no `creativeLayers` serialization.
+
+- [ ] **Step 3: Implement the shared layer model and controls**
+
+Render layers on both card sides, support pointer drag and selection, add position/size/rotation/opacity/color/side controls, and provide delete/duplicate actions.
+
+- [ ] **Step 4: Add drawing and sticker tools**
+
+Use a pen-capable canvas for drawings and real uploaded PNG/WebP assets for stickers. Do not substitute emoji or CSS-drawn stickers.
+
+- [ ] **Step 5: Verify GREEN**
+
+Run studio tests and syntax checks; expected exit 0.
+
+### Task 13: Make hologram motion user-controlled on studio and fan cards
+
+**Files:**
+- Modify: `builder_app/tests/studio-core.test.mjs`
+- Modify: `builder_app/app.js`
+- Modify: `builder_app/styles.css`
+- Modify: `frontend/tests/card-detail-special-media.test.mjs`
+- Modify: `frontend/src/components/CardDetail.tsx`
+- Modify: `frontend/src/App.css`
+
+- [ ] **Step 1: Write failing interaction contract tests**
+
+Assert studio and fan card sources expose pointer move/leave handlers and shared tilt/light CSS variables, and retain reduced-motion fallbacks.
+
+- [ ] **Step 2: Run studio and fan tests and confirm RED**
+
+Expected: missing interaction handlers and CSS variables.
+
+- [ ] **Step 3: Implement pointer and touch hologram response**
+
+Map pointer position to bounded `rotateX`, `rotateY`, light X/Y, and texture shift. Reset to center on pointer leave/cancel; skip transforms when reduced motion is requested.
+
+- [ ] **Step 4: Run all frontend checks**
+
+Run builder tests, frontend tests, frontend lint, frontend build, and JavaScript syntax checks; expected exit 0.

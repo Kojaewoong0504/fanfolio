@@ -19,6 +19,38 @@ function normalizedIntensity(value, fallback = 0.78) {
   return Math.max(0, Math.min(1, parsed > 1 ? parsed / 100 : parsed))
 }
 
+function clamped(value, minimum, maximum, fallback) {
+  return Math.max(minimum, Math.min(maximum, numeric(value, fallback)))
+}
+
+export function responsiveStudioMode(width) {
+  const viewport = numeric(width, 1280)
+  if (viewport <= 720) return 'phone'
+  if (viewport <= 1024) return 'tablet'
+  return 'desktop'
+}
+
+export function normalizeCreativeLayer(layer = {}, index = 0) {
+  const allowedTypes = new Set(['handwriting', 'drawing', 'sticker'])
+  const color = /^#[0-9a-f]{6}$/i.test(String(layer.color || ''))
+    ? String(layer.color).toLowerCase()
+    : '#ffffff'
+  return compactObject({
+    id: String(layer.id || `creative-layer-${index + 1}`),
+    type: allowedTypes.has(layer.type) ? layer.type : 'handwriting',
+    side: layer.side === 'back' ? 'back' : 'front',
+    assetId: layer.assetId || undefined,
+    x: clamped(layer.x, 0, 100, 50),
+    y: clamped(layer.y, 0, 100, 50),
+    width: clamped(layer.width, 8, 100, 36),
+    rotation: clamped(layer.rotation, -180, 180, 0),
+    opacity: clamped(layer.opacity, 0, 1, 1),
+    color,
+    zIndex:
+      layer.zIndex === undefined ? undefined : clamped(layer.zIndex, 1, 99, index + 1),
+  })
+}
+
 export function buildDesignConfig({ form = {}, editor = {} } = {}) {
   const existing = form.designConfig || editor.designConfig || {}
   const existingFront = existing.front || {}
@@ -38,6 +70,10 @@ export function buildDesignConfig({ form = {}, editor = {} } = {}) {
       editor.signatureAssetId ??
       form.handwritingAssetId,
   )
+  const layerSource = editor.layers ?? existing.creativeLayers
+  const creativeLayers = Array.isArray(layerSource)
+    ? layerSource.map((layer, index) => normalizeCreativeLayer(layer, index))
+    : undefined
 
   const front = compactObject({
     ...existingFront,
@@ -65,6 +101,7 @@ export function buildDesignConfig({ form = {}, editor = {} } = {}) {
   return {
     ...existing,
     version: numeric(existing.version, 2) || 2,
+    ...(creativeLayers ? { creativeLayers } : {}),
     front,
     back: compactObject({
       ...existingBack,
