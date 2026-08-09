@@ -158,6 +158,15 @@ Render 인스턴스의 재배포·재시작 때 보존된다는 보장이 없으
 Render의 API 서비스와 PostgreSQL을 같은 프로젝트에 연결하고, `DATABASE_URL`을 Secret으로
 등록한 뒤 마이그레이션 로그에 `alembic upgrade head`가 성공했는지 확인하세요.
 
+추가로 production은 `DATA_PROTECTION_KEY`로 데이터 저장소의 신원을 고정합니다. 최초로
+새 PostgreSQL을 연결할 때만 `ALLOW_DATA_BOOTSTRAP=true`로 한 번 배포해
+`deployment_identity` 행을 만든 뒤, 반드시 `false`로 되돌려 재배포하세요. 이후 DB가
+교체되거나 비어 있으면 API는 초기 관리자만 재생성하지 않고 `DATA_STORE_NOT_INITIALIZED`
+또는 `DATA_STORE_IDENTITY_MISMATCH`로 기동을 중단합니다. 이 보호 장치는 “로그인은 되지만
+기존 계정이 사라진 것처럼 보이는” 조용한 데이터 교체를 막기 위한 것입니다. 운영 중인
+기존 DB를 복구해야 한다면 먼저 Render PostgreSQL 백업 또는 외부 DB 백업을 복원한 뒤
+마이그레이션을 실행해야 하며, 새 DB에 기존 계정을 재생성하는 방식으로 대체하지 마세요.
+
 ### 8. Kakao·Google 소셜 로그인 설정
 
 팬 앱 로그인 화면은 Kakao와 Google을 우선 노출하고 이메일 매직 링크를 보조 수단으로 제공합니다.

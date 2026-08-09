@@ -1,4 +1,5 @@
 import asyncio
+import hmac
 import logging
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
@@ -22,6 +23,7 @@ from app.models import (
     Card,
     CollectionBenefitClaim,
     CollectionCampaign,
+    DeploymentIdentity,
     Drop,
     MagicLink,
     Member,
@@ -116,6 +118,30 @@ async def ensure_admin_bootstrap(session: AsyncSession) -> None:
     # during deployment; only delegated accounts are forced to rotate one.
     user.must_change_password = False
     await session.commit()
+
+
+async def ensure_data_identity(session: AsyncSession) -> None:
+    """Refuse to silently initialize a replacement production database.
+
+    A Render restart should keep using the same database. If the database URL
+    is accidentally replaced, the identity row is absent or mismatched and
+    startup stops instead of recreating only the bootstrap administrator.
+    ``ALLOW_DATA_BOOTSTRAP`` is a deliberate, one-deploy switch for the first
+    initialization of a new durable database.
+    """
+    settings = get_settings()
+    if settings.app_env != "production":
+        return
+    digest = sha256(settings.data_protection_key.encode("utf-8")).hexdigest()
+    identity = await session.get(DeploymentIdentity, "primary")
+    if identity is None:
+        if not settings.allow_data_bootstrap:
+            raise RuntimeError("DATA_STORE_NOT_INITIALIZED")
+        session.add(DeploymentIdentity(id="primary", key_digest=digest))
+        await session.commit()
+        return
+    if not hmac.compare_digest(identity.key_digest, digest):
+        raise RuntimeError("DATA_STORE_IDENTITY_MISMATCH")
 
 
 async def reset_database(session: AsyncSession) -> None:

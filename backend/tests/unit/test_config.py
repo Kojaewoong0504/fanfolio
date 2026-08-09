@@ -22,6 +22,7 @@ def test_database_backend_name_does_not_expose_connection_details() -> None:
 def test_production_settings_require_https_smtp_and_origins() -> None:
     settings = Settings(
         app_env="production",
+        data_protection_key="production-data-protection-key-from-environment",
         database_url="postgresql+asyncpg://fanfolio:password@db.example.com/fanfolio",
         frontend_url="http://localhost:5173",
         auto_create_schema=False,
@@ -38,6 +39,7 @@ def test_production_settings_require_https_smtp_and_origins() -> None:
 def test_valid_production_settings_pass_runtime_validation() -> None:
     settings = Settings(
         app_env="production",
+        data_protection_key="production-data-protection-key-from-test",
         database_url="postgresql+asyncpg://fanfolio:password@db.example.com/fanfolio",
         frontend_url="https://app.fanfolio.example",
         frontend_origins="https://app.fanfolio.example,https://admin.fanfolio.example",
@@ -61,6 +63,7 @@ def test_valid_production_settings_pass_runtime_validation() -> None:
 def test_production_settings_require_redis_rate_limiting() -> None:
     settings = Settings(
         app_env="production",
+        data_protection_key="production-data-protection-key-from-test",
         database_url="postgresql+asyncpg://fanfolio:password@db.example.com/fanfolio",
         frontend_url="https://app.fanfolio.example",
         frontend_origins="https://app.fanfolio.example",
@@ -82,6 +85,7 @@ def test_production_settings_require_redis_rate_limiting() -> None:
 def test_production_settings_require_explicit_migrations() -> None:
     settings = Settings(
         app_env="production",
+        data_protection_key="production-data-protection-key-from-test",
         database_url="postgresql+asyncpg://fanfolio:password@db.example.com/fanfolio",
         frontend_url="https://app.fanfolio.example",
         frontend_origins="https://app.fanfolio.example",
@@ -103,6 +107,7 @@ def test_production_settings_require_explicit_migrations() -> None:
 def test_production_settings_reject_ephemeral_sqlite_database() -> None:
     settings = Settings(
         app_env="production",
+        data_protection_key="production-data-protection-key-from-test",
         database_url="sqlite+aiosqlite:///./fanfolio.db",
         frontend_url="https://app.fanfolio.example",
         frontend_origins="https://app.fanfolio.example",
@@ -131,6 +136,7 @@ def test_production_settings_reject_ephemeral_sqlite_database() -> None:
 def test_production_settings_reject_insecure_cors_origins() -> None:
     settings = Settings(
         app_env="production",
+        data_protection_key="production-data-protection-key-from-test",
         database_url="postgresql+asyncpg://fanfolio:password@db.example.com/fanfolio",
         frontend_url="https://app.fanfolio.example",
         frontend_origins="https://app.fanfolio.example,http://admin.fanfolio.example",
@@ -152,6 +158,7 @@ def test_production_settings_reject_insecure_cors_origins() -> None:
 def test_production_settings_reject_wildcard_cors_origins() -> None:
     settings = Settings(
         app_env="production",
+        data_protection_key="production-data-protection-key-from-test",
         database_url="postgresql+asyncpg://fanfolio:password@db.example.com/fanfolio",
         frontend_url="https://app.fanfolio.example",
         frontend_origins="*",
@@ -173,6 +180,7 @@ def test_production_settings_reject_wildcard_cors_origins() -> None:
 def test_production_settings_require_asset_scanning() -> None:
     settings = Settings(
         app_env="production",
+        data_protection_key="production-data-protection-key-from-test",
         database_url="postgresql+asyncpg://fanfolio:password@db.example.com/fanfolio",
         frontend_url="https://app.fanfolio.example",
         frontend_origins="https://app.fanfolio.example",

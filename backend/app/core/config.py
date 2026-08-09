@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:5173"
     admin_bootstrap_email: str = ""
     admin_bootstrap_password: str = ""
+    data_protection_key: str = ""
+    allow_data_bootstrap: bool = False
     mail_delivery_mode: str = "console"
     mail_from: str = "Fanfolio <no-reply@localhost>"
     jwt_access_secret: str = "dev-access-secret-change-me-32-bytes"
@@ -96,6 +98,8 @@ class Settings(BaseSettings):
             raise ValueError("UPLOAD_CLEANUP_INTERVAL_SECONDS must be positive")
         if self.app_env != "production":
             return
+        if len(self.data_protection_key) < 32:
+            raise ValueError("DATA_PROTECTION_KEY must be at least 32 characters in production")
         if not self.async_database_url.startswith("postgresql+asyncpg://"):
             raise ValueError("DATABASE_URL must use durable PostgreSQL storage in production")
         if self.auto_create_schema:

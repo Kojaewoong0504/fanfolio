@@ -13,7 +13,7 @@ from app.db.session import SessionLocal, engine
 from app.errors import AppError
 from app.models import Base
 from app.routers import admin, artist, assets, auth, fan, fixtures, health
-from app.services import ensure_admin_bootstrap, ensure_demo_catalog
+from app.services import ensure_admin_bootstrap, ensure_data_identity, ensure_demo_catalog
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +36,7 @@ async def lifespan(_: FastAPI):
             await ensure_demo_catalog(session)
 
     async with SessionLocal() as session:
+        await ensure_data_identity(session)
         await ensure_admin_bootstrap(session)
     yield
     await engine.dispose()

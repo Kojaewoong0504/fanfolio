@@ -9,6 +9,18 @@ class Base(DeclarativeBase):
     pass
 
 
+class DeploymentIdentity(Base):
+    """A durable marker that prevents silently bootstrapping a replacement DB."""
+
+    __tablename__ = "deployment_identity"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    key_digest: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
 class Role(str, enum.Enum):
     FAN = "fan"
     ADMIN = "admin"
