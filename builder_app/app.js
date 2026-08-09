@@ -258,7 +258,7 @@ function editorLayerControls() {
   const e = state.editor;
   const layers = [['photo', '사진'], ['text', '문구'], ['sticker', '스티커']];
   const current = layers.find(([value]) => value === e.selectedLayer)?.[1] || '사진';
-  return `<div class="layer-controls"><div class="layer-controls-heading"><span>레이어</span><small>선택: ${current}</small></div><div class="layer-list">${layers.map(([value, label]) => `<button type="button" class="layer-chip ${e.selectedLayer === value ? 'selected' : ''}" data-editor-layer-select="${value}">${value === 'photo' ? '▧' : value === 'text' ? 'T' : '✦'}<span>${label}</span></button>`).join('')}</div><div class="layer-actions"><button type="button" data-editor-action="align-x">가로 중앙</button><button type="button" data-editor-action="align-y">세로 중앙</button><button type="button" data-editor-action="reset-position">위치 초기화</button></div><label class="snap-toggle"><input type="checkbox" data-editor-action="toggle-snap" ${e.snapToGrid ? 'checked' : ''} /> <span>스냅 가이드</span><small>드래그 시 4px 단위</small></label></div>`;
+  return `<div class="layer-controls"><div class="layer-controls-heading"><span>레이어</span><small>선택: ${current}</small></div><div class="layer-list">${layers.map(([value, label]) => `<button type="button" class="layer-chip ${e.selectedLayer === value ? 'selected' : ''}" data-editor-layer-select="${value}">${value === 'photo' ? '▧' : value === 'text' ? 'T' : '✦'}<span>${label}</span></button>`).join('')}</div><div class="layer-actions"><button type="button" data-editor-action="align-x">가로 중앙</button><button type="button" data-editor-action="align-y">세로 중앙</button><button type="button" data-editor-action="reset-position">위치 초기화</button></div><label class="snap-toggle"><input type="checkbox" data-editor-action="toggle-snap" ${e.snapToGrid ? 'checked' : ''} /> <span>스냅 가이드</span><small>드래그 4px · 방향키 1px · Shift 10px</small></label></div>`;
 }
 
 function editorInspectorBody() {
@@ -440,6 +440,24 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && state.editor.previewOpen) {
     state.editor.previewOpen = false;
     render();
+  }
+  const editableTarget = event.target.closest?.('input,textarea,select,[contenteditable="true"]');
+  if (state.view === 'editor' && !editableTarget && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+    event.preventDefault();
+    rememberEditorChange();
+    const [xKey, yKey] = editorLayerPositionKeys();
+    const amount = event.shiftKey ? 10 : 1;
+    if (event.key === 'ArrowUp') state.editor[yKey] -= amount;
+    if (event.key === 'ArrowDown') state.editor[yKey] += amount;
+    if (event.key === 'ArrowLeft') state.editor[xKey] -= amount;
+    if (event.key === 'ArrowRight') state.editor[xKey] += amount;
+    persistEditorDraft();
+    render();
+  }
+  if (state.view === 'editor' && modifier && event.key.toLowerCase() === 's') {
+    event.preventDefault();
+    persistEditorDraft();
+    toast('이 기기에 초안을 저장했습니다.');
   }
 });
 
