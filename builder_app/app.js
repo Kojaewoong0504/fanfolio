@@ -25,6 +25,8 @@ state.editor.textOpacity ??= 100;
 state.editor.stickerScale ||= 100;
 state.editor.stickerRotate ||= 0;
 state.editor.stickerOpacity ??= 100;
+state.editor.imageRotate ||= 0;
+state.editor.imageOpacity ??= 100;
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
 
 async function editorImageFile() {
@@ -239,7 +241,7 @@ function settingsView() {
 function editorCardMarkup() {
   const e = state.editor;
   const selected = (layer) => e.selectedLayer === layer ? ' editor-layer-selected' : '';
-  const image = e.imageSrc ? `<img class="editor-photo${selected('photo')}" data-editor-layer="photo" src="${esc(e.imageSrc)}" alt="카드 사진 미리보기" style="transform:translate(${e.imageX}px,${e.imageY}px) scale(${e.imageScale / 100});filter:${e.filter === 'mono' ? 'grayscale(1)' : e.filter === 'warm' ? 'saturate(1.25) sepia(.18)' : 'none'}" />` : `<div class="editor-photo-empty${selected('photo')}" data-editor-layer="photo"><span>사진을 넣어보세요</span><small>권장 1000 × 1500 px</small></div>`;
+  const image = e.imageSrc ? `<img class="editor-photo${selected('photo')}" data-editor-layer="photo" src="${esc(e.imageSrc)}" alt="카드 사진 미리보기" style="transform:translate(${e.imageX}px,${e.imageY}px) scale(${e.imageScale / 100}) rotate(${e.imageRotate || 0}deg);opacity:${Number(e.imageOpacity ?? 100) / 100};filter:${e.filter === 'mono' ? 'grayscale(1)' : e.filter === 'warm' ? 'saturate(1.25) sepia(.18)' : 'none'}" />` : `<div class="editor-photo-empty${selected('photo')}" data-editor-layer="photo"><span>사진을 넣어보세요</span><small>권장 1000 × 1500 px</small></div>`;
   const front = e.side === 'front';
   const activeEffect = front ? (e.effect || 'none') : (e.backEffect || 'none');
   const agencyTemplate = (state.catalog?.backTemplates || []).find((template) => template.id === e.backTemplateId);
@@ -277,6 +279,7 @@ function editorInspector() {
 
 function editorToolEnhancements() {
   const e = state.editor;
+  if (e.tool === 'photo') return `<div class="inspector-block"><p class="inspector-label">사진 스타일</p>${editorRange('imageRotate', '회전', -180, 180, 1, '°')}${editorRange('imageOpacity', '투명도', 20, 100, 1, '%')}</div>`;
   if (e.tool === 'text') return `<div class="inspector-block"><p class="inspector-label">문구 스타일</p><div class="inline-choice"><button type="button" class="mini-choice ${e.textAlign === 'left' ? 'selected' : ''}" data-editor-value="textAlign" data-value="left">왼쪽</button><button type="button" class="mini-choice ${e.textAlign === 'center' ? 'selected' : ''}" data-editor-value="textAlign" data-value="center">가운데</button><button type="button" class="mini-choice ${e.textAlign === 'right' ? 'selected' : ''}" data-editor-value="textAlign" data-value="right">오른쪽</button></div>${editorRange('textWeight', '굵기', 400, 900, 100, '')}${editorRange('textRotate', '회전', -180, 180, 1, '°')}${editorRange('textOpacity', '투명도', 20, 100, 1, '%')}</div>`;
   if (e.tool === 'sticker') return `<div class="inspector-block"><p class="inspector-label">스티커 스타일</p>${editorRange('stickerScale', '크기', 50, 180, 1, '%')}${editorRange('stickerRotate', '회전', -180, 180, 1, '°')}${editorRange('stickerOpacity', '투명도', 20, 100, 1, '%')}</div>`;
   return '';
@@ -316,7 +319,7 @@ function editorDesignConfig(imageAssetId) {
   return {
     version: 2,
     front: {
-      image: { assetId: imageAssetId, x: Number(e.imageX || 0), y: Number(e.imageY || 0), scale: Number(e.imageScale || 100), filter: e.filter || 'clean' },
+      image: { assetId: imageAssetId, x: Number(e.imageX || 0), y: Number(e.imageY || 0), scale: Number(e.imageScale || 100), rotate: Number(e.imageRotate || 0), opacity: Number(e.imageOpacity ?? 100), filter: e.filter || 'clean' },
       text: { value: e.text || '', x: Number(e.textX || 0), y: Number(e.textY || 0), size: Number(e.textSize || 24), color: e.textColor || '#ffffff', align: e.textAlign || 'left', weight: Number(e.textWeight || 800), rotate: Number(e.textRotate || 0), opacity: Number(e.textOpacity ?? 100) },
       sticker: { kind: e.sticker || 'none', x: Number(e.stickerX || 0), y: Number(e.stickerY || 0), scale: Number(e.stickerScale || 100), rotate: Number(e.stickerRotate || 0), opacity: Number(e.stickerOpacity ?? 100) },
       effect: e.effect || 'none', effectIntensity: Number(e.effectIntensity || 0), effectAngle: Number(e.effectAngle || 135), videoAssetId: e.videoAssetId || null,
@@ -337,7 +340,7 @@ function restoreEditorDesign(card) {
     imageName: card.name ? `${card.name}.jpg` : state.editor.imageName,
     videoSrc: card.videoUrl ? absoluteApiUrl(card.videoUrl) : state.editor.videoSrc,
     videoName: card.videoAssetId ? `${card.name || 'card'}-motion.mp4` : state.editor.videoName,
-    imageScale: Number(image.scale ?? state.editor.imageScale), imageX: Number(image.x ?? state.editor.imageX), imageY: Number(image.y ?? state.editor.imageY), filter: image.filter || state.editor.filter,
+    imageScale: Number(image.scale ?? state.editor.imageScale), imageX: Number(image.x ?? state.editor.imageX), imageY: Number(image.y ?? state.editor.imageY), imageRotate: Number(image.rotate ?? state.editor.imageRotate), imageOpacity: Number(image.opacity ?? state.editor.imageOpacity), filter: image.filter || state.editor.filter,
     text: text.value ?? state.editor.text, textX: Number(text.x ?? state.editor.textX), textY: Number(text.y ?? state.editor.textY), textSize: Number(text.size ?? state.editor.textSize), textColor: text.color || state.editor.textColor, textAlign: text.align || state.editor.textAlign, textWeight: Number(text.weight ?? state.editor.textWeight), textRotate: Number(text.rotate ?? state.editor.textRotate), textOpacity: Number(text.opacity ?? state.editor.textOpacity),
     sticker: sticker.kind || state.editor.sticker, stickerX: Number(sticker.x ?? state.editor.stickerX), stickerY: Number(sticker.y ?? state.editor.stickerY), stickerScale: Number(sticker.scale ?? state.editor.stickerScale), stickerRotate: Number(sticker.rotate ?? state.editor.stickerRotate), stickerOpacity: Number(sticker.opacity ?? state.editor.stickerOpacity), effect: config.front.effect || state.editor.effect, effectIntensity: Number(config.front.effectIntensity ?? state.editor.effectIntensity), effectAngle: Number(config.front.effectAngle ?? state.editor.effectAngle), videoAssetId: config.front.videoAssetId || state.editor.videoAssetId, backEffect: config.back.effect || state.editor.backEffect, background: config.back.background || state.editor.background,
   };
@@ -568,7 +571,7 @@ document.addEventListener('input', (event) => {
   if (key === 'textColor') document.querySelector('.editor-copy')?.style.setProperty('color', field.value);
   if (['textAlign', 'textWeight', 'textOpacity', 'textRotate'].includes(key)) { const copy = document.querySelector('.editor-copy'); if (copy) { copy.style.textAlign = state.editor.textAlign; copy.style.fontWeight = state.editor.textWeight; copy.style.opacity = Number(state.editor.textOpacity ?? 100) / 100; copy.style.transform = `translate(${state.editor.textX}px,${state.editor.textY}px) rotate(${state.editor.textRotate || 0}deg)`; } }
   if (['stickerScale', 'stickerRotate', 'stickerOpacity'].includes(key)) { const sticker = document.querySelector('.editor-sticker'); if (sticker) { sticker.style.opacity = Number(state.editor.stickerOpacity ?? 100) / 100; sticker.style.transform = `translate(${state.editor.stickerX}px,${state.editor.stickerY}px) scale(${Number(state.editor.stickerScale || 100) / 100}) rotate(${state.editor.stickerRotate || 0}deg)`; } }
-  if (['imageScale', 'imageX', 'imageY', 'filter'].includes(key)) { const image = document.querySelector('.editor-photo'); if (image) { image.style.transform = `translate(${state.editor.imageX}px,${state.editor.imageY}px) scale(${state.editor.imageScale / 100})`; image.style.filter = state.editor.filter === 'mono' ? 'grayscale(1)' : state.editor.filter === 'warm' ? 'saturate(1.25) sepia(.18)' : 'none'; } }
+  if (['imageScale', 'imageX', 'imageY', 'imageRotate', 'imageOpacity', 'filter'].includes(key)) { const image = document.querySelector('.editor-photo'); if (image) { image.style.transform = `translate(${state.editor.imageX}px,${state.editor.imageY}px) scale(${state.editor.imageScale / 100}) rotate(${state.editor.imageRotate || 0}deg)`; image.style.opacity = Number(state.editor.imageOpacity ?? 100) / 100; image.style.filter = state.editor.filter === 'mono' ? 'grayscale(1)' : state.editor.filter === 'warm' ? 'saturate(1.25) sepia(.18)' : 'none'; } }
 });
 
 document.addEventListener('pointerdown', (event) => {
