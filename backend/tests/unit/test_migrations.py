@@ -3,6 +3,8 @@ import sqlite3
 import subprocess
 from pathlib import Path
 
+import pytest
+
 
 def test_alembic_upgrade_creates_the_current_schema(tmp_path: Path) -> None:
     database_path = tmp_path / "migration.db"
@@ -79,3 +81,60 @@ def test_alembic_upgrade_adds_drop_metadata_to_a_legacy_database(tmp_path: Path)
     with sqlite3.connect(database_path) as connection:
         columns = {row[1] for row in connection.execute("PRAGMA table_info(drops)").fetchall()}
         assert {"id", "name", "status", "starts_at", "ends_at"} <= columns
+
+
+def test_role_scoped_email_migration_upgrades_the_previous_user_constraint(
+    tmp_path: Path,
+) -> None:
+    """A deployed 0022 database must allow separate fan and admin identities."""
+    database_path = tmp_path / "role-scoped-email.db"
+    with sqlite3.connect(database_path) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE users (
+                id VARCHAR PRIMARY KEY,
+                email VARCHAR UNIQUE,
+                username VARCHAR UNIQUE,
+                password_hash VARCHAR,
+                must_change_password BOOLEAN NOT NULL DEFAULT 0,
+                role VARCHAR NOT NULL,
+                nickname VARCHAR,
+                profile_image_url VARCHAR,
+                favorite_artist_ids JSON NOT NULL DEFAULT '[]',
+                favorite_member_ids JSON NOT NULL DEFAULT '[]',
+                onboarding_completed BOOLEAN NOT NULL DEFAULT 0,
+                notification_email_enabled BOOLEAN NOT NULL DEFAULT 0
+            );
+            INSERT INTO users (id, email, role) VALUES
+                ('admin_legacy', 'shared@example.com', 'ADMIN');
+            CREATE TABLE alembic_version (
+                version_num VARCHAR(32) NOT NULL PRIMARY KEY
+            );
+            INSERT INTO alembic_version (version_num)
+            VALUES ('0022_deployment_identity');
+            """
+        )
+
+    backend_dir = Path(__file__).parents[2]
+    environment = os.environ.copy()
+    environment["DATABASE_URL"] = f"sqlite:///{database_path}"
+    result = subprocess.run(
+        [str(backend_dir / ".venv/bin/alembic"), "upgrade", "head"],
+        cwd=backend_dir,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            "INSERT INTO users (id, email, role) VALUES (?, ?, ?)",
+            ("fan_new", "shared@example.com", "FAN"),
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                "INSERT INTO users (id, email, role) VALUES (?, ?, ?)",
+                ("fan_duplicate", "shared@example.com", "FAN"),
+            )

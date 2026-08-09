@@ -67,7 +67,7 @@ def _admin_user_data(user: User) -> dict[str, object]:
 
 def _refresh_cookie_samesite() -> str:
     """Allow the deployed Vercel fan app to refresh against the Render API."""
-    return "none" if get_settings().app_env == "production" else "lax"
+    return "none" if get_settings().is_hosted else "lax"
 
 
 def _oauth_frontend_url(error: str | None = None, code: str | None = None) -> str:
@@ -99,7 +99,7 @@ async def oauth_start(
         "fanfolio_oauth_state",
         state,
         httponly=True,
-        secure=get_settings().app_env == "production",
+        secure=get_settings().is_hosted,
         samesite="lax",
         path="/api/auth/oauth",
         max_age=get_settings().oauth_state_ttl_seconds,
@@ -163,7 +163,7 @@ async def oauth_exchange(
         refresh_cookie_name(payload.client),
         refresh_token,
         httponly=True,
-        secure=settings.app_env == "production",
+        secure=settings.is_hosted,
         samesite=_refresh_cookie_samesite(),
         path="/",
         max_age=settings.jwt_refresh_ttl_seconds,
@@ -223,7 +223,7 @@ async def artist_password_login(
         refresh_cookie_name("artist"),
         refresh_token,
         httponly=True,
-        secure=settings.app_env == "production",
+        secure=settings.is_hosted,
         samesite=_refresh_cookie_samesite(),
         path="/",
         max_age=settings.jwt_refresh_ttl_seconds,
@@ -263,7 +263,7 @@ async def admin_password_login(
         refresh_cookie_name("admin"),
         refresh_token,
         httponly=True,
-        secure=settings.app_env == "production",
+        secure=settings.is_hosted,
         samesite=_refresh_cookie_samesite(),
         path="/",
         max_age=settings.jwt_refresh_ttl_seconds,
@@ -328,12 +328,12 @@ async def verify_magic_link_endpoint(
         refresh_cookie_name(client_name),
         refresh_token,
         httponly=True,
-        secure=get_settings().app_env == "production",
+        secure=get_settings().is_hosted,
         samesite=_refresh_cookie_samesite(),
         path="/",
         max_age=get_settings().jwt_refresh_ttl_seconds,
     )
-    if get_settings().app_env != "production":
+    if not get_settings().is_hosted:
         response.set_cookie(
             session_cookie_name(client),
             data.pop("sessionToken"),
@@ -371,7 +371,7 @@ async def refresh_access_token(
         refresh_cookie_name(client_name),
         refresh_token,
         httponly=True,
-        secure=get_settings().app_env == "production",
+        secure=get_settings().is_hosted,
         samesite=_refresh_cookie_samesite(),
         path="/",
         max_age=get_settings().jwt_refresh_ttl_seconds,

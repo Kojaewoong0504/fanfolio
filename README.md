@@ -132,7 +132,8 @@ JWT_REFRESH_TTL_SECONDS=2592000
 ```
 
 refresh 쿠키는 `fanfolio_fan_refresh`, `fanfolio_admin_refresh`, `fanfolio_artist_refresh`로
-클라이언트별 분리되며 `Secure`, `HttpOnly`, `SameSite=Lax` 속성을 사용합니다.
+클라이언트별 분리됩니다. 배포 환경은 Vercel과 Render 사이의 교차 사이트 요청을 위해
+`Secure`, `HttpOnly`, `SameSite=None`을 사용하고, 로컬 개발 환경만 `SameSite=Lax`를 사용합니다.
 
 아티스트 스튜디오는 팬 앱과 달리 이메일·소셜 인증을 사용하지 않습니다. 관리자가
 `POST /api/admin/artist-accounts`로 개인별 스튜디오 아이디를 발급하면 생성 응답에 임시
@@ -140,6 +141,9 @@ refresh 쿠키는 `fanfolio_fan_refresh`, `fanfolio_admin_refresh`, `fanfolio_ar
 뒤 새 비밀번호를 설정합니다. 비밀번호는 서버에 scrypt 해시로만 저장하고, 계정별 아티스트
 Refresh 쿠키와 짧은 수명의 Access JWT를 사용합니다. 비밀번호를 잊은 경우에는 이메일 재설정
 대신 관리자가 계정을 재설정합니다.
+관리자 웹은 `GET /api/admin/artist-accounts`로 이미 발급한 계정을 계속 확인할 수 있고,
+`POST /api/admin/artist-accounts/{user_id}/reset-password`로 임시 비밀번호를 재발급할 수 있습니다.
+재발급 시 기존 Refresh Token은 모두 폐기되며 새 임시 비밀번호는 응답에 한 번만 표시됩니다.
 
 관리자 웹은 이메일 매직 링크 대신 이메일·비밀번호 로그인으로 운영합니다. 최초 관리자 계정은
 Render 환경 변수 `ADMIN_BOOTSTRAP_EMAIL`과 `ADMIN_BOOTSTRAP_PASSWORD`를 설정한 뒤 API를
@@ -157,6 +161,9 @@ Render 인스턴스의 재배포·재시작 때 보존된다는 보장이 없으
 실행할 때는 `APP_ENV=development AUTO_CREATE_SCHEMA=true`를 명시적으로 덮어쓰세요.
 Render의 API 서비스와 PostgreSQL을 같은 프로젝트에 연결하고, `DATABASE_URL`을 Secret으로
 등록한 뒤 마이그레이션 로그에 `alembic upgrade head`가 성공했는지 확인하세요.
+Render Free PostgreSQL은 개발·검수용으로만 사용합니다. 생성 후 30일에 만료되고 백업이
+제공되지 않으므로, 실제 사용자 데이터를 받기 전에는 유료 Render PostgreSQL이나 별도 관리형
+PostgreSQL로 이전하고 자동 백업 정책을 설정해야 합니다.
 
 추가로 production은 `DATA_PROTECTION_KEY`로 데이터 저장소의 신원을 고정합니다. 최초로
 새 PostgreSQL을 연결할 때만 `ALLOW_DATA_BOOTSTRAP=true`로 한 번 배포해

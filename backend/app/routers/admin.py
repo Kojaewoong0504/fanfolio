@@ -9,7 +9,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 import qrcode
 from fastapi import APIRouter, Query, status
 from fastapi.responses import Response, StreamingResponse
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 
 from app.dependencies import AdminUser, DbSession
 from app.errors import AppError
@@ -24,6 +24,7 @@ from app.models import (
     Member,
     RedeemCode,
     RedeemCodeBatch,
+    RefreshToken,
     Role,
     User,
 )
@@ -647,6 +648,67 @@ async def create_artist_account(
     }
 
 
+def artist_account_data(user: User) -> dict:
+    return {
+        "id": user.id,
+        "username": user.username,
+        "displayName": user.nickname,
+        "mustChangePassword": user.must_change_password,
+    }
+
+
+@router.get("/artist-accounts")
+async def list_artist_accounts(_: AdminUser, session: DbSession) -> dict:
+    users = await session.scalars(
+        select(User).where(User.role == Role.ARTIST).order_by(User.username)
+    )
+    return {
+        "ok": True,
+        "data": {"items": [artist_account_data(user) for user in users]},
+    }
+
+
+@router.post("/artist-accounts/{user_id}/reset-password")
+async def reset_artist_account_password(
+    user_id: str,
+    admin: AdminUser,
+    session: DbSession,
+) -> dict:
+    user = await session.get(User, user_id)
+    if user is None or user.role != Role.ARTIST:
+        raise AppError(404, "ARTIST_ACCOUNT_NOT_FOUND", "아티스트 계정을 찾을 수 없습니다.")
+
+    temporary_password = token_urlsafe(18)
+    user.password_hash = hash_password(temporary_password)
+    user.must_change_password = True
+    await session.execute(
+        update(RefreshToken)
+        .where(
+            RefreshToken.user_id == user.id,
+            RefreshToken.client == "artist",
+            RefreshToken.revoked_at.is_(None),
+        )
+        .values(revoked_at=datetime.now(UTC))
+    )
+    await record_audit(
+        session,
+        actor_user_id=admin.id,
+        action="artist_account.password_reset",
+        entity_type="user",
+        entity_id=user.id,
+        details={"username": user.username},
+    )
+    await session.commit()
+    return {
+        "ok": True,
+        "data": {
+            **artist_account_data(user),
+            # Returned once; only the hash is stored in the database.
+            "temporaryPassword": temporary_password,
+        },
+    }
+
+
 @router.post("/admin-accounts", status_code=status.HTTP_201_CREATED)
 async def create_admin_account(
     payload: AdminAccountCreate,
@@ -654,7 +716,9 @@ async def create_admin_account(
     session: DbSession,
 ) -> dict:
     email = str(payload.email).lower()
-    existing = await session.scalar(select(User).where(User.email == email))
+    existing = await session.scalar(
+        select(User).where(User.email == email, User.role == Role.ADMIN)
+    )
     if existing:
         raise AppError(409, "EMAIL_TAKEN", "이미 등록된 이메일입니다.")
     temporary_password = token_urlsafe(18)

@@ -143,3 +143,9 @@
 .brand-lockup{display:block;width:min(100%,270px);height:auto;margin:0 0 18px;mix-blend-mode:multiply}
 .app-header .eyebrow{display:inline-flex;align-items:center;gap:7px;font-size:11px;letter-spacing:.14em;line-height:1}.app-header .eyebrow::before{content:'';display:inline-block;width:20px;height:20px;border-radius:7px;background:url('/fanfolio-app-icon.png') center/cover;box-shadow:0 4px 10px #4b37c52b}
 .session-loading-mark{background:url('/fanfolio-app-icon.png') center/cover;color:transparent;font-size:0;box-shadow:0 12px 24px #4b37c540}
+
+/* Safari/WebKit injects a contacts control into email fields. Hiding that
+   control prevents the detached black icon seen outside the rounded input. */
+.login-email-input{min-height:48px;padding:13px 16px;line-height:1.35;appearance:none;-webkit-appearance:none}
+.login-email-input::-webkit-contacts-auto-fill-button,
+.login-email-input::-webkit-credentials-auto-fill-button{display:none!important;visibility:hidden;pointer-events:none;position:absolute;right:0}

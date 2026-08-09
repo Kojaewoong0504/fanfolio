@@ -229,7 +229,11 @@ async function loginArtistWithCatalog(event) {
   } catch (error) {
     ACCESS_TOKEN = '';
     state.authenticated = false;
-    state.loginError = error.status === 403 ? '아티스트 스튜디오 전용 계정으로 로그인해 주세요.' : '아이디 또는 비밀번호가 올바르지 않습니다.';
+    state.loginError = error.status === 403
+      ? '아티스트 스튜디오 전용 계정으로 로그인해 주세요.'
+      : error.status === 502 || error.status === 503
+        ? '서비스가 잠시 준비 중입니다. 운영팀에 문의하거나 잠시 후 다시 시도해 주세요.'
+        : '아이디 또는 비밀번호가 올바르지 않습니다.';
     render();
   }
 }

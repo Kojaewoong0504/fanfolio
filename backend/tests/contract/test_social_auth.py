@@ -1,7 +1,10 @@
 import asyncio
 from urllib.parse import parse_qs, urlparse
 
+from sqlalchemy import select
+
 from app.core.config import get_settings
+from app.models import Role, User
 from app.oauth import OAuthProfile, fetch_oauth_profile
 
 
@@ -55,6 +58,55 @@ def test_google_oauth_code_flow_links_account_and_issues_jwt(client, seeded, mon
     )
     assert me.status_code == 200
     assert me.json()["data"]["email"] == "social@example.com"
+
+
+def test_google_oauth_never_reuses_an_admin_account_with_the_same_email(
+    client, seeded, monkeypatch
+) -> None:
+    """The fan OAuth client must not inherit admin privileges or become unusable."""
+    _configure_social(monkeypatch)
+    admin_email = "admin@example.com"
+
+    start = client.get("/api/auth/oauth/google/start?client=fan", follow_redirects=False)
+    state = parse_qs(urlparse(start.headers["location"]).query)["state"][0]
+
+    async def fake_profile(provider: str, code: str, redirect_uri: str) -> OAuthProfile:
+        return OAuthProfile("google", "google-admin-email", admin_email, "관리자와 같은 이메일")
+
+    monkeypatch.setattr("app.routers.auth.fetch_oauth_profile", fake_profile)
+    callback = client.get(
+        f"/api/auth/oauth/google/callback?code=provider-code&state={state}",
+        follow_redirects=False,
+    )
+    assert callback.status_code == 302
+    exchange_code = parse_qs(urlparse(callback.headers["location"]).query)["code"][0]
+
+    exchanged = client.post(
+        "/api/auth/oauth/exchange",
+        json={"code": exchange_code, "client": "fan"},
+        headers={"X-Fanfolio-Client": "fan"},
+    )
+    assert exchanged.status_code == 200, exchanged.text
+    access_token = exchanged.json()["data"]["accessToken"]
+
+    me = client.get(
+        "/api/me",
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "X-Fanfolio-Client": "fan",
+        },
+    )
+    assert me.status_code == 200, me.text
+    assert me.json()["data"]["role"] == Role.FAN.value
+
+    async def roles_for_email() -> set[Role]:
+        from app.db.session import SessionLocal
+
+        async with SessionLocal() as session:
+            users = await session.scalars(select(User).where(User.email == admin_email))
+            return {user.role for user in users}
+
+    assert asyncio.run(roles_for_email()) == {Role.ADMIN, Role.FAN}
 
 
 def test_oauth_state_cannot_be_replayed(client, seeded, monkeypatch) -> None:

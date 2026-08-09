@@ -217,7 +217,9 @@ export async function apiFetch<T>(path: string, init?: RequestInit, allowRefresh
         const refreshed = await refreshAccessToken()
         if (refreshed) return apiFetch<T>(path, init, false)
       }
-      let message = `API 요청에 실패했습니다. (${response.status})`
+      let message = response.status === 502 || response.status === 503
+        ? '서비스가 잠시 준비 중입니다. 잠시 후 다시 시도해 주세요.'
+        : `API 요청에 실패했습니다. (${response.status})`
       try {
         const body = await response.json() as { error?: { message?: string } }
         message = body.error?.message ?? message

@@ -81,12 +81,21 @@ class Settings(BaseSettings):
         """
         if self.database_url.startswith("sqlite:///"):
             return self.database_url.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
+        if self.database_url.startswith("postgres://"):
+            return self.database_url.replace("postgres://", "postgresql+asyncpg://", 1)
+        if self.database_url.startswith("postgresql://"):
+            return self.database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
         return self.database_url
 
     @property
     def database_backend(self) -> str:
         """Return only the driver name for safe startup diagnostics."""
         return self.async_database_url.split("://", 1)[0]
+
+    @property
+    def is_hosted(self) -> bool:
+        """Use browser-safe auth rules in both staging and production."""
+        return self.app_env in {"staging", "production"}
 
     def validate_runtime(self) -> None:
         """Fail fast when a production process would start with unsafe defaults."""
@@ -96,7 +105,7 @@ class Settings(BaseSettings):
             raise ValueError("S3_BUCKET is required when STORAGE_BACKEND is s3")
         if self.upload_cleanup_interval_seconds <= 0:
             raise ValueError("UPLOAD_CLEANUP_INTERVAL_SECONDS must be positive")
-        if self.app_env != "production":
+        if not self.is_hosted:
             return
         if len(self.data_protection_key) < 32:
             raise ValueError("DATA_PROTECTION_KEY must be at least 32 characters in production")
@@ -112,6 +121,12 @@ class Settings(BaseSettings):
             raise ValueError("FRONTEND_ORIGINS cannot use a wildcard in production")
         if any(not origin.startswith("https://") for origin in self.allowed_origins):
             raise ValueError("FRONTEND_ORIGINS must use HTTPS in production")
+        if self.app_env == "staging":
+            # Staging still enforces durable identity, HTTPS, explicit schema
+            # migration, and strong token secrets. SMTP, Redis, ClamAV, and
+            # object storage remain production launch gates.
+            self._validate_hosted_auth_secrets()
+            return
         if self.mail_delivery_mode != "smtp":
             raise ValueError("MAIL_DELIVERY_MODE must be smtp in production")
         if not self.smtp_host or not self.mail_from:
@@ -132,6 +147,20 @@ class Settings(BaseSettings):
             raise ValueError("ASSET_SCAN_MODE must be clamav in production")
         if not self.clamav_host:
             raise ValueError("CLAMAV_HOST is required when ASSET_SCAN_MODE is clamav")
+        self._validate_oauth_redirects()
+
+    def _validate_hosted_auth_secrets(self) -> None:
+        if self.download_signing_secret == "dev-only-change-me":
+            raise ValueError("DOWNLOAD_SIGNING_SECRET must be changed in hosted environments")
+        if self.jwt_access_secret == "dev-access-secret-change-me-32-bytes":
+            raise ValueError("JWT_ACCESS_SECRET must be changed in hosted environments")
+        if self.jwt_refresh_secret == "dev-refresh-secret-change-me-32-bytes":
+            raise ValueError("JWT_REFRESH_SECRET must be changed in hosted environments")
+        if self.jwt_access_ttl_seconds <= 0 or self.jwt_refresh_ttl_seconds <= 0:
+            raise ValueError("JWT token TTLs must be positive")
+        self._validate_oauth_redirects()
+
+    def _validate_oauth_redirects(self) -> None:
         if not self.oauth_frontend_callback_url.startswith("https://"):
             raise ValueError("OAUTH_FRONTEND_CALLBACK_URL must use HTTPS in production")
         if self.google_redirect_uri and not self.google_redirect_uri.startswith("https://"):

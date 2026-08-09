@@ -19,6 +19,51 @@ def test_database_backend_name_does_not_expose_connection_details() -> None:
     assert "secret" not in settings.database_backend
 
 
+def test_render_postgres_url_is_normalized_for_the_async_driver() -> None:
+    settings = Settings(database_url="postgresql://user:secret@render.internal/fanfolio")
+
+    assert settings.async_database_url.startswith("postgresql+asyncpg://")
+    assert settings.database_backend == "postgresql+asyncpg"
+
+
+def test_staging_uses_hosted_security_without_requiring_deferred_integrations() -> None:
+    settings = Settings(
+        app_env="staging",
+        data_protection_key="staging-data-protection-key-from-test",
+        database_url="postgresql://fanfolio:password@db.internal/fanfolio",
+        frontend_url="https://fanfolio-fan.vercel.app",
+        frontend_origins=("https://fanfolio-fan.vercel.app,https://fanfolio-admin-one.vercel.app"),
+        auto_create_schema=False,
+        download_signing_secret="staging-download-secret-from-test",
+        jwt_access_secret="staging-access-secret-from-test",
+        jwt_refresh_secret="staging-refresh-secret-from-test",
+        oauth_frontend_callback_url="https://fanfolio-fan.vercel.app/oauth/callback",
+        google_redirect_uri=("https://fanfolio-api.onrender.com/api/auth/oauth/google/callback"),
+        kakao_redirect_uri=("https://fanfolio-api.onrender.com/api/auth/oauth/kakao/callback"),
+    )
+
+    settings.validate_runtime()
+    assert settings.is_hosted is True
+
+
+def test_staging_rejects_ephemeral_sqlite() -> None:
+    settings = Settings(
+        app_env="staging",
+        data_protection_key="staging-data-protection-key-from-test",
+        database_url="sqlite+aiosqlite:///./fanfolio.db",
+        frontend_url="https://fanfolio-fan.vercel.app",
+        frontend_origins="https://fanfolio-fan.vercel.app",
+        auto_create_schema=False,
+    )
+
+    try:
+        settings.validate_runtime()
+    except ValueError as error:
+        assert "DATABASE_URL" in str(error)
+    else:
+        raise AssertionError("hosted staging must not use ephemeral SQLite")
+
+
 def test_production_settings_require_https_smtp_and_origins() -> None:
     settings = Settings(
         app_env="production",

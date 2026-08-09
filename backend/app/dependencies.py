@@ -56,7 +56,7 @@ async def current_user(
         if not user or user.role.value != claims.get("role"):
             raise AuthTokenError()
         return user
-    if get_settings().app_env == "production":
+    if get_settings().is_hosted:
         raise AppError(401, "AUTH_REQUIRED", "로그인이 필요합니다.")
     scoped_token = {
         "fan": fanfolio_fan_session,
@@ -121,7 +121,7 @@ async def optional_current_user(
             return None
         user = await session.get(User, str(claims["sub"]))
         return user if user and user.role.value == claims.get("role") else None
-    if get_settings().app_env == "production":
+    if get_settings().is_hosted:
         return None
     scoped_token = {
         "fan": fanfolio_fan_session,

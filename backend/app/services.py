@@ -99,7 +99,7 @@ async def ensure_admin_bootstrap(session: AsyncSession) -> None:
         return
     if len(password) < 12:
         raise ValueError("ADMIN_BOOTSTRAP_PASSWORD must be at least 12 characters")
-    user = await session.scalar(select(User).where(User.email == email))
+    user = await session.scalar(select(User).where(User.email == email, User.role == Role.ADMIN))
     if user is None:
         user = User(
             id=f"admin_{uuid4().hex}",
@@ -110,8 +110,6 @@ async def ensure_admin_bootstrap(session: AsyncSession) -> None:
             must_change_password=False,
         )
         session.add(user)
-    elif user.role != Role.ADMIN:
-        raise ValueError("ADMIN_BOOTSTRAP_EMAIL belongs to a non-admin user")
     elif not user.password_hash:
         user.password_hash = hash_password(password)
     # The bootstrap administrator is trusted to choose their own password
@@ -130,7 +128,7 @@ async def ensure_data_identity(session: AsyncSession) -> None:
     initialization of a new durable database.
     """
     settings = get_settings()
-    if settings.app_env != "production":
+    if not settings.is_hosted:
         return
     digest = sha256(settings.data_protection_key.encode("utf-8")).hexdigest()
     identity = await session.get(DeploymentIdentity, "primary")
@@ -455,7 +453,13 @@ async def verify_magic_link(session: AsyncSession, *, token: str) -> dict:
         if not link or link.consumed_at or (expires_at and expires_at <= now()):
             raise AppError(401, "MAGIC_LINK_INVALID", "유효하지 않거나 만료된 매직 링크입니다.")
 
-        user = await session.scalar(select(User).where(User.email == link.email))
+        matching_users = list(await session.scalars(select(User).where(User.email == link.email)))
+        user = next((candidate for candidate in matching_users if candidate.role == Role.FAN), None)
+        if user is None and len(matching_users) == 1:
+            # Preserve the role of an unambiguous legacy admin/artist magic
+            # link. When several role-scoped identities share one email, the
+            # fan app must never guess a privileged identity.
+            user = matching_users[0]
         if not user:
             user = User(id=f"user_{uuid4().hex[:12]}", email=link.email, role=Role.FAN)
             session.add(user)
@@ -463,7 +467,7 @@ async def verify_magic_link(session: AsyncSession, *, token: str) -> dict:
 
         link.consumed_at = now()
         session_token = token_urlsafe(32)
-        if get_settings().app_env != "production":
+        if not get_settings().is_hosted:
             session.add(Session(token=session_token, user_id=user.id))
 
         result = {

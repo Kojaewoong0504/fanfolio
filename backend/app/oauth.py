@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth_tokens import issue_token_pair
 from app.core.config import get_settings
 from app.errors import AppError
-from app.models import OAuthExchangeCode, OAuthState, SocialAccount, User
+from app.models import OAuthExchangeCode, OAuthState, Role, SocialAccount, User
 
 SUPPORTED_OAUTH_PROVIDERS = frozenset({"google", "kakao"})
 
@@ -223,6 +223,26 @@ async def upsert_social_user(session: AsyncSession, profile: OAuthProfile) -> Us
         user = await session.get(User, account.user_id)
         if user is None:
             raise OAuthError("연결된 Fanfolio 계정을 찾을 수 없습니다.")
+        if user.role != Role.FAN:
+            user = None
+            if profile.email:
+                user = await session.scalar(
+                    select(User).where(
+                        User.email == profile.email,
+                        User.role == Role.FAN,
+                    )
+                )
+            if user is None:
+                user = User(
+                    id=f"user_{uuid4().hex}",
+                    email=profile.email,
+                    nickname=profile.nickname,
+                    profile_image_url=profile.profile_image_url,
+                    role=Role.FAN,
+                )
+                session.add(user)
+                await session.flush()
+            account.user_id = user.id
         if profile.nickname and user.nickname != profile.nickname:
             user.nickname = profile.nickname
         if profile.profile_image_url and user.profile_image_url != profile.profile_image_url:
@@ -235,7 +255,9 @@ async def upsert_social_user(session: AsyncSession, profile: OAuthProfile) -> Us
 
     user = None
     if profile.email:
-        user = await session.scalar(select(User).where(User.email == profile.email))
+        user = await session.scalar(
+            select(User).where(User.email == profile.email, User.role == Role.FAN)
+        )
     if user is None:
         user = User(
             id=f"user_{uuid4().hex}",

@@ -3,6 +3,7 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.core.config import get_settings
 from app.mailer import MailDeliveryError
 from tests.conftest import assert_error, assert_success
 
@@ -72,6 +73,26 @@ def test_admin_password_login_rejects_artist_client(
         json={"email": "admin@example.com", "password": "test-admin-password"},
     )
     assert_error(response, 403, "ADMIN_CLIENT_REQUIRED")
+
+
+def test_hosted_staging_login_uses_a_secure_cross_site_refresh_cookie(
+    actors: dict[str, TestClient], monkeypatch: Any
+) -> None:
+    settings = get_settings()
+    monkeypatch.setattr(settings, "app_env", "staging")
+
+    response = actors["admin"].post(
+        "/api/auth/admin/login",
+        headers={"X-Fanfolio-Client": "admin"},
+        json={"email": "admin@example.com", "password": "test-admin-password"},
+    )
+
+    assert_success(response)
+    cookie = response.headers["set-cookie"]
+    assert "fanfolio_admin_refresh=" in cookie
+    assert "HttpOnly" in cookie
+    assert "Secure" in cookie
+    assert "SameSite=none" in cookie
 
 
 def test_admin_can_issue_another_admin_account_with_one_time_password(
@@ -338,6 +359,76 @@ def test_admin_can_issue_an_artist_login_and_artist_can_change_the_temporary_pas
         },
     )
     assert restored.status_code == 200, restored.text
+
+
+def test_admin_can_list_artist_accounts_without_exposing_passwords(
+    actors: dict[str, TestClient],
+) -> None:
+    issued = actors["admin"].post(
+        "/api/admin/artist-accounts",
+        json={"username": "persistent-studio", "displayName": "영속 계정 담당자"},
+    )
+    account = assert_success(issued, 201)
+
+    listed = actors["admin"].get("/api/admin/artist-accounts")
+    data = assert_success(listed)
+    item = next(entry for entry in data["items"] if entry["id"] == account["id"])
+
+    assert item == {
+        "id": account["id"],
+        "username": "persistent-studio",
+        "displayName": "영속 계정 담당자",
+        "mustChangePassword": True,
+    }
+    assert "temporaryPassword" not in item
+
+
+def test_admin_can_reset_an_artist_password_and_revoke_existing_refresh_tokens(
+    actors: dict[str, TestClient],
+) -> None:
+    issued = actors["admin"].post(
+        "/api/admin/artist-accounts",
+        json={"username": "recoverable-studio", "displayName": "복구 가능한 스튜디오"},
+    )
+    account = assert_success(issued, 201)
+    old_password = account["temporaryPassword"]
+
+    artist_browser = TestClient(actors["admin"].app)
+    logged_in = artist_browser.post(
+        "/api/auth/artist/login",
+        headers={"X-Fanfolio-Client": "artist"},
+        json={"username": "recoverable-studio", "password": old_password},
+    )
+    assert_success(logged_in)
+    assert "fanfolio_artist_refresh" in logged_in.cookies
+
+    reset = actors["admin"].post(f"/api/admin/artist-accounts/{account['id']}/reset-password")
+    reset_account = assert_success(reset)
+    assert reset_account["temporaryPassword"] != old_password
+    assert reset_account["mustChangePassword"] is True
+
+    stale_refresh = artist_browser.post(
+        "/api/auth/refresh", headers={"X-Fanfolio-Client": "artist"}
+    )
+    assert_error(stale_refresh, 401, "AUTH_TOKEN_INVALID")
+
+    old_login = artist_browser.post(
+        "/api/auth/artist/login",
+        headers={"X-Fanfolio-Client": "artist"},
+        json={"username": "recoverable-studio", "password": old_password},
+    )
+    assert_error(old_login, 401, "INVALID_CREDENTIALS")
+
+    new_login = artist_browser.post(
+        "/api/auth/artist/login",
+        headers={"X-Fanfolio-Client": "artist"},
+        json={
+            "username": "recoverable-studio",
+            "password": reset_account["temporaryPassword"],
+        },
+    )
+    new_login_data = assert_success(new_login)
+    assert new_login_data["mustChangePassword"] is True
 
 
 def test_artist_password_login_rejects_fan_and_admin_clients(

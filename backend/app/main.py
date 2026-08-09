@@ -59,7 +59,7 @@ def create_app() -> FastAPI:
         # Cookie-authenticated state changes must originate from one of our
         # configured frontends. CORS protects JavaScript callers, but an
         # Origin check also covers cross-site form submissions.
-        if get_settings().app_env == "production" and request.method in {
+        if get_settings().is_hosted and request.method in {
             "POST",
             "PUT",
             "PATCH",
