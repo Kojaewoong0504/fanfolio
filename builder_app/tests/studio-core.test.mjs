@@ -118,6 +118,30 @@ test('serializes voice, motion and hologram settings into the shared design cont
   assert.equal(payload.videoAssetId, 'asset_video')
 })
 
+test('serializes premium hologram tuning so fan previews can match the studio', () => {
+  const config = buildDesignConfig({
+    editor: {
+      effect: 'holographic',
+      effectPreset: 'moonlight',
+      effectIntensity: 0.72,
+      effectAngle: 210,
+      effectSpread: 0.64,
+      effectGrain: 0.38,
+      effectFinish: 'silk',
+    },
+  })
+
+  assert.deepEqual(config.front, {
+    effect: 'holographic',
+    effectPreset: 'moonlight',
+    effectIntensity: 0.72,
+    effectAngle: 210,
+    effectSpread: 0.64,
+    effectGrain: 0.38,
+    effectFinish: 'silk',
+  })
+})
+
 test('serializes handwriting state and transform into the shared design contract', () => {
   const payload = buildCardPayload({
     form: {
@@ -235,6 +259,28 @@ test('serializes creative layer metadata without browser-only files or URLs', ()
   ])
   assert.equal('src' in config.creativeLayers[0], false)
   assert.equal('file' in config.creativeLayers[0], false)
+})
+
+test('preserves the built-in sticker identity while stripping its browser preview URL', () => {
+  const config = buildDesignConfig({
+    editor: {
+      layers: [
+        {
+          id: 'layer-opal-heart',
+          type: 'sticker',
+          builtinId: 'opal-heart',
+          src: './assets/stickers/sticker-opal-heart.png',
+          side: 'front',
+          x: 66,
+          y: 30,
+          width: 24,
+        },
+      ],
+    },
+  })
+
+  assert.equal(config.creativeLayers[0].builtinId, 'opal-heart')
+  assert.equal('src' in config.creativeLayers[0], false)
 })
 
 test('studio shell exposes adaptive navigation, a mobile inspector, and interactive cards', async () => {

@@ -40,6 +40,7 @@ export function normalizeCreativeLayer(layer = {}, index = 0) {
     type: allowedTypes.has(layer.type) ? layer.type : 'handwriting',
     side: layer.side === 'back' ? 'back' : 'front',
     assetId: layer.assetId || undefined,
+    builtinId: layer.builtinId || undefined,
     x: clamped(layer.x, 0, 100, 50),
     y: clamped(layer.y, 0, 100, 50),
     width: clamped(layer.width, 8, 100, 36),
@@ -88,6 +89,15 @@ export function buildDesignConfig({ form = {}, editor = {} } = {}) {
         ? numeric(editor.effectAngle ?? existingFront.effectAngle, 135)
         : undefined,
     effectMotion: editor.effectMotion ?? existingFront.effectMotion,
+    effectSpread:
+      editor.effectSpread !== undefined || existingFront.effectSpread !== undefined
+        ? normalizedIntensity(editor.effectSpread ?? existingFront.effectSpread, 0.64)
+        : undefined,
+    effectGrain:
+      editor.effectGrain !== undefined || existingFront.effectGrain !== undefined
+        ? normalizedIntensity(editor.effectGrain ?? existingFront.effectGrain, 0.38)
+        : undefined,
+    effectFinish: editor.effectFinish ?? existingFront.effectFinish,
     image:
       existingFront.image || imageAssetId
         ? compactObject({

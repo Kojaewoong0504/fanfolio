@@ -34,6 +34,44 @@ const sampleAssets = {
   stardust: './assets/card-stardust-backstage.jpg',
 }
 
+const builtInStickers = [
+  {
+    id: 'opal-heart',
+    name: '오팔 하트',
+    source: './assets/stickers/sticker-opal-heart.png',
+  },
+  {
+    id: 'shooting-star',
+    name: '슈팅 스타',
+    source: './assets/stickers/sticker-shooting-star.png',
+  },
+  {
+    id: 'opal-butterfly',
+    name: '오팔 버터플라이',
+    source: './assets/stickers/sticker-opal-butterfly.png',
+  },
+  {
+    id: 'moon-tiara',
+    name: '문 티아라',
+    source: './assets/stickers/sticker-moon-tiara.png',
+  },
+]
+
+const hologramPresets = [
+  ['aurora', '오로라', '청보라 빛이 부드럽게 번지는 포일'],
+  ['prism', '프리즘', '각도마다 선명하게 갈라지는 스펙트럼'],
+  ['crystal', '크리스탈', '차갑고 투명한 다이아몬드 광택'],
+  ['stardust', '스타더스트', '미세한 별 입자가 반짝이는 포일'],
+  ['moonlight', '문라이트', '은은한 달빛과 진주광이 도는 포일'],
+  ['rose-opal', '로즈 오팔', '핑크와 골드가 겹치는 오팔 광택'],
+]
+
+const hologramFinishes = [
+  ['glass', '글라스'],
+  ['silk', '실크'],
+  ['diamond', '다이아몬드'],
+]
+
 const recipes = [
   {
     id: 'voice',
@@ -131,6 +169,9 @@ function initialEditor() {
     effectIntensity: 0.58,
     effectAngle: 135,
     effectMotion: true,
+    effectSpread: 0.64,
+    effectGrain: 0.38,
+    effectFinish: 'glass',
     backEffect: 'sparkle',
     background: '#0b1033',
     backTemplateId: 'agency_back_v1',
@@ -398,7 +439,7 @@ function shell(content, title, activeView = state.view) {
         ${navigation
           .map(
             ([view, symbol, label]) => `<button type="button" data-nav="${view}" class="${activeView === view ? 'active' : ''}" aria-label="${label}" title="${label}" ${activeView === view ? 'aria-current="page"' : ''}>
-              ${icon(symbol)}<span>${label}</span>
+              ${icon(symbol)}<span class="nav-label">${label}</span>
             </button>`,
           )
           .join('')}
@@ -499,6 +540,32 @@ function selectedCreativeLayer() {
   return (state.editor.layers || []).find((layer) => layer.id === state.editor.selectedLayerId) || null
 }
 
+function builtInStickerSource(stickerId) {
+  return builtInStickers.find((sticker) => sticker.id === stickerId)?.source || ''
+}
+
+function creativeLayerLabel(layer) {
+  if (layer?.type === 'sticker') return '스티커'
+  if (layer?.type === 'drawing') return '그림'
+  return '손글씨'
+}
+
+function deleteSelectedLayer() {
+  const selected = selectedCreativeLayer()
+  if (!selected) return false
+  if (selected.src?.startsWith('blob:')) URL.revokeObjectURL(selected.src)
+  state.editor.layers = (state.editor.layers || []).filter((layer) => layer.id !== selected.id)
+  if (selected.type === 'handwriting') {
+    state.editor.handwritingSrc = ''
+    state.editor.handwritingAssetId = null
+    state.form.handwritingAssetId = null
+  }
+  state.editor.selectedLayerId = null
+  markDirty()
+  render()
+  return true
+}
+
 function upsertCreativeLayer(type, values = {}) {
   const layers = state.editor.layers || []
   const existingIndex = values.id
@@ -522,6 +589,7 @@ function upsertCreativeLayer(type, values = {}) {
     src: values.src || current?.src || '',
     file: values.file ?? current?.file ?? null,
     assetId: values.assetId ?? current?.assetId ?? null,
+    builtinId: values.builtinId ?? current?.builtinId ?? null,
   }
   const nextLayers = [...layers]
   if (existingIndex >= 0) nextLayers.splice(existingIndex, 1, layer)
@@ -539,7 +607,7 @@ function creativeLayerMarkup(layer) {
   const content = layer.type === 'sticker'
     ? `<img src="${esc(layer.src)}" alt="" draggable="false" />`
     : '<span class="creative-layer-mask" aria-hidden="true"></span>'
-  return `<button type="button" class="creative-layer layer-${esc(layer.type)} ${selected ? 'selected' : ''}" data-layer-id="${esc(layer.id)}" style="${style}" aria-label="${layer.type === 'sticker' ? '스티커' : layer.type === 'drawing' ? '그림' : '손글씨'} 레이어${selected ? ' 선택됨' : ''}">${content}<span class="layer-selection" aria-hidden="true"></span></button>`
+  return `<button type="button" class="creative-layer layer-${esc(layer.type)} ${selected ? 'selected' : ''}" data-layer-id="${esc(layer.id)}" style="${style}" aria-label="${creativeLayerLabel(layer)} 레이어${selected ? ' 선택됨' : ''}">${content}<span class="layer-selection" aria-hidden="true"></span></button>`
 }
 
 function creativeLayersMarkup(side) {
@@ -550,6 +618,16 @@ function creativeLayersMarkup(side) {
     .join('')
 }
 
+function creativeLayerToolbar(side) {
+  const layer = selectedCreativeLayer()
+  if (!layer || layer.side !== side) return ''
+  return `<div class="layer-context-toolbar" role="toolbar" aria-label="선택한 ${creativeLayerLabel(layer)} 레이어 작업">
+    <span>${icon(layer.type === 'sticker' ? 'interests' : layer.type === 'drawing' ? 'gesture' : 'draw')} ${creativeLayerLabel(layer)} 선택</span>
+    <button type="button" data-action="duplicate-layer" aria-label="선택 레이어 복제">${icon('content_copy')}<span>복제</span></button>
+    <button type="button" class="delete" data-action="delete-layer" aria-label="선택 레이어 삭제">${icon('delete')}<span>삭제</span></button>
+  </div>`
+}
+
 function cardVisual({ fan = false } = {}) {
   const editor = state.editor
   const isBack = editor.side === 'back' && !fan
@@ -557,15 +635,16 @@ function cardVisual({ fan = false } = {}) {
     ? `<video src="${esc(editor.videoSrc)}" muted loop playsinline preload="metadata" ${fan ? 'controls' : 'autoplay'}></video>`
     : `<img class="card-photo" src="${esc(editor.imageSrc || sampleAssets.aurora)}" alt="${esc(state.form.name)} 카드 이미지" />`
   const effectOpacity = Number(editor.effectIntensity || 0)
-  const tiltStyle = '--tilt-x:0deg;--tilt-y:0deg;--light-x:50%;--light-y:42%;--foil-shift-x:0px;--foil-shift-y:0px'
+  const tiltStyle = '--tilt-x:0deg;--tilt-y:0deg;--light-x:50%;--light-y:42%'
   if (isBack) {
-    return `<div class="editor-card back-card" data-hologram-card style="${tiltStyle};--back-color:${esc(editor.background || '#0b1033')}"><img src="./agency-back-template-v1.png" alt="Fanfolio 공식 카드 뒷면" />${creativeLayersMarkup('back')}<div class="back-card-meta"><strong>${esc(state.form.name)}</strong><span>OFFICIAL DIGITAL COLLECTIBLE</span></div></div>`
+    return `<div class="editor-card back-card effect-motion" data-hologram-card style="${tiltStyle};--back-color:${esc(editor.background || '#0b1033')}"><img src="./agency-back-template-v1.png" alt="Fanfolio 공식 카드 뒷면" />${creativeLayersMarkup('back')}${creativeLayerToolbar('back')}<div class="back-card-meta"><strong>${esc(state.form.name)}</strong><span>OFFICIAL DIGITAL COLLECTIBLE</span></div></div>`
   }
-  return `<div class="editor-card ${editor.effectMotion ? 'effect-motion' : ''}" data-hologram-card style="${tiltStyle};--effect-opacity:${effectOpacity};--effect-angle:${Number(editor.effectAngle || 135)}deg">
+  return `<div class="editor-card ${editor.effectMotion ? 'effect-motion' : ''}" data-hologram-card style="${tiltStyle};--effect-opacity:${effectOpacity};--effect-angle:${Number(editor.effectAngle || 135)}deg;--effect-spread:${Math.round(Number(editor.effectSpread ?? 0.64) * 100)}%;--effect-grain:${Number(editor.effectGrain ?? 0.38)}">
     ${media}
-    ${editor.effect !== 'none' ? `<img class="hologram-layer preset-${esc(editor.effectPreset)}" src="./assets/hologram-aurora-texture.jpg" alt="" />` : ''}
+    ${editor.effect !== 'none' ? `<div class="hologram-layer preset-${esc(editor.effectPreset)} finish-${esc(editor.effectFinish || 'glass')}" aria-hidden="true"></div>` : ''}
     <div class="card-vignette" aria-hidden="true"></div>
     ${creativeLayersMarkup('front')}
+    ${fan ? '' : creativeLayerToolbar('front')}
     <div class="card-caption"><span>${esc(state.form.seasonName || 'FANFOLIO EDITION')}</span><strong>${esc(state.form.name || '새 특별 카드')}</strong><small>${esc(state.form.rarity || 'SR')} · OFFICIAL</small></div>
   </div>`
 }
@@ -592,7 +671,7 @@ function layerControls() {
   }
   const normalized = normalizeCreativeLayer(layer)
   return `<div class="layer-controls">
-    <div class="layer-controls-heading"><span><strong>${layer.type === 'sticker' ? '스티커' : layer.type === 'drawing' ? '그림' : '손글씨'} 레이어</strong><small>카드 위에서 직접 끌어 이동할 수도 있어요.</small></span><button type="button" class="icon-button small danger" data-action="delete-layer" aria-label="선택 레이어 삭제">${icon('delete')}</button></div>
+    <div class="layer-controls-heading"><span><strong>${creativeLayerLabel(layer)} 레이어</strong><small>카드 위에서 직접 끌어 이동할 수도 있어요.</small></span><button type="button" class="layer-delete-button" data-action="delete-layer" aria-label="선택 레이어 삭제">${icon('delete')} 삭제</button></div>
     <label class="compact-field">표시 면<select data-layer-field="side"><option value="front" ${normalized.side === 'front' ? 'selected' : ''}>앞면</option><option value="back" ${normalized.side === 'back' ? 'selected' : ''}>뒷면</option></select></label>
     ${layer.type === 'sticker' ? '' : `<label class="compact-field">색상<input type="color" value="${normalized.color}" data-layer-field="color" /></label>`}
     <div class="range-group"><label>가로 위치 <output>${Math.round(normalized.x)}%</output></label><input type="range" min="0" max="100" step="1" value="${normalized.x}" data-layer-field="x" /></div>
@@ -636,7 +715,9 @@ function drawingInspector() {
 }
 
 function stickerInspector() {
-  return `<div class="inspector-section"><span class="inspector-label">나만의 스티커</span><p class="inspector-description">아티스트가 직접 만든 투명 PNG나 WebP를 올려 카드 양면에 배치할 수 있어요.</p>${uploadBox('sticker', 'image/png,image/webp', '스티커 이미지 업로드', '투명 PNG 또는 WebP 권장')}</div>${layerControls()}`
+  return `<div class="inspector-section"><span class="inspector-label">기본 스티커</span><p class="inspector-description">Fanfolio 전용 오팔 참을 선택하면 카드에 바로 추가돼요.</p><div class="built-in-sticker-grid">${builtInStickers.map((sticker) => `<button type="button" data-built-in-sticker="${esc(sticker.id)}" aria-label="${esc(sticker.name)} 스티커 추가"><img src="${esc(sticker.source)}" alt="" /><span>${esc(sticker.name)}</span>${icon('add_circle')}</button>`).join('')}</div></div>
+  <div class="inspector-divider"><span>또는 직접 만들기</span></div>
+  <div class="inspector-section"><span class="inspector-label">나만의 스티커</span><p class="inspector-description">직접 만든 투명 PNG나 WebP도 카드 양면에 자유롭게 배치할 수 있어요.</p>${uploadBox('sticker', 'image/png,image/webp', '스티커 이미지 업로드', '투명 PNG 또는 WebP 권장')}</div>${layerControls()}`
 }
 
 function voiceInspector() {
@@ -661,17 +742,14 @@ function motionInspector() {
 }
 
 function hologramInspector() {
-  const presets = [
-    ['aurora', '오로라'],
-    ['prism', '프리즘'],
-    ['crystal', '크리스탈'],
-    ['stardust', '스타더스트'],
-  ]
-  return `<div class="feature-toggle"><span>${icon('auto_awesome')}<span><strong>홀로그램 포일</strong><small>한정판 광택을 실시간 조절해요.</small></span></span><button type="button" class="switch ${state.editor.effect !== 'none' ? 'on' : ''}" data-action="toggle-hologram" aria-pressed="${state.editor.effect !== 'none'}" aria-label="홀로그램 켜기"></button></div>
-  <div class="inspector-section"><span class="inspector-label">포일 프리셋</span><div class="preset-grid">${presets.map(([value, label]) => `<button type="button" data-preset="${value}" class="${state.editor.effectPreset === value ? 'active' : ''}"><img src="./assets/hologram-aurora-texture.jpg" alt="" /><span>${label}</span></button>`).join('')}</div></div>
+  return `<div class="feature-toggle"><span>${icon('auto_awesome')}<span><strong>홀로그램 포일</strong><small>기울이는 방향을 따라 빛이 흐르는 한정판 포일이에요.</small></span></span><button type="button" class="switch ${state.editor.effect !== 'none' ? 'on' : ''}" data-action="toggle-hologram" aria-pressed="${state.editor.effect !== 'none'}" aria-label="홀로그램 켜기"></button></div>
+  <div class="inspector-section"><span class="inspector-label">포일 프리셋</span><div class="preset-grid premium">${hologramPresets.map(([value, label, description]) => `<button type="button" data-preset="${value}" class="${state.editor.effectPreset === value ? 'active' : ''}" aria-label="${label}: ${description}"><i class="foil-swatch preset-${value}" aria-hidden="true"></i><span><strong>${label}</strong><small>${description}</small></span>${icon('check_circle')}</button>`).join('')}</div></div>
+  <div class="inspector-section"><span class="inspector-label">표면 마감</span><div class="finish-selector">${hologramFinishes.map(([value, label]) => `<button type="button" data-finish="${value}" class="${state.editor.effectFinish === value ? 'active' : ''}">${label}</button>`).join('')}</div></div>
   <div class="range-group"><label>광택 강도 <output>${Math.round(Number(state.editor.effectIntensity) * 100)}%</output></label><input type="range" min="0" max="1" step="0.01" value="${Number(state.editor.effectIntensity)}" data-editor="effectIntensity" /></div>
+  <div class="range-group"><label>빛 번짐 <output>${Math.round(Number(state.editor.effectSpread ?? 0.64) * 100)}%</output></label><input type="range" min="0.3" max="0.9" step="0.01" value="${Number(state.editor.effectSpread ?? 0.64)}" data-editor="effectSpread" /></div>
+  <div class="range-group"><label>입자 디테일 <output>${Math.round(Number(state.editor.effectGrain ?? 0.38) * 100)}%</output></label><input type="range" min="0" max="1" step="0.01" value="${Number(state.editor.effectGrain ?? 0.38)}" data-editor="effectGrain" /></div>
   <div class="range-group"><label>빛의 각도 <output>${Number(state.editor.effectAngle)}°</output></label><input type="range" min="0" max="360" step="5" value="${Number(state.editor.effectAngle)}" data-editor="effectAngle" /></div>
-  <label class="check-row"><input type="checkbox" data-editor="effectMotion" ${state.editor.effectMotion ? 'checked' : ''} /><span><strong>기울임 모션</strong><small>움직임 감소 설정에서는 자동으로 정지합니다.</small></span></label>`
+  <label class="check-row"><input type="checkbox" data-editor="effectMotion" ${state.editor.effectMotion ? 'checked' : ''} /><span><strong>기울임에 반응</strong><small>마우스·펜·손가락 위치를 따라 카드와 광택이 함께 움직여요. 움직임 감소 설정에서는 정지합니다.</small></span></label>`
 }
 
 function backInspector() {
@@ -1176,10 +1254,17 @@ async function openCard(cardId) {
     effectIntensity: card.designConfig?.front?.effectIntensity ?? 0.58,
     effectAngle: card.designConfig?.front?.effectAngle ?? 135,
     effectMotion: card.designConfig?.front?.effectMotion ?? true,
+    effectSpread: card.designConfig?.front?.effectSpread ?? 0.64,
+    effectGrain: card.designConfig?.front?.effectGrain ?? 0.38,
+    effectFinish: card.designConfig?.front?.effectFinish || 'glass',
     videoLoop: card.designConfig?.video?.loop ?? true,
     handwritingTransform: card.handwritingTransform || initialEditor().handwritingTransform,
     layers: Array.isArray(card.designConfig?.creativeLayers)
-      ? card.designConfig.creativeLayers.map((layer) => ({ ...layer, src: '', file: null }))
+      ? card.designConfig.creativeLayers.map((layer) => ({
+          ...layer,
+          src: builtInStickerSource(layer.builtinId),
+          file: null,
+        }))
       : [],
     selectedLayerId: null,
     inspectorOpen: false,
@@ -1455,18 +1540,16 @@ function resetInteractiveCard(card) {
   card.style.setProperty('--tilt-y', '0deg')
   card.style.setProperty('--light-x', '50%')
   card.style.setProperty('--light-y', '42%')
-  card.style.setProperty('--foil-shift-x', '0px')
-  card.style.setProperty('--foil-shift-y', '0px')
   card.classList.remove('is-tilting')
 }
 
 function initInteractiveCards() {
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
   document.querySelectorAll('[data-hologram-card]').forEach((card) => {
-    if (reduceMotion) return
+    if (reduceMotion || !card.classList.contains('effect-motion')) return
     const move = (event) => {
-      if (event.target.closest?.('.creative-layer')) return
-      if (event.pointerType === 'touch') return
+      if (event.target.closest?.('.creative-layer, .layer-context-toolbar')) return
+      if (event.pointerType === 'touch' && !card.hasPointerCapture?.(event.pointerId)) return
       const box = card.getBoundingClientRect()
       const x = Math.max(0, Math.min(1, (event.clientX - box.left) / box.width))
       const y = Math.max(0, Math.min(1, (event.clientY - box.top) / box.height))
@@ -1474,13 +1557,10 @@ function initInteractiveCards() {
       card.style.setProperty('--tilt-y', `${((x - 0.5) * 14).toFixed(2)}deg`)
       card.style.setProperty('--light-x', `${Math.round(x * 100)}%`)
       card.style.setProperty('--light-y', `${Math.round(y * 100)}%`)
-      card.style.setProperty('--foil-shift-x', `${Math.round((x - 0.5) * 30)}px`)
-      card.style.setProperty('--foil-shift-y', `${Math.round((y - 0.5) * 24)}px`)
       card.classList.add('is-tilting')
     }
     card.addEventListener('pointerdown', (event) => {
-      if (event.target.closest?.('.creative-layer')) return
-      if (event.pointerType === 'touch') return
+      if (event.target.closest?.('.creative-layer, .layer-context-toolbar')) return
       card.setPointerCapture?.(event.pointerId)
       move(event)
     })
@@ -1625,6 +1705,53 @@ async function saveProfile(formElement) {
   }
 }
 
+function liveOutput(input, field, value) {
+  const output = input.closest('.range-group')?.querySelector('output')
+  if (!output) return
+  if (['rotation', 'effectAngle'].includes(field)) output.textContent = `${Math.round(value)}°`
+  else output.textContent = `${Math.round(Number(value) * (field === 'opacity' || field.startsWith('effect') ? 100 : 1))}%`
+}
+
+function applyLayerLivePreview(layer, input) {
+  const element = document.querySelector(`[data-layer-id="${CSS.escape(layer.id)}"]`)
+  if (!element) return
+  const property = {
+    x: '--layer-x',
+    y: '--layer-y',
+    width: '--layer-width',
+    rotation: '--layer-rotation',
+    opacity: '--layer-opacity',
+    color: '--layer-color',
+  }[input.dataset.layerField]
+  if (!property) return
+  const unit = ['x', 'y', 'width'].includes(input.dataset.layerField)
+    ? '%'
+    : input.dataset.layerField === 'rotation'
+      ? 'deg'
+      : ''
+  element.style.setProperty(property, `${layer[input.dataset.layerField]}${unit}`)
+  liveOutput(input, input.dataset.layerField, layer[input.dataset.layerField])
+}
+
+function applyEditorLivePreview(field, input) {
+  const card = document.querySelector('.editor-card')
+  const value = state.editor[field]
+  if (field === 'background') card?.style.setProperty('--back-color', value)
+  if (field === 'effectIntensity') card?.style.setProperty('--effect-opacity', value)
+  if (field === 'effectAngle') card?.style.setProperty('--effect-angle', `${value}deg`)
+  if (field === 'effectSpread') card?.style.setProperty('--effect-spread', `${Math.round(value * 100)}%`)
+  if (field === 'effectGrain') card?.style.setProperty('--effect-grain', value)
+  if (field === 'drawingColor') {
+    const context = document.querySelector('#drawing-pad')?.getContext('2d')
+    if (context) context.strokeStyle = value
+  }
+  if (field === 'drawingSize') {
+    const context = document.querySelector('#drawing-pad')?.getContext('2d')
+    if (context) context.lineWidth = Number(value)
+  }
+  liveOutput(input, field, value)
+}
+
 app.addEventListener('submit', (event) => {
   event.preventDefault()
   if (event.target.id === 'login-form') loginArtist(event.target)
@@ -1699,9 +1826,35 @@ app.addEventListener('click', async (event) => {
     render()
     return
   }
+  const builtInSticker = event.target.closest('[data-built-in-sticker]')
+  if (builtInSticker) {
+    const sticker = builtInStickers.find((item) => item.id === builtInSticker.dataset.builtInSticker)
+    if (sticker) {
+      upsertCreativeLayer('sticker', {
+        builtinId: sticker.id,
+        src: sticker.source,
+        file: null,
+        assetId: null,
+        side: state.editor.side,
+        width: 28,
+      })
+      state.editor.inspectorOpen = true
+      markDirty()
+      render()
+    }
+    return
+  }
   const preset = event.target.closest('[data-preset]')
   if (preset) {
     state.editor.effectPreset = preset.dataset.preset
+    state.editor.effect = 'holographic'
+    markDirty()
+    render()
+    return
+  }
+  const finish = event.target.closest('[data-finish]')
+  if (finish) {
+    state.editor.effectFinish = finish.dataset.finish
     state.editor.effect = 'holographic'
     markDirty()
     render()
@@ -1808,19 +1961,7 @@ app.addEventListener('click', async (event) => {
     }
   }
   if (action === 'delete-layer') {
-    const selected = selectedCreativeLayer()
-    if (selected?.src?.startsWith('blob:')) URL.revokeObjectURL(selected.src)
-    state.editor.layers = (state.editor.layers || []).filter(
-      (layer) => layer.id !== state.editor.selectedLayerId,
-    )
-    if (selected?.type === 'handwriting') {
-      state.editor.handwritingSrc = ''
-      state.editor.handwritingAssetId = null
-      state.form.handwritingAssetId = null
-    }
-    state.editor.selectedLayerId = null
-    markDirty()
-    render()
+    deleteSelectedLayer()
   }
   if (action === 'duplicate-layer') {
     const selected = selectedCreativeLayer()
@@ -1858,8 +1999,16 @@ app.addEventListener('change', async (event) => {
   }
   const editorField = event.target.dataset.editor
   if (editorField) {
-    state.editor[editorField] = event.target.type === 'checkbox' ? event.target.checked : event.target.value
+    state.editor[editorField] = event.target.type === 'checkbox'
+      ? event.target.checked
+      : event.target.type === 'range'
+        ? Number(event.target.value)
+        : event.target.value
     markDirty()
+    if (event.target.type === 'range' || event.target.type === 'color') {
+      applyEditorLivePreview(editorField, event.target)
+      return
+    }
     render()
     return
   }
@@ -1872,7 +2021,8 @@ app.addEventListener('change', async (event) => {
       : event.target.value
     if (layerField === 'side') state.editor.side = layer.side
     markDirty()
-    render()
+    if (layerField === 'side') render()
+    else applyLayerLivePreview(layer, event.target)
   }
 })
 
@@ -1889,10 +2039,12 @@ app.addEventListener('input', (event) => {
     markDirty()
   }
   const editorField = event.target.dataset.editor
-  if (editorField && event.target.type === 'range') {
-    state.editor[editorField] = Number(event.target.value)
+  if (editorField && (event.target.type === 'range' || event.target.type === 'color')) {
+    state.editor[editorField] = event.target.type === 'range'
+      ? Number(event.target.value)
+      : event.target.value
     markDirty()
-    render()
+    applyEditorLivePreview(editorField, event.target)
   }
   const layerField = event.target.dataset.layerField
   if (layerField) {
@@ -1902,7 +2054,9 @@ app.addEventListener('input', (event) => {
         ? Number(event.target.value)
         : event.target.value
       markDirty()
-      render()
+      if (event.target.type === 'color' || event.target.type === 'range') {
+        applyLayerLivePreview(layer, event.target)
+      }
     }
   }
   const transformField = event.target.dataset.transform
@@ -1914,6 +2068,13 @@ app.addEventListener('input', (event) => {
   if (event.target.matches('[data-review-note]')) {
     state.reviewNote = event.target.value
   }
+})
+
+window.addEventListener('keydown', (event) => {
+  if (!['Backspace', 'Delete'].includes(event.key) || !state.editor.selectedLayerId) return
+  if (event.target.matches?.('input, textarea, select, [contenteditable="true"]')) return
+  event.preventDefault()
+  deleteSelectedLayer()
 })
 
 let responsiveRenderTimer = null

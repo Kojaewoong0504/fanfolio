@@ -1348,29 +1348,90 @@ video {
 
 .hologram-layer {
   position: absolute;
-  inset: -12%;
+  inset: 0;
   z-index: 2;
-  width: 124%;
-  height: 124%;
-  object-fit: cover;
+  overflow: hidden;
+  border-radius: inherit;
   pointer-events: none;
   opacity: var(--effect-opacity, 0.58);
   mix-blend-mode: screen;
-  transform: rotate(var(--effect-angle, 135deg)) scale(1.15);
+  background:
+    radial-gradient(circle at var(--light-x, 50%) var(--light-y, 42%), rgba(255, 255, 255, 0.98) 0 3%, rgba(127, 222, 255, 0.52) 12%, transparent var(--effect-spread, 64%)),
+    conic-gradient(from var(--effect-angle, 135deg) at var(--light-x, 50%) var(--light-y, 42%), transparent 0 7%, rgba(116, 255, 238, 0.48) 13%, rgba(132, 139, 255, 0.54) 22%, rgba(242, 127, 255, 0.5) 31%, rgba(255, 226, 154, 0.48) 42%, transparent 54% 68%, rgba(124, 217, 255, 0.4) 79%, transparent 92%);
+  background-blend-mode: screen;
+  transform: translateZ(2px);
+  transition: opacity 140ms ease, filter 180ms ease;
+  isolation: isolate;
 }
 
-.hologram-layer.preset-prism { filter: hue-rotate(38deg) saturate(1.18); }
-.hologram-layer.preset-crystal { filter: hue-rotate(178deg) saturate(0.78) brightness(1.2); }
-.hologram-layer.preset-stardust { filter: hue-rotate(315deg) saturate(1.24) contrast(1.05); }
-
-.effect-motion .hologram-layer {
-  animation: hologram-sweep 4.8s ease-in-out infinite alternate;
+.hologram-layer::before,
+.hologram-layer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
-@keyframes hologram-sweep {
-  from { transform: rotate(calc(var(--effect-angle, 135deg) - 10deg)) scale(1.12) translate3d(-2%, -1%, 0); }
-  to { transform: rotate(calc(var(--effect-angle, 135deg) + 10deg)) scale(1.2) translate3d(2%, 1%, 0); }
+.hologram-layer::before {
+  inset: -7%;
+  opacity: var(--effect-grain, 0.38);
+  background-image: url('./assets/hologram-aurora-texture.jpg');
+  background-position: center;
+  background-size: cover;
+  mix-blend-mode: screen;
+  filter: saturate(0.72) contrast(1.08);
+  transform: rotate(var(--effect-angle, 135deg)) scale(1.12);
 }
+
+.hologram-layer::after {
+  opacity: 0.66;
+  background:
+    radial-gradient(ellipse at var(--light-x, 50%) var(--light-y, 42%), rgba(255, 255, 255, 0.86) 0 2%, rgba(229, 240, 255, 0.3) 9%, transparent 26%),
+    repeating-linear-gradient(calc(var(--effect-angle, 135deg) + 18deg), transparent 0 11%, rgba(255, 255, 255, 0.18) 11.5%, transparent 12.4% 22%);
+  mix-blend-mode: soft-light;
+}
+
+.hologram-layer.preset-prism {
+  background:
+    radial-gradient(circle at var(--light-x, 50%) var(--light-y, 42%), rgba(255, 255, 255, 0.95) 0 4%, transparent var(--effect-spread, 64%)),
+    repeating-conic-gradient(from var(--effect-angle, 135deg) at var(--light-x, 50%) var(--light-y, 42%), rgba(255, 72, 184, 0.46) 0 8deg, rgba(93, 151, 255, 0.5) 13deg 24deg, rgba(85, 255, 223, 0.42) 29deg 41deg, rgba(255, 224, 120, 0.4) 46deg 58deg, transparent 62deg 78deg);
+}
+
+.hologram-layer.preset-crystal {
+  background:
+    radial-gradient(circle at var(--light-x, 50%) var(--light-y, 42%), rgba(255, 255, 255, 1) 0 3%, rgba(190, 239, 255, 0.58) 13%, transparent var(--effect-spread, 64%)),
+    repeating-linear-gradient(calc(var(--effect-angle, 135deg) + 24deg), rgba(231, 250, 255, 0.34) 0 2%, transparent 2% 12%, rgba(139, 203, 255, 0.27) 13% 15%, transparent 16% 28%);
+  filter: saturate(0.76) brightness(1.08) contrast(1.06);
+}
+
+.hologram-layer.preset-stardust {
+  background:
+    radial-gradient(circle at 18% 22%, rgba(255, 255, 255, 0.9) 0 0.7%, transparent 1.7%),
+    radial-gradient(circle at 72% 30%, rgba(184, 226, 255, 0.9) 0 0.8%, transparent 1.8%),
+    radial-gradient(circle at 34% 68%, rgba(255, 205, 245, 0.88) 0 0.65%, transparent 1.65%),
+    radial-gradient(circle at 82% 78%, rgba(255, 244, 186, 0.86) 0 0.75%, transparent 1.8%),
+    radial-gradient(circle at var(--light-x, 50%) var(--light-y, 42%), rgba(255, 255, 255, 0.94) 0 4%, rgba(114, 206, 255, 0.36) 14%, transparent var(--effect-spread, 64%)),
+    conic-gradient(from var(--effect-angle, 135deg) at var(--light-x, 50%) var(--light-y, 42%), rgba(66, 99, 255, 0.2), rgba(217, 88, 255, 0.45), rgba(63, 231, 255, 0.32), rgba(255, 183, 225, 0.36), rgba(66, 99, 255, 0.2));
+  background-size: 73px 73px, 91px 91px, 117px 117px, 83px 83px, auto, auto;
+}
+
+.hologram-layer.preset-moonlight {
+  background:
+    radial-gradient(ellipse at var(--light-x, 50%) var(--light-y, 42%), rgba(255, 255, 255, 0.94) 0 5%, rgba(202, 222, 255, 0.62) 18%, rgba(179, 167, 255, 0.26) 35%, transparent var(--effect-spread, 64%)),
+    linear-gradient(calc(var(--effect-angle, 135deg) + 45deg), rgba(229, 239, 255, 0.15), rgba(185, 203, 255, 0.48), rgba(255, 242, 255, 0.24), rgba(178, 214, 255, 0.4));
+  filter: saturate(0.7) brightness(1.08);
+}
+
+.hologram-layer.preset-rose-opal {
+  background:
+    radial-gradient(circle at var(--light-x, 50%) var(--light-y, 42%), rgba(255, 255, 255, 0.96) 0 4%, rgba(255, 221, 236, 0.62) 15%, transparent var(--effect-spread, 64%)),
+    conic-gradient(from var(--effect-angle, 135deg) at var(--light-x, 50%) var(--light-y, 42%), rgba(255, 147, 193, 0.44), rgba(255, 220, 150, 0.45), rgba(173, 224, 255, 0.34), rgba(224, 154, 255, 0.43), rgba(255, 147, 193, 0.44));
+  filter: saturate(0.94) brightness(1.04);
+}
+
+.hologram-layer.finish-silk { filter: saturate(0.78) brightness(1.04); }
+.hologram-layer.finish-diamond { filter: saturate(1.18) contrast(1.16) brightness(1.06); }
+.hologram-layer.finish-diamond::after { opacity: 0.92; }
 
 .card-vignette {
   position: absolute;
@@ -1426,6 +1487,7 @@ video {
   left: 20px;
   right: 20px;
   bottom: 20px;
+  z-index: 5;
   display: grid;
   gap: 3px;
   color: #fff;
@@ -1488,6 +1550,57 @@ video {
   color: #5e6481;
   font-size: 11px;
   font-weight: 800;
+}
+
+.built-in-sticker-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.built-in-sticker-grid button {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid #e2e3ef;
+  border-radius: 12px;
+  color: #3f4668;
+  background: linear-gradient(145deg, #fff, #f7f5ff);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.built-in-sticker-grid button:hover,
+.built-in-sticker-grid button:focus-visible {
+  border-color: #a99cfb;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(57, 52, 128, 0.1);
+}
+
+.built-in-sticker-grid img {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  filter: drop-shadow(0 5px 7px rgba(79, 70, 151, 0.2));
+}
+
+.built-in-sticker-grid button > span:not(.material-symbols-rounded) {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 9px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.built-in-sticker-grid .material-symbols-rounded {
+  color: var(--violet);
+  font-size: 17px;
 }
 
 .sample-grid {
@@ -1942,41 +2055,82 @@ input[type='range'] {
   gap: 8px;
 }
 
-.preset-grid button {
+.preset-grid.premium button {
   position: relative;
-  min-height: 64px;
+  min-height: 84px;
   overflow: hidden;
-  padding: 0;
-  border: 2px solid transparent;
-  border-radius: 10px;
-  background: var(--navy);
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  padding: 8px;
+  border: 1px solid #e0e2ee;
+  border-radius: 12px;
+  color: #3f4667;
+  background: #fff;
+  text-align: left;
   cursor: pointer;
 }
 
-.preset-grid button.active {
+.preset-grid.premium button.active {
   border-color: var(--violet);
+  background: #f8f6ff;
+  box-shadow: 0 0 0 1px rgba(103, 84, 235, 0.12);
 }
 
-.preset-grid img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0.72;
+.foil-swatch {
+  width: 42px;
+  height: 58px;
+  display: block;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 9px;
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.94), transparent 16%),
+    conic-gradient(from 135deg, #72e6ff, #8d76ff, #ff9ed8, #ffe29c, #77efe5, #72e6ff);
+  box-shadow: inset 0 0 14px rgba(255, 255, 255, 0.42), 0 5px 12px rgba(49, 49, 114, 0.16);
 }
 
-.preset-grid button:nth-child(2) img { filter: hue-rotate(38deg); }
-.preset-grid button:nth-child(3) img { filter: hue-rotate(178deg) saturate(0.7); }
-.preset-grid button:nth-child(4) img { filter: hue-rotate(315deg) saturate(1.2); }
+.foil-swatch.preset-prism { background: repeating-conic-gradient(from 22deg, #ff75bd 0 11deg, #7e9cff 12deg 25deg, #65f4dd 26deg 38deg, #ffe18b 39deg 52deg); }
+.foil-swatch.preset-crystal { background: repeating-linear-gradient(135deg, #f8feff 0 9px, #acdfff 10px 18px, #d7caff 19px 29px, #fff 30px 36px); }
+.foil-swatch.preset-stardust { background: radial-gradient(circle at 20% 22%, #fff 0 2px, transparent 3px), radial-gradient(circle at 76% 34%, #fff 0 1px, transparent 2px), radial-gradient(circle at 42% 73%, #ffd9fa 0 2px, transparent 3px), linear-gradient(145deg, #17245e, #6c48b8 50%, #1478a9); }
+.foil-swatch.preset-moonlight { background: radial-gradient(circle at 42% 34%, #fff, #d9e7ff 22%, #9d99d4 55%, #29366c); }
+.foil-swatch.preset-rose-opal { background: conic-gradient(from 145deg, #ff9ec8, #ffd9ac, #bcddff, #dda4ff, #ff9ec8); }
 
-.preset-grid span {
-  position: relative;
-  z-index: 1;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 700;
-  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.6);
+.preset-grid.premium button > span:not(.material-symbols-rounded) {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.preset-grid.premium strong { font-size: 10px; }
+.preset-grid.premium small { color: var(--muted); font-size: 8px; line-height: 1.35; }
+.preset-grid.premium .material-symbols-rounded { position: absolute; top: 6px; right: 6px; display: none; color: var(--violet); font-size: 16px; }
+.preset-grid.premium button.active .material-symbols-rounded { display: block; }
+
+.finish-selector {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  padding: 4px;
+  border-radius: 11px;
+  background: #f0f1f7;
+}
+
+.finish-selector button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 8px;
+  color: #858ba4;
+  background: transparent;
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.finish-selector button.active {
+  color: var(--violet);
+  background: #fff;
+  box-shadow: 0 2px 7px rgba(32, 37, 82, 0.11);
 }
 
 .back-template {
@@ -2717,7 +2871,7 @@ input[type='range'] {
   }
 
   .studio-sidebar .studio-brand div,
-  .studio-sidebar nav button span,
+  .studio-sidebar nav button .nav-label,
   .studio-sidebar-note,
   .profile-chip > span:nth-child(2),
   .profile-chip > .material-symbols-rounded {
@@ -2849,7 +3003,7 @@ input[type='range'] {
     border-radius: 9px;
   }
 
-  .studio-sidebar nav button span {
+  .studio-sidebar nav button .nav-label {
     display: block;
     font-size: 9px;
   }
@@ -3139,7 +3293,7 @@ input[type='range'] {
 }
 
 .studio-shell.sidebar-collapsed .studio-brand div,
-.studio-shell.sidebar-collapsed .studio-sidebar nav button span,
+.studio-shell.sidebar-collapsed .studio-sidebar nav button .nav-label,
 .studio-shell.sidebar-collapsed .studio-sidebar-note,
 .studio-shell.sidebar-collapsed .profile-chip > span:nth-child(2),
 .studio-shell.sidebar-collapsed .profile-chip > .material-symbols-rounded {
@@ -3153,6 +3307,14 @@ input[type='range'] {
 .studio-shell.sidebar-collapsed .studio-sidebar nav button {
   justify-content: center;
   padding-inline: 0;
+}
+
+.studio-shell.sidebar-collapsed .studio-sidebar nav button > .material-symbols-rounded {
+  width: 24px;
+  height: 24px;
+  display: inline-grid;
+  flex: 0 0 24px;
+  place-items: center;
 }
 
 .studio-shell.sidebar-collapsed .profile-chip {
@@ -3178,23 +3340,24 @@ input[type='range'] {
   box-shadow: 0 30px 64px rgba(24, 29, 76, 0.34);
 }
 
-.effect-motion .hologram-layer {
-  animation: none;
-}
-
-.hologram-layer {
-  transform: rotate(var(--effect-angle, 135deg)) scale(1.18)
-    translate3d(var(--foil-shift-x, 0), var(--foil-shift-y, 0), 0);
-  transform-origin: var(--light-x, 50%) var(--light-y, 50%);
-  transition: transform 140ms ease, opacity 140ms ease;
-}
-
 .editor-card.is-tilting .hologram-layer {
   opacity: min(0.92, calc(var(--effect-opacity, 0.58) + 0.12));
+  filter: saturate(1.08) brightness(1.04);
 }
 
 .back-card {
-  background: var(--back-color, #0b1033);
+  background:
+    radial-gradient(circle at var(--light-x, 50%) var(--light-y, 42%), rgba(255, 255, 255, 0.24), transparent 44%),
+    var(--back-color, #0b1033);
+}
+
+.back-card > img {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  opacity: 0.86;
+  mix-blend-mode: luminosity;
+  filter: contrast(1.08) brightness(0.94);
 }
 
 .creative-layer {
@@ -3267,6 +3430,66 @@ input[type='range'] {
   background: #6b58ef;
 }
 
+.layer-context-toolbar {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  z-index: 120;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 12px;
+  color: #fff;
+  background: rgba(12, 16, 51, 0.9);
+  box-shadow: 0 10px 26px rgba(5, 8, 32, 0.3);
+  transform: translateX(-50%) translateZ(10px);
+  backdrop-filter: blur(14px);
+}
+
+.layer-context-toolbar > span,
+.layer-context-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.layer-context-toolbar > span {
+  padding: 0 7px;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.layer-context-toolbar > span .material-symbols-rounded,
+.layer-context-toolbar button .material-symbols-rounded {
+  font-size: 15px;
+}
+
+.layer-context-toolbar button {
+  min-height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  color: #eef0ff;
+  background: rgba(255, 255, 255, 0.11);
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.layer-context-toolbar button:hover,
+.layer-context-toolbar button:focus-visible {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.layer-context-toolbar button.delete {
+  color: #ffd9e1;
+  background: rgba(217, 75, 98, 0.24);
+}
+
 .inspector-heading > div:last-child {
   display: flex;
   align-items: center;
@@ -3312,6 +3535,32 @@ input[type='range'] {
   color: var(--muted);
   font-size: 9px;
   line-height: 1.5;
+}
+
+.layer-delete-button {
+  min-height: 32px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  padding: 0 9px;
+  border: 1px solid #f2c9d2;
+  border-radius: 9px;
+  color: #c83e5a;
+  background: #fff7f9;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.layer-delete-button:hover,
+.layer-delete-button:focus-visible {
+  border-color: #e99bad;
+  background: #ffedf2;
+}
+
+.layer-delete-button .material-symbols-rounded {
+  font-size: 16px;
 }
 
 .icon-button.small {
@@ -3417,7 +3666,7 @@ input[type='range'] {
   }
 
   .studio-shell:not(.sidebar-collapsed) .studio-sidebar .studio-brand div,
-  .studio-shell:not(.sidebar-collapsed) .studio-sidebar nav button span,
+  .studio-shell:not(.sidebar-collapsed) .studio-sidebar nav button .nav-label,
   .studio-shell:not(.sidebar-collapsed) .profile-chip > span:nth-child(2),
   .studio-shell:not(.sidebar-collapsed) .profile-chip > .material-symbols-rounded {
     display: grid;
@@ -3542,6 +3791,15 @@ input[type='range'] {
     width: min(270px, 74vw);
   }
 
+  .layer-context-toolbar {
+    top: 8px;
+    max-width: calc(100% - 16px);
+  }
+
+  .layer-context-toolbar > span {
+    display: none;
+  }
+
   .canvas-caption > div {
     width: 100%;
     display: flex;
@@ -3645,8 +3903,6 @@ input[type='range'] {
   .editor-card {
     --tilt-x: 0deg !important;
     --tilt-y: 0deg !important;
-    --foil-shift-x: 0px !important;
-    --foil-shift-y: 0px !important;
     transform: none !important;
   }
 }
