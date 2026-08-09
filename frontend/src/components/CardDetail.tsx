@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type SyntheticEvent } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type SyntheticEvent } from 'react'
 import { apiFetch, resolveApiUrl, type UserCardDetail } from '../api/client'
+import hologramTexture from '../assets/hologram-aurora-texture.jpg'
 import type { Card } from '../types'
 
 type CardDetailProps = {
@@ -26,7 +27,7 @@ function useDialogFocus(open: boolean): void {
       if (event.key !== 'Tab') return
       const dialog = document.querySelector<HTMLElement>('.detail-panel[role="dialog"]')
       if (!dialog) return
-      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], audio[controls]'))
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], audio[controls], video[controls]'))
         .filter(element => element.getClientRects().length > 0)
       if (focusable.length === 0) {
         event.preventDefault()
@@ -84,6 +85,17 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
 
   const imageUrl = detail?.card.imageUrl ?? card.image
   const imageError = (event: SyntheticEvent<HTMLImageElement>) => onImageError(event, card.id)
+  const designEffect = detail?.card.designConfig?.front?.effect
+  const effectIntensity = Math.max(0, Math.min(1, Number(detail?.card.designConfig?.front?.effectIntensity ?? 0) || 0))
+  const hasHologram = designEffect === 'holographic' && effectIntensity > 0
+  const hologramStyle = {
+    '--hologram-opacity': hasHologram ? String(0.18 + effectIntensity * 0.34) : '0',
+    '--hologram-shift': `${Math.round(18 + effectIntensity * 18)}px`,
+    '--hologram-texture': `url("${hologramTexture}")`,
+  } as CSSProperties & Record<'--hologram-opacity' | '--hologram-shift' | '--hologram-texture', string>
+  const voiceAudioUrl = detail?.card.hasVoice && detail.card.voiceAudioUrl ? resolveApiUrl(detail.card.voiceAudioUrl) : ''
+  const videoUrl = detail?.card.hasVideo && detail.card.videoUrl ? resolveApiUrl(detail.card.videoUrl) : ''
+  const hasSpecialMedia = Boolean(voiceAudioUrl || videoUrl)
 
   return <div className="detail-backdrop" role="presentation" onClick={event => { if (event.target === event.currentTarget) onClose() }}>
     <aside className="detail-panel" role="dialog" aria-modal="true" aria-labelledby="card-detail-title">
@@ -94,10 +106,9 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
         </button>
       </div>
       {detailLoading && <p className="detail-loading" role="status" aria-live="polite">카드 상세 정보를 확인하는 중이에요…</p>}
-      <div className="detail-media">
+      <div className={hasHologram ? 'detail-media hologram' : 'detail-media'} style={hologramStyle}>
         <img src={imageFor(resolveApiUrl(imageUrl), card.id)} alt="카드 상세" onError={imageError} />
         <span className="official-badge">공식 카드</span>
-        <span className="detail-shine" aria-hidden="true">✦</span>
       </div>
       <p className="detail-kicker">공식 디지털 카드</p>
       <h2 id="card-detail-title" className="detail-title">{detail?.card.name ?? card.title}</h2>
@@ -118,7 +129,27 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
       {detail?.card.signatureText && <p className="detail-hint">“{detail.card.signatureText}”</p>}
       {detail?.futureBenefitPreview && <div className="notice">{detail.futureBenefitPreview}</div>}
       {detail?.card.handwritingImageUrl && <div className="handwriting-special"><p className="detail-badge">손글씨 특전</p><img src={resolveApiUrl(detail.card.handwritingImageUrl)} alt="손글씨 특전" /></div>}
-      {detail?.card.hasVoice && <><p className="detail-badge">보이스 특전 포함</p><audio controls preload="metadata" src={resolveApiUrl(detail.card.voiceAudioUrl)} aria-label="보이스 특전 재생" /></>}
+      {hasSpecialMedia && <section className="special-media-section" aria-labelledby="special-media-title">
+        <div className="special-media-heading">
+          <span>스페셜 미디어</span>
+          <small>팬 전용 특전을 직접 재생해 보세요.</small>
+        </div>
+        <h3 id="special-media-title">스페셜 미디어</h3>
+        {voiceAudioUrl && <div className="special-player voice-player">
+          <div>
+            <b>보이스 메시지</b>
+            <small>재생 버튼을 눌러 아티스트 음성을 들어보세요.</small>
+          </div>
+          <audio controls preload="metadata" src={voiceAudioUrl} aria-label="보이스 메시지 재생" />
+        </div>}
+        {videoUrl && <div className="special-player video-player">
+          <div>
+            <b>스페셜 비디오</b>
+            <small>음소거된 미리보기로 열리며 컨트롤에서 소리를 켤 수 있어요.</small>
+          </div>
+          <video controls muted playsInline loop preload="metadata" src={videoUrl} aria-label="스페셜 비디오 재생" />
+        </div>}
+      </section>}
       {detailError && <div className="detail-error-actions"><p className="detail-hint error-message">카드 상세 정보를 불러오지 못했어요.</p><button className="outline" onClick={() => setDetailAttempt(value => value + 1)}>다시 시도</button></div>}
       {!isOwned && <><p className="detail-hint">카드 패키지의 QR 또는 코드를 사용해 컬렉션에 등록할 수 있어요.</p><button className="primary detail-action" onClick={onRedeem}>카드 등록하기</button></>}
     </aside>
