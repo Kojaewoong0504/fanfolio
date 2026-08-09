@@ -179,6 +179,7 @@ class Card(Base):
     video_asset_id: Mapped[str | None] = mapped_column(String, nullable=True)
     handwriting_transform: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     design_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    review_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
     has_voice: Mapped[bool] = mapped_column(Boolean, default=False)
     issue_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     preview_storage_path: Mapped[str | None] = mapped_column(String, nullable=True)

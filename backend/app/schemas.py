@@ -226,6 +226,11 @@ class AdminCardReviewRequest(BaseModel):
     note: str | None = Field(default=None, max_length=500)
 
 
+class ArtistReviewSubmitRequest(BaseModel):
+    review_note: str | None = Field(default=None, alias="reviewNote", max_length=500)
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class ArtistCardRequest(BaseModel):
     template_id: str = Field(alias="templateId")
     name: str

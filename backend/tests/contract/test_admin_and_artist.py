@@ -8,6 +8,30 @@ from app.models import Artist, Member
 from tests.conftest import assert_error, assert_success
 
 
+def _upload_artist_asset(
+    artist: TestClient,
+    *,
+    file_name: str,
+    content_type: str,
+    purpose: str,
+    content: bytes,
+) -> dict[str, Any]:
+    asset = assert_success(
+        artist.post(
+            "/api/uploads/presign",
+            json={
+                "fileName": file_name,
+                "contentType": content_type,
+                "purpose": purpose,
+            },
+        ),
+        201,
+    )
+    uploaded = artist.put(asset["uploadUrl"], content=content)
+    assert uploaded.status_code == 204, uploaded.text
+    return asset
+
+
 def test_fan_cannot_access_admin_dashboard(actors: dict[str, TestClient]) -> None:
     assert_error(actors["fan"].get("/api/admin/dashboard"), 403, "FORBIDDEN")
 
@@ -39,6 +63,13 @@ def test_artist_can_submit_special_card_for_review_but_not_publish_it(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:
     artist = actors["artist"]
+    voice_asset = _upload_artist_asset(
+        artist,
+        file_name="review-voice.mp3",
+        content_type="audio/mpeg",
+        purpose="voice",
+        content=b"voice",
+    )
     draft = assert_success(
         artist.post(
             "/api/artist/cards",
@@ -49,6 +80,7 @@ def test_artist_can_submit_special_card_for_review_but_not_publish_it(
                 "rarity": "Special",
                 "imageAssetId": seeded["ids"]["imageAssetId"],
                 "signatureText": "우리 팬들 사랑해요.",
+                "voiceAssetId": voice_asset["assetId"],
                 "hasVoice": True,
                 "issueLimit": 3000,
             },
@@ -85,6 +117,83 @@ def test_artist_can_submit_special_card_for_review_but_not_publish_it(
     assert submitted["status"] == "pending_review"
 
     assert_error(artist.post(f"/api/admin/cards/{draft['id']}/publish"), 403, "FORBIDDEN")
+
+
+def test_artist_review_rejects_enabled_voice_without_an_uploaded_asset(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    artist = actors["artist"]
+    draft = assert_success(
+        artist.post(
+            "/api/artist/cards",
+            json={
+                "templateId": seeded["ids"]["templateId"],
+                "name": "보이스 누락 카드",
+                "seasonName": "2026 SPRING",
+                "rarity": "Special",
+                "imageAssetId": seeded["ids"]["imageAssetId"],
+                "hasVoice": True,
+                "issueLimit": 3000,
+            },
+        ),
+        201,
+    )
+
+    response = artist.post(
+        f"/api/artist/cards/{draft['id']}/submit-review",
+        json={"reviewNote": "컴백 주간에 맞춰 공개해 주세요."},
+    )
+
+    assert_error(response, 409, "CARD_MEDIA_INCOMPLETE")
+
+
+def test_artist_review_persists_note_for_complete_voice_and_motion_assets(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    artist = actors["artist"]
+    voice_asset = _upload_artist_asset(
+        artist,
+        file_name="special-voice.mp3",
+        content_type="audio/mpeg",
+        purpose="voice",
+        content=b"voice",
+    )
+    video_asset = _upload_artist_asset(
+        artist,
+        file_name="special-motion.mp4",
+        content_type="video/mp4",
+        purpose="video",
+        content=b"video",
+    )
+    draft = assert_success(
+        artist.post(
+            "/api/artist/cards",
+            json={
+                "templateId": seeded["ids"]["templateId"],
+                "name": "보이스 모션 카드",
+                "seasonName": "2026 SUMMER",
+                "rarity": "UR",
+                "imageAssetId": seeded["ids"]["imageAssetId"],
+                "voiceAssetId": voice_asset["assetId"],
+                "videoAssetId": video_asset["assetId"],
+                "hasVoice": True,
+                "designConfig": {"video": {"enabled": True, "loop": True}},
+                "issueLimit": 100,
+            },
+        ),
+        201,
+    )
+
+    submitted = assert_success(
+        artist.post(
+            f"/api/artist/cards/{draft['id']}/submit-review",
+            json={"reviewNote": "모션과 보이스 타이밍을 함께 확인해 주세요."},
+        )
+    )
+
+    assert submitted["reviewNote"] == "모션과 보이스 타이밍을 함께 확인해 주세요."
+    detail = assert_success(artist.get(f"/api/artist/cards/{draft['id']}"))
+    assert detail["reviewNote"] == "모션과 보이스 타이밍을 함께 확인해 주세요."
 
 
 def test_artist_card_rejects_an_unknown_member(

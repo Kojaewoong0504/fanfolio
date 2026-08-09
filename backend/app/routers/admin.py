@@ -269,6 +269,7 @@ def admin_card_data(card: Card) -> dict:
         "voiceAssetId": card.voice_asset_id,
         "videoAssetId": card.video_asset_id,
         "designConfig": card.design_config,
+        "reviewNote": card.review_note,
         "handwritingTransform": card.handwriting_transform,
         "hasVoice": card.has_voice,
         "sourceImageUrl": f"/api/admin/cards/{card.id}/image" if card.image_asset_id else None,

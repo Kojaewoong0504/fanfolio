@@ -305,6 +305,36 @@ def test_admin_can_review_an_artist_card_before_publishing(
     assert changes_requested == {"id": revision["id"], "status": "changes_requested"}
 
 
+def test_admin_card_detail_exposes_the_artist_review_note(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    draft = assert_success(
+        actors["artist"].post(
+            "/api/artist/cards",
+            json={
+                "templateId": seeded["ids"]["templateId"],
+                "name": "검수 메모 카드",
+                "seasonName": "2026 SUMMER",
+                "rarity": "Special",
+                "imageAssetId": seeded["ids"]["imageAssetId"],
+                "issueLimit": 100,
+            },
+        ),
+        201,
+    )
+    note = "모션과 보이스 타이밍을 함께 확인해 주세요."
+    assert_success(
+        actors["artist"].post(
+            f"/api/artist/cards/{draft['id']}/submit-review",
+            json={"reviewNote": note},
+        )
+    )
+
+    detail = assert_success(actors["admin"].get(f"/api/admin/cards/{draft['id']}"))
+
+    assert detail["reviewNote"] == note
+
+
 def test_admin_dashboard_and_card_list_are_backed_by_database(
     actors: dict[str, TestClient],
 ) -> None:

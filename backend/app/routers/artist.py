@@ -17,7 +17,12 @@ from app.models import (
     UserCard,
 )
 from app.rate_limit import enforce_rate_limit
-from app.schemas import ArtistCardRequest, ArtistCardUpdate, ArtistProfileUpdate
+from app.schemas import (
+    ArtistCardRequest,
+    ArtistCardUpdate,
+    ArtistProfileUpdate,
+    ArtistReviewSubmitRequest,
+)
 from app.storage import configured_asset_storage, storage_response
 from app.tasks import enqueue_background_removal
 
@@ -224,6 +229,7 @@ def card_data(card: Card) -> dict:
             f"/api/artist/cards/{card.id}/video?client=artist" if card.video_asset_id else None
         ),
         "designConfig": card.design_config,
+        "reviewNote": card.review_note,
         "handwritingTransform": card.handwriting_transform,
         "hasVoice": card.has_voice,
         "issueLimit": card.issue_limit,
@@ -449,15 +455,49 @@ async def get_preview_image(card_id: str, user: ArtistUser, session: DbSession) 
 
 
 @router.post("/artist/cards/{card_id}/submit-review")
-async def submit_review(card_id: str, user: ArtistUser, session: DbSession) -> dict:
+async def submit_review(
+    card_id: str,
+    user: ArtistUser,
+    session: DbSession,
+    payload: ArtistReviewSubmitRequest | None = None,
+) -> dict:
     card = await session.get(Card, card_id)
     if not card or card.owner_artist_id != user.id:
         raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
     if card.status != "draft":
         raise AppError(409, "INVALID_CARD_STATUS", "검수 요청할 수 없는 상태입니다.")
+    if card.has_voice:
+        if not card.voice_asset_id:
+            raise AppError(409, "CARD_MEDIA_INCOMPLETE", "보이스 파일을 추가해 주세요.")
+        voice_asset = await owned_asset(card.voice_asset_id, user, session)
+        if not voice_asset.storage_path or not voice_asset.upload_completed_at:
+            raise AppError(
+                409,
+                "CARD_MEDIA_INCOMPLETE",
+                "보이스 파일 업로드를 완료해 주세요.",
+            )
+    video_enabled = bool((card.design_config or {}).get("video", {}).get("enabled"))
+    if video_enabled:
+        if not card.video_asset_id:
+            raise AppError(409, "CARD_MEDIA_INCOMPLETE", "모션 영상을 추가해 주세요.")
+        video_asset = await owned_asset(card.video_asset_id, user, session)
+        if not video_asset.storage_path or not video_asset.upload_completed_at:
+            raise AppError(
+                409,
+                "CARD_MEDIA_INCOMPLETE",
+                "모션 영상 업로드를 완료해 주세요.",
+            )
+    card.review_note = payload.review_note if payload else None
     card.status = "pending_review"
     await session.commit()
-    return {"ok": True, "data": {"id": card.id, "status": card.status}}
+    return {
+        "ok": True,
+        "data": {
+            "id": card.id,
+            "status": card.status,
+            "reviewNote": card.review_note,
+        },
+    }
 
 
 @router.post("/assets/{asset_id}/background-removal", status_code=status.HTTP_202_ACCEPTED)
