@@ -276,7 +276,7 @@ function editorLayerControls() {
   const e = state.editor;
   const layers = [['photo', '사진'], ['text', '문구'], ['sticker', '스티커'], ['signature', '손글씨']];
   const current = layers.find(([value]) => value === e.selectedLayer)?.[1] || '사진';
-  return `<div class="layer-controls"><div class="layer-controls-heading"><span>레이어</span><small>선택: ${current}</small></div><div class="layer-list">${layers.map(([value, label]) => `<button type="button" class="layer-chip ${e.selectedLayer === value ? 'selected' : ''}" data-editor-layer-select="${value}">${value === 'photo' ? '▧' : value === 'text' ? 'T' : value === 'sticker' ? '✦' : '✍'}<span>${label}</span></button>`).join('')}</div><div class="layer-actions"><button type="button" data-editor-action="align-x">가로 중앙</button><button type="button" data-editor-action="align-y">세로 중앙</button><button type="button" data-editor-action="reset-position">위치 초기화</button></div><label class="snap-toggle"><input type="checkbox" data-editor-action="toggle-snap" ${e.snapToGrid ? 'checked' : ''} /> <span>스냅 가이드</span><small>드래그 4px · 방향키 1px · Shift 10px</small></label></div>`;
+  return `<div class="layer-controls"><div class="layer-controls-heading"><span>레이어</span><small>선택: ${current}</small></div><div class="layer-list">${layers.map(([value, label]) => `<button type="button" class="layer-chip ${e.selectedLayer === value ? 'selected' : ''}" data-editor-layer-select="${value}">${value === 'photo' ? '▧' : value === 'text' ? 'T' : value === 'sticker' ? '✦' : '✍'}<span>${label}</span></button>`).join('')}</div><div class="layer-actions"><button type="button" data-editor-action="align-x">가로 중앙</button><button type="button" data-editor-action="align-y">세로 중앙</button><button type="button" data-editor-action="reset-position">위치 초기화</button><button type="button" data-editor-action="delete-selected-layer">선택 레이어 삭제</button></div><label class="snap-toggle"><input type="checkbox" data-editor-action="toggle-snap" ${e.snapToGrid ? 'checked' : ''} /> <span>스냅 가이드</span><small>드래그 4px · 방향키 1px · Shift 10px</small></label></div>`;
 }
 
 function editorInspectorBody() {
@@ -375,7 +375,7 @@ function visualEditorView() {
   if (e.firstRun !== false) return editorStartView();
   const tools = [['photo', studioIcon('photo'), '사진'], ['text', studioIcon('text'), '텍스트'], ['sticker', studioIcon('sticker'), '스티커'], ['handwriting', studioIcon('handwriting'), '손글씨'], ['effect', studioIcon('effect'), '효과'], ['background', studioIcon('background'), '배경'], ['back', studioIcon('back'), '뒷면']];
   const preview = e.previewOpen ? `<div class="editor-preview-backdrop" role="presentation"><div class="editor-preview-modal" role="dialog" aria-modal="true" aria-labelledby="editor-preview-title"><div class="editor-preview-heading"><div><span>FANFOLIO · CARD PREVIEW</span><h3 id="editor-preview-title">카드 전체 화면 미리보기</h3></div><button class="modal-close" data-editor-action="close-preview" aria-label="미리보기 닫기">×</button></div><div class="editor-preview-stage"><div class="preview-side-label">${e.side === 'front' ? '앞면' : '뒷면'}</div>${editorCardMarkup()}</div><div class="editor-preview-actions"><button class="secondary" data-editor-action="close-preview">계속 편집하기</button><button class="primary" data-editor-action="details">이 디자인으로 상세 정보 입력 <span>→</span></button></div></div></div>` : '';
-  return `<section class="visual-editor"><div class="editor-toolbar"><div><span class="editor-breadcrumb">카드 만들기 <b>/</b> 비주얼 에디터</span><h2>나만의 특별 카드를 디자인해 보세요</h2><p>앞면은 자유롭게 꾸미고, 뒷면은 소속사 기본 템플릿을 바탕으로 완성합니다.</p></div><div class="editor-toolbar-actions"><span class="draft-status"><i></i> 자동 저장됨</span><button class="secondary" data-editor-action="exit">나중에 계속하기</button><button class="primary" data-editor-action="details">상세 정보 입력 <span>→</span></button></div></div><div class="editor-workspace"><aside class="editor-tools" aria-label="카드 편집 도구">${tools.map(([value, icon, label]) => `<button class="editor-tool ${e.tool === value ? 'active' : ''}" data-editor-tool="${value}"><span>${icon}</span><small>${label}</small></button>`).join('')}</aside><div class="editor-stage-wrap"><div class="stage-header"><span>${e.side === 'front' ? '앞면' : '뒷면'} 미리보기</span><div class="side-switch"><button class="${e.side === 'front' ? 'active' : ''}" data-editor-side="front">앞면</button><button class="${e.side === 'back' ? 'active' : ''}" data-editor-side="back">뒷면</button></div><span class="zoom-label">100%</span></div><div class="visual-editor-stage"><div class="stage-grid"></div>${editorCardMarkup()}<span class="stage-caption">드래그하여 위치를 조정할 수 있어요</span></div><div class="stage-footer"><span><b>Tip</b> 카드의 분위기를 먼저 정한 뒤 사진과 문구를 배치해 보세요.</span><button class="ghost-button" data-editor-action="preview">전체 화면 미리보기 ↗</button></div></div><aside class="editor-inspector"><div class="inspector-heading"><div><span>편집 도구</span><h3>${tools.find(([value]) => value === e.tool)?.[2] || '사진'}</h3></div><span class="inspector-count">${e.side === 'front' ? '앞면' : '뒷면'}</span></div>${editorInspector()}</aside></div>${preview}</section>`;
+  return `<section class="visual-editor"><div class="editor-toolbar"><div><span class="editor-breadcrumb">카드 만들기 <b>/</b> 비주얼 에디터</span><h2>나만의 특별 카드를 디자인해 보세요</h2><p>앞면은 자유롭게 꾸미고, 뒷면은 소속사 기본 템플릿을 바탕으로 완성합니다.</p></div><div class="editor-toolbar-actions"><span class="draft-status"><i></i> 자동 저장됨</span><button class="secondary" data-editor-action="exit">나중에 계속하기</button><button class="primary" data-editor-action="details">상세 정보 입력 <span>→</span></button></div></div><div class="editor-workspace"><aside class="editor-tools" aria-label="카드 편집 도구">${tools.map(([value, icon, label]) => `<button class="editor-tool ${e.tool === value ? 'active' : ''}" data-editor-tool="${value}" title="${label}"><span>${icon}</span><small>${label}</small></button>`).join('')}</aside><div class="editor-stage-wrap"><div class="stage-header"><span>${e.side === 'front' ? '앞면' : '뒷면'} 미리보기</span><div class="side-switch"><button class="${e.side === 'front' ? 'active' : ''}" data-editor-side="front">앞면</button><button class="${e.side === 'back' ? 'active' : ''}" data-editor-side="back">뒷면</button></div><span class="zoom-label">100%</span></div><div class="visual-editor-stage"><div class="stage-grid"></div>${editorCardMarkup()}<span class="stage-caption">드래그하여 위치를 조정할 수 있어요</span></div><div class="stage-footer"><span><b>Tip</b> 레이어를 선택해 드래그하세요 · ⌘/Ctrl+휠 확대 · P 사진 · T 텍스트 · H 손글씨</span><button class="ghost-button" data-editor-action="preview">전체 화면 미리보기 ↗</button></div></div><aside class="editor-inspector"><div class="inspector-heading"><div><span>편집 도구</span><h3>${tools.find(([value]) => value === e.tool)?.[2] || '사진'}</h3></div><span class="inspector-count">${e.side === 'front' ? '앞면' : '뒷면'}</span></div>${editorInspector()}</aside></div>${preview}</section>`;
 }
 
 function editorStartView() {
@@ -435,7 +435,7 @@ function renderShell(content) {
   enhanceCardImageField();
   enhanceRarityField();
   document.querySelector('input[name="cardImage"]')?.toggleAttribute('required', !state.editor.imageSrc);
-  if (editorMode) { initEditorDrag(); initEditorSignaturePad(); }
+  if (editorMode) { initEditorDrag(); initEditorSignaturePad(); initEditorStageGestures(); }
   document.querySelector('#new-card')?.addEventListener('click', () => { state.view = 'editor'; state.editingCardId = null; state.cardId = null; state.step = 1; render(); });
 }
 
@@ -503,6 +503,21 @@ function initEditorSignaturePad() {
   canvas.addEventListener('pointercancel', finish);
 }
 
+function initEditorStageGestures() {
+  const stage = document.querySelector('.visual-editor-stage');
+  if (!stage) return;
+  stage.addEventListener('wheel', (event) => {
+    if (!event.metaKey && !event.ctrlKey) return;
+    event.preventDefault();
+    const current = Number(state.editor.zoom || 100);
+    state.editor.zoom = Math.max(70, Math.min(140, current + (event.deltaY < 0 ? 5 : -5)));
+    persistEditorDraft();
+    const card = stage.querySelector('.editor-card');
+    if (card) card.style.transform = `scale(${state.editor.zoom / 100})`;
+    document.querySelector('.zoom-controls .zoom-label')?.replaceChildren(`${state.editor.zoom}%`);
+  }, { passive: false });
+}
+
 document.addEventListener('keydown', (event) => {
   if (!state.authenticated) return;
   const modifier = event.metaKey || event.ctrlKey;
@@ -515,6 +530,19 @@ document.addEventListener('keydown', (event) => {
     render();
   }
   const editableTarget = event.target.closest?.('input,textarea,select,[contenteditable="true"]');
+  if (state.view === 'editor' && !editableTarget && !modifier) {
+    const toolByKey = { p: 'photo', t: 'text', s: 'sticker', h: 'handwriting', e: 'effect', b: 'background' };
+    const nextTool = toolByKey[event.key.toLowerCase()];
+    if (nextTool) {
+      event.preventDefault();
+      rememberEditorChange();
+      state.editor.tool = nextTool;
+      state.editor.selectedLayer = nextTool === 'handwriting' ? 'signature' : nextTool;
+      persistEditorDraft();
+      render();
+      return;
+    }
+  }
   if (state.view === 'editor' && !editableTarget && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
     event.preventDefault();
     rememberEditorChange();
@@ -590,6 +618,7 @@ document.addEventListener('click', (event) => {
   if (action === 'redo') { redoEditorChange(); return; }
   if (action === 'align-x' || action === 'align-y') { rememberEditorChange(); alignEditorLayer(action === 'align-x' ? 'x' : 'y'); persistEditorDraft(); render(); return; }
   if (action === 'reset-position') { rememberEditorChange(); const [xKey, yKey] = editorLayerPositionKeys(); state.editor[xKey] = 0; state.editor[yKey] = 0; persistEditorDraft(); render(); return; }
+  if (action === 'delete-selected-layer') { rememberEditorChange(); const layer = state.editor.selectedLayer || 'photo'; if (layer === 'photo') { state.editor.imageSrc = ''; state.editor.imageName = ''; } if (layer === 'text') state.editor.text = ''; if (layer === 'sticker') state.editor.sticker = 'none'; if (layer === 'signature') { state.editor.signatureSrc = ''; state.editor.signatureName = ''; state.editor.signatureAssetId = null; } persistEditorDraft(); render(); return; }
   if (action === 'toggle-snap') { state.editor.snapToGrid = event.target.checked; persistEditorDraft(); return; }
   if (action === 'zoom-in' || action === 'zoom-out' || action === 'zoom-reset') {
     rememberEditorChange();
