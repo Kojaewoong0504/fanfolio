@@ -30,3 +30,9 @@ test('hosted admin routes authentication through its same-origin API proxy', asy
     ),
   )
 })
+
+test('admin keeps the login form hidden while restoring a refresh-cookie session', () => {
+  assert.match(source, /restoringSession:\s*true/)
+  assert.match(source, /관리자 세션을 확인하고 있습니다/)
+  assert.match(source, /state\.restoringSession = false/)
+})
