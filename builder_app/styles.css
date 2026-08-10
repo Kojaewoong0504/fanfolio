@@ -1554,53 +1554,51 @@ video {
 
 .built-in-sticker-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 9px;
+  grid-template-columns: repeat(2, minmax(92px, 1fr));
+  gap: 10px;
 }
 
 .built-in-sticker-grid button {
-  position: relative;
   min-width: 0;
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) auto;
-  align-items: center;
+  grid-template-rows: 72px auto;
+  justify-items: center;
   gap: 8px;
-  padding: 8px;
+  padding: 10px 8px 11px;
   border: 1px solid #e2e3ef;
-  border-radius: 12px;
+  border-radius: 14px;
   color: #3f4668;
   background: linear-gradient(145deg, #fff, #f7f5ff);
-  text-align: left;
+  text-align: center;
   cursor: pointer;
-  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
 }
 
-.built-in-sticker-grid button:hover,
-.built-in-sticker-grid button:focus-visible {
-  border-color: #a99cfb;
-  transform: translateY(-1px);
-  box-shadow: 0 8px 18px rgba(57, 52, 128, 0.1);
+.sticker-tile-preview {
+  width: 72px;
+  height: 72px;
+  display: grid;
+  place-items: center;
 }
 
-.built-in-sticker-grid img {
-  width: 48px;
-  height: 48px;
+.sticker-tile-preview img {
+  width: 68px;
+  height: 68px;
   object-fit: contain;
-  filter: drop-shadow(0 5px 7px rgba(79, 70, 151, 0.2));
 }
 
-.built-in-sticker-grid button > span:not(.material-symbols-rounded) {
+.sticker-tile-name {
   min-width: 0;
-  overflow: hidden;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
-.built-in-sticker-grid .material-symbols-rounded {
-  color: var(--violet);
-  font-size: 17px;
+@media (max-width: 380px) {
+  .built-in-sticker-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .sample-grid {

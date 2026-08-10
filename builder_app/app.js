@@ -715,7 +715,7 @@ function drawingInspector() {
 }
 
 function stickerInspector() {
-  return `<div class="inspector-section"><span class="inspector-label">기본 스티커</span><p class="inspector-description">Fanfolio 전용 오팔 참을 선택하면 카드에 바로 추가돼요.</p><div class="built-in-sticker-grid">${builtInStickers.map((sticker) => `<button type="button" data-built-in-sticker="${esc(sticker.id)}" aria-label="${esc(sticker.name)} 스티커 추가"><img src="${esc(sticker.source)}" alt="" /><span>${esc(sticker.name)}</span>${icon('add_circle')}</button>`).join('')}</div></div>
+  return `<div class="inspector-section"><span class="inspector-label">기본 스티커</span><p class="inspector-description">Fanfolio 전용 오팔 참을 선택하면 카드에 바로 추가돼요.</p><div class="built-in-sticker-grid">${builtInStickers.map((sticker) => `<button type="button" data-built-in-sticker="${esc(sticker.id)}" aria-label="${esc(sticker.name)} 스티커 추가"><span class="sticker-tile-preview"><img src="${esc(sticker.source)}" alt="" /></span><span class="sticker-tile-name">${esc(sticker.name)}</span></button>`).join('')}</div></div>
   <div class="inspector-divider"><span>또는 직접 만들기</span></div>
   <div class="inspector-section"><span class="inspector-label">나만의 스티커</span><p class="inspector-description">직접 만든 투명 PNG나 WebP도 카드 양면에 자유롭게 배치할 수 있어요.</p>${uploadBox('sticker', 'image/png,image/webp', '스티커 이미지 업로드', '투명 PNG 또는 WebP 권장')}</div>${layerControls()}`
 }

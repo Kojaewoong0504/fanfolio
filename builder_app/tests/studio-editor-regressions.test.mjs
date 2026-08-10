@@ -50,6 +50,17 @@ test('sticker inspector provides generated premium stickers in addition to uploa
   )
 })
 
+test('built-in sticker tiles show the full name below a large preview', async () => {
+  const source = await readFile(appUrl, 'utf8')
+  const css = await readFile(cssUrl, 'utf8')
+
+  assert.match(source, /class="sticker-tile-name"/)
+  assert.doesNotMatch(source, /data-built-in-sticker=[\s\S]{0,260}add_circle/)
+  assert.match(css, /\.built-in-sticker-grid button\s*\{[\s\S]{0,420}grid-template-rows:\s*72px auto/)
+  assert.match(css, /\.sticker-tile-name\s*\{[\s\S]{0,260}white-space:\s*normal/)
+  assert.doesNotMatch(css, /\.built-in-sticker-grid button > span:not\([\s\S]{0,220}text-overflow:\s*ellipsis/)
+})
+
 test('hologram uses light-responsive layered foil instead of sliding one texture image', async () => {
   const source = await readFile(appUrl, 'utf8')
   const css = await readFile(cssUrl, 'utf8')
