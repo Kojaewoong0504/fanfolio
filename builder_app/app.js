@@ -657,7 +657,8 @@ function cardVisual({ fan = false } = {}) {
     : `<img class="card-photo" src="${esc(editor.imageSrc || sampleAssets.aurora)}" alt="${esc(state.form.name)} 카드 이미지" />${isLenticular ? `<img class="lenticular-photo" src="${esc(editor.lenticularSrc)}" alt="" />` : ''}`
   const effectOpacity = Number(editor.effectIntensity || 0)
   const tiltStyle = '--tilt-x:0deg;--tilt-y:0deg;--light-x:50%;--light-y:42%;--lenticular-reveal:0%'
-  const reducedMotionControls = isLenticular && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const reducedMotionControls =
+    isLenticular && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
     ? `<div class="lenticular-motion-controls" aria-label="렌티큘러 장면 선택"><button type="button" data-action="set-lenticular-scene" data-reveal="0">첫 장면</button><button type="button" data-action="set-lenticular-scene" data-reveal="100">두 번째 장면</button></div>`
     : ''
   if (isBack) {

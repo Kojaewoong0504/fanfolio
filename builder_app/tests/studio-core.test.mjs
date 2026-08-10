@@ -286,6 +286,7 @@ test('serializes premium hologram tuning so fan previews can match the studio', 
     effectSpread: 0.64,
     effectGrain: 0.38,
     effectFinish: 'silk',
+    effectMotion: true,
   })
 })
 
@@ -325,6 +326,7 @@ test('serializes explicit lenticular asset removal without reusing existing conf
         front: {
           interaction: 'lenticular',
           lenticularAssetId: 'old-secondary',
+          effectMotion: true,
         },
       },
     },
@@ -346,6 +348,7 @@ test('serializes inactive interactions without stale lenticular assets', () => {
         front: {
           interaction: 'lenticular',
           lenticularAssetId: 'old-secondary',
+          effectMotion: false,
         },
       },
     },
@@ -375,11 +378,30 @@ test('serializes inactive interactions without stale lenticular assets', () => {
       lenticularAssetId: 'old-secondary',
     },
   })
+  const lenticularConfig = buildDesignConfig({
+    form: {
+      designConfig: {
+        version: 3,
+        front: {
+          interaction: 'static',
+          effectMotion: false,
+        },
+      },
+    },
+    editor: {
+      interaction: 'lenticular',
+      lenticularAssetId: 'old-secondary',
+    },
+  })
 
   assert.equal(staticConfig.front.interaction, 'static')
   assert.equal(staticConfig.front.lenticularAssetId, null)
+  assert.equal(staticConfig.front.effectMotion, false)
   assert.equal(tiltPayload.designConfig.front.interaction, 'tilt')
   assert.equal(tiltPayload.designConfig.front.lenticularAssetId, null)
+  assert.equal(tiltPayload.designConfig.front.effectMotion, true)
+  assert.equal(lenticularConfig.front.interaction, 'lenticular')
+  assert.equal(lenticularConfig.front.effectMotion, true)
 })
 
 test('preserves existing lenticular asset while lenticular interaction remains active', () => {

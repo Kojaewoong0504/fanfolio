@@ -199,7 +199,11 @@ export function buildDesignConfig({ form = {}, editor = {} } = {}) {
     ...existing,
     version: 3,
     ...(creativeLayers ? { creativeLayers } : {}),
-    front: compactObject({ ...frontSource, ...effects.front }),
+    front: compactObject({
+      ...frontSource,
+      ...effects.front,
+      effectMotion: effects.front.interaction !== 'static',
+    }),
     back: compactObject({ ...backSource, ...effects.back }),
     video: compactObject({
       ...(existing.video || {}),

@@ -98,6 +98,12 @@ test('card markup composes material pattern and coverage classes', async () => {
   assert.match(css, /\.pattern-micro-star/)
 })
 
+test('lenticular reduced-motion controls guard missing matchMedia', async () => {
+  const source = await readFile(appUrl, 'utf8')
+
+  assert.match(source, /window\.matchMedia\?\.\('\(prefers-reduced-motion: reduce\)'\)\.matches === true/)
+})
+
 test('official back template visibly inherits the selected background color', async () => {
   const css = await readFile(cssUrl, 'utf8')
 
