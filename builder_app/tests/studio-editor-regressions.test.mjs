@@ -1,9 +1,118 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { access, readFile } from 'node:fs/promises'
+import vm from 'node:vm'
 
 const appUrl = new URL('../app.js', import.meta.url)
 const cssUrl = new URL('../styles.css', import.meta.url)
+
+async function loadMotionHarness(options = {}) {
+  const {
+    reducedMotion = false,
+    deviceMemory = 8,
+    secureContext = true,
+    permissionResult = 'granted',
+    effectMotion = true,
+  } = options
+  const listeners = new Map()
+  const styleWrites = []
+  const card = {
+    classList: {
+      contains: (name) => name === 'effect-motion' && effectMotion,
+      add: (name) => styleWrites.push(['class', name]),
+      remove: () => {},
+    },
+    style: {
+      setProperty: (name, value) => styleWrites.push([name, value]),
+    },
+  }
+  let permissionRequests = 0
+  const context = {
+    console,
+    FormData: class FormData {},
+    Image: class Image {
+      addEventListener() {}
+      set src(_value) {}
+    },
+    URL,
+    URLSearchParams,
+    fetch: async () => ({ ok: false, status: 401, json: async () => ({}) }),
+    buildCardPayload: () => ({}),
+    navigationState: (destination) => ({ view: destination }),
+    normalizeCardEffects: (value) => value || {},
+    normalizeCreativeLayer: (value) => value || {},
+    responsiveStudioMode: () => 'desktop',
+    reviewReadiness: () => ({ ready: true, items: {} }),
+    studioDashboard: () => ({ summary: {}, tasks: [] }),
+    localStorage: {
+      getItem: () => null,
+      setItem: () => {},
+      removeItem: () => {},
+    },
+    navigator: { deviceMemory },
+    __listenerCount: (type) => listeners.get(type)?.size || 0,
+    __permissionRequests: () => permissionRequests,
+    __styleWrites: styleWrites,
+    document: {
+      body: { append: () => {} },
+      createElement: () => ({
+        setAttribute: () => {},
+        classList: { add: () => {} },
+        dataset: {},
+      }),
+      querySelector: (selector) => {
+        if (selector === '#app') return { innerHTML: '', addEventListener: () => {} }
+        if (selector === '.fan-card-wrap [data-hologram-card]') return card
+        if (selector === '#studio-toast') return null
+        return null
+      },
+      querySelectorAll: () => [],
+    },
+  }
+  context.window = {
+    location: { hostname: 'localhost', search: '' },
+    isSecureContext: secureContext,
+    DeviceOrientationEvent: {
+      requestPermission: async () => {
+        permissionRequests += 1
+        return permissionResult
+      },
+    },
+    matchMedia: () => ({ matches: reducedMotion }),
+    requestAnimationFrame: (callback) => callback(),
+    clearTimeout: () => {},
+    setTimeout: () => 0,
+    addEventListener: (type, listener) => {
+      const current = listeners.get(type) || new Set()
+      current.add(listener)
+      listeners.set(type, current)
+    },
+    removeEventListener: (type, listener) => {
+      listeners.get(type)?.delete(listener)
+    },
+  }
+  context.globalThis = context
+  context.setTimeout = context.window.setTimeout
+  context.clearTimeout = context.window.clearTimeout
+
+  const source = (await readFile(appUrl, 'utf8'))
+    .replace(/^import \{[\s\S]*?\} from '\.\/studio-core\.js'\n\n/, '')
+    .replace(/\nbootstrap\(\)\s*$/, '')
+  vm.runInNewContext(
+    `${source}
+globalThis.__motionHarness = {
+  state,
+  enableDeviceMotion,
+  applyDeviceOrientation,
+  syncDeviceMotionLifecycle: typeof syncDeviceMotionLifecycle === 'function' ? syncDeviceMotionLifecycle : null,
+  listenerCount: __listenerCount,
+  styleWrites: __styleWrites,
+  permissionRequests: __permissionRequests,
+}`,
+    context,
+  )
+  return context.__motionHarness
+}
 
 test('collapsed navigation hides only labels and keeps every menu icon visible', async () => {
   const source = await readFile(appUrl, 'utf8')
@@ -115,6 +224,75 @@ test('device orientation is requested only after an explicit preview action', as
   const initialSetup = source.slice(source.indexOf('function render('), source.indexOf('function markDirty('))
   assert.doesNotMatch(initialSetup, /enableDeviceMotion\(/)
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\.editor-card\s*\{[\s\S]*?(animation|transition):/)
+})
+
+test('device orientation behavior requires explicit enablement before permission request', async () => {
+  const harness = await loadMotionHarness()
+
+  assert.equal(harness.permissionRequests(), 0)
+  await harness.enableDeviceMotion()
+  assert.equal(harness.permissionRequests(), 1)
+})
+
+test('device orientation behavior does not duplicate listeners on repeated enable', async () => {
+  const harness = await loadMotionHarness()
+  harness.state.view = 'editor'
+  harness.state.stage = 'preview'
+
+  await harness.enableDeviceMotion()
+  await harness.enableDeviceMotion()
+
+  assert.equal(harness.permissionRequests(), 2)
+  assert.equal(harness.listenerCount('deviceorientation'), 1)
+})
+
+test('device orientation behavior avoids permission request when reduced effects are preferred', async () => {
+  const harness = await loadMotionHarness({ reducedMotion: true })
+
+  await harness.enableDeviceMotion()
+
+  assert.equal(harness.permissionRequests(), 0)
+  assert.equal(harness.listenerCount('deviceorientation'), 0)
+})
+
+test('device orientation behavior tears down listener outside full fan preview', async () => {
+  const harness = await loadMotionHarness()
+
+  await harness.enableDeviceMotion()
+  harness.state.view = 'editor'
+  harness.state.stage = 'preview'
+  harness.syncDeviceMotionLifecycle()
+  assert.equal(harness.listenerCount('deviceorientation'), 1)
+
+  harness.state.stage = 'details'
+  harness.syncDeviceMotionLifecycle()
+
+  assert.equal(harness.listenerCount('deviceorientation'), 0)
+})
+
+test('device orientation behavior ignores static cards without effect motion', async () => {
+  const harness = await loadMotionHarness({ effectMotion: false })
+  harness.state.deviceMotionEnabled = true
+
+  harness.applyDeviceOrientation({ beta: 8, gamma: 7 })
+
+  assert.deepEqual(harness.styleWrites, [])
+})
+
+test('device orientation behavior clamps numeric tilt and sanitizes invalid values', async () => {
+  const harness = await loadMotionHarness()
+  harness.state.deviceMotionEnabled = true
+
+  harness.applyDeviceOrientation({ beta: 24, gamma: Number.NaN })
+
+  assert.deepEqual(harness.styleWrites.slice(0, 5), [
+    ['--tilt-x', '-15.00deg'],
+    ['--tilt-y', '0.00deg'],
+    ['--light-x', '50%'],
+    ['--light-y', '100%'],
+    ['--lenticular-reveal', '50%'],
+  ])
+  assert.equal(harness.styleWrites.flat().some((value) => String(value).includes('NaN')), false)
 })
 
 test('official back template visibly inherits the selected background color', async () => {

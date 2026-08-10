@@ -990,6 +990,7 @@ function settingsView() {
 }
 
 function render() {
+  syncDeviceMotionLifecycle()
   if (state.loading) {
     app.innerHTML = loadingView()
     return
@@ -1156,6 +1157,8 @@ async function logoutArtist() {
   state.authenticated = false
   state.mustChangePassword = false
   state.profile = null
+  state.deviceMotionStatus = 'idle'
+  state.deviceMotionEnabled = false
   clearDraft()
   render()
 }
@@ -1684,7 +1687,14 @@ function clampTilt(value) {
 
 function applyDeviceOrientation(event) {
   const card = document.querySelector('.fan-card-wrap [data-hologram-card]')
-  if (!card || !state.deviceMotionEnabled || prefersReducedEffects()) return
+  if (
+    !card ||
+    !card.classList.contains('effect-motion') ||
+    !state.deviceMotionEnabled ||
+    prefersReducedEffects()
+  ) {
+    return
+  }
   const beta = clampTilt(event?.beta)
   const gamma = clampTilt(event?.gamma)
   const lightX = Math.round(((gamma + 15) / 30) * 100)
@@ -1695,6 +1705,36 @@ function applyDeviceOrientation(event) {
   card.style.setProperty('--light-y', `${lightY}%`)
   card.style.setProperty('--lenticular-reveal', `${lightX}%`)
   card.classList.add('is-tilting')
+}
+
+function supportsDeviceMotion() {
+  return window.isSecureContext === true && typeof window.DeviceOrientationEvent !== 'undefined'
+}
+
+function isDeviceMotionPreviewActive() {
+  return (
+    state.view === 'editor' &&
+    state.stage === 'preview' &&
+    state.deviceMotionEnabled === true &&
+    supportsDeviceMotion() &&
+    !prefersReducedEffects()
+  )
+}
+
+function syncDeviceMotionLifecycle() {
+  if (isDeviceMotionPreviewActive()) {
+    if (!deviceMotionListenerAttached) {
+      window.addEventListener('deviceorientation', applyDeviceOrientation, { passive: true })
+      deviceMotionListenerAttached = true
+    }
+    return
+  }
+  if (deviceMotionListenerAttached) {
+    window.removeEventListener('deviceorientation', applyDeviceOrientation)
+    deviceMotionListenerAttached = false
+    const card = document.querySelector('.fan-card-wrap [data-hologram-card]')
+    if (card) resetInteractiveCard(card)
+  }
 }
 
 async function enableDeviceMotion() {
@@ -1713,10 +1753,7 @@ async function enableDeviceMotion() {
     if (permission !== 'granted') throw new Error('DEVICE_ORIENTATION_DENIED')
     state.deviceMotionStatus = 'granted'
     state.deviceMotionEnabled = true
-    if (!deviceMotionListenerAttached) {
-      window.addEventListener('deviceorientation', applyDeviceOrientation, { passive: true })
-      deviceMotionListenerAttached = true
-    }
+    syncDeviceMotionLifecycle()
     notify('기기 움직임으로 카드 빛 반사를 볼 수 있어요.')
     render()
   } catch {
