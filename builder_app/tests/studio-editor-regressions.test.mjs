@@ -133,6 +133,14 @@ test('back creative layers render above decorative finish layers and below authe
   assert.match(css, /\.back-authenticity\s*\{[\s\S]{0,180}z-index:\s*130/)
 })
 
+test('back draft serial always starts at issue one even without an issue limit', async () => {
+  const source = await readFile(appUrl, 'utf8')
+
+  assert.match(source, /const issueNumber = String\(1\)\.padStart\(4, '0'\)/)
+  assert.match(source, /const issueLimit = String\(state\.form\.issueLimit \|\| 0\)\.padStart\(4, '0'\)/)
+  assert.doesNotMatch(source, /state\.form\.issueLimit \? 1 : 0/)
+})
+
 test('review readiness renders every dynamic item with an accurate total', async () => {
   const source = await readFile(appUrl, 'utf8')
 

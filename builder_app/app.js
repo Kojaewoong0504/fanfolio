@@ -685,7 +685,7 @@ function cardVisual({ fan = false } = {}) {
     ? `<div class="lenticular-motion-controls" aria-label="렌티큘러 장면 선택"><button type="button" data-action="set-lenticular-scene" data-reveal="0">첫 장면</button><button type="button" data-action="set-lenticular-scene" data-reveal="100">두 번째 장면</button></div>`
     : ''
   if (isBack) {
-    const issueNumber = String(state.form.issueLimit ? 1 : 0).padStart(4, '0')
+    const issueNumber = String(1).padStart(4, '0')
     const issueLimit = String(state.form.issueLimit || 0).padStart(4, '0')
     const hiddenMessage = String(editor.backHiddenMessage || '')
     return `<div class="editor-card back-card material-${esc(editor.backMaterial)} edge-foil-${esc(editor.backEdgeFoil)} spot-uv-${esc(editor.backSpotUv)} effect-motion" data-hologram-card style="${tiltStyle};--back-color:${esc(editor.background || '#0b1033')}"><img src="./agency-back-template-v1.png" alt="Fanfolio 공식 카드 뒷면" /><div class="back-surface" aria-hidden="true"></div><div class="back-spot-uv" aria-hidden="true"></div>${creativeLayersMarkup('back')}${creativeLayerToolbar('back')}<div class="back-authenticity"><span>FANFOLIO OFFICIAL</span><strong>No. ${issueNumber} / ${issueLimit}</strong></div>${hiddenMessage ? `<p class="back-hidden-message">${esc(hiddenMessage)}</p>` : ''}</div>`
