@@ -264,6 +264,34 @@ def ensure_lenticular_image_asset(asset: Asset) -> None:
         )
 
 
+def media_incomplete(message: str) -> AppError:
+    return AppError(409, "CARD_MEDIA_INCOMPLETE", message)
+
+
+async def ensure_ready_lenticular_asset(card: Card, user: ArtistUser, session: DbSession) -> None:
+    front = (card.design_config or {}).get("front")
+    if not isinstance(front, dict) or front.get("interaction") != "lenticular":
+        return
+    lenticular_asset_id = front.get("lenticularAssetId")
+    if not isinstance(lenticular_asset_id, str) or not lenticular_asset_id:
+        raise media_incomplete("렌티큘러 이미지를 추가해 주세요.")
+
+    asset = await session.get(Asset, lenticular_asset_id)
+    if (
+        not asset
+        or asset.owner_id != user.id
+        or asset.purpose != "card"
+        or asset.content_type not in LENTICULAR_IMAGE_CONTENT_TYPES
+    ):
+        raise media_incomplete("렌티큘러 이미지 자산 정보를 확인해 주세요.")
+
+    path = asset.processed_storage_path or asset.storage_path
+    if not path:
+        raise media_incomplete("렌티큘러 이미지 업로드를 완료해 주세요.")
+    if not configured_asset_storage().exists(path):
+        raise media_incomplete("렌티큘러 이미지 업로드를 완료해 주세요.")
+
+
 async def validate_design_assets(
     design_config: dict | None, user: ArtistUser, session: DbSession
 ) -> None:
@@ -557,6 +585,7 @@ async def submit_review(
                 "CARD_MEDIA_INCOMPLETE",
                 "모션 영상 업로드를 완료해 주세요.",
             )
+    await ensure_ready_lenticular_asset(card, user, session)
     card.review_note = payload.review_note if payload else None
     card.status = "pending_review"
     await session.commit()

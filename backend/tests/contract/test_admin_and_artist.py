@@ -5,7 +5,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.db.session import SessionLocal
-from app.models import Artist, Member
+from app.models import Artist, Asset, Card, Member
+from app.storage import configured_asset_storage
 from tests.conftest import assert_error, assert_success
 
 
@@ -31,6 +32,80 @@ def _upload_artist_asset(
     uploaded = artist.put(asset["uploadUrl"], content=content)
     assert uploaded.status_code == 204, uploaded.text
     return asset
+
+
+def _presign_artist_asset(
+    artist: TestClient,
+    *,
+    file_name: str,
+    content_type: str,
+    purpose: str,
+) -> dict[str, Any]:
+    return assert_success(
+        artist.post(
+            "/api/uploads/presign",
+            json={
+                "fileName": file_name,
+                "contentType": content_type,
+                "purpose": purpose,
+            },
+        ),
+        201,
+    )
+
+
+def _force_card_lenticular_front(card_id: str, front: dict[str, Any]) -> None:
+    async def update_card() -> None:
+        async with SessionLocal() as session:
+            card = await session.get(Card, card_id)
+            assert card is not None
+            card.design_config = {"version": 3, "front": front}
+            await session.commit()
+
+    asyncio.run(update_card())
+
+
+def _clear_asset_storage_path(asset_id: str) -> None:
+    async def clear_path() -> None:
+        async with SessionLocal() as session:
+            asset = await session.get(Asset, asset_id)
+            assert asset is not None
+            asset.storage_path = None
+            asset.processed_storage_path = None
+            await session.commit()
+
+    asyncio.run(clear_path())
+
+
+def _delete_asset_storage_object(asset_id: str) -> None:
+    async def delete_object() -> None:
+        async with SessionLocal() as session:
+            asset = await session.get(Asset, asset_id)
+            assert asset is not None
+            path = asset.processed_storage_path or asset.storage_path
+            assert path is not None
+            configured_asset_storage().delete(path)
+
+    asyncio.run(delete_object())
+
+
+def _create_artist_draft(
+    artist: TestClient, seeded: dict[str, Any], *, name: str
+) -> dict[str, Any]:
+    return assert_success(
+        artist.post(
+            "/api/artist/cards",
+            json={
+                "templateId": seeded["ids"]["templateId"],
+                "name": name,
+                "seasonName": "2026 SPRING",
+                "rarity": "Special",
+                "imageAssetId": seeded["ids"]["imageAssetId"],
+                "issueLimit": 100,
+            },
+        ),
+        201,
+    )
 
 
 def test_fan_cannot_access_admin_dashboard(actors: dict[str, TestClient]) -> None:
@@ -362,6 +437,151 @@ def test_artist_review_rejects_enabled_voice_without_an_uploaded_asset(
     )
 
     assert_error(response, 409, "CARD_MEDIA_INCOMPLETE")
+
+
+def test_artist_review_rejects_lenticular_without_asset_id(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    artist = actors["artist"]
+    draft = _create_artist_draft(artist, seeded, name="렌티큘러 자산 누락 카드")
+    _force_card_lenticular_front(draft["id"], {"interaction": "lenticular"})
+
+    response = artist.post(f"/api/artist/cards/{draft['id']}/submit-review")
+
+    assert_error(response, 409, "CARD_MEDIA_INCOMPLETE")
+
+
+def test_artist_review_rejects_lenticular_asset_without_storage_path(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    artist = actors["artist"]
+    lenticular_asset = _presign_artist_asset(
+        artist,
+        file_name="not-uploaded-lenticular.webp",
+        content_type="image/webp",
+        purpose="card",
+    )
+    draft = _create_artist_draft(artist, seeded, name="렌티큘러 업로드 누락 카드")
+    _force_card_lenticular_front(
+        draft["id"],
+        {"interaction": "lenticular", "lenticularAssetId": lenticular_asset["assetId"]},
+    )
+
+    response = artist.post(f"/api/artist/cards/{draft['id']}/submit-review")
+
+    assert_error(response, 409, "CARD_MEDIA_INCOMPLETE")
+
+
+def test_artist_review_rejects_lenticular_asset_after_storage_path_is_cleared(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    artist = actors["artist"]
+    lenticular_asset = _upload_artist_asset(
+        artist,
+        file_name="cleared-lenticular.webp",
+        content_type="image/webp",
+        purpose="card",
+        content=b"lenticular-card-image",
+    )
+    _clear_asset_storage_path(lenticular_asset["assetId"])
+    draft = _create_artist_draft(artist, seeded, name="렌티큘러 경로 삭제 카드")
+    _force_card_lenticular_front(
+        draft["id"],
+        {"interaction": "lenticular", "lenticularAssetId": lenticular_asset["assetId"]},
+    )
+
+    response = artist.post(f"/api/artist/cards/{draft['id']}/submit-review")
+
+    assert_error(response, 409, "CARD_MEDIA_INCOMPLETE")
+
+
+def test_artist_review_rejects_lenticular_asset_when_storage_object_is_missing(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    artist = actors["artist"]
+    lenticular_asset = _upload_artist_asset(
+        artist,
+        file_name="deleted-lenticular.webp",
+        content_type="image/webp",
+        purpose="card",
+        content=b"lenticular-card-image",
+    )
+    draft = _create_artist_draft(artist, seeded, name="렌티큘러 객체 삭제 카드")
+    _force_card_lenticular_front(
+        draft["id"],
+        {"interaction": "lenticular", "lenticularAssetId": lenticular_asset["assetId"]},
+    )
+    _delete_asset_storage_object(lenticular_asset["assetId"])
+
+    response = artist.post(f"/api/artist/cards/{draft['id']}/submit-review")
+
+    assert_error(response, 409, "CARD_MEDIA_INCOMPLETE")
+
+
+def test_artist_review_rejects_foreign_lenticular_asset(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    admin_asset = _upload_artist_asset(
+        actors["admin"],
+        file_name="foreign-review-lenticular.webp",
+        content_type="image/webp",
+        purpose="card",
+        content=b"admin-lenticular-card-image",
+    )
+    artist = actors["artist"]
+    draft = _create_artist_draft(artist, seeded, name="렌티큘러 소유권 제출 카드")
+    _force_card_lenticular_front(
+        draft["id"],
+        {"interaction": "lenticular", "lenticularAssetId": admin_asset["assetId"]},
+    )
+
+    response = artist.post(f"/api/artist/cards/{draft['id']}/submit-review")
+
+    assert_error(response, 409, "CARD_MEDIA_INCOMPLETE")
+
+
+def test_artist_review_rejects_lenticular_asset_with_unsupported_mime_type(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    artist = actors["artist"]
+    voice_asset = _upload_artist_asset(
+        artist,
+        file_name="review-lenticular-voice.mp3",
+        content_type="audio/mpeg",
+        purpose="voice",
+        content=b"voice",
+    )
+    draft = _create_artist_draft(artist, seeded, name="렌티큘러 타입 제출 카드")
+    _force_card_lenticular_front(
+        draft["id"],
+        {"interaction": "lenticular", "lenticularAssetId": voice_asset["assetId"]},
+    )
+
+    response = artist.post(f"/api/artist/cards/{draft['id']}/submit-review")
+
+    assert_error(response, 409, "CARD_MEDIA_INCOMPLETE")
+
+
+def test_artist_review_accepts_ready_lenticular_asset(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    artist = actors["artist"]
+    lenticular_asset = _upload_artist_asset(
+        artist,
+        file_name="ready-lenticular.webp",
+        content_type="image/webp",
+        purpose="card",
+        content=b"lenticular-card-image",
+    )
+    draft = _create_artist_draft(artist, seeded, name="렌티큘러 정상 제출 카드")
+    _force_card_lenticular_front(
+        draft["id"],
+        {"interaction": "lenticular", "lenticularAssetId": lenticular_asset["assetId"]},
+    )
+
+    submitted = assert_success(artist.post(f"/api/artist/cards/{draft['id']}/submit-review"))
+
+    assert submitted["status"] == "pending_review"
 
 
 def test_artist_review_persists_note_for_complete_voice_and_motion_assets(
