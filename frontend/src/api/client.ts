@@ -144,6 +144,49 @@ export type CurrentUser = {
   onboardingCompleted: boolean
 }
 
+export type CardMaterial = 'matte' | 'pearl' | 'chrome'
+export type FoilPattern =
+  | 'aurora-wave'
+  | 'prism'
+  | 'cracked-ice'
+  | 'micro-star'
+export type FoilCoverage = 'full' | 'background' | 'frame' | 'signature'
+export type CardInteraction = 'static' | 'tilt' | 'lenticular'
+export type EdgeFoil = 'none' | 'silver' | 'gold'
+export type SpotUv = 'none' | 'logo' | 'symbol' | 'serial'
+
+export type CardFrontDesignConfig = {
+  material?: CardMaterial
+  foilPattern?: FoilPattern
+  foilCoverage?: FoilCoverage
+  interaction?: CardInteraction
+  intensity?: number
+  angle?: number
+  lenticularAssetId?: string | null
+  effect?: string
+  effectPreset?: string
+  effectIntensity?: number
+  effectAngle?: number
+  effectMotion?: boolean
+  effectSpread?: number
+  effectGrain?: number
+  effectFinish?: string
+}
+
+export type CardBackDesignConfig = {
+  material?: CardMaterial
+  edgeFoil?: EdgeFoil
+  spotUv?: SpotUv
+  hiddenMessage?: string
+  effect?: string
+}
+
+export type CardDesignConfig = {
+  version?: 3
+  front?: CardFrontDesignConfig
+  back?: CardBackDesignConfig
+}
+
 export type UserCardDetail = {
   userCardId: string
   serialNumber: number
@@ -164,14 +207,16 @@ export type UserCardDetail = {
     issueLimit: number | null
     status: string
     designConfig?: {
-      front?: { effect?: string; effectIntensity?: number }
-      back?: { effect?: string }
+      version?: 3
+      front?: CardFrontDesignConfig
+      back?: CardBackDesignConfig
     } | null
     handwritingImageUrl: string | null
     hasVoice: boolean
     voiceAudioUrl: string | null
     hasVideo: boolean
     videoUrl: string | null
+    lenticularImageUrl?: string | null
     imageUrl?: string
     artistId?: string | null
     artistName?: string | null
