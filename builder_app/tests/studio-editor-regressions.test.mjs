@@ -71,3 +71,11 @@ test('official back template visibly inherits the selected background color', as
   assert.match(css, /\.back-card\s*\{[\s\S]{0,260}--back-color/)
   assert.match(css, /\.back-card > img\s*\{[\s\S]{0,220}mix-blend-mode:\s*luminosity/)
 })
+
+test('review readiness renders every dynamic item with an accurate total', async () => {
+  const source = await readFile(appUrl, 'utf8')
+
+  assert.match(source, /lenticular:\s*'렌티큘러 이미지'/)
+  assert.match(source, /Object\.values\(readiness\.items\)\.length/)
+  assert.doesNotMatch(source, /readiness-score[\s\S]{0,260}\/7/)
+})

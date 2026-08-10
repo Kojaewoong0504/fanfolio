@@ -119,6 +119,24 @@ test('normalizes unknown version 3 effect values back to supported defaults', ()
   )
 })
 
+test('truncates back hidden messages by Unicode code point', () => {
+  const hiddenMessage = `${'가'.repeat(39)}😀나`
+  const normalized = normalizeCardEffects({
+    version: 3,
+    back: { hiddenMessage },
+  })
+
+  assert.equal(normalized.back.hiddenMessage, `${'가'.repeat(39)}😀`)
+  assert.equal(Array.from(normalized.back.hiddenMessage).length, 40)
+  assert.equal(
+    Array.from(normalized.back.hiddenMessage).some((char) => {
+      const codePoint = char.codePointAt(0)
+      return codePoint >= 0xd800 && codePoint <= 0xdfff
+    }),
+    false,
+  )
+})
+
 test('requires a lenticular asset only when version 3 interaction is lenticular', () => {
   const baseDraft = {
     imageAssetId: 'asset_card',

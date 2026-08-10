@@ -847,6 +847,7 @@ const readinessLabels = {
   handwriting: '손글씨 레이어',
   voice: '보이스 파일',
   video: '모션 영상',
+  lenticular: '렌티큘러 이미지',
   issueLimit: '발행 수량',
   preview: '팬 화면 미리보기',
 }
@@ -860,9 +861,12 @@ function currentReadiness() {
 
 function reviewStage() {
   const readiness = currentReadiness()
+  const readinessItems = Object.values(readiness.items)
+  const completedReadinessCount = readinessItems.filter((item) => item.status !== 'missing').length
+  const totalReadinessCount = Object.values(readiness.items).length
   return `<section class="review-stage">
     <div class="review-card-preview"><span class="page-kicker">FINAL CHECK</span><h2>운영팀에 보내기 전 마지막 확인</h2><p>필수 항목이 모두 준비되면 검수 요청을 보낼 수 있어요.</p>${cardVisual()}<div class="review-summary"><strong>${esc(state.form.name)}</strong><span>${esc(state.form.seasonName)} · ${esc(state.form.rarity)} · ${Number(state.form.issueLimit).toLocaleString('ko-KR')}장</span></div></div>
-    <div class="review-panel"><div class="review-panel-heading"><div><span>REVIEW READINESS</span><h3>${readiness.ready ? '검수 준비가 완료됐어요.' : '추가로 준비할 항목이 있어요.'}</h3></div><span class="readiness-score ${readiness.ready ? 'ready' : ''}">${Object.values(readiness.items).filter((item) => item.status !== 'missing').length}/7</span></div>
+    <div class="review-panel"><div class="review-panel-heading"><div><span>REVIEW READINESS</span><h3>${readiness.ready ? '검수 준비가 완료됐어요.' : '추가로 준비할 항목이 있어요.'}</h3></div><span class="readiness-score ${readiness.ready ? 'ready' : ''}">${completedReadinessCount}/${totalReadinessCount}</span></div>
       <div class="readiness-list">${Object.entries(readiness.items).map(([key, item]) => `<div class="readiness-row ${item.status}"><span>${icon(item.status === 'missing' ? 'error' : item.status === 'optional' ? 'remove_circle' : 'check_circle')}<strong>${readinessLabels[key]}</strong></span><small>${item.label}</small></div>`).join('')}</div>
       <label class="review-note">운영팀에 전달할 메모<textarea data-review-note maxlength="500" rows="4" placeholder="공개 희망일, 미디어 확인 포인트 등을 적어 주세요.">${esc(state.reviewNote)}</textarea><small>${state.reviewNote.length}/500</small></label>
       ${state.reviewError ? `<p class="review-error" role="alert">${esc(state.reviewError)}</p>` : ''}

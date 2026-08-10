@@ -111,7 +111,7 @@ export function normalizeCardEffects(designConfig = {}) {
       material: oneOf(back.material, MATERIALS, 'matte'),
       edgeFoil: oneOf(back.edgeFoil, EDGE_FOILS, 'none'),
       spotUv: oneOf(back.spotUv, SPOT_UV_TARGETS, 'none'),
-      hiddenMessage: String(back.hiddenMessage ?? '').slice(0, 40),
+      hiddenMessage: Array.from(String(back.hiddenMessage ?? '')).slice(0, 40).join(''),
     },
   }
 }
