@@ -10,6 +10,14 @@ import ts from 'typescript'
 const frontendRoot = dirname(fileURLToPath(new URL('../package.json', import.meta.url)))
 const apiSource = await readFile(new URL('../src/api/client.ts', import.meta.url), 'utf8')
 const effectsSource = await readFile(new URL('../src/utils/cardEffects.ts', import.meta.url), 'utf8')
+const detailSource = await readFile(new URL('../src/components/CardDetail.tsx', import.meta.url), 'utf8')
+const cssSource = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
+
+function sourceContainsAll(source, snippets) {
+  for (const snippet of snippets) {
+    assert.ok(source.includes(snippet), `Expected source to include: ${snippet}`)
+  }
+}
 
 async function importCardEffects() {
   const output = ts.transpileModule(effectsSource, {
@@ -266,4 +274,91 @@ test('normalizeCardEffects accepts lenticular asset ids only for lenticular inte
       hiddenMessage: '',
     },
   })
+})
+
+test('card detail renders normalized v3 front and back collectible classes', () => {
+  sourceContainsAll(detailSource, [
+    "import { normalizeCardEffects",
+    'normalizeCardEffects(detail?.card.designConfig)',
+    "material-${effects.front.material}",
+    "pattern-${effects.front.foilPattern}",
+    "coverage-${effects.front.foilCoverage}",
+    "material-${effects.back.material}",
+    "back edge-foil-${effects.back.edgeFoil}",
+    "spot-uv-${effects.back.spotUv}",
+    "const [visibleSide, setVisibleSide] = useState<'front' | 'back'>('front')",
+    "setVisibleSide('front')",
+    'aria-pressed={visibleSide ===',
+    '>앞면</button>',
+    '>뒷면</button>',
+    '.slice(-8).toUpperCase()',
+    'effects.back.hiddenMessage',
+  ])
+  assert.doesNotMatch(detailSource, /import hologramTexture/)
+  assert.doesNotMatch(detailSource, /hologramStyle/)
+})
+
+test('card detail protects lenticular scene and keeps movement permission explicit', () => {
+  sourceContainsAll(detailSource, [
+    'hasLenticular',
+    'detail.card.lenticularImageUrl',
+    'className="fan-card-lenticular"',
+    '--lenticular-reveal',
+    'requestDeviceMotion',
+    'DeviceOrientationEvent.requestPermission',
+    '기기 움직임으로 보기',
+    '손가락으로 움직여 볼 수 있어요',
+    'window.isSecureContext',
+    'deviceorientation',
+    'prefers-reduced-motion: reduce',
+    '첫 장면',
+    '두 번째 장면',
+  ])
+  assert.match(detailSource, /navigator[\s\S]{0,160}deviceMemory/)
+  const permissionButtonIndex = detailSource.indexOf('기기 움직임으로 보기')
+  const requestPermissionIndex = detailSource.indexOf('requestPermission')
+  assert.ok(permissionButtonIndex > -1 && requestPermissionIndex > -1)
+  assert.ok(
+    requestPermissionIndex < permissionButtonIndex,
+    'requestPermission should live in the explicit handler rendered by the button',
+  )
+  assert.doesNotMatch(detailSource, /useEffect\([\s\S]{0,240}requestPermission/)
+})
+
+test('fan collectible css replaces moving texture with reduced-motion-safe layered surfaces', () => {
+  sourceContainsAll(cssSource, [
+    '.fan-card-collectible',
+    '--tilt-x:0deg',
+    '--tilt-y:0deg',
+    '--light-x:50%',
+    '--light-y:42%',
+    '--lenticular-reveal:0%',
+    'touch-action:pan-y',
+    '.fan-card-material',
+    '.fan-card-surface',
+    '.fan-card-lenticular',
+    'clip-path:inset(0 calc(100% - var(--lenticular-reveal)) 0 0)',
+    'pointer-events:none',
+    '.material-matte',
+    '.material-pearl',
+    '.material-chrome',
+    '.pattern-aurora-wave',
+    '.pattern-prism',
+    '.pattern-cracked-ice',
+    '.pattern-micro-star',
+    '.coverage-full',
+    '.coverage-background',
+    '.coverage-frame',
+    '.coverage-signature',
+    '.edge-foil-silver',
+    '.edge-foil-gold',
+    '.spot-uv-logo',
+    '.spot-uv-symbol',
+    '.spot-uv-serial',
+    '-webkit-line-clamp:2',
+    '@media(prefers-reduced-motion:reduce)',
+  ])
+  assert.doesNotMatch(cssSource, /hologram-sweep/)
+  assert.doesNotMatch(cssSource, /--hologram-texture/)
+  assert.doesNotMatch(cssSource, /translateX\(calc\(var\(--hologram-shift/)
 })

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type SyntheticEvent } from 'react'
 import { apiFetch, resolveApiUrl, type UserCardDetail } from '../api/client'
-import hologramTexture from '../assets/hologram-aurora-texture.jpg'
 import type { Card } from '../types'
+import { normalizeCardEffects } from '../utils/cardEffects'
 
 type CardDetailProps = {
   card: Card
@@ -12,6 +12,39 @@ type CardDetailProps = {
   imageFor: (imageUrl: string, seed: string) => string
   onImageError: (event: SyntheticEvent<HTMLImageElement>, seed: string) => void
   cardTypeLabel: (cardType: string | null) => string
+}
+
+type CollectibleStyle = CSSProperties & Record<'--tilt-x' | '--tilt-y' | '--light-x' | '--light-y' | '--lenticular-reveal' | '--effect-opacity' | '--effect-angle' | '--effect-spread' | '--effect-grain', string>
+type MotionStatus = 'idle' | 'granted' | 'denied' | 'unsupported'
+
+function prefersReducedEffects(): boolean {
+  const reducedMotion =
+    typeof window !== 'undefined' &&
+    window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true
+  const browserNavigator = typeof navigator !== 'undefined'
+    ? navigator as Navigator & { deviceMemory?: number }
+    : null
+  const deviceMemory = Number.isFinite(Number(browserNavigator?.deviceMemory))
+    ? Number(browserNavigator?.deviceMemory)
+    : null
+  return reducedMotion || (deviceMemory !== null && deviceMemory <= 2)
+}
+
+function supportsDeviceMotion(): boolean {
+  return window.isSecureContext === true && typeof window.DeviceOrientationEvent !== 'undefined'
+}
+
+function clampMotion(value: number | null): number {
+  if (!Number.isFinite(Number(value))) return 0
+  return Math.max(-15, Math.min(15, Number(value)))
+}
+
+function resetCollectibleVars(element: HTMLElement): void {
+  element.style.setProperty('--tilt-x', '0deg')
+  element.style.setProperty('--tilt-y', '0deg')
+  element.style.setProperty('--light-x', '50%')
+  element.style.setProperty('--light-y', '42%')
+  element.style.setProperty('--lenticular-reveal', '0%')
 }
 
 function useDialogFocus(open: boolean): void {
@@ -57,6 +90,11 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
   const [detail, setDetail] = useState<UserCardDetail | null>(null)
   const [detailError, setDetailError] = useState(false)
   const [detailAttempt, setDetailAttempt] = useState(0)
+  const [visibleSide, setVisibleSide] = useState<'front' | 'back'>('front')
+  const [motionStatus, setMotionStatus] = useState<MotionStatus>('idle')
+  const [deviceMotionEnabled, setDeviceMotionEnabled] = useState(false)
+  const collectibleRef = useRef<HTMLDivElement | null>(null)
+  const dragStartRef = useRef<{ pointerId: number, x: number, y: number } | null>(null)
   const isOwned = Boolean(card.userCardId)
   const hasRemoteDetail = Boolean(card.userCardId && !card.userCardId.startsWith('user-card-'))
   const [detailLoading, setDetailLoading] = useState(hasRemoteDetail)
@@ -66,6 +104,9 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
     let cancelled = false
     setDetail(null)
     setDetailError(false)
+    setVisibleSide('front')
+    setMotionStatus('idle')
+    setDeviceMotionEnabled(false)
     const remoteDetail = Boolean(card.userCardId && !card.userCardId.startsWith('user-card-'))
     setDetailLoading(remoteDetail)
     if (!remoteDetail || !card.userCardId) return
@@ -76,6 +117,13 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
   }, [card.userCardId, detailAttempt])
 
   useEffect(() => {
+    setVisibleSide('front')
+    setMotionStatus('idle')
+    setDeviceMotionEnabled(false)
+    if (collectibleRef.current) resetCollectibleVars(collectibleRef.current)
+  }, [card.id, detail?.userCardId])
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
     }
@@ -83,55 +131,129 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [onClose])
 
+  const effects = normalizeCardEffects(detail?.card.designConfig)
+  const designConfig = detail?.card.designConfig
+  const legacyHolographic = designConfig?.front?.effect === 'holographic'
+  const hasSurface = Boolean(legacyHolographic || designConfig?.version === 3)
+  const hasLenticular = Boolean(effects.front.interaction === 'lenticular' && detail && detail.card.lenticularImageUrl)
+  const lenticularImageUrl = detail?.card.lenticularImageUrl ?? ''
+  const reducedEffects = prefersReducedEffects()
+  const motionSupported = !reducedEffects && supportsDeviceMotion()
   const imageUrl = detail?.card.imageUrl ?? card.image
   const imageError = (event: SyntheticEvent<HTMLImageElement>) => onImageError(event, card.id)
-  const designEffect = detail?.card.designConfig?.front?.effect
-  const effectIntensity = Math.max(0, Math.min(1, Number(detail?.card.designConfig?.front?.effectIntensity ?? 0) || 0))
-  const hasHologram = designEffect === 'holographic' && effectIntensity > 0
-  const hologramStyle = {
-    '--hologram-opacity': hasHologram ? String(0.18 + effectIntensity * 0.34) : '0',
-    '--hologram-shift': `${Math.round(18 + effectIntensity * 18)}px`,
-    '--hologram-texture': `url("${hologramTexture}")`,
-    '--hologram-tilt-x': '0deg',
-    '--hologram-tilt-y': '0deg',
-    '--hologram-light-x': '50%',
-    '--hologram-light-y': '42%',
-    '--hologram-drag-x': '0px',
-    '--hologram-drag-y': '0px',
-  } as CSSProperties & Record<'--hologram-opacity' | '--hologram-shift' | '--hologram-texture' | '--hologram-tilt-x' | '--hologram-tilt-y' | '--hologram-light-x' | '--hologram-light-y' | '--hologram-drag-x' | '--hologram-drag-y', string>
-  const handleHologramMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!hasHologram || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  const cardImageAlt = `${detail?.card.name ?? card.title} 공식 카드 앞면`
+  const collectibleStyle = {
+    '--tilt-x': '0deg',
+    '--tilt-y': '0deg',
+    '--light-x': '50%',
+    '--light-y': '42%',
+    '--lenticular-reveal': '0%',
+    '--effect-opacity': hasSurface ? String(0.2 + effects.front.intensity * 0.42) : '0',
+    '--effect-angle': `${effects.front.angle}deg`,
+    '--effect-spread': `${Math.round(effects.front.effectSpread * 100)}%`,
+    '--effect-grain': String(effects.front.effectGrain),
+  } as CollectibleStyle
+  const frontClassName = `fan-card-collectible front material-${effects.front.material} pattern-${effects.front.foilPattern} coverage-${effects.front.foilCoverage} interaction-${effects.front.interaction}${hasLenticular ? ' has-lenticular' : ''}${hasSurface ? ' has-surface' : ''}`
+  const backClassName = `fan-card-collectible material-${effects.back.material} back edge-foil-${effects.back.edgeFoil} spot-uv-${effects.back.spotUv}`
+
+  const handleCollectibleMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (visibleSide !== 'front' || reducedEffects) return
+    if (event.pointerType === 'touch' && !event.currentTarget.hasPointerCapture(event.pointerId)) {
+      const start = dragStartRef.current
+      if (!start || start.pointerId !== event.pointerId) return
+      const deltaX = Math.abs(event.clientX - start.x)
+      const deltaY = Math.abs(event.clientY - start.y)
+      if (deltaX < 8 && deltaY < 8) return
+      if (deltaY > deltaX) return
+      event.currentTarget.setPointerCapture(event.pointerId)
+    }
     const element = event.currentTarget
     const box = element.getBoundingClientRect()
     const x = Math.max(0, Math.min(1, (event.clientX - box.left) / box.width))
     const y = Math.max(0, Math.min(1, (event.clientY - box.top) / box.height))
-    element.style.setProperty('--hologram-tilt-x', `${((0.5 - y) * 10).toFixed(2)}deg`)
-    element.style.setProperty('--hologram-tilt-y', `${((x - 0.5) * 12).toFixed(2)}deg`)
-    element.style.setProperty('--hologram-light-x', `${Math.round(x * 100)}%`)
-    element.style.setProperty('--hologram-light-y', `${Math.round(y * 100)}%`)
-    element.style.setProperty('--hologram-drag-x', `${Math.round((x - 0.5) * 24)}px`)
-    element.style.setProperty('--hologram-drag-y', `${Math.round((y - 0.5) * 18)}px`)
+    if (effects.front.interaction !== 'static') {
+      element.style.setProperty('--tilt-x', `${((0.5 - y) * 10).toFixed(2)}deg`)
+      element.style.setProperty('--tilt-y', `${((x - 0.5) * 12).toFixed(2)}deg`)
+    }
+    element.style.setProperty('--light-x', `${Math.round(x * 100)}%`)
+    element.style.setProperty('--light-y', `${Math.round(y * 100)}%`)
+    if (hasLenticular) {
+      element.style.setProperty('--lenticular-reveal', `${Math.round(x * 100)}%`)
+    }
   }
-  const handleHologramStart = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!hasHologram) return
-    event.currentTarget.setPointerCapture(event.pointerId)
-    handleHologramMove(event)
+  const handleCollectibleStart = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (visibleSide !== 'front' || reducedEffects) return
+    dragStartRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY }
+    if (event.pointerType !== 'touch') {
+      event.currentTarget.setPointerCapture(event.pointerId)
+      handleCollectibleMove(event)
+    }
   }
-  const handleHologramReset = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const element = event.currentTarget
-    element.style.setProperty('--hologram-tilt-x', '0deg')
-    element.style.setProperty('--hologram-tilt-y', '0deg')
-    element.style.setProperty('--hologram-light-x', '50%')
-    element.style.setProperty('--hologram-light-y', '42%')
-    element.style.setProperty('--hologram-drag-x', '0px')
-    element.style.setProperty('--hologram-drag-y', '0px')
+  const handleCollectibleReset = (element: HTMLElement) => {
+    resetCollectibleVars(element)
   }
-  const handleHologramEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
+  const handleCollectibleEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
-    handleHologramReset(event)
+    dragStartRef.current = null
+    handleCollectibleReset(event.currentTarget)
   }
+  const setLenticularReveal = (reveal: '0%' | '100%') => {
+    collectibleRef.current?.style.setProperty('--lenticular-reveal', reveal)
+  }
+  const requestDeviceMotion = async () => {
+    if (reducedEffects || !supportsDeviceMotion()) {
+      setMotionStatus('unsupported')
+      setDeviceMotionEnabled(false)
+      return
+    }
+    try {
+      const DeviceOrientationEvent = window.DeviceOrientationEvent as typeof window.DeviceOrientationEvent & {
+        requestPermission?: () => Promise<PermissionState | 'default'>
+      }
+      const permission = typeof DeviceOrientationEvent.requestPermission === 'function'
+        ? await DeviceOrientationEvent.requestPermission()
+        : 'granted'
+      if (permission !== 'granted') throw new Error('denied')
+      setMotionStatus('granted')
+      setDeviceMotionEnabled(true)
+    } catch {
+      setMotionStatus('denied')
+      setDeviceMotionEnabled(false)
+    }
+  }
+
+  useEffect(() => {
+    if (
+      !deviceMotionEnabled ||
+      visibleSide !== 'front' ||
+      reducedEffects ||
+      effects.front.interaction === 'static' ||
+      !detail ||
+      !supportsDeviceMotion()
+    ) {
+      return
+    }
+    const applyDeviceOrientation = (event: DeviceOrientationEvent) => {
+      const element = collectibleRef.current
+      if (!element) return
+      const beta = clampMotion(event.beta)
+      const gamma = clampMotion(event.gamma)
+      const lightX = Math.round(((gamma + 15) / 30) * 100)
+      const lightY = Math.round(((beta + 15) / 30) * 100)
+      element.style.setProperty('--tilt-x', `${(-beta).toFixed(2)}deg`)
+      element.style.setProperty('--tilt-y', `${gamma.toFixed(2)}deg`)
+      element.style.setProperty('--light-x', `${lightX}%`)
+      element.style.setProperty('--light-y', `${lightY}%`)
+      if (hasLenticular) {
+        element.style.setProperty('--lenticular-reveal', `${lightX}%`)
+      }
+    }
+    window.addEventListener('deviceorientation', applyDeviceOrientation, { passive: true })
+    return () => window.removeEventListener('deviceorientation', applyDeviceOrientation)
+  }, [detail, deviceMotionEnabled, effects.front.interaction, hasLenticular, reducedEffects, visibleSide])
+
   const voiceAudioUrl = detail?.card.hasVoice && detail.card.voiceAudioUrl ? resolveApiUrl(detail.card.voiceAudioUrl) : ''
   const videoUrl = detail?.card.hasVideo && detail.card.videoUrl ? resolveApiUrl(detail.card.videoUrl) : ''
   const hasSpecialMedia = Boolean(voiceAudioUrl || videoUrl)
@@ -145,9 +267,47 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
         </button>
       </div>
       {detailLoading && <p className="detail-loading" role="status" aria-live="polite">카드 상세 정보를 확인하는 중이에요…</p>}
-      <div className={hasHologram ? 'detail-media hologram interactive' : 'detail-media'} style={hologramStyle} onPointerDown={handleHologramStart} onPointerMove={handleHologramMove} onPointerUp={handleHologramEnd} onPointerLeave={handleHologramReset} onPointerCancel={handleHologramReset}>
-        <img src={imageFor(resolveApiUrl(imageUrl), card.id)} alt="카드 상세" onError={imageError} />
+      <div className="card-side-toggle" role="group" aria-label="카드 면 선택">
+        <button type="button" aria-pressed={visibleSide === 'front'} onClick={() => setVisibleSide('front')}>앞면</button>
+        <button type="button" aria-pressed={visibleSide === 'back'} onClick={() => setVisibleSide('back')}>뒷면</button>
+      </div>
+      {visibleSide === 'front' ? <div
+        ref={collectibleRef}
+        className={frontClassName}
+        style={collectibleStyle}
+        onPointerDown={handleCollectibleStart}
+        onPointerMove={handleCollectibleMove}
+        onPointerUp={handleCollectibleEnd}
+        onPointerLeave={handleCollectibleEnd}
+        onPointerCancel={handleCollectibleEnd}
+      >
+        <img className="fan-card-photo" src={imageFor(resolveApiUrl(imageUrl), card.id)} alt={cardImageAlt} onError={imageError} />
+        {hasLenticular && <img className="fan-card-lenticular" src={resolveApiUrl(lenticularImageUrl)} alt="" aria-hidden="true" />}
+        <span className="fan-card-material" aria-hidden="true" />
+        <span className="fan-card-surface" aria-hidden="true" />
         <span className="official-badge">공식 카드</span>
+      </div> : <div className={backClassName} style={collectibleStyle}>
+        <div className="fan-card-back-meta">
+          <span className="fan-card-official-label">OFFICIAL FAN CARD</span>
+          <strong>{detail?.card.name ?? card.title}</strong>
+          <span>{detail?.card.artistName ?? card.artist}{(detail?.card.memberName ?? card.member) ? ` · ${detail?.card.memberName ?? card.member}` : ''}</span>
+        </div>
+        <dl className="fan-card-back-stats">
+          <div><dt>SERIAL</dt><dd>#{String(detail?.serialNumber ?? 0).padStart(3, '0')}</dd></div>
+          <div><dt>LIMIT</dt><dd>{detail?.card.issueLimit ? `${detail.card.issueLimit.toLocaleString()}장` : 'UNLIMITED'}</dd></div>
+          <div><dt>SEAL</dt><dd>{(detail?.card.id ?? card.id).slice(-8).toUpperCase()}</dd></div>
+        </dl>
+        <p className="fan-card-hidden-message">{effects.back.hiddenMessage || '공식 컬렉션 인증 카드'}</p>
+        <span className="fan-card-material" aria-hidden="true" />
+        <span className="fan-card-surface" aria-hidden="true" />
+      </div>}
+      <div className="fan-card-motion-actions">
+        {motionSupported && visibleSide === 'front' && effects.front.interaction !== 'static' && <button type="button" className="motion-permission-button" onClick={requestDeviceMotion}>기기 움직임으로 보기</button>}
+        {motionStatus === 'denied' && <p className="motion-helper">손가락으로 움직여 볼 수 있어요</p>}
+        {hasLenticular && reducedEffects && visibleSide === 'front' && <div className="lenticular-scene-controls" aria-label="렌티큘러 장면 선택">
+          <button type="button" onClick={() => setLenticularReveal('0%')}>첫 장면</button>
+          <button type="button" onClick={() => setLenticularReveal('100%')}>두 번째 장면</button>
+        </div>}
       </div>
       <p className="detail-kicker">공식 디지털 카드</p>
       <h2 id="card-detail-title" className="detail-title">{detail?.card.name ?? card.title}</h2>
