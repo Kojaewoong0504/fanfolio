@@ -816,7 +816,7 @@ function backInspector() {
   <label class="compact-field">뒷면 바탕색<input type="color" value="${esc(state.editor.background || '#0b1033')}" data-editor="background" /></label>
   <label class="compact-field">
     숨은 메시지
-    <input type="text" maxlength="40" data-editor="backHiddenMessage" value="${esc(state.editor.backHiddenMessage || '')}" />
+    <input type="text" maxlength="80" data-editor="backHiddenMessage" value="${esc(state.editor.backHiddenMessage || '')}" />
     <small><span data-hidden-message-count>${hiddenMessageLength}</span>/40 · 기울이면 선명해져요.</small>
   </label>
   <div class="info-card">${icon('lock')}<span><strong>브랜드 보호 영역</strong><small>뒷면 인증 마크와 발행 정보는 공개 시 자동으로 생성됩니다.</small></span></div>${layerControls()}`

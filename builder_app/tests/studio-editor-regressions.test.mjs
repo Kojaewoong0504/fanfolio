@@ -141,6 +141,14 @@ test('back draft serial always starts at issue one even without an issue limit',
   assert.doesNotMatch(source, /state\.form\.issueLimit \? 1 : 0/)
 })
 
+test('back hidden message input allows emoji before code point clamping', async () => {
+  const source = await readFile(appUrl, 'utf8')
+
+  assert.match(source, /maxlength="80" data-editor="backHiddenMessage"/)
+  assert.match(source, /Array\.from\(event\.target\.value\)\.slice\(0, 40\)\.join\(''\)/)
+  assert.doesNotMatch(source, /maxlength="40" data-editor="backHiddenMessage"/)
+})
+
 test('review readiness renders every dynamic item with an accurate total', async () => {
   const source = await readFile(appUrl, 'utf8')
 
