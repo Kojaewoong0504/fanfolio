@@ -271,7 +271,7 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
         <button type="button" aria-pressed={visibleSide === 'front'} onClick={() => setVisibleSide('front')}>앞면</button>
         <button type="button" aria-pressed={visibleSide === 'back'} onClick={() => setVisibleSide('back')}>뒷면</button>
       </div>
-      {visibleSide === 'front' ? <div
+      {visibleSide === 'front' || !detail ? <div
         ref={collectibleRef}
         className={frontClassName}
         style={collectibleStyle}
@@ -286,16 +286,16 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
         <span className="fan-card-material" aria-hidden="true" />
         <span className="fan-card-surface" aria-hidden="true" />
         <span className="official-badge">공식 카드</span>
-      </div> : <div className={backClassName} style={collectibleStyle}>
+      </div> : visibleSide === 'back' && detail && <div className={backClassName} style={collectibleStyle}>
         <div className="fan-card-back-meta">
           <span className="fan-card-official-label">OFFICIAL FAN CARD</span>
-          <strong>{detail?.card.name ?? card.title}</strong>
-          <span>{detail?.card.artistName ?? card.artist}{(detail?.card.memberName ?? card.member) ? ` · ${detail?.card.memberName ?? card.member}` : ''}</span>
+          <strong>{detail.card.name}</strong>
+          <span>{detail.card.artistName ?? card.artist}{(detail.card.memberName ?? card.member) ? ` · ${detail.card.memberName ?? card.member}` : ''}</span>
         </div>
         <dl className="fan-card-back-stats">
-          <div><dt>SERIAL</dt><dd>#{String(detail?.serialNumber ?? 0).padStart(3, '0')}</dd></div>
-          <div><dt>LIMIT</dt><dd>{detail?.card.issueLimit ? `${detail.card.issueLimit.toLocaleString()}장` : 'UNLIMITED'}</dd></div>
-          <div><dt>SEAL</dt><dd>{(detail?.card.id ?? card.id).slice(-8).toUpperCase()}</dd></div>
+          <div><dt>SERIAL</dt><dd>#{String(detail.serialNumber).padStart(3, '0')}</dd></div>
+          <div><dt>LIMIT</dt><dd>{detail.card.issueLimit ? `${detail.card.issueLimit.toLocaleString()}장` : 'UNLIMITED'}</dd></div>
+          <div><dt>SEAL</dt><dd>{detail.card.id.slice(-8).toUpperCase()}</dd></div>
         </dl>
         <p className="fan-card-hidden-message">{effects.back.hiddenMessage || '공식 컬렉션 인증 카드'}</p>
         <span className="fan-card-material" aria-hidden="true" />

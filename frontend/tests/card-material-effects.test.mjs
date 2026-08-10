@@ -298,6 +298,14 @@ test('card detail renders normalized v3 front and back collectible classes', () 
   assert.doesNotMatch(detailSource, /hologramStyle/)
 })
 
+test('card detail does not expose a fake back serial before owned detail loads', () => {
+  assert.doesNotMatch(detailSource, /detail\?\.serialNumber\s*\?\?\s*0/)
+  assert.doesNotMatch(detailSource, /padStart\(3,\s*'0'\)[\s\S]{0,80}UNLIMITED/)
+  assert.doesNotMatch(detailSource, />#000</)
+  assert.match(detailSource, /visibleSide === 'back' && detail/)
+  assert.match(detailSource, /String\(detail\.serialNumber\)\.padStart\(3, '0'\)/)
+})
+
 test('card detail protects lenticular scene and keeps movement permission explicit', () => {
   sourceContainsAll(detailSource, [
     'hasLenticular',
