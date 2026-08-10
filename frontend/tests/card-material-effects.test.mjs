@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { spawnSync } from 'node:child_process'
 import test from 'node:test'
 import ts from 'typescript'
 
+const frontendRoot = dirname(fileURLToPath(new URL('../package.json', import.meta.url)))
 const apiSource = await readFile(new URL('../src/api/client.ts', import.meta.url), 'utf8')
 const effectsSource = await readFile(new URL('../src/utils/cardEffects.ts', import.meta.url), 'utf8')
 
@@ -16,6 +21,37 @@ async function importCardEffects() {
   })
   const moduleUrl = `data:text/javascript;base64,${Buffer.from(output.outputText).toString('base64')}`
   return import(moduleUrl)
+}
+
+async function compileTypeFixture(source) {
+  const tempDir = await mkdtemp(join(tmpdir(), 'fanfolio-card-effects-'))
+  const fixturePath = join(tempDir, 'fixture.ts')
+  await writeFile(fixturePath, source)
+
+  try {
+    return spawnSync(
+      process.execPath,
+      [
+        join(frontendRoot, 'node_modules/typescript/bin/tsc'),
+        '--noEmit',
+        '--ignoreConfig',
+        '--target',
+        'ES2023',
+        '--module',
+        'ESNext',
+        '--moduleResolution',
+        'bundler',
+        '--allowImportingTsExtensions',
+        '--types',
+        'vite/client',
+        '--skipLibCheck',
+        fixturePath,
+      ],
+      { cwd: frontendRoot, encoding: 'utf8' },
+    )
+  } finally {
+    await rm(tempDir, { recursive: true, force: true })
+  }
 }
 
 test('card detail API contract exposes version 3 collectible effect types', () => {
@@ -33,8 +69,58 @@ test('card detail API contract exposes version 3 collectible effect types', () =
   assert.match(apiSource, /export type SpotUv = 'none' \| 'logo' \| 'symbol' \| 'serial'/)
 })
 
+test('card detail API contract compiles legacy version 2 migration payloads', async () => {
+  const result = await compileTypeFixture(`
+    import type { CardDesignConfig, UserCardDetail } from '${frontendRoot}/src/api/client.ts'
+
+    const legacyDesign: CardDesignConfig = {
+      version: 2,
+      front: {
+        effect: 'holographic',
+        effectPreset: 'stardust',
+        effectFinish: 'glass',
+        effectIntensity: 72,
+        effectMotion: false,
+      },
+      back: { effect: 'sparkle' },
+    }
+
+    const detail: UserCardDetail = {
+      userCardId: 'owned-1',
+      serialNumber: 1,
+      acquiredAt: '2026-08-10T00:00:00.000Z',
+      acquisitionSource: 'drop',
+      drop: null,
+      redeemCode: null,
+      futureBenefitPreview: null,
+      card: {
+        id: 'card-1',
+        name: 'Legacy card',
+        isOfficial: true,
+        seasonName: null,
+        cardType: null,
+        rarity: null,
+        signatureText: null,
+        handwrittenMessage: null,
+        issueLimit: null,
+        status: 'published',
+        designConfig: legacyDesign,
+        handwritingImageUrl: null,
+        hasVoice: false,
+        voiceAudioUrl: null,
+        hasVideo: false,
+        videoUrl: null,
+      },
+    }
+
+    void detail
+  `)
+
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
+})
+
 test('user card detail keeps version 3 design fields optional and legacy-compatible', () => {
-  assert.match(apiSource, /version\?: 3/)
+  assert.match(apiSource, /version\?: 2 \| 3/)
   assert.match(apiSource, /material\?: CardMaterial/)
   assert.match(apiSource, /foilPattern\?: FoilPattern/)
   assert.match(apiSource, /foilCoverage\?: FoilCoverage/)

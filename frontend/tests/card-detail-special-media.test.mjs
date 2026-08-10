@@ -7,7 +7,7 @@ const apiSource = await readFile(new URL('../src/api/client.ts', import.meta.url
 const cssSource = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
 
 test('card detail API contract exposes special media and design configuration', () => {
-  assert.match(apiSource, /designConfig\?: \{/)
+  assert.match(apiSource, /designConfig\?: CardDesignConfig \| null/)
   assert.match(apiSource, /effectIntensity\?: number/)
   assert.match(apiSource, /voiceAudioUrl: string \| null/)
   assert.match(apiSource, /hasVideo: boolean/)

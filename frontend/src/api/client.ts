@@ -182,7 +182,7 @@ export type CardBackDesignConfig = {
 }
 
 export type CardDesignConfig = {
-  version?: 3
+  version?: 2 | 3
   front?: CardFrontDesignConfig
   back?: CardBackDesignConfig
 }
@@ -206,11 +206,7 @@ export type UserCardDetail = {
     handwrittenMessage: string | null
     issueLimit: number | null
     status: string
-    designConfig?: {
-      version?: 3
-      front?: CardFrontDesignConfig
-      back?: CardBackDesignConfig
-    } | null
+    designConfig?: CardDesignConfig | null
     handwritingImageUrl: string | null
     hasVoice: boolean
     voiceAudioUrl: string | null
