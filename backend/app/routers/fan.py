@@ -572,7 +572,7 @@ async def card_video(user_card_id: str, user: FanUser, session: DbSession) -> Re
     )
 
 
-@router.get("/me/cards/{user_card_id}/lenticular", include_in_schema=False)
+@router.get("/me/cards/{user_card_id}/lenticular")
 async def card_lenticular(user_card_id: str, user: FanUser, session: DbSession) -> Response:
     """Serve a lenticular image only after verifying that the fan owns the card."""
     row = await session.execute(

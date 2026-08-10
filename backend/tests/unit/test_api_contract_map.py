@@ -4,6 +4,11 @@ from pathlib import Path
 from app.main import app
 
 
+def test_lenticular_card_asset_route_is_documented_in_openapi() -> None:
+    """Fan-owned lenticular assets are a supported API route, not an internal helper."""
+    assert "/api/me/cards/{user_card_id}/lenticular" in app.openapi()["paths"]
+
+
 def test_api_contract_map_covers_every_fastapi_operation() -> None:
     """Keep the visual contract map aligned with the executable OpenAPI surface."""
     map_path = Path(__file__).parents[3] / "fanfolio-api-contract-map.html"

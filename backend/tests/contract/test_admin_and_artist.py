@@ -225,8 +225,9 @@ def test_artist_card_rejects_malformed_lenticular_asset_id(
     assert_error(response, 422, "INVALID_LENTICULAR_ASSET")
 
 
+@pytest.mark.parametrize("lenticular_asset_id", ["", 123])
 def test_artist_card_update_rejects_malformed_lenticular_asset_id(
-    actors: dict[str, TestClient], seeded: dict[str, Any]
+    actors: dict[str, TestClient], seeded: dict[str, Any], lenticular_asset_id: Any
 ) -> None:
     artist = actors["artist"]
     draft = assert_success(
@@ -251,7 +252,7 @@ def test_artist_card_update_rejects_malformed_lenticular_asset_id(
                 "version": 3,
                 "front": {
                     "interaction": "lenticular",
-                    "lenticularAssetId": "",
+                    "lenticularAssetId": lenticular_asset_id,
                 },
             },
         },
