@@ -1,6 +1,7 @@
 import {
   buildCardPayload,
   navigationState,
+  normalizeCardEffects,
   normalizeCreativeLayer,
   responsiveStudioMode,
   reviewReadiness,
@@ -57,19 +58,30 @@ const builtInStickers = [
   },
 ]
 
-const hologramPresets = [
-  ['aurora', '오로라', '청보라 빛이 부드럽게 번지는 포일'],
-  ['prism', '프리즘', '각도마다 선명하게 갈라지는 스펙트럼'],
-  ['crystal', '크리스탈', '차갑고 투명한 다이아몬드 광택'],
-  ['stardust', '스타더스트', '미세한 별 입자가 반짝이는 포일'],
-  ['moonlight', '문라이트', '은은한 달빛과 진주광이 도는 포일'],
-  ['rose-opal', '로즈 오팔', '핑크와 골드가 겹치는 오팔 광택'],
+const materialOptions = [
+  ['matte', '무광', '빛을 눌러 사진에 집중'],
+  ['pearl', '펄', '은은한 진주광'],
+  ['chrome', '크롬', '선명한 금속 반사'],
 ]
 
-const hologramFinishes = [
-  ['glass', '글라스'],
-  ['silk', '실크'],
-  ['diamond', '다이아몬드'],
+const foilPatternOptions = [
+  ['aurora-wave', '오로라 웨이브'],
+  ['prism', '프리즘'],
+  ['cracked-ice', '크랙드 아이스'],
+  ['micro-star', '마이크로 스타'],
+]
+
+const foilCoverageOptions = [
+  ['full', '전체'],
+  ['background', '배경'],
+  ['frame', '프레임'],
+  ['signature', '로고·사인'],
+]
+
+const interactionOptions = [
+  ['static', '정적'],
+  ['tilt', '기울임'],
+  ['lenticular', '렌티큘러'],
 ]
 
 const recipes = [
@@ -138,6 +150,13 @@ function initialEditor() {
     imageName: '오로라 포트레이트',
     imageFile: null,
     imageAssetId: null,
+    material: 'pearl',
+    foilPattern: 'aurora-wave',
+    foilCoverage: 'full',
+    interaction: 'tilt',
+    lenticularSrc: '',
+    lenticularFile: null,
+    lenticularAssetId: null,
     videoSrc: '',
     videoName: '',
     videoFile: null,
@@ -631,21 +650,27 @@ function creativeLayerToolbar(side) {
 function cardVisual({ fan = false } = {}) {
   const editor = state.editor
   const isBack = editor.side === 'back' && !fan
+  const isLenticular = editor.interaction === 'lenticular' && editor.lenticularSrc
+  const effectMotion = editor.interaction !== 'static'
   const media = editor.videoEnabled && editor.videoSrc
     ? `<video src="${esc(editor.videoSrc)}" muted loop playsinline preload="metadata" ${fan ? 'controls' : 'autoplay'}></video>`
-    : `<img class="card-photo" src="${esc(editor.imageSrc || sampleAssets.aurora)}" alt="${esc(state.form.name)} 카드 이미지" />`
+    : `<img class="card-photo" src="${esc(editor.imageSrc || sampleAssets.aurora)}" alt="${esc(state.form.name)} 카드 이미지" />${isLenticular ? `<img class="lenticular-photo" src="${esc(editor.lenticularSrc)}" alt="" />` : ''}`
   const effectOpacity = Number(editor.effectIntensity || 0)
-  const tiltStyle = '--tilt-x:0deg;--tilt-y:0deg;--light-x:50%;--light-y:42%'
+  const tiltStyle = '--tilt-x:0deg;--tilt-y:0deg;--light-x:50%;--light-y:42%;--lenticular-reveal:0%'
+  const reducedMotionControls = isLenticular && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ? `<div class="lenticular-motion-controls" aria-label="렌티큘러 장면 선택"><button type="button" data-action="set-lenticular-scene" data-reveal="0">첫 장면</button><button type="button" data-action="set-lenticular-scene" data-reveal="100">두 번째 장면</button></div>`
+    : ''
   if (isBack) {
     return `<div class="editor-card back-card effect-motion" data-hologram-card style="${tiltStyle};--back-color:${esc(editor.background || '#0b1033')}"><img src="./agency-back-template-v1.png" alt="Fanfolio 공식 카드 뒷면" />${creativeLayersMarkup('back')}${creativeLayerToolbar('back')}<div class="back-card-meta"><strong>${esc(state.form.name)}</strong><span>OFFICIAL DIGITAL COLLECTIBLE</span></div></div>`
   }
-  return `<div class="editor-card ${editor.effectMotion ? 'effect-motion' : ''}" data-hologram-card style="${tiltStyle};--effect-opacity:${effectOpacity};--effect-angle:${Number(editor.effectAngle || 135)}deg;--effect-spread:${Math.round(Number(editor.effectSpread ?? 0.64) * 100)}%;--effect-grain:${Number(editor.effectGrain ?? 0.38)}">
+  return `<div class="editor-card material-${esc(editor.material)} pattern-${esc(editor.foilPattern)} coverage-${esc(editor.foilCoverage)} ${effectMotion ? 'effect-motion' : ''} ${isLenticular ? 'interaction-lenticular' : ''}" data-hologram-card style="${tiltStyle};--effect-opacity:${effectOpacity};--effect-angle:${Number(editor.effectAngle || 135)}deg;--effect-spread:${Math.round(Number(editor.effectSpread ?? 0.64) * 100)}%;--effect-grain:${Number(editor.effectGrain ?? 0.38)}">
     ${media}
-    ${editor.effect !== 'none' ? `<div class="hologram-layer preset-${esc(editor.effectPreset)} finish-${esc(editor.effectFinish || 'glass')}" aria-hidden="true"></div>` : ''}
+    ${editor.effect !== 'none' ? `<div class="card-material material-${esc(editor.material)}" aria-hidden="true"></div><div class="hologram-layer pattern-${esc(editor.foilPattern)} coverage-${esc(editor.foilCoverage)} material-${esc(editor.material)}" aria-hidden="true"></div>` : ''}
     <div class="card-vignette" aria-hidden="true"></div>
     ${creativeLayersMarkup('front')}
     ${fan ? '' : creativeLayerToolbar('front')}
     <div class="card-caption"><span>${esc(state.form.seasonName || 'FANFOLIO EDITION')}</span><strong>${esc(state.form.name || '새 특별 카드')}</strong><small>${esc(state.form.rarity || 'SR')} · OFFICIAL</small></div>
+    ${reducedMotionControls}
   </div>`
 }
 
@@ -742,14 +767,17 @@ function motionInspector() {
 }
 
 function hologramInspector() {
-  return `<div class="feature-toggle"><span>${icon('auto_awesome')}<span><strong>홀로그램 포일</strong><small>기울이는 방향을 따라 빛이 흐르는 한정판 포일이에요.</small></span></span><button type="button" class="switch ${state.editor.effect !== 'none' ? 'on' : ''}" data-action="toggle-hologram" aria-pressed="${state.editor.effect !== 'none'}" aria-label="홀로그램 켜기"></button></div>
-  <div class="inspector-section"><span class="inspector-label">포일 프리셋</span><div class="preset-grid premium">${hologramPresets.map(([value, label, description]) => `<button type="button" data-preset="${value}" class="${state.editor.effectPreset === value ? 'active' : ''}" aria-label="${label}: ${description}"><i class="foil-swatch preset-${value}" aria-hidden="true"></i><span><strong>${label}</strong><small>${description}</small></span>${icon('check_circle')}</button>`).join('')}</div></div>
-  <div class="inspector-section"><span class="inspector-label">표면 마감</span><div class="finish-selector">${hologramFinishes.map(([value, label]) => `<button type="button" data-finish="${value}" class="${state.editor.effectFinish === value ? 'active' : ''}">${label}</button>`).join('')}</div></div>
+  const needsSecondScene = state.editor.interaction === 'lenticular' && !state.editor.lenticularSrc
+  return `<div class="feature-toggle"><span>${icon('auto_awesome')}<span><strong>홀로그램 포일</strong><small>소재, 패턴, 적용 범위와 팬의 상호작용을 따로 조정해요.</small></span></span><button type="button" class="switch ${state.editor.effect !== 'none' ? 'on' : ''}" data-action="toggle-hologram" aria-pressed="${state.editor.effect !== 'none'}" aria-label="홀로그램 켜기"></button></div>
+  <div class="inspector-section"><span class="inspector-label">전면 소재</span><div class="preset-grid premium surface-grid">${materialOptions.map(([value, label, description]) => `<button type="button" data-effect-material="${value}" class="${state.editor.material === value ? 'active' : ''}" aria-pressed="${state.editor.material === value}"><span><strong>${label}</strong><small>${description}</small></span>${icon('check_circle')}</button>`).join('')}</div></div>
+  <div class="inspector-section"><span class="inspector-label">포일 패턴</span><div class="finish-selector option-row">${foilPatternOptions.map(([value, label]) => `<button type="button" data-foil-pattern="${value}" class="${state.editor.foilPattern === value ? 'active' : ''}" aria-pressed="${state.editor.foilPattern === value}"><span><strong>${label}</strong></span>${icon('check_circle')}</button>`).join('')}</div></div>
+  <div class="inspector-section"><span class="inspector-label">적용 범위</span><div class="finish-selector option-row">${foilCoverageOptions.map(([value, label]) => `<button type="button" data-foil-coverage="${value}" class="${state.editor.foilCoverage === value ? 'active' : ''}" aria-pressed="${state.editor.foilCoverage === value}"><span><strong>${label}</strong></span>${icon('check_circle')}</button>`).join('')}</div></div>
+  <div class="inspector-section"><span class="inspector-label">상호작용</span><div class="finish-selector option-row">${interactionOptions.map(([value, label]) => `<button type="button" data-effect-interaction="${value}" class="${state.editor.interaction === value ? 'active' : ''}" aria-pressed="${state.editor.interaction === value}"><span><strong>${label}</strong></span>${icon('check_circle')}</button>`).join('')}</div></div>
+  ${state.editor.interaction === 'lenticular' ? `<div class="inspector-section"><label class="upload-box"><input type="file" data-upload="lenticular" accept="image/png,image/jpeg,image/webp" /><span class="upload-icon">${icon('upload_file')}</span><strong>두 번째 장면 추가</strong><small>기울일 때 전환될 사진</small></label>${state.editor.lenticularSrc ? `<div class="lenticular-source"><img src="${esc(state.editor.lenticularSrc)}" alt="" /><div><strong>두 번째 장면</strong><button type="button" class="text-button danger" data-action="remove-lenticular">삭제</button></div></div>` : `<div class="media-empty">${icon('compare')}<span>${needsSecondScene ? '검수를 위해 전환될 두 번째 장면이 필요해요.' : '렌티큘러 장면을 추가할 수 있어요.'}</span></div>`}</div>` : ''}
   <div class="range-group"><label>광택 강도 <output>${Math.round(Number(state.editor.effectIntensity) * 100)}%</output></label><input type="range" min="0" max="1" step="0.01" value="${Number(state.editor.effectIntensity)}" data-editor="effectIntensity" /></div>
   <div class="range-group"><label>빛 번짐 <output>${Math.round(Number(state.editor.effectSpread ?? 0.64) * 100)}%</output></label><input type="range" min="0.3" max="0.9" step="0.01" value="${Number(state.editor.effectSpread ?? 0.64)}" data-editor="effectSpread" /></div>
   <div class="range-group"><label>입자 디테일 <output>${Math.round(Number(state.editor.effectGrain ?? 0.38) * 100)}%</output></label><input type="range" min="0" max="1" step="0.01" value="${Number(state.editor.effectGrain ?? 0.38)}" data-editor="effectGrain" /></div>
-  <div class="range-group"><label>빛의 각도 <output>${Number(state.editor.effectAngle)}°</output></label><input type="range" min="0" max="360" step="5" value="${Number(state.editor.effectAngle)}" data-editor="effectAngle" /></div>
-  <label class="check-row"><input type="checkbox" data-editor="effectMotion" ${state.editor.effectMotion ? 'checked' : ''} /><span><strong>기울임에 반응</strong><small>마우스·펜·손가락 위치를 따라 카드와 광택이 함께 움직여요. 움직임 감소 설정에서는 정지합니다.</small></span></label>`
+  <div class="range-group"><label>빛의 각도 <output>${Number(state.editor.effectAngle)}°</output></label><input type="range" min="0" max="360" step="5" value="${Number(state.editor.effectAngle)}" data-editor="effectAngle" /></div>`
 }
 
 function backInspector() {
@@ -981,6 +1009,7 @@ function setRecipe(recipeId) {
     form.rarity = 'UR'
     editor.tool = 'hologram'
     editor.effectPreset = 'stardust'
+    editor.foilPattern = 'micro-star'
     editor.effectIntensity = 0.72
     editor.imageSrc = sampleAssets.stardust
   } else if (recipeId === 'signature') {
@@ -992,6 +1021,7 @@ function setRecipe(recipeId) {
     form.name = '새 특별 카드'
     editor.effect = 'none'
     editor.effectMotion = false
+    editor.interaction = 'static'
   }
   const firstArtist = state.catalog.artists?.[0]
   const firstMember = state.catalog.members?.find((member) => member.artistId === firstArtist?.id)
@@ -1164,14 +1194,18 @@ async function ensureAsset(kind) {
   if (state.editor[idKey]) return state.editor[idKey]
   let file = state.editor[fileKey]
   if (!file && state.editor[srcKey]) {
-    const extension = kind === 'image' || kind === 'handwriting' ? 'png' : kind === 'voice' ? 'webm' : 'mp4'
+    const extension = ['image', 'handwriting', 'lenticular'].includes(kind)
+      ? 'png'
+      : kind === 'voice'
+        ? 'webm'
+        : 'mp4'
     file = await sourceToFile(state.editor[srcKey], `${kind}-${Date.now()}.${extension}`)
   }
   if (!file) return null
-  const purpose = kind === 'image' ? 'card' : kind
+  const purpose = kind === 'image' || kind === 'lenticular' ? 'card' : kind
   const assetId = await uploadAsset(file, purpose)
   state.editor[idKey] = assetId
-  state.form[idKey] = assetId
+  if (kind !== 'lenticular') state.form[idKey] = assetId
   return assetId
 }
 
@@ -1201,6 +1235,9 @@ async function saveDraft({ quiet = false, nextStage = null } = {}) {
     await ensureAsset('image')
     if (state.editor.voiceEnabled && state.editor.voiceSrc) await ensureAsset('voice')
     if (state.editor.videoEnabled && state.editor.videoSrc) await ensureAsset('video')
+    if (state.editor.interaction === 'lenticular' && state.editor.lenticularSrc) {
+      await ensureAsset('lenticular')
+    }
     if (state.editor.handwritingEnabled && state.editor.handwritingSrc) {
       await ensureAsset('handwriting')
     }
@@ -1241,6 +1278,10 @@ async function saveDraft({ quiet = false, nextStage = null } = {}) {
 async function openCard(cardId) {
   const card = state.cards.find((item) => item.id === cardId)
   if (!card) return
+  const effects = normalizeCardEffects(card.designConfig)
+  if (state.editor.lenticularSrc?.startsWith('blob:')) {
+    URL.revokeObjectURL(state.editor.lenticularSrc)
+  }
   state.form = { ...initialForm(), ...card }
   state.editor = {
     ...initialEditor(),
@@ -1261,6 +1302,12 @@ async function openCard(cardId) {
     effectSpread: card.designConfig?.front?.effectSpread ?? 0.64,
     effectGrain: card.designConfig?.front?.effectGrain ?? 0.38,
     effectFinish: card.designConfig?.front?.effectFinish || 'glass',
+    material: effects.front.material,
+    foilPattern: effects.front.foilPattern,
+    foilCoverage: effects.front.foilCoverage,
+    interaction: effects.front.interaction,
+    effectMotion: effects.front.interaction !== 'static',
+    lenticularAssetId: effects.front.lenticularAssetId,
     videoLoop: card.designConfig?.video?.loop ?? true,
     handwritingTransform: card.handwritingTransform || initialEditor().handwritingTransform,
     layers: Array.isArray(card.designConfig?.creativeLayers)
@@ -1298,6 +1345,15 @@ async function openCard(cardId) {
       }
     }),
   )
+  if (state.editor.lenticularAssetId) {
+    try {
+      state.editor.lenticularSrc = await fetchProtectedBlob(
+        `/assets/${state.editor.lenticularAssetId}/content`,
+      )
+    } catch {
+      state.editor.lenticularSrc = ''
+    }
+  }
   await Promise.all(
     state.editor.layers.map(async (layer) => {
       if (!layer.assetId) return
@@ -1374,8 +1430,12 @@ async function handleUpload(kind, file) {
   replaceObjectUrl(srcKey, file)
   state.editor[fileKey] = file
   state.editor[idKey] = null
-  state.form[idKey] = null
+  if (kind !== 'lenticular') state.form[idKey] = null
   if (kind === 'image') state.editor.imageName = file.name
+  if (kind === 'lenticular') {
+    state.editor.interaction = 'lenticular'
+    state.editor.effectMotion = true
+  }
   if (kind === 'voice') {
     state.editor.voiceName = file.name
     state.editor.voiceEnabled = true
@@ -1561,6 +1621,7 @@ function initInteractiveCards() {
       card.style.setProperty('--tilt-y', `${((x - 0.5) * 14).toFixed(2)}deg`)
       card.style.setProperty('--light-x', `${Math.round(x * 100)}%`)
       card.style.setProperty('--light-y', `${Math.round(y * 100)}%`)
+      card.style.setProperty('--lenticular-reveal', `${Math.round(x * 100)}%`)
       card.classList.add('is-tilting')
     }
     card.addEventListener('pointerdown', (event) => {
@@ -1848,6 +1909,39 @@ app.addEventListener('click', async (event) => {
     }
     return
   }
+  const material = event.target.closest('[data-effect-material]')
+  if (material) {
+    state.editor.material = material.dataset.effectMaterial
+    state.editor.effect = 'holographic'
+    markDirty()
+    render()
+    return
+  }
+  const foilPattern = event.target.closest('[data-foil-pattern]')
+  if (foilPattern) {
+    state.editor.foilPattern = foilPattern.dataset.foilPattern
+    state.editor.effect = 'holographic'
+    markDirty()
+    render()
+    return
+  }
+  const foilCoverage = event.target.closest('[data-foil-coverage]')
+  if (foilCoverage) {
+    state.editor.foilCoverage = foilCoverage.dataset.foilCoverage
+    state.editor.effect = 'holographic'
+    markDirty()
+    render()
+    return
+  }
+  const interaction = event.target.closest('[data-effect-interaction]')
+  if (interaction) {
+    state.editor.interaction = interaction.dataset.effectInteraction
+    state.editor.effectMotion = state.editor.interaction !== 'static'
+    state.editor.effect = 'holographic'
+    markDirty()
+    render()
+    return
+  }
   const preset = event.target.closest('[data-preset]')
   if (preset) {
     state.editor.effectPreset = preset.dataset.preset
@@ -1931,6 +2025,20 @@ app.addEventListener('click', async (event) => {
     state.form.videoAssetId = null
     markDirty()
     render()
+  }
+  if (action === 'remove-lenticular') {
+    if (state.editor.lenticularSrc?.startsWith('blob:')) {
+      URL.revokeObjectURL(state.editor.lenticularSrc)
+    }
+    state.editor.lenticularSrc = ''
+    state.editor.lenticularFile = null
+    state.editor.lenticularAssetId = null
+    markDirty()
+    render()
+  }
+  if (action === 'set-lenticular-scene') {
+    const reveal = event.target.closest('[data-action]')?.dataset.reveal === '100' ? '100%' : '0%'
+    event.target.closest('[data-hologram-card]')?.style.setProperty('--lenticular-reveal', reveal)
   }
   if (action === 'clear-handwriting') {
     state.editor.handwritingSrc = ''

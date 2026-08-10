@@ -76,6 +76,28 @@ test('hologram uses light-responsive layered foil instead of sliding one texture
   assert.doesNotMatch(css, /translate3d\(var\(--foil-shift/)
 })
 
+test('hologram inspector exposes independent material pattern coverage and interaction controls', async () => {
+  const source = await readFile(appUrl, 'utf8')
+  assert.match(source, /data-effect-material=/)
+  assert.match(source, /data-foil-pattern=/)
+  assert.match(source, /data-foil-coverage=/)
+  assert.match(source, /data-effect-interaction=/)
+  assert.match(source, /data-upload="lenticular"/)
+})
+
+test('card markup composes material pattern and coverage classes', async () => {
+  const source = await readFile(appUrl, 'utf8')
+  const css = await readFile(cssUrl, 'utf8')
+  assert.match(source, /material-\$\{esc\(editor\.material\)\}/)
+  assert.match(source, /pattern-\$\{esc\(editor\.foilPattern\)\}/)
+  assert.match(source, /coverage-\$\{esc\(editor\.foilCoverage\)\}/)
+  assert.match(source, /class="lenticular-photo"/)
+  assert.match(css, /\.coverage-frame/)
+  assert.match(css, /\.coverage-signature/)
+  assert.match(css, /\.pattern-cracked-ice/)
+  assert.match(css, /\.pattern-micro-star/)
+})
+
 test('official back template visibly inherits the selected background color', async () => {
   const css = await readFile(cssUrl, 'utf8')
 
