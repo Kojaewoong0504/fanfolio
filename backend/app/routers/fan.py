@@ -34,6 +34,7 @@ from app.services import record_audit, redeem
 from app.storage import configured_asset_storage, storage_response
 
 router = APIRouter(prefix="/api", tags=["fan"])
+LENTICULAR_IMAGE_CONTENT_TYPES = {"image/png", "image/jpeg", "image/webp"}
 
 
 def card_image_url(card: Card) -> str:
@@ -41,6 +42,18 @@ def card_image_url(card: Card) -> str:
     if card.image_asset_id:
         return f"/api/cards/{card.id}/image?client=fan"
     return card.image_url
+
+
+def is_lenticular_image_asset(asset: Asset | None) -> bool:
+    return bool(
+        asset and asset.purpose == "card" and asset.content_type in LENTICULAR_IMAGE_CONTENT_TYPES
+    )
+
+
+def lenticular_storage_path(asset: Asset | None) -> str | None:
+    if not asset:
+        return None
+    return asset.processed_storage_path or asset.storage_path
 
 
 @router.get("/me")
@@ -470,9 +483,12 @@ async def card_detail(user_card_id: str, user: FanUser, session: DbSession) -> d
     lenticular_asset_id = front.get("lenticularAssetId") if isinstance(front, dict) else None
     if isinstance(lenticular_asset_id, str):
         lenticular_asset = await session.get(Asset, lenticular_asset_id)
-        if lenticular_asset and (
-            lenticular_asset.processed_storage_path or lenticular_asset.storage_path
-        ):
+        lenticular_path = (
+            lenticular_storage_path(lenticular_asset)
+            if is_lenticular_image_asset(lenticular_asset)
+            else None
+        )
+        if lenticular_path and configured_asset_storage().exists(lenticular_path):
             lenticular_image_url = f"/api/me/cards/{uc.id}/lenticular?client=fan"
     return {
         "ok": True,
@@ -586,18 +602,23 @@ async def card_lenticular(user_card_id: str, user: FanUser, session: DbSession) 
     if not user_card or not card or not isinstance(lenticular_asset_id, str):
         raise AppError(404, "LENTICULAR_NOT_FOUND", "렌티큘러 이미지를 찾을 수 없습니다.")
     asset = await session.get(Asset, lenticular_asset_id)
-    if not asset:
+    if not is_lenticular_image_asset(asset):
         raise AppError(404, "LENTICULAR_NOT_FOUND", "렌티큘러 이미지를 찾을 수 없습니다.")
-    path = asset.processed_storage_path or asset.storage_path
+    path = lenticular_storage_path(asset)
     if not path:
         raise AppError(
             404,
             "LENTICULAR_NOT_READY",
             "렌티큘러 이미지가 아직 준비되지 않았습니다.",
         )
-    return storage_response(
-        configured_asset_storage(), path, media_type=asset.content_type or "image/webp"
-    )
+    storage = configured_asset_storage()
+    if not storage.exists(path):
+        raise AppError(
+            404,
+            "LENTICULAR_NOT_READY",
+            "렌티큘러 이미지가 아직 준비되지 않았습니다.",
+        )
+    return storage_response(storage, path, media_type=asset.content_type or "image/webp")
 
 
 @router.get("/cards/{card_id}/image")

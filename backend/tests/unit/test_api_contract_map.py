@@ -22,3 +22,13 @@ def test_api_contract_map_covers_every_fastapi_operation() -> None:
     }
 
     assert map_operations == openapi_operations
+
+
+def test_api_contract_map_visible_path_count_matches_operations() -> None:
+    """Keep the visible summary count aligned with the endpoint list."""
+    map_path = Path(__file__).parents[3] / "fanfolio-api-contract-map.html"
+    html = map_path.read_text(encoding="utf-8")
+    displayed_count = int(re.search(r"맵의 (\d+)개 HTTP 경로", html).group(1))
+    map_operations = set(re.findall(r"method:'([^']+)', path:'([^']+)'", html))
+
+    assert displayed_count == len(map_operations)

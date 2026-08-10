@@ -49,6 +49,7 @@ from app.services import notify_fans, record_audit
 from app.storage import configured_asset_storage, storage_response
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+LENTICULAR_IMAGE_CONTENT_TYPES = {"image/png", "image/jpeg", "image/webp"}
 
 
 def drop_data(drop: Drop) -> dict:
@@ -299,6 +300,38 @@ async def validate_admin_assets(values: dict, session: DbSession) -> None:
                 storage = configured_asset_storage()
             if not storage.exists(asset.storage_path):
                 raise AppError(409, "ASSET_NOT_READY", "업로드된 자산이 아직 준비되지 않았습니다.")
+
+    design_config = values.get("design_config")
+    if not design_config:
+        return
+    front = design_config.get("front") if isinstance(design_config, dict) else None
+    if not isinstance(front, dict) or "lenticularAssetId" not in front:
+        return
+    lenticular_asset_id = front["lenticularAssetId"]
+    if lenticular_asset_id is None:
+        return
+    if not isinstance(lenticular_asset_id, str) or not lenticular_asset_id:
+        raise AppError(
+            422,
+            "INVALID_LENTICULAR_ASSET",
+            "렌티큘러 이미지 자산 정보를 확인해 주세요.",
+        )
+    asset = await session.get(Asset, lenticular_asset_id)
+    if not asset:
+        raise AppError(404, "ASSET_NOT_FOUND", "카드 자산을 찾을 수 없습니다.")
+    if asset.purpose != "card" or asset.content_type not in LENTICULAR_IMAGE_CONTENT_TYPES:
+        raise AppError(
+            422,
+            "INVALID_LENTICULAR_ASSET",
+            "렌티큘러 이미지 자산 정보를 확인해 주세요.",
+        )
+    path = asset.processed_storage_path or asset.storage_path
+    if not path:
+        raise AppError(409, "ASSET_NOT_READY", "업로드된 자산이 아직 준비되지 않았습니다.")
+    if storage is None:
+        storage = configured_asset_storage()
+    if not storage.exists(path):
+        raise AppError(409, "ASSET_NOT_READY", "업로드된 자산이 아직 준비되지 않았습니다.")
 
 
 async def resolve_admin_catalog_ids(

@@ -27,6 +27,7 @@ from app.storage import configured_asset_storage, storage_response
 from app.tasks import enqueue_background_removal
 
 router = APIRouter(prefix="/api", tags=["artist"])
+LENTICULAR_IMAGE_CONTENT_TYPES = {"image/png", "image/jpeg", "image/webp"}
 
 
 def profile_data(user, profile: ArtistProfile | None = None) -> dict:
@@ -254,6 +255,15 @@ async def owned_asset(asset_id: str, user: ArtistUser, session: DbSession) -> As
     return asset
 
 
+def ensure_lenticular_image_asset(asset: Asset) -> None:
+    if asset.purpose != "card" or asset.content_type not in LENTICULAR_IMAGE_CONTENT_TYPES:
+        raise AppError(
+            422,
+            "INVALID_LENTICULAR_ASSET",
+            "렌티큘러 이미지 자산 정보를 확인해 주세요.",
+        )
+
+
 async def validate_design_assets(
     design_config: dict | None, user: ArtistUser, session: DbSession
 ) -> None:
@@ -289,7 +299,8 @@ async def validate_design_assets(
             "INVALID_LENTICULAR_ASSET",
             "렌티큘러 이미지 자산 정보를 확인해 주세요.",
         )
-    await owned_asset(lenticular_asset_id, user, session)
+    asset = await owned_asset(lenticular_asset_id, user, session)
+    ensure_lenticular_image_asset(asset)
 
 
 @router.get("/artist/cards/{card_id}")

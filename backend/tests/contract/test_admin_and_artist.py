@@ -225,6 +225,39 @@ def test_artist_card_rejects_malformed_lenticular_asset_id(
     assert_error(response, 422, "INVALID_LENTICULAR_ASSET")
 
 
+def test_artist_card_rejects_owned_voice_asset_as_lenticular_image(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    voice_asset = _upload_artist_asset(
+        actors["artist"],
+        file_name="lenticular-voice.mp3",
+        content_type="audio/mpeg",
+        purpose="voice",
+        content=b"voice",
+    )
+
+    response = actors["artist"].post(
+        "/api/artist/cards",
+        json={
+            "templateId": seeded["ids"]["templateId"],
+            "name": "렌티큘러 음성 차단 카드",
+            "seasonName": "2026 SPRING",
+            "rarity": "Special",
+            "imageAssetId": seeded["ids"]["imageAssetId"],
+            "designConfig": {
+                "version": 3,
+                "front": {
+                    "interaction": "lenticular",
+                    "lenticularAssetId": voice_asset["assetId"],
+                },
+            },
+            "issueLimit": 100,
+        },
+    )
+
+    assert_error(response, 422, "INVALID_LENTICULAR_ASSET")
+
+
 @pytest.mark.parametrize("lenticular_asset_id", ["", 123])
 def test_artist_card_update_rejects_malformed_lenticular_asset_id(
     actors: dict[str, TestClient], seeded: dict[str, Any], lenticular_asset_id: Any
@@ -253,6 +286,48 @@ def test_artist_card_update_rejects_malformed_lenticular_asset_id(
                 "front": {
                     "interaction": "lenticular",
                     "lenticularAssetId": lenticular_asset_id,
+                },
+            },
+        },
+    )
+
+    assert_error(response, 422, "INVALID_LENTICULAR_ASSET")
+
+
+def test_artist_card_update_rejects_owned_voice_asset_as_lenticular_image(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    artist = actors["artist"]
+    voice_asset = _upload_artist_asset(
+        artist,
+        file_name="update-lenticular-voice.mp3",
+        content_type="audio/mpeg",
+        purpose="voice",
+        content=b"voice",
+    )
+    draft = assert_success(
+        artist.post(
+            "/api/artist/cards",
+            json={
+                "templateId": seeded["ids"]["templateId"],
+                "name": "렌티큘러 수정 음성 차단 카드",
+                "seasonName": "2026 SPRING",
+                "rarity": "Special",
+                "imageAssetId": seeded["ids"]["imageAssetId"],
+                "issueLimit": 100,
+            },
+        ),
+        201,
+    )
+
+    response = artist.patch(
+        f"/api/artist/cards/{draft['id']}",
+        json={
+            "designConfig": {
+                "version": 3,
+                "front": {
+                    "interaction": "lenticular",
+                    "lenticularAssetId": voice_asset["assetId"],
                 },
             },
         },

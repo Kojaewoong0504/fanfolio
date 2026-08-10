@@ -1,8 +1,12 @@
+import asyncio
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.db.session import SessionLocal
+from app.models import Asset, Card
+from app.storage import configured_asset_storage
 from tests.conftest import assert_error, assert_success
 
 
@@ -27,6 +31,52 @@ def _redeem_card_via_batch(
     assert exported.status_code == 200, exported.text
     code = exported.text.splitlines()[1].split(",")[0].strip('"')
     return assert_success(fan.post("/api/redemptions", json={"code": code, "source": "qr"}), 201)
+
+
+def _upload_asset(
+    actor: TestClient,
+    *,
+    file_name: str,
+    content_type: str,
+    purpose: str,
+    content: bytes,
+) -> dict[str, Any]:
+    asset = assert_success(
+        actor.post(
+            "/api/uploads/presign",
+            json={"fileName": file_name, "contentType": content_type, "purpose": purpose},
+        ),
+        201,
+    )
+    uploaded = actor.put(asset["uploadUrl"], content=content)
+    assert uploaded.status_code == 204, uploaded.text
+    return asset
+
+
+def _force_card_lenticular_asset(card_id: str, asset_id: str) -> None:
+    async def update_card() -> None:
+        async with SessionLocal() as session:
+            card = await session.get(Card, card_id)
+            assert card is not None
+            card.design_config = {
+                "version": 3,
+                "front": {"interaction": "lenticular", "lenticularAssetId": asset_id},
+            }
+            await session.commit()
+
+    asyncio.run(update_card())
+
+
+def _delete_asset_storage_object(asset_id: str) -> None:
+    async def delete_object() -> None:
+        async with SessionLocal() as session:
+            asset = await session.get(Asset, asset_id)
+            assert asset is not None
+            path = asset.processed_storage_path or asset.storage_path
+            assert path is not None
+            configured_asset_storage().delete(path)
+
+    asyncio.run(delete_object())
 
 
 def test_authenticated_fan_can_read_current_user_state(actors: dict[str, TestClient]) -> None:
@@ -410,22 +460,68 @@ def test_owned_card_lenticular_route_returns_not_ready_until_asset_upload_finish
     card = assert_success(
         admin.post(
             "/api/admin/cards",
-            json={
-                "name": "준비 중인 렌티큘러 카드",
-                "memberId": "member_yuna",
-                "designConfig": {
-                    "version": 3,
-                    "front": {
-                        "interaction": "lenticular",
-                        "lenticularAssetId": lenticular_asset["assetId"],
-                    },
-                },
-            },
+            json={"name": "준비 중인 렌티큘러 카드", "memberId": "member_yuna"},
         ),
         201,
     )
+    _force_card_lenticular_asset(card["id"], lenticular_asset["assetId"])
     assert_success(admin.post(f"/api/admin/cards/{card['id']}/publish"))
     redeemed = _redeem_card_via_batch(admin, fan, card_id=card["id"], prefix="PENDING")
+
+    detail = assert_success(fan.get(f"/api/me/cards/{redeemed['userCardId']}"))
+    assert detail["card"]["lenticularImageUrl"] is None
+    assert_error(
+        fan.get(f"/api/me/cards/{redeemed['userCardId']}/lenticular?client=fan"),
+        404,
+        "LENTICULAR_NOT_READY",
+    )
+
+
+def test_owned_card_lenticular_route_ignores_legacy_non_card_image_asset(
+    actors: dict[str, TestClient],
+) -> None:
+    artist = actors["artist"]
+    admin = actors["admin"]
+    fan = actors["fan"]
+    voice_asset = _upload_asset(
+        artist,
+        file_name="legacy-lenticular-voice.mp3",
+        content_type="audio/mpeg",
+        purpose="voice",
+        content=b"voice",
+    )
+    card = assert_success(admin.post("/api/admin/cards", json={"name": "레거시 음성 카드"}), 201)
+    _force_card_lenticular_asset(card["id"], voice_asset["assetId"])
+    assert_success(admin.post(f"/api/admin/cards/{card['id']}/publish"))
+    redeemed = _redeem_card_via_batch(admin, fan, card_id=card["id"], prefix="LEGACYVOICE")
+
+    detail = assert_success(fan.get(f"/api/me/cards/{redeemed['userCardId']}"))
+    assert detail["card"]["lenticularImageUrl"] is None
+    assert_error(
+        fan.get(f"/api/me/cards/{redeemed['userCardId']}/lenticular?client=fan"),
+        404,
+        "LENTICULAR_NOT_FOUND",
+    )
+
+
+def test_owned_card_lenticular_route_returns_not_ready_when_storage_object_is_missing(
+    actors: dict[str, TestClient],
+) -> None:
+    artist = actors["artist"]
+    admin = actors["admin"]
+    fan = actors["fan"]
+    lenticular_asset = _upload_asset(
+        artist,
+        file_name="deleted-lenticular.webp",
+        content_type="image/webp",
+        purpose="card",
+        content=b"alternate-card-image",
+    )
+    card = assert_success(admin.post("/api/admin/cards", json={"name": "삭제된 이미지 카드"}), 201)
+    _force_card_lenticular_asset(card["id"], lenticular_asset["assetId"])
+    assert_success(admin.post(f"/api/admin/cards/{card['id']}/publish"))
+    redeemed = _redeem_card_via_batch(admin, fan, card_id=card["id"], prefix="MISSINGIMG")
+    _delete_asset_storage_object(lenticular_asset["assetId"])
 
     detail = assert_success(fan.get(f"/api/me/cards/{redeemed['userCardId']}"))
     assert detail["card"]["lenticularImageUrl"] is None

@@ -1,8 +1,29 @@
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 
 from tests.conftest import assert_error, assert_success
+
+
+def _upload_admin_asset(
+    admin: TestClient,
+    *,
+    file_name: str,
+    content_type: str,
+    purpose: str,
+    content: bytes,
+) -> dict[str, Any]:
+    asset = assert_success(
+        admin.post(
+            "/api/uploads/presign",
+            json={"fileName": file_name, "contentType": content_type, "purpose": purpose},
+        ),
+        201,
+    )
+    uploaded = admin.put(asset["uploadUrl"], content=content)
+    assert uploaded.status_code == 204, uploaded.text
+    return asset
 
 
 def test_admin_can_create_update_and_read_a_card(actors: dict[str, TestClient]) -> None:
@@ -75,6 +96,84 @@ def test_admin_can_preview_the_uploaded_source_image_for_a_card(
     assert image.status_code == 200
     assert image.headers["content-type"] == "image/png"
     assert image.content == b"fake-png"
+
+
+@pytest.mark.parametrize("lenticular_asset_id", ["", 123])
+def test_admin_card_rejects_malformed_lenticular_asset_id(
+    actors: dict[str, TestClient], lenticular_asset_id: Any
+) -> None:
+    response = actors["admin"].post(
+        "/api/admin/cards",
+        json={
+            "name": "운영 렌티큘러 형식 확인 카드",
+            "designConfig": {
+                "version": 3,
+                "front": {
+                    "interaction": "lenticular",
+                    "lenticularAssetId": lenticular_asset_id,
+                },
+            },
+        },
+    )
+
+    assert_error(response, 422, "INVALID_LENTICULAR_ASSET")
+
+
+def test_admin_card_rejects_voice_asset_as_lenticular_image(
+    actors: dict[str, TestClient],
+) -> None:
+    voice_asset = _upload_admin_asset(
+        actors["admin"],
+        file_name="admin-lenticular-voice.mp3",
+        content_type="audio/mpeg",
+        purpose="voice",
+        content=b"voice",
+    )
+
+    response = actors["admin"].post(
+        "/api/admin/cards",
+        json={
+            "name": "운영 렌티큘러 음성 차단 카드",
+            "designConfig": {
+                "version": 3,
+                "front": {
+                    "interaction": "lenticular",
+                    "lenticularAssetId": voice_asset["assetId"],
+                },
+            },
+        },
+    )
+
+    assert_error(response, 422, "INVALID_LENTICULAR_ASSET")
+
+
+def test_admin_card_update_rejects_voice_asset_as_lenticular_image(
+    actors: dict[str, TestClient],
+) -> None:
+    admin = actors["admin"]
+    voice_asset = _upload_admin_asset(
+        admin,
+        file_name="admin-update-lenticular-voice.mp3",
+        content_type="audio/mpeg",
+        purpose="voice",
+        content=b"voice",
+    )
+    card = assert_success(admin.post("/api/admin/cards", json={"name": "운영 수정 카드"}), 201)
+
+    response = admin.patch(
+        f"/api/admin/cards/{card['id']}",
+        json={
+            "designConfig": {
+                "version": 3,
+                "front": {
+                    "interaction": "lenticular",
+                    "lenticularAssetId": voice_asset["assetId"],
+                },
+            },
+        },
+    )
+
+    assert_error(response, 422, "INVALID_LENTICULAR_ASSET")
 
 
 def test_admin_can_read_and_update_drop_metadata(
