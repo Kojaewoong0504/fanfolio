@@ -6,6 +6,7 @@ import {
   buildCardPayload,
   buildDesignConfig,
   navigationState,
+  normalizeCardEffects,
   normalizeCreativeLayer,
   responsiveStudioMode,
   reviewReadiness,
@@ -42,6 +43,118 @@ test('blocks review when enabled motion has no video asset', () => {
 
   assert.equal(result.ready, false)
   assert.equal(result.items.video.status, 'missing')
+})
+
+test('normalizes legacy version 2 holographic effects into the version 3 contract', () => {
+  assert.deepEqual(
+    normalizeCardEffects({
+      version: 2,
+      front: {
+        effect: 'holographic',
+        effectPreset: 'stardust',
+        effectFinish: 'diamond',
+        effectIntensity: 72,
+        effectAngle: 210,
+        effectMotion: false,
+      },
+    }),
+    {
+      version: 3,
+      front: {
+        material: 'chrome',
+        foilPattern: 'micro-star',
+        foilCoverage: 'full',
+        interaction: 'static',
+        intensity: 0.72,
+        angle: 210,
+        lenticularAssetId: null,
+      },
+      back: {
+        material: 'matte',
+        edgeFoil: 'none',
+        spotUv: 'none',
+        hiddenMessage: '',
+      },
+    },
+  )
+})
+
+test('normalizes unknown version 3 effect values back to supported defaults', () => {
+  assert.deepEqual(
+    normalizeCardEffects({
+      version: 3,
+      front: {
+        material: 'plastic',
+        foilPattern: 'laser-grid',
+        foilCoverage: 'portrait-mask',
+        interaction: 'spin',
+        intensity: 800,
+        angle: -20,
+      },
+      back: {
+        material: 'paper',
+        edgeFoil: 'bronze',
+        spotUv: 'everything',
+        hiddenMessage: '가'.repeat(50),
+      },
+    }),
+    {
+      version: 3,
+      front: {
+        material: 'matte',
+        foilPattern: 'aurora-wave',
+        foilCoverage: 'full',
+        interaction: 'static',
+        intensity: 1,
+        angle: 340,
+        lenticularAssetId: null,
+      },
+      back: {
+        material: 'matte',
+        edgeFoil: 'none',
+        spotUv: 'none',
+        hiddenMessage: '가'.repeat(40),
+      },
+    },
+  )
+})
+
+test('requires a lenticular asset only when version 3 interaction is lenticular', () => {
+  const baseDraft = {
+    imageAssetId: 'asset_card',
+    artistId: 'artist_1',
+    memberId: 'member_1',
+    issueLimit: 100,
+    previewOpened: true,
+    designConfig: {
+      version: 3,
+      front: {
+        material: 'chrome',
+        foilPattern: 'prism',
+        foilCoverage: 'full',
+        interaction: 'lenticular',
+        intensity: 0.8,
+        angle: 135,
+      },
+    },
+  }
+
+  const missing = reviewReadiness(baseDraft)
+  const ready = reviewReadiness({
+    ...baseDraft,
+    designConfig: {
+      ...baseDraft.designConfig,
+      front: {
+        ...baseDraft.designConfig.front,
+        lenticularAssetId: 'asset_alt',
+      },
+    },
+  })
+
+  assert.equal(missing.items.lenticular.status, 'missing')
+  assert.equal(missing.ready, false)
+  assert.equal(ready.items.lenticular.status, 'ready')
+  assert.equal(ready.ready, true)
 })
 
 test('summarizes cards requiring work without mutating the source list', () => {
@@ -96,7 +209,15 @@ test('serializes voice, motion and hologram settings into the shared design cont
     },
   })
 
+  assert.equal(payload.designConfig.version, 3)
   assert.deepEqual(payload.designConfig.front, {
+    material: 'pearl',
+    foilPattern: 'aurora-wave',
+    foilCoverage: 'full',
+    interaction: 'tilt',
+    intensity: 0.78,
+    angle: 135,
+    lenticularAssetId: null,
     effect: 'holographic',
     effectPreset: 'aurora',
     effectIntensity: 0.78,
@@ -131,7 +252,15 @@ test('serializes premium hologram tuning so fan previews can match the studio', 
     },
   })
 
+  assert.equal(config.version, 3)
   assert.deepEqual(config.front, {
+    material: 'matte',
+    foilPattern: 'aurora-wave',
+    foilCoverage: 'full',
+    interaction: 'tilt',
+    intensity: 0.72,
+    angle: 210,
+    lenticularAssetId: null,
     effect: 'holographic',
     effectPreset: 'moonlight',
     effectIntensity: 0.72,
@@ -140,6 +269,34 @@ test('serializes premium hologram tuning so fan previews can match the studio', 
     effectGrain: 0.38,
     effectFinish: 'silk',
   })
+})
+
+test('keeps lenticular assets scoped to the front effect contract', () => {
+  const config = buildDesignConfig({
+    form: {
+      designConfig: {
+        version: 3,
+        lenticularAssetId: 'legacy_top_asset',
+        customTopLevel: 'preserve-me',
+        front: {
+          interaction: 'lenticular',
+          lenticularAssetId: 'asset_alt',
+        },
+        back: {
+          lenticularAssetId: 'legacy_back_asset',
+          background: 'midnight',
+          templateId: 'back_template',
+        },
+      },
+    },
+  })
+
+  assert.equal(config.front.lenticularAssetId, 'asset_alt')
+  assert.equal('lenticularAssetId' in config, false)
+  assert.equal('lenticularAssetId' in config.back, false)
+  assert.equal(config.customTopLevel, 'preserve-me')
+  assert.equal(config.back.background, 'midnight')
+  assert.equal(config.back.templateId, 'back_template')
 })
 
 test('serializes handwriting state and transform into the shared design contract', () => {

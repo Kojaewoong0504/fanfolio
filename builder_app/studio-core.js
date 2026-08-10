@@ -19,6 +19,31 @@ function normalizedIntensity(value, fallback = 0.78) {
   return Math.max(0, Math.min(1, parsed > 1 ? parsed / 100 : parsed))
 }
 
+const MATERIALS = new Set(['matte', 'pearl', 'chrome'])
+const FOIL_PATTERNS = new Set(['aurora-wave', 'prism', 'cracked-ice', 'micro-star'])
+const FOIL_COVERAGES = new Set(['full', 'background', 'frame', 'signature'])
+const INTERACTIONS = new Set(['static', 'tilt', 'lenticular'])
+const EDGE_FOILS = new Set(['none', 'silver', 'gold'])
+const SPOT_UV_TARGETS = new Set(['none', 'logo', 'symbol', 'serial'])
+const LEGACY_MATERIAL = { glass: 'pearl', silk: 'matte', diamond: 'chrome' }
+const LEGACY_PATTERN = {
+  aurora: 'aurora-wave',
+  moonlight: 'aurora-wave',
+  'rose-opal': 'aurora-wave',
+  prism: 'prism',
+  crystal: 'cracked-ice',
+  stardust: 'micro-star',
+}
+
+function oneOf(value, allowed, fallback) {
+  return allowed.has(value) ? value : fallback
+}
+
+function normalizedAngle(value, fallback = 135) {
+  const angle = numeric(value, fallback) % 360
+  return angle < 0 ? angle + 360 : angle
+}
+
 function clamped(value, minimum, maximum, fallback) {
   return Math.max(minimum, Math.min(maximum, numeric(value, fallback)))
 }
@@ -52,10 +77,50 @@ export function normalizeCreativeLayer(layer = {}, index = 0) {
   })
 }
 
+export function normalizeCardEffects(designConfig = {}) {
+  const front = designConfig.front || {}
+  const back = designConfig.back || {}
+  const interaction = front.interaction || (front.effectMotion === false ? 'static' : 'tilt')
+
+  return {
+    version: 3,
+    front: {
+      material: oneOf(
+        front.material,
+        MATERIALS,
+        oneOf(
+          LEGACY_MATERIAL[
+            front.effectFinish ?? (front.effect === 'holographic' ? 'glass' : undefined)
+          ],
+          MATERIALS,
+          'matte',
+        ),
+      ),
+      foilPattern: oneOf(
+        front.foilPattern,
+        FOIL_PATTERNS,
+        oneOf(LEGACY_PATTERN[front.effectPreset], FOIL_PATTERNS, 'aurora-wave'),
+      ),
+      foilCoverage: oneOf(front.foilCoverage, FOIL_COVERAGES, 'full'),
+      interaction: oneOf(interaction, INTERACTIONS, 'static'),
+      intensity: normalizedIntensity(front.intensity ?? front.effectIntensity, 0.58),
+      angle: normalizedAngle(front.angle ?? front.effectAngle, 135),
+      lenticularAssetId: front.lenticularAssetId || null,
+    },
+    back: {
+      material: oneOf(back.material, MATERIALS, 'matte'),
+      edgeFoil: oneOf(back.edgeFoil, EDGE_FOILS, 'none'),
+      spotUv: oneOf(back.spotUv, SPOT_UV_TARGETS, 'none'),
+      hiddenMessage: String(back.hiddenMessage ?? '').slice(0, 40),
+    },
+  }
+}
+
 export function buildDesignConfig({ form = {}, editor = {} } = {}) {
-  const existing = form.designConfig || editor.designConfig || {}
+  const rawExisting = form.designConfig || editor.designConfig || {}
+  const { lenticularAssetId: _topLevelLenticularAssetId, ...existing } = rawExisting
   const existingFront = existing.front || {}
-  const existingBack = existing.back || {}
+  const { lenticularAssetId: _backLenticularAssetId, ...existingBack } = existing.back || {}
   const imageAssetId = editor.imageAssetId || form.imageAssetId
   const videoAssetId = editor.videoAssetId || form.videoAssetId
   const voiceEnabled = Boolean(
@@ -76,8 +141,15 @@ export function buildDesignConfig({ form = {}, editor = {} } = {}) {
     ? layerSource.map((layer, index) => normalizeCreativeLayer(layer, index))
     : undefined
 
-  const front = compactObject({
+  const frontSource = compactObject({
     ...existingFront,
+    material: editor.material ?? existingFront.material,
+    foilPattern: editor.foilPattern ?? existingFront.foilPattern,
+    foilCoverage: editor.foilCoverage ?? existingFront.foilCoverage,
+    interaction: editor.interaction ?? existingFront.interaction,
+    intensity: editor.effectIntensity ?? existingFront.intensity,
+    angle: editor.effectAngle ?? existingFront.angle,
+    lenticularAssetId: editor.lenticularAssetId ?? existingFront.lenticularAssetId,
     effect: editor.effect ?? existingFront.effect,
     effectPreset: editor.effectPreset ?? existingFront.effectPreset,
     effectIntensity:
@@ -107,18 +179,24 @@ export function buildDesignConfig({ form = {}, editor = {} } = {}) {
           })
         : undefined,
   })
+  const backSource = compactObject({
+    ...existingBack,
+    material: editor.backMaterial ?? existingBack.material,
+    edgeFoil: editor.backEdgeFoil ?? existingBack.edgeFoil,
+    spotUv: editor.backSpotUv ?? existingBack.spotUv,
+    hiddenMessage: editor.backHiddenMessage ?? existingBack.hiddenMessage,
+    effect: editor.backEffect ?? existingBack.effect,
+    background: editor.background ?? existingBack.background,
+    templateId: editor.backTemplateId ?? existingBack.templateId,
+  })
+  const effects = normalizeCardEffects({ ...existing, front: frontSource, back: backSource })
 
   return {
     ...existing,
-    version: numeric(existing.version, 2) || 2,
+    version: 3,
     ...(creativeLayers ? { creativeLayers } : {}),
-    front,
-    back: compactObject({
-      ...existingBack,
-      effect: editor.backEffect ?? existingBack.effect,
-      background: editor.background ?? existingBack.background,
-      templateId: editor.backTemplateId ?? existingBack.templateId,
-    }),
+    front: compactObject({ ...frontSource, ...effects.front }),
+    back: compactObject({ ...backSource, ...effects.back }),
     video: compactObject({
       ...(existing.video || {}),
       enabled: videoEnabled,
@@ -180,9 +258,11 @@ function readinessItem(enabled, complete, optionalLabel = '사용 안 함') {
 
 export function reviewReadiness(draft = {}) {
   const config = draft.designConfig || {}
+  const normalizedEffects = normalizeCardEffects(config)
   const voiceEnabled = Boolean(draft.hasVoice || config.voice?.enabled)
   const videoEnabled = Boolean(config.video?.enabled)
   const handwritingEnabled = Boolean(config.handwriting?.enabled)
+  const lenticularEnabled = normalizedEffects.front.interaction === 'lenticular'
   const items = {
     image: readinessItem(true, Boolean(draft.imageAssetId)),
     catalog: readinessItem(true, Boolean(draft.artistId && draft.memberId)),
@@ -192,6 +272,10 @@ export function reviewReadiness(draft = {}) {
     ),
     voice: readinessItem(voiceEnabled, Boolean(draft.voiceAssetId)),
     video: readinessItem(videoEnabled, Boolean(draft.videoAssetId)),
+    lenticular: readinessItem(
+      lenticularEnabled,
+      Boolean(normalizedEffects.front.lenticularAssetId),
+    ),
     issueLimit: readinessItem(true, numeric(draft.issueLimit, 0) > 0),
     preview: readinessItem(true, Boolean(draft.previewOpened)),
   }
