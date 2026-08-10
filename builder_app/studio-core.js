@@ -81,6 +81,7 @@ export function normalizeCardEffects(designConfig = {}) {
   const front = designConfig.front || {}
   const back = designConfig.back || {}
   const interaction = front.interaction || (front.effectMotion === false ? 'static' : 'tilt')
+  const normalizedInteraction = oneOf(interaction, INTERACTIONS, 'static')
 
   return {
     version: 3,
@@ -102,10 +103,11 @@ export function normalizeCardEffects(designConfig = {}) {
         oneOf(LEGACY_PATTERN[front.effectPreset], FOIL_PATTERNS, 'aurora-wave'),
       ),
       foilCoverage: oneOf(front.foilCoverage, FOIL_COVERAGES, 'full'),
-      interaction: oneOf(interaction, INTERACTIONS, 'static'),
+      interaction: normalizedInteraction,
       intensity: normalizedIntensity(front.intensity ?? front.effectIntensity, 0.58),
       angle: normalizedAngle(front.angle ?? front.effectAngle, 135),
-      lenticularAssetId: front.lenticularAssetId || null,
+      lenticularAssetId:
+        normalizedInteraction === 'lenticular' ? front.lenticularAssetId || null : null,
     },
     back: {
       material: oneOf(back.material, MATERIALS, 'matte'),
@@ -149,7 +151,9 @@ export function buildDesignConfig({ form = {}, editor = {} } = {}) {
     interaction: editor.interaction ?? existingFront.interaction,
     intensity: editor.effectIntensity ?? existingFront.intensity,
     angle: editor.effectAngle ?? existingFront.angle,
-    lenticularAssetId: editor.lenticularAssetId ?? existingFront.lenticularAssetId,
+    lenticularAssetId: Object.hasOwn(editor, 'lenticularAssetId')
+      ? editor.lenticularAssetId
+      : existingFront.lenticularAssetId,
     effect: editor.effect ?? existingFront.effect,
     effectPreset: editor.effectPreset ?? existingFront.effectPreset,
     effectIntensity:

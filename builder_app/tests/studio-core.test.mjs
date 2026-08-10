@@ -317,6 +317,92 @@ test('keeps lenticular assets scoped to the front effect contract', () => {
   assert.equal(config.back.templateId, 'back_template')
 })
 
+test('serializes explicit lenticular asset removal without reusing existing config', () => {
+  const config = buildDesignConfig({
+    form: {
+      designConfig: {
+        version: 3,
+        front: {
+          interaction: 'lenticular',
+          lenticularAssetId: 'old-secondary',
+        },
+      },
+    },
+    editor: {
+      interaction: 'lenticular',
+      lenticularAssetId: null,
+    },
+  })
+
+  assert.equal(config.front.interaction, 'lenticular')
+  assert.equal(config.front.lenticularAssetId, null)
+})
+
+test('serializes inactive interactions without stale lenticular assets', () => {
+  const staticConfig = buildDesignConfig({
+    form: {
+      designConfig: {
+        version: 3,
+        front: {
+          interaction: 'lenticular',
+          lenticularAssetId: 'old-secondary',
+        },
+      },
+    },
+    editor: {
+      interaction: 'static',
+      lenticularAssetId: 'old-secondary',
+    },
+  })
+  const tiltPayload = buildCardPayload({
+    form: {
+      templateId: 'template_signature_v1',
+      name: '프리즘 카드',
+      seasonName: '2026 SUMMER',
+      rarity: 'SR',
+      issueLimit: 100,
+      designConfig: {
+        version: 3,
+        front: {
+          interaction: 'lenticular',
+          lenticularAssetId: 'old-secondary',
+        },
+      },
+    },
+    editor: {
+      imageAssetId: 'asset_card',
+      interaction: 'tilt',
+      lenticularAssetId: 'old-secondary',
+    },
+  })
+
+  assert.equal(staticConfig.front.interaction, 'static')
+  assert.equal(staticConfig.front.lenticularAssetId, null)
+  assert.equal(tiltPayload.designConfig.front.interaction, 'tilt')
+  assert.equal(tiltPayload.designConfig.front.lenticularAssetId, null)
+})
+
+test('preserves existing lenticular asset while lenticular interaction remains active', () => {
+  const config = buildDesignConfig({
+    form: {
+      designConfig: {
+        version: 3,
+        front: {
+          interaction: 'lenticular',
+          lenticularAssetId: 'old-secondary',
+        },
+      },
+    },
+    editor: {
+      interaction: 'lenticular',
+      lenticularAssetId: 'old-secondary',
+    },
+  })
+
+  assert.equal(config.front.interaction, 'lenticular')
+  assert.equal(config.front.lenticularAssetId, 'old-secondary')
+})
+
 test('serializes handwriting state and transform into the shared design contract', () => {
   const payload = buildCardPayload({
     form: {
