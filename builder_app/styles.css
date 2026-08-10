@@ -2516,6 +2516,44 @@ input[type='range'] {
   border-radius: 20px;
 }
 
+.motion-permission-panel {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 0 22px 14px;
+  background: #f4f5fb;
+}
+
+.motion-permission-button {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--navy);
+  font: 800 11px/1 Manrope, sans-serif;
+  cursor: pointer;
+  box-shadow: 0 10px 22px rgba(27, 31, 74, 0.18);
+}
+
+.motion-permission-button:focus-visible {
+  outline: 3px solid rgba(107, 88, 239, 0.38);
+  outline-offset: 3px;
+}
+
+.motion-permission-status {
+  margin: 0;
+  color: #5f6582;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.motion-permission-status.denied {
+  color: #94604f;
+}
+
 .fan-card-info {
   padding: 20px 22px 24px;
 }
@@ -4220,6 +4258,8 @@ input[type='range'] {
   .editor-card {
     --tilt-x: 0deg !important;
     --tilt-y: 0deg !important;
+    animation: none !important;
+    transition: none !important;
     transform: none !important;
   }
 }

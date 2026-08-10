@@ -104,6 +104,19 @@ test('lenticular reduced-motion controls guard missing matchMedia', async () => 
   assert.match(source, /window\.matchMedia\?\.\('\(prefers-reduced-motion: reduce\)'\)\.matches === true/)
 })
 
+test('device orientation is requested only after an explicit preview action', async () => {
+  const source = await readFile(appUrl, 'utf8')
+  const css = await readFile(cssUrl, 'utf8')
+
+  assert.match(source, /data-action="enable-device-motion"/)
+  assert.match(source, /DeviceOrientationEvent\.requestPermission/)
+  assert.match(source, /async function enableDeviceMotion\(/)
+  assert.match(source, /function prefersReducedEffects\(/)
+  const initialSetup = source.slice(source.indexOf('function render('), source.indexOf('function markDirty('))
+  assert.doesNotMatch(initialSetup, /enableDeviceMotion\(/)
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\.editor-card\s*\{[\s\S]*?(animation|transition):/)
+})
+
 test('official back template visibly inherits the selected background color', async () => {
   const css = await readFile(cssUrl, 'utf8')
 

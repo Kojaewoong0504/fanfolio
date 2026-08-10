@@ -28,6 +28,7 @@ let autosaveTimer = null
 let mediaRecorder = null
 let mediaStream = null
 let recordedChunks = []
+let deviceMotionListenerAttached = false
 
 const sampleAssets = {
   aurora: './assets/card-aurora-portrait.jpg',
@@ -258,6 +259,8 @@ const state = {
   saveStatus: 'saved',
   busy: false,
   recording: false,
+  deviceMotionStatus: 'idle',
+  deviceMotionEnabled: false,
   jobStatus: '',
   reviewError: '',
 }
@@ -891,11 +894,26 @@ function detailsStage() {
 function fanPreviewStage() {
   state.editor.previewOpened = true
   persistDraft()
+  const canOfferDeviceMotion =
+    window.isSecureContext === true && typeof window.DeviceOrientationEvent !== 'undefined'
+  const motionStatus =
+    state.deviceMotionStatus === 'granted'
+      ? '<p class="motion-permission-status" role="status">기기 움직임 미리보기가 켜졌어요.</p>'
+      : state.deviceMotionStatus === 'reduced'
+        ? '<p class="motion-permission-status" role="status">움직임 효과를 줄이는 설정입니다. 카드 터치로 소재를 확인할 수 있어요.</p>'
+      : state.deviceMotionStatus === 'denied'
+        ? '<p class="motion-permission-status denied" role="status">센서 접근이 꺼져 있어요. 카드 터치로 같은 효과를 볼 수 있어요.</p>'
+        : ''
+  const motionPermission =
+    canOfferDeviceMotion
+      ? `<div class="motion-permission-panel">${state.deviceMotionEnabled || state.deviceMotionStatus === 'reduced' ? '' : '<button type="button" class="motion-permission-button" data-action="enable-device-motion">기기 움직임으로 보기</button>'}${motionStatus}</div>`
+      : ''
   return `<section class="fan-preview-stage">
     <div class="fan-preview-copy"><span class="page-kicker">FAN EXPERIENCE</span><h2>팬이 카드를 열었을 때의 경험입니다.</h2><p>보이스와 영상은 자동 재생되지 않으며 팬이 직접 선택할 수 있어요.</p><div class="preview-checks"><span>${icon('touch_app')} 사용자 제어 재생</span><span>${icon('shield_lock')} 소유자 전용 미디어</span><span>${icon('accessibility_new')} 움직임 감소 대응</span></div></div>
     <div class="fan-phone">
       <div class="fan-phone-bar"><span>FANFOLIO</span>${icon('close')}</div>
       <div class="fan-card-wrap">${cardVisual({ fan: true })}</div>
+      ${motionPermission}
       <div class="fan-card-info"><span class="fan-rarity">${esc(state.form.rarity)}</span><h3>${esc(state.form.name)}</h3><p>${esc(state.form.signatureText || '팬을 위한 특별 메시지가 도착했어요.')}</p>
         ${state.editor.voiceEnabled ? `<section class="fan-media-card"><span class="fan-media-icon">${icon('graphic_eq')}</span><div><strong>아티스트 보이스</strong><small>${state.editor.voiceSrc ? '재생 버튼을 눌러 메시지를 들어보세요.' : '검수 전 보이스 파일을 추가해 주세요.'}</small></div>${state.editor.voiceSrc ? `<audio controls preload="metadata" src="${esc(state.editor.voiceSrc)}"></audio>` : ''}</section>` : ''}
         ${state.editor.videoEnabled ? `<section class="fan-media-card"><span class="fan-media-icon">${icon('movie')}</span><div><strong>모션 스테이지</strong><small>${state.editor.videoSrc ? '영상을 직접 재생하고 전체 화면으로 볼 수 있어요.' : '검수 전 모션 영상을 추가해 주세요.'}</small></div></section>` : ''}
@@ -1004,9 +1022,9 @@ function afterRender() {
   if (state.view === 'editor' && state.stage === 'design' && state.editor.tool === 'drawing') {
     initDrawingPad()
   }
-  if (state.view === 'editor' && state.stage === 'design') {
+  if (state.view === 'editor' && ['design', 'preview'].includes(state.stage)) {
     initInteractiveCards()
-    initCreativeLayerInteractions()
+    if (state.stage === 'design') initCreativeLayerInteractions()
   }
 }
 
@@ -1647,8 +1665,70 @@ function resetInteractiveCard(card) {
   card.classList.remove('is-tilting')
 }
 
+function prefersReducedEffects() {
+  const reducedMotion =
+    typeof window !== 'undefined' &&
+    window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true
+  const deviceMemory =
+    typeof navigator !== 'undefined' && Number.isFinite(Number(navigator.deviceMemory))
+      ? Number(navigator.deviceMemory)
+      : null
+  return reducedMotion || (deviceMemory !== null && deviceMemory <= 2)
+}
+
+function clampTilt(value) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return 0
+  return Math.max(-15, Math.min(15, numeric))
+}
+
+function applyDeviceOrientation(event) {
+  const card = document.querySelector('.fan-card-wrap [data-hologram-card]')
+  if (!card || !state.deviceMotionEnabled || prefersReducedEffects()) return
+  const beta = clampTilt(event?.beta)
+  const gamma = clampTilt(event?.gamma)
+  const lightX = Math.round(((gamma + 15) / 30) * 100)
+  const lightY = Math.round(((beta + 15) / 30) * 100)
+  card.style.setProperty('--tilt-x', `${(-beta).toFixed(2)}deg`)
+  card.style.setProperty('--tilt-y', `${gamma.toFixed(2)}deg`)
+  card.style.setProperty('--light-x', `${lightX}%`)
+  card.style.setProperty('--light-y', `${lightY}%`)
+  card.style.setProperty('--lenticular-reveal', `${lightX}%`)
+  card.classList.add('is-tilting')
+}
+
+async function enableDeviceMotion() {
+  if (prefersReducedEffects()) {
+    state.deviceMotionStatus = 'reduced'
+    state.deviceMotionEnabled = false
+    notify('움직임 효과를 줄이는 설정입니다. 카드를 터치해 소재를 확인할 수 있어요.')
+    render()
+    return
+  }
+  try {
+    const permission =
+      typeof window.DeviceOrientationEvent?.requestPermission === 'function'
+        ? await window.DeviceOrientationEvent.requestPermission()
+        : 'granted'
+    if (permission !== 'granted') throw new Error('DEVICE_ORIENTATION_DENIED')
+    state.deviceMotionStatus = 'granted'
+    state.deviceMotionEnabled = true
+    if (!deviceMotionListenerAttached) {
+      window.addEventListener('deviceorientation', applyDeviceOrientation, { passive: true })
+      deviceMotionListenerAttached = true
+    }
+    notify('기기 움직임으로 카드 빛 반사를 볼 수 있어요.')
+    render()
+  } catch {
+    state.deviceMotionStatus = 'denied'
+    state.deviceMotionEnabled = false
+    notify('센서 접근이 허용되지 않았어요. 카드를 터치해 같은 효과를 볼 수 있어요.', 'warning')
+    render()
+  }
+}
+
 function initInteractiveCards() {
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const reduceMotion = prefersReducedEffects()
   document.querySelectorAll('[data-hologram-card]').forEach((card) => {
     if (reduceMotion || !card.classList.contains('effect-motion')) return
     const move = (event) => {
@@ -2042,6 +2122,10 @@ app.addEventListener('click', async (event) => {
   if (action === 'open-fan-preview') {
     state.stage = 'preview'
     render()
+  }
+  if (action === 'enable-device-motion') {
+    await enableDeviceMotion()
+    return
   }
   if (action === 'open-inspector') {
     state.editor.inspectorOpen = true
