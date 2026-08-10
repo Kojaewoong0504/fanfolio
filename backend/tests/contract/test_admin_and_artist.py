@@ -1,6 +1,7 @@
 import asyncio
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.db.session import SessionLocal
@@ -157,6 +158,106 @@ def test_artist_card_rejects_creative_layers_owned_by_another_account(
     )
 
     assert_error(response, 404, "ASSET_NOT_FOUND")
+
+
+def test_artist_cannot_attach_another_accounts_lenticular_asset(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    admin_asset = assert_success(
+        actors["admin"].post(
+            "/api/uploads/presign",
+            json={
+                "fileName": "admin-lenticular.png",
+                "contentType": "image/png",
+                "purpose": "card",
+            },
+        ),
+        201,
+    )
+    uploaded = actors["admin"].put(admin_asset["uploadUrl"], content=b"admin-card-image")
+    assert uploaded.status_code == 204, uploaded.text
+
+    response = actors["artist"].post(
+        "/api/artist/cards",
+        json={
+            "templateId": seeded["ids"]["templateId"],
+            "name": "렌티큘러 소유권 확인 카드",
+            "seasonName": "2026 SPRING",
+            "rarity": "Special",
+            "imageAssetId": seeded["ids"]["imageAssetId"],
+            "designConfig": {
+                "version": 3,
+                "front": {
+                    "interaction": "lenticular",
+                    "lenticularAssetId": admin_asset["assetId"],
+                },
+            },
+            "issueLimit": 100,
+        },
+    )
+
+    assert_error(response, 404, "ASSET_NOT_FOUND")
+
+
+@pytest.mark.parametrize("lenticular_asset_id", ["", 123])
+def test_artist_card_rejects_malformed_lenticular_asset_id(
+    actors: dict[str, TestClient], seeded: dict[str, Any], lenticular_asset_id: Any
+) -> None:
+    response = actors["artist"].post(
+        "/api/artist/cards",
+        json={
+            "templateId": seeded["ids"]["templateId"],
+            "name": "렌티큘러 형식 확인 카드",
+            "seasonName": "2026 SPRING",
+            "rarity": "Special",
+            "imageAssetId": seeded["ids"]["imageAssetId"],
+            "designConfig": {
+                "version": 3,
+                "front": {
+                    "interaction": "lenticular",
+                    "lenticularAssetId": lenticular_asset_id,
+                },
+            },
+            "issueLimit": 100,
+        },
+    )
+
+    assert_error(response, 422, "INVALID_LENTICULAR_ASSET")
+
+
+def test_artist_card_update_rejects_malformed_lenticular_asset_id(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    artist = actors["artist"]
+    draft = assert_success(
+        artist.post(
+            "/api/artist/cards",
+            json={
+                "templateId": seeded["ids"]["templateId"],
+                "name": "렌티큘러 수정 확인 카드",
+                "seasonName": "2026 SPRING",
+                "rarity": "Special",
+                "imageAssetId": seeded["ids"]["imageAssetId"],
+                "issueLimit": 100,
+            },
+        ),
+        201,
+    )
+
+    response = artist.patch(
+        f"/api/artist/cards/{draft['id']}",
+        json={
+            "designConfig": {
+                "version": 3,
+                "front": {
+                    "interaction": "lenticular",
+                    "lenticularAssetId": "",
+                },
+            },
+        },
+    )
+
+    assert_error(response, 422, "INVALID_LENTICULAR_ASSET")
 
 
 def test_artist_review_rejects_enabled_voice_without_an_uploaded_asset(

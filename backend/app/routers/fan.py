@@ -465,6 +465,15 @@ async def card_detail(user_card_id: str, user: FanUser, session: DbSession) -> d
         video_asset = await session.get(Asset, card.video_asset_id)
         if video_asset and (video_asset.processed_storage_path or video_asset.storage_path):
             video_url = f"/api/me/cards/{uc.id}/video?client=fan"
+    lenticular_image_url = None
+    front = (card.design_config or {}).get("front")
+    lenticular_asset_id = front.get("lenticularAssetId") if isinstance(front, dict) else None
+    if isinstance(lenticular_asset_id, str):
+        lenticular_asset = await session.get(Asset, lenticular_asset_id)
+        if lenticular_asset and (
+            lenticular_asset.processed_storage_path or lenticular_asset.storage_path
+        ):
+            lenticular_image_url = f"/api/me/cards/{uc.id}/lenticular?client=fan"
     return {
         "ok": True,
         "data": {
@@ -494,6 +503,7 @@ async def card_detail(user_card_id: str, user: FanUser, session: DbSession) -> d
                 "voiceAudioUrl": voice_audio_url,
                 "videoUrl": video_url,
                 "hasVideo": video_url is not None,
+                "lenticularImageUrl": lenticular_image_url,
             },
             "drop": {"name": drop.name} if drop else None,
             "redeemCode": None,
@@ -559,6 +569,34 @@ async def card_video(user_card_id: str, user: FanUser, session: DbSession) -> Re
         raise AppError(404, "VIDEO_NOT_READY", "카드 영상이 아직 준비되지 않았습니다.")
     return storage_response(
         configured_asset_storage(), path, media_type=asset.content_type or "video/mp4"
+    )
+
+
+@router.get("/me/cards/{user_card_id}/lenticular", include_in_schema=False)
+async def card_lenticular(user_card_id: str, user: FanUser, session: DbSession) -> Response:
+    """Serve a lenticular image only after verifying that the fan owns the card."""
+    row = await session.execute(
+        select(UserCard, Card)
+        .join(Card, UserCard.card_id == Card.id)
+        .where(UserCard.id == user_card_id, UserCard.user_id == user.id)
+    )
+    user_card, card = row.one_or_none() or (None, None)
+    front = (card.design_config or {}).get("front") if card else None
+    lenticular_asset_id = front.get("lenticularAssetId") if isinstance(front, dict) else None
+    if not user_card or not card or not isinstance(lenticular_asset_id, str):
+        raise AppError(404, "LENTICULAR_NOT_FOUND", "렌티큘러 이미지를 찾을 수 없습니다.")
+    asset = await session.get(Asset, lenticular_asset_id)
+    if not asset:
+        raise AppError(404, "LENTICULAR_NOT_FOUND", "렌티큘러 이미지를 찾을 수 없습니다.")
+    path = asset.processed_storage_path or asset.storage_path
+    if not path:
+        raise AppError(
+            404,
+            "LENTICULAR_NOT_READY",
+            "렌티큘러 이미지가 아직 준비되지 않았습니다.",
+        )
+    return storage_response(
+        configured_asset_storage(), path, media_type=asset.content_type or "image/webp"
     )
 
 

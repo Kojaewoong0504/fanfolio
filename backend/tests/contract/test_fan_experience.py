@@ -6,6 +6,29 @@ from fastapi.testclient import TestClient
 from tests.conftest import assert_error, assert_success
 
 
+def _redeem_card_via_batch(
+    admin: TestClient, fan: TestClient, *, card_id: str, prefix: str
+) -> dict[str, Any]:
+    batch = assert_success(
+        admin.post(
+            "/api/admin/redeem-code-batches",
+            json={
+                "dropId": "drop_live",
+                "cardId": card_id,
+                "quantity": 1,
+                "maxUsesPerCode": 1,
+                "expiresAt": "2030-12-31T23:59:59Z",
+                "prefix": prefix,
+            },
+        ),
+        201,
+    )
+    exported = admin.get(batch["csvExportUrl"])
+    assert exported.status_code == 200, exported.text
+    code = exported.text.splitlines()[1].split(",")[0].strip('"')
+    return assert_success(fan.post("/api/redemptions", json={"code": code, "source": "qr"}), 201)
+
+
 def test_authenticated_fan_can_read_current_user_state(actors: dict[str, TestClient]) -> None:
     me = assert_success(actors["fan"].get("/api/me"))
 
@@ -268,6 +291,19 @@ def test_owned_card_detail_exposes_handwriting_and_voice_entitlements(
     )
     voice = artist.put(voice_asset["uploadUrl"], content=b"voice")
     assert voice.status_code == 204, voice.text
+    lenticular_asset = assert_success(
+        artist.post(
+            "/api/uploads/presign",
+            json={
+                "fileName": "alternate-card.png",
+                "contentType": "image/webp",
+                "purpose": "card",
+            },
+        ),
+        201,
+    )
+    lenticular = artist.put(lenticular_asset["uploadUrl"], content=b"alternate-card-image")
+    assert lenticular.status_code == 204, lenticular.text
 
     card = assert_success(
         admin.post(
@@ -277,7 +313,15 @@ def test_owned_card_detail_exposes_handwriting_and_voice_entitlements(
                 "memberId": "member_yuna",
                 "handwritingAssetId": seeded["ids"]["handwritingAssetId"],
                 "voiceAssetId": voice_asset["assetId"],
-                "designConfig": {"front": {"effect": "holographic", "effectIntensity": 0.82}},
+                "designConfig": {
+                    "version": 3,
+                    "front": {
+                        "effect": "holographic",
+                        "effectIntensity": 0.82,
+                        "interaction": "lenticular",
+                        "lenticularAssetId": lenticular_asset["assetId"],
+                    },
+                },
                 "hasVoice": True,
             },
         ),
@@ -319,6 +363,77 @@ def test_owned_card_detail_exposes_handwriting_and_voice_entitlements(
     audio = fan.get(voice_url)
     assert audio.status_code == 200
     assert audio.content == b"voice"
+    lenticular_url = detail["card"]["lenticularImageUrl"]
+    assert lenticular_url == f"/api/me/cards/{redeemed['userCardId']}/lenticular?client=fan"
+    alternate = fan.get(lenticular_url)
+    assert alternate.status_code == 200
+    assert alternate.content == b"alternate-card-image"
+    assert_error(actors["otherFan"].get(lenticular_url), 404, "LENTICULAR_NOT_FOUND")
+
+
+def test_owned_card_lenticular_route_returns_not_found_without_design_asset(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    redeemed = assert_success(
+        actors["fan"].post(
+            "/api/redemptions", json={"code": seeded["codes"]["valid"], "source": "qr"}
+        ),
+        201,
+    )
+
+    detail = assert_success(actors["fan"].get(f"/api/me/cards/{redeemed['userCardId']}"))
+    assert detail["card"]["lenticularImageUrl"] is None
+    assert_error(
+        actors["fan"].get(f"/api/me/cards/{redeemed['userCardId']}/lenticular?client=fan"),
+        404,
+        "LENTICULAR_NOT_FOUND",
+    )
+
+
+def test_owned_card_lenticular_route_returns_not_ready_until_asset_upload_finishes(
+    actors: dict[str, TestClient],
+) -> None:
+    artist = actors["artist"]
+    admin = actors["admin"]
+    fan = actors["fan"]
+    lenticular_asset = assert_success(
+        artist.post(
+            "/api/uploads/presign",
+            json={
+                "fileName": "pending-alternate-card.png",
+                "contentType": "image/webp",
+                "purpose": "card",
+            },
+        ),
+        201,
+    )
+    card = assert_success(
+        admin.post(
+            "/api/admin/cards",
+            json={
+                "name": "준비 중인 렌티큘러 카드",
+                "memberId": "member_yuna",
+                "designConfig": {
+                    "version": 3,
+                    "front": {
+                        "interaction": "lenticular",
+                        "lenticularAssetId": lenticular_asset["assetId"],
+                    },
+                },
+            },
+        ),
+        201,
+    )
+    assert_success(admin.post(f"/api/admin/cards/{card['id']}/publish"))
+    redeemed = _redeem_card_via_batch(admin, fan, card_id=card["id"], prefix="PENDING")
+
+    detail = assert_success(fan.get(f"/api/me/cards/{redeemed['userCardId']}"))
+    assert detail["card"]["lenticularImageUrl"] is None
+    assert_error(
+        fan.get(f"/api/me/cards/{redeemed['userCardId']}/lenticular?client=fan"),
+        404,
+        "LENTICULAR_NOT_READY",
+    )
 
 
 def test_catalog_returns_only_published_cards_to_fans(actors: dict[str, TestClient]) -> None:
