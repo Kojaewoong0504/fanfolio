@@ -1593,29 +1593,6 @@ video {
   background: #15194a;
 }
 
-.back-card-meta {
-  position: absolute;
-  left: 20px;
-  right: 20px;
-  bottom: 20px;
-  z-index: 5;
-  display: grid;
-  gap: 3px;
-  color: #fff;
-  text-align: center;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
-}
-
-.back-card-meta strong {
-  font-size: 13px;
-}
-
-.back-card-meta span {
-  font-family: Manrope, sans-serif;
-  font-size: 7px;
-  letter-spacing: 0.14em;
-}
-
 .editor-inspector {
   min-width: 0;
   border-left: 1px solid var(--line);
@@ -3533,10 +3510,167 @@ input[type='range'] {
 .back-card > img {
   position: absolute;
   inset: 0;
-  z-index: 1;
+  z-index: 3;
   opacity: 0.86;
   mix-blend-mode: luminosity;
   filter: contrast(1.08) brightness(0.94);
+}
+
+.back-surface,
+.back-spot-uv,
+.back-card::after {
+  position: absolute;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.back-surface,
+.back-spot-uv {
+  inset: 0;
+}
+
+.back-surface {
+  z-index: 2;
+  opacity: 0.72;
+  mix-blend-mode: screen;
+}
+
+.back-card.material-matte .back-surface {
+  opacity: 0.28;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 44%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.055) 0 1px, transparent 1px 5px);
+  filter: saturate(0.72) contrast(0.96);
+}
+
+.back-card.material-pearl .back-surface {
+  background:
+    radial-gradient(circle at var(--light-x, 50%) var(--light-y, 42%), rgba(255, 255, 255, 0.5), transparent 32%),
+    conic-gradient(from 150deg at 50% 46%, rgba(255, 218, 238, 0.34), rgba(193, 231, 255, 0.32), rgba(255, 244, 190, 0.28), rgba(221, 202, 255, 0.33), rgba(255, 218, 238, 0.34));
+  filter: saturate(0.92) brightness(1.06);
+}
+
+.back-card.material-chrome .back-surface {
+  opacity: 0.64;
+  background:
+    linear-gradient(112deg, transparent 0 16%, rgba(255, 255, 255, 0.7) 20%, transparent 27% 49%, rgba(152, 222, 255, 0.46) 55%, transparent 63%),
+    radial-gradient(circle at var(--light-x, 50%) var(--light-y, 42%), rgba(255, 255, 255, 0.42), transparent 38%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.14) 0 1px, rgba(0, 0, 0, 0.1) 1px 2px, transparent 2px 7px);
+  filter: saturate(0.78) contrast(1.24);
+}
+
+.back-card::after {
+  content: '';
+  inset: 7px;
+  z-index: 6;
+  border: 1.5px solid transparent;
+}
+
+.back-card.edge-foil-none::after {
+  content: none;
+}
+
+.back-card.edge-foil-silver::after {
+  border-color: rgba(234, 242, 255, 0.9);
+  box-shadow:
+    inset 0 0 0 1px rgba(92, 116, 156, 0.48),
+    inset 0 0 18px rgba(255, 255, 255, 0.5),
+    0 0 10px rgba(202, 220, 255, 0.34);
+}
+
+.back-card.edge-foil-gold::after {
+  border-color: rgba(255, 222, 139, 0.95);
+  box-shadow:
+    inset 0 0 0 1px rgba(142, 95, 20, 0.45),
+    inset 0 0 18px rgba(255, 238, 171, 0.5),
+    0 0 11px rgba(255, 201, 77, 0.38);
+}
+
+.back-spot-uv {
+  z-index: 3;
+  opacity: 0;
+  background:
+    radial-gradient(circle at var(--light-x, 50%) var(--light-y, 42%), rgba(255, 255, 255, 0.92), rgba(185, 232, 255, 0.32) 24%, transparent 58%);
+  mix-blend-mode: screen;
+  filter: contrast(1.12) brightness(1.08);
+}
+
+.back-card.spot-uv-logo .back-spot-uv {
+  opacity: 0.58;
+  clip-path: inset(8% 16% 66% 16% round 18px);
+}
+
+.back-card.spot-uv-symbol .back-spot-uv {
+  opacity: 0.52;
+  clip-path: circle(18% at 50% 45%);
+}
+
+.back-card.spot-uv-serial .back-spot-uv {
+  opacity: 0.5;
+  clip-path: inset(70% 15% 12% 15% round 16px);
+}
+
+.back-card.spot-uv-none .back-spot-uv {
+  display: none;
+}
+
+.back-authenticity {
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  bottom: 20px;
+  z-index: 8;
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 10px;
+  color: #fff;
+  text-align: center;
+  background: rgba(5, 8, 28, 0.62);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.24);
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+.back-authenticity span {
+  font-family: Manrope, sans-serif;
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+}
+
+.back-authenticity strong {
+  font-family: Manrope, sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.back-hidden-message {
+  position: absolute;
+  left: 11%;
+  right: 11%;
+  top: 48%;
+  z-index: 7;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+  text-align: center;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.72);
+  opacity: 0.56;
+  background:
+    radial-gradient(circle at var(--light-x, 50%) var(--light-y, 42%), rgba(255, 255, 255, 0.32), transparent 42%);
+  filter: brightness(1.04);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .back-hidden-message {
+    opacity: 0.82;
+    background: none;
+  }
 }
 
 .creative-layer {

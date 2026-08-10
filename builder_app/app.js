@@ -84,6 +84,25 @@ const interactionOptions = [
   ['lenticular', '렌티큘러'],
 ]
 
+const backMaterialOptions = [
+  ['matte', '무광'],
+  ['pearl', '펄'],
+  ['chrome', '크롬'],
+]
+
+const backEdgeFoilOptions = [
+  ['none', '없음'],
+  ['silver', '실버'],
+  ['gold', '골드'],
+]
+
+const backSpotUvOptions = [
+  ['none', '없음'],
+  ['logo', '로고'],
+  ['symbol', '심볼'],
+  ['serial', '시리얼'],
+]
+
 const recipes = [
   {
     id: 'voice',
@@ -192,6 +211,10 @@ function initialEditor() {
     effectGrain: 0.38,
     effectFinish: 'glass',
     backEffect: 'sparkle',
+    backMaterial: 'matte',
+    backEdgeFoil: 'silver',
+    backSpotUv: 'logo',
+    backHiddenMessage: '',
     background: '#0b1033',
     backTemplateId: 'agency_back_v1',
     previewOpened: false,
@@ -662,7 +685,10 @@ function cardVisual({ fan = false } = {}) {
     ? `<div class="lenticular-motion-controls" aria-label="렌티큘러 장면 선택"><button type="button" data-action="set-lenticular-scene" data-reveal="0">첫 장면</button><button type="button" data-action="set-lenticular-scene" data-reveal="100">두 번째 장면</button></div>`
     : ''
   if (isBack) {
-    return `<div class="editor-card back-card effect-motion" data-hologram-card style="${tiltStyle};--back-color:${esc(editor.background || '#0b1033')}"><img src="./agency-back-template-v1.png" alt="Fanfolio 공식 카드 뒷면" />${creativeLayersMarkup('back')}${creativeLayerToolbar('back')}<div class="back-card-meta"><strong>${esc(state.form.name)}</strong><span>OFFICIAL DIGITAL COLLECTIBLE</span></div></div>`
+    const issueNumber = String(state.form.issueLimit ? 1 : 0).padStart(4, '0')
+    const issueLimit = String(state.form.issueLimit || 0).padStart(4, '0')
+    const hiddenMessage = String(editor.backHiddenMessage || '')
+    return `<div class="editor-card back-card material-${esc(editor.backMaterial)} edge-foil-${esc(editor.backEdgeFoil)} spot-uv-${esc(editor.backSpotUv)} effect-motion" data-hologram-card style="${tiltStyle};--back-color:${esc(editor.background || '#0b1033')}"><img src="./agency-back-template-v1.png" alt="Fanfolio 공식 카드 뒷면" /><div class="back-surface" aria-hidden="true"></div><div class="back-spot-uv" aria-hidden="true"></div>${creativeLayersMarkup('back')}${creativeLayerToolbar('back')}<div class="back-authenticity"><span>FANFOLIO OFFICIAL</span><strong>No. ${issueNumber} / ${issueLimit}</strong></div>${hiddenMessage ? `<p class="back-hidden-message">${esc(hiddenMessage)}</p>` : ''}</div>`
   }
   return `<div class="editor-card material-${esc(editor.material)} pattern-${esc(editor.foilPattern)} coverage-${esc(editor.foilCoverage)} ${effectMotion ? 'effect-motion' : ''} ${isLenticular ? 'interaction-lenticular' : ''}" data-hologram-card style="${tiltStyle};--effect-opacity:${effectOpacity};--effect-angle:${Number(editor.effectAngle || 135)}deg;--effect-spread:${Math.round(Number(editor.effectSpread ?? 0.64) * 100)}%;--effect-grain:${Number(editor.effectGrain ?? 0.38)}">
     ${media}
@@ -782,8 +808,17 @@ function hologramInspector() {
 }
 
 function backInspector() {
+  const hiddenMessageLength = Array.from(String(state.editor.backHiddenMessage || '')).length
   return `<div class="inspector-section"><span class="inspector-label">공식 뒷면 템플릿</span><button type="button" class="back-template active"><img src="./agency-back-template-v1.png" alt="Fanfolio 공식 뒷면 템플릿" /><span>${icon('verified')}<strong>소속사 공식 템플릿</strong><small>로고와 인증 영역이 보호됩니다.</small></span></button></div>
+  <div class="inspector-section"><span class="inspector-label">뒷면 소재</span><div class="finish-selector option-row">${backMaterialOptions.map(([value, label]) => `<button type="button" data-back-material="${value}" class="${state.editor.backMaterial === value ? 'active' : ''}" aria-pressed="${state.editor.backMaterial === value}"><span><strong>${label}</strong></span>${icon('check_circle')}</button>`).join('')}</div></div>
+  <div class="inspector-section"><span class="inspector-label">엣지 포일</span><div class="finish-selector option-row">${backEdgeFoilOptions.map(([value, label]) => `<button type="button" data-edge-foil="${value}" class="${state.editor.backEdgeFoil === value ? 'active' : ''}" aria-pressed="${state.editor.backEdgeFoil === value}"><span><strong>${label}</strong></span>${icon('check_circle')}</button>`).join('')}</div></div>
+  <div class="inspector-section"><span class="inspector-label">스팟 UV</span><div class="finish-selector option-row">${backSpotUvOptions.map(([value, label]) => `<button type="button" data-spot-uv="${value}" class="${state.editor.backSpotUv === value ? 'active' : ''}" aria-pressed="${state.editor.backSpotUv === value}"><span><strong>${label}</strong></span>${icon('check_circle')}</button>`).join('')}</div></div>
   <label class="compact-field">뒷면 바탕색<input type="color" value="${esc(state.editor.background || '#0b1033')}" data-editor="background" /></label>
+  <label class="compact-field">
+    숨은 메시지
+    <input type="text" maxlength="40" data-editor="backHiddenMessage" value="${esc(state.editor.backHiddenMessage || '')}" />
+    <small><span data-hidden-message-count>${hiddenMessageLength}</span>/40 · 기울이면 선명해져요.</small>
+  </label>
   <div class="info-card">${icon('lock')}<span><strong>브랜드 보호 영역</strong><small>뒷면 인증 마크와 발행 정보는 공개 시 자동으로 생성됩니다.</small></span></div>${layerControls()}`
 }
 
@@ -1309,6 +1344,10 @@ async function openCard(cardId) {
     interaction: effects.front.interaction,
     effectMotion: effects.front.interaction !== 'static',
     lenticularAssetId: effects.front.lenticularAssetId,
+    backMaterial: effects.back.material,
+    backEdgeFoil: effects.back.edgeFoil,
+    backSpotUv: effects.back.spotUv,
+    backHiddenMessage: effects.back.hiddenMessage,
     videoLoop: card.designConfig?.video?.loop ?? true,
     handwritingTransform: card.handwritingTransform || initialEditor().handwritingTransform,
     layers: Array.isArray(card.designConfig?.creativeLayers)
@@ -1943,6 +1982,27 @@ app.addEventListener('click', async (event) => {
     render()
     return
   }
+  const backMaterial = event.target.closest('[data-back-material]')
+  if (backMaterial) {
+    state.editor.backMaterial = backMaterial.dataset.backMaterial
+    markDirty()
+    render()
+    return
+  }
+  const edgeFoil = event.target.closest('[data-edge-foil]')
+  if (edgeFoil) {
+    state.editor.backEdgeFoil = edgeFoil.dataset.edgeFoil
+    markDirty()
+    render()
+    return
+  }
+  const spotUv = event.target.closest('[data-spot-uv]')
+  if (spotUv) {
+    state.editor.backSpotUv = spotUv.dataset.spotUv
+    markDirty()
+    render()
+    return
+  }
   const preset = event.target.closest('[data-preset]')
   if (preset) {
     state.editor.effectPreset = preset.dataset.preset
@@ -2152,6 +2212,17 @@ app.addEventListener('input', (event) => {
     markDirty()
   }
   const editorField = event.target.dataset.editor
+  if (editorField === 'backHiddenMessage') {
+    state.editor.backHiddenMessage = Array.from(event.target.value).slice(0, 40).join('')
+    if (state.editor.backHiddenMessage !== event.target.value) event.target.value = state.editor.backHiddenMessage
+    event.target
+      .closest('.compact-field')
+      ?.querySelector('[data-hidden-message-count]')?.replaceChildren(
+        String(Array.from(state.editor.backHiddenMessage).length),
+      )
+    markDirty()
+    return
+  }
   if (editorField && (event.target.type === 'range' || event.target.type === 'color')) {
     state.editor[editorField] = event.target.type === 'range'
       ? Number(event.target.value)

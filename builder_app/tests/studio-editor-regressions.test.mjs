@@ -111,6 +111,19 @@ test('official back template visibly inherits the selected background color', as
   assert.match(css, /\.back-card > img\s*\{[\s\S]{0,220}mix-blend-mode:\s*luminosity/)
 })
 
+test('back editor applies material edge foil spot UV and hidden message', async () => {
+  const source = await readFile(appUrl, 'utf8')
+  const css = await readFile(cssUrl, 'utf8')
+  assert.match(source, /data-back-material=/)
+  assert.match(source, /data-edge-foil=/)
+  assert.match(source, /data-spot-uv=/)
+  assert.match(source, /data-editor="backHiddenMessage"/)
+  assert.match(source, /class="back-authenticity"/)
+  assert.match(source, /class="back-hidden-message"/)
+  assert.match(css, /\.edge-foil-gold/)
+  assert.match(css, /\.spot-uv-logo/)
+})
+
 test('review readiness renders every dynamic item with an accurate total', async () => {
   const source = await readFile(appUrl, 'utf8')
 
