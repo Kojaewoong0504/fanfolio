@@ -124,6 +124,10 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
   }, [card.id, detail?.userCardId])
 
   useEffect(() => {
+    if (!detail && visibleSide === 'back') setVisibleSide('front')
+  }, [detail, visibleSide])
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
     }
@@ -139,6 +143,13 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
   const lenticularImageUrl = detail?.card.lenticularImageUrl ?? ''
   const reducedEffects = prefersReducedEffects()
   const motionSupported = !reducedEffects && supportsDeviceMotion()
+  const canRequestDeviceMotion = Boolean(
+    detail &&
+    motionStatus === 'idle' &&
+    motionSupported &&
+    visibleSide === 'front' &&
+    effects.front.interaction !== 'static',
+  )
   const imageUrl = detail?.card.imageUrl ?? card.image
   const imageError = (event: SyntheticEvent<HTMLImageElement>) => onImageError(event, card.id)
   const cardImageAlt = `${detail?.card.name ?? card.title} 공식 카드 앞면`
@@ -203,6 +214,7 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
     collectibleRef.current?.style.setProperty('--lenticular-reveal', reveal)
   }
   const requestDeviceMotion = async () => {
+    if (!detail || motionStatus !== 'idle') return
     if (reducedEffects || !supportsDeviceMotion()) {
       setMotionStatus('unsupported')
       setDeviceMotionEnabled(false)
@@ -269,7 +281,7 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
       {detailLoading && <p className="detail-loading" role="status" aria-live="polite">카드 상세 정보를 확인하는 중이에요…</p>}
       <div className="card-side-toggle" role="group" aria-label="카드 면 선택">
         <button type="button" aria-pressed={visibleSide === 'front'} onClick={() => setVisibleSide('front')}>앞면</button>
-        <button type="button" aria-pressed={visibleSide === 'back'} onClick={() => setVisibleSide('back')}>뒷면</button>
+        <button type="button" aria-pressed={visibleSide === 'back' && Boolean(detail)} aria-disabled={!detail} disabled={!detail} onClick={() => { if (detail) setVisibleSide('back') }}>뒷면</button>
       </div>
       {visibleSide === 'front' || !detail ? <div
         ref={collectibleRef}
@@ -302,7 +314,7 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
         <span className="fan-card-surface" aria-hidden="true" />
       </div>}
       <div className="fan-card-motion-actions">
-        {motionSupported && visibleSide === 'front' && effects.front.interaction !== 'static' && <button type="button" className="motion-permission-button" onClick={requestDeviceMotion}>기기 움직임으로 보기</button>}
+        {canRequestDeviceMotion && <button type="button" className="motion-permission-button" onClick={requestDeviceMotion}>기기 움직임으로 보기</button>}
         {motionStatus === 'denied' && <p className="motion-helper">손가락으로 움직여 볼 수 있어요</p>}
         {hasLenticular && reducedEffects && visibleSide === 'front' && <div className="lenticular-scene-controls" aria-label="렌티큘러 장면 선택">
           <button type="button" onClick={() => setLenticularReveal('0%')}>첫 장면</button>

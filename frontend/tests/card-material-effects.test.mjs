@@ -306,6 +306,20 @@ test('card detail does not expose a fake back serial before owned detail loads',
   assert.match(detailSource, /String\(detail\.serialNumber\)\.padStart\(3, '0'\)/)
 })
 
+test('card detail only offers device motion before permission is settled on loaded owned detail', () => {
+  assert.match(detailSource, /const canRequestDeviceMotion = Boolean\([\s\S]*detail[\s\S]*motionStatus === 'idle'[\s\S]*motionSupported[\s\S]*effects\.front\.interaction !== 'static'[\s\S]*\)/)
+  assert.match(detailSource, /if \(!detail \|\| motionStatus !== 'idle'\) return/)
+  assert.match(detailSource, /\{canRequestDeviceMotion && <button/)
+  assert.doesNotMatch(detailSource, /\{motionSupported && visibleSide === 'front' && effects\.front\.interaction !== 'static' && <button/)
+})
+
+test('card detail cannot leave the back side selected without loaded detail', () => {
+  assert.match(detailSource, /if \(!detail && visibleSide === 'back'\) setVisibleSide\('front'\)/)
+  assert.match(detailSource, /disabled=\{!detail\}/)
+  assert.match(detailSource, /aria-disabled=\{!detail\}/)
+  assert.doesNotMatch(detailSource, /aria-pressed=\{visibleSide === 'back'\} onClick=\{\(\) => setVisibleSide\('back'\)\}/)
+})
+
 test('card detail protects lenticular scene and keeps movement permission explicit', () => {
   sourceContainsAll(detailSource, [
     'hasLenticular',
