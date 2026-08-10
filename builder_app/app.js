@@ -1958,6 +1958,20 @@ function applyLayerLivePreview(layer, input) {
 function applyEditorLivePreview(field, input) {
   const card = document.querySelector('.editor-card')
   const value = state.editor[field]
+  if (field === 'backHiddenMessage') {
+    const text = String(value || '')
+    let message = card?.querySelector('.back-hidden-message')
+    if (!text) {
+      message?.remove()
+    } else if (card) {
+      if (!message) {
+        message = document.createElement('p')
+        message.className = 'back-hidden-message'
+        card.append(message)
+      }
+      message.textContent = text
+    }
+  }
   if (field === 'background') card?.style.setProperty('--back-color', value)
   if (field === 'effectIntensity') card?.style.setProperty('--effect-opacity', value)
   if (field === 'effectAngle') card?.style.setProperty('--effect-angle', `${value}deg`)
@@ -2341,6 +2355,7 @@ app.addEventListener('input', (event) => {
       ?.querySelector('[data-hidden-message-count]')?.replaceChildren(
         String(Array.from(state.editor.backHiddenMessage).length),
       )
+    applyEditorLivePreview(editorField, event.target)
     markDirty()
     return
   }

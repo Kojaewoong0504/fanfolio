@@ -340,6 +340,16 @@ test('back hidden message input allows emoji before code point clamping', async 
   assert.doesNotMatch(source, /maxlength="40" data-editor="backHiddenMessage"/)
 })
 
+test('back hidden message updates the card preview while the artist is typing', async () => {
+  const source = await readFile(appUrl, 'utf8')
+
+  assert.match(source, /if \(field === 'backHiddenMessage'\) \{[\s\S]{0,500}\.back-hidden-message/)
+  assert.match(
+    source,
+    /if \(editorField === 'backHiddenMessage'\) \{[\s\S]{0,700}applyEditorLivePreview\(editorField, event\.target\)/,
+  )
+})
+
 test('review readiness renders every dynamic item with an accurate total', async () => {
   const source = await readFile(appUrl, 'utf8')
 
