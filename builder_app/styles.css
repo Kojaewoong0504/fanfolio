@@ -3619,7 +3619,7 @@ input[type='range'] {
   left: 22px;
   right: 22px;
   bottom: 20px;
-  z-index: 8;
+  z-index: 130;
   display: grid;
   gap: 4px;
   justify-items: center;
@@ -3690,6 +3690,10 @@ input[type='range'] {
   transform-origin: center;
   cursor: grab;
   touch-action: none;
+}
+
+.back-card .creative-layer {
+  z-index: calc(var(--layer-z, 1) + 10);
 }
 
 .creative-layer:active {

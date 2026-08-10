@@ -124,6 +124,15 @@ test('back editor applies material edge foil spot UV and hidden message', async 
   assert.match(css, /\.spot-uv-logo/)
 })
 
+test('back creative layers render above decorative finish layers and below authenticity', async () => {
+  const css = await readFile(cssUrl, 'utf8')
+
+  assert.match(css, /\.back-card \.creative-layer\s*\{[\s\S]{0,180}z-index:\s*calc\(var\(--layer-z,\s*1\) \+ 10\)/)
+  assert.match(css, /\.back-card > img\s*\{[\s\S]{0,160}z-index:\s*3/)
+  assert.match(css, /\.back-spot-uv\s*\{[\s\S]{0,180}z-index:\s*3/)
+  assert.match(css, /\.back-authenticity\s*\{[\s\S]{0,180}z-index:\s*130/)
+})
+
 test('review readiness renders every dynamic item with an accurate total', async () => {
   const source = await readFile(appUrl, 'utf8')
 
