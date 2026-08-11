@@ -726,11 +726,11 @@ button:disabled {
 
 .partner-list-item {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) 8px;
+  grid-template-columns: 44px minmax(0, 1fr) 8px;
   gap: 9px;
   align-items: center;
   width: 100%;
-  min-height: 58px;
+  min-height: 66px;
   padding: 8px;
   text-align: left;
   background: transparent;
@@ -760,16 +760,38 @@ button:disabled {
 }
 
 .company-avatar {
-  width: 36px;
-  height: 36px;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
   font-size: 12px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
 }
 
 .company-avatar.large {
-  width: 56px;
-  height: 56px;
+  flex-basis: 96px;
+  width: 96px;
+  height: 96px;
   font-size: 18px;
-  border-radius: 14px;
+  border-radius: 18px;
+}
+
+.company-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.company-avatar-fallback {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  color: var(--purple);
+  font-weight: 800;
+  background: var(--purple-soft);
 }
 
 .partner-list-copy strong,
@@ -824,7 +846,7 @@ button:disabled {
 
 .partner-hero {
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr) auto;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
   gap: 14px;
   align-items: center;
   padding: 22px 28px;
@@ -1376,6 +1398,70 @@ button:disabled {
 
 .form {
   gap: 14px;
+}
+
+.organization-logo-picker {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  padding: 16px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.organization-logo-preview {
+  display: grid;
+  place-items: center;
+}
+
+.organization-logo-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.organization-logo-copy strong {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.organization-logo-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.optional-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 7px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 750;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.upload-button {
+  min-height: 36px;
+}
+
+.danger-text {
+  color: var(--red);
 }
 
 .field {
@@ -2259,7 +2345,7 @@ code {
   }
 
   .partner-hero {
-    grid-template-columns: 50px minmax(0, 1fr);
+    grid-template-columns: 96px minmax(0, 1fr);
   }
 
   .partner-hero-actions {
@@ -2367,6 +2453,25 @@ code {
   }
 }
 
+@media (max-width: 640px) {
+  .organization-logo-picker {
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .organization-logo-picker .company-avatar.large {
+    flex-basis: 72px;
+    width: 72px;
+    height: 72px;
+    border-radius: 14px;
+  }
+
+  .organization-logo-copy {
+    gap: 7px;
+  }
+}
+
 @media (max-width: 767px) {
   .guide-grid,
   .guide-compare {
@@ -2438,14 +2543,8 @@ code {
   }
 
   .partner-hero {
-    grid-template-columns: 44px minmax(0, 1fr);
+    grid-template-columns: 96px minmax(0, 1fr);
     padding: 18px 14px;
-  }
-
-  .company-avatar.large {
-    width: 44px;
-    height: 44px;
-    border-radius: 11px;
   }
 
   .partner-identity h2 {
