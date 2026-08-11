@@ -588,6 +588,41 @@ async def update_organization_member(
     return {"ok": True, "data": await _member_data(session, user, membership)}
 
 
+@router.post("/{organization_id}/members/{user_id}/reset-password")
+async def reset_organization_member_password(
+    organization_id: str,
+    user_id: str,
+    context: CurrentAdmin,
+    session: DbSession,
+) -> dict:
+    """Issue a one-time password and invalidate every active admin session."""
+    await _require_organization_member_management(session, context, organization_id)
+    user, membership = await _member_or_404(session, organization_id, user_id)
+    _require_company_admin_subordinate_role(
+        context,
+        None,
+        target_access_level=membership.access_level,
+    )
+    temporary_password = token_urlsafe(18)
+    user.password_hash = hash_password(temporary_password)
+    user.must_change_password = True
+    membership.updated_at = datetime.now(UTC)
+    await _revoke_member_sessions(session, user.id)
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="organization.member_password_reset",
+        entity_type="admin_membership",
+        entity_id=user.id,
+        organization_id=organization_id,
+        details={"accessLevel": membership.access_level},
+    )
+    await session.commit()
+    data = await _member_data(session, user, membership)
+    data["temporaryPassword"] = temporary_password
+    return {"ok": True, "data": data}
+
+
 @router.put("/{organization_id}/members/{user_id}/artists")
 async def set_member_artists(
     organization_id: str,

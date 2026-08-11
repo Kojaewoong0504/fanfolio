@@ -448,8 +448,10 @@ function partnerMembersView() {
     state.organizationMembers.length
       ? `<div class="table-wrap member-table-wrap"><table class="table responsive-table member-table"><thead><tr><th>관리자</th><th>권한</th><th>담당 아티스트</th><th>최근 로그인</th><th>상태</th><th><span class="sr-only">관리</span></th></tr></thead><tbody>${state.organizationMembers
           .map(
-            (member) =>
-              `<tr><td data-label="관리자"><div class="person-cell"><span class="person-avatar">${escapeHtml((member.displayName || member.email).slice(0, 1))}</span><div><strong>${escapeHtml(member.displayName)}</strong><small>${escapeHtml(member.email)}</small></div></div></td><td data-label="권한">${adminSelect({ id: `member-role-${member.id}`, value: member.accessLevel, label: `${member.displayName} 권한`, className: "member-role", options: roleOptions })}</td><td data-label="담당 아티스트"><button class="artist-assignment-trigger" type="button" data-assign-member="${escapeHtml(member.id)}">${member.assignedArtists.length ? member.assignedArtists.map((artist) => `<span>${escapeHtml(artist.name)}</span>`).join("") : "배정 없음"} ${icon("edit")}</button></td><td data-label="최근 로그인">${formatDate(member.lastLoginAt)}</td><td data-label="상태"><span class="badge ${member.status === "active" ? "success-badge" : "danger-badge"}">${member.status === "active" ? "활성" : "중지"}</span></td><td data-label="관리">${member.accessLevel === "company_admin" && !isRoot() ? '<span class="muted">보호됨</span>' : `<button class="icon-button member-status" type="button" data-member-id="${escapeHtml(member.id)}" data-next-status="${member.status === "active" ? "suspended" : "active"}" aria-label="${member.status === "active" ? "계정 중지" : "계정 활성화"}">${icon(member.status === "active" ? "person_off" : "person_check")}</button>`}</td></tr>`,
+            (member) => {
+              const protectedMember = member.accessLevel === "company_admin" && !isRoot();
+              return `<tr><td data-label="관리자"><div class="person-cell"><span class="person-avatar">${escapeHtml((member.displayName || member.email).slice(0, 1))}</span><div><strong>${escapeHtml(member.displayName)}</strong><small>${escapeHtml(member.email)}</small></div></div></td><td data-label="권한">${accessRoleBadge(member.accessLevel)}</td><td data-label="담당 아티스트"><button class="artist-assignment-trigger" type="button" data-assign-member="${escapeHtml(member.id)}">${member.assignedArtists.length ? member.assignedArtists.map((artist) => `<span>${escapeHtml(artist.name)}</span>`).join("") : "배정 없음"} ${icon("edit")}</button></td><td data-label="최근 로그인">${formatDate(member.lastLoginAt)}</td><td data-label="상태"><span class="badge ${member.status === "active" ? "success-badge" : "danger-badge"}">${member.status === "active" ? "활성" : "중지"}</span></td><td data-label="관리"><div class="row-actions">${protectedMember ? '<span class="muted">보호됨</span>' : `<button class="icon-button row-action" type="button" data-edit-member-role="${escapeHtml(member.id)}" aria-label="${escapeHtml(member.displayName)} 권한 변경" title="권한 변경">${icon("manage_accounts")}</button><button class="icon-button row-action" type="button" data-reset-member-password="${escapeHtml(member.id)}" aria-label="${escapeHtml(member.displayName)} 비밀번호 재발급" title="비밀번호 재발급">${icon("key")}</button><button class="icon-button row-action member-status" type="button" data-member-id="${escapeHtml(member.id)}" data-next-status="${member.status === "active" ? "suspended" : "active"}" aria-label="${member.status === "active" ? "계정 중지" : "계정 활성화"}" title="${member.status === "active" ? "계정 중지" : "계정 활성화"}">${icon(member.status === "active" ? "person_off" : "person_check")}</button>`}</div></td></tr>`;
+            },
           )
           .join("")}</tbody></table></div>`
       : `<div class="inline-empty">${icon("manage_accounts")}<h4>등록된 기업 관리자가 없습니다.</h4><p>첫 담당자 계정을 발급하고 담당 아티스트를 배정하세요.</p><button class="primary" id="empty-add-member" type="button">관리자 추가</button></div>`
@@ -517,6 +519,8 @@ function drawerView() {
     "artist-assignment": artistAssignmentDrawer,
     "artist-edit": artistEditDrawer,
     "card-create": cardCreateDrawer,
+    "role-change": roleChangeDrawer,
+    "member-password": memberPasswordDrawer,
   }[state.drawer]?.();
   if (!contents) return "";
   const cardOperationsNote = state.drawer === "card-create"
@@ -544,6 +548,34 @@ function temporaryCredentialPanel() {
   const credential = state.temporaryCredential;
   if (!credential) return "";
   return `<div class="credential-result" role="status">${icon("key")}<div><strong>임시 비밀번호가 발급되었습니다.</strong><p>${escapeHtml(credential.email)}</p><code>${escapeHtml(credential.temporaryPassword)}</code><small>이 화면을 닫으면 다시 표시되지 않습니다. 안전한 경로로 전달하세요.</small></div><button class="icon-button" id="copy-temporary-password" type="button" aria-label="임시 비밀번호 복사">${icon("content_copy")}</button></div>`;
+}
+
+function accessRoleBadge(role, current = false) {
+  const labels = { root: "루트 관리자", admin: "관리자", company_admin: "기업 슈퍼 관리자", manager: "매니저", editor: "에디터", viewer: "뷰어", artist: "아티스트", fan: "팬" };
+  const tone = { root: "violet", admin: "violet", company_admin: "violet", manager: "blue", editor: "blue", viewer: "gray", artist: "pink", fan: "gray" }[role] || "gray";
+  return `<span class="access-role ${tone}${current ? " current" : ""}">${icon(role === "root" || role === "company_admin" ? "shield_person" : "badge")}<span>${current ? "현재 세션" : labels[role] || role}</span></span>`;
+}
+
+function roleChangeDrawer() {
+  const data = state.drawerData;
+  const member = data?.member;
+  const isMember = data?.kind === "member";
+  if (!member) return "";
+  const options = isMember
+    ? [
+        ...(isRoot() ? [{ value: "company_admin", label: "기업 슈퍼 관리자", description: "회사 운영과 구성원 관리" }] : []),
+        { value: "manager", label: "매니저", description: "드롭·코드 운영 및 검수 요청" },
+        { value: "editor", label: "에디터", description: "카드·드롭 초안 편집" },
+        { value: "viewer", label: "뷰어", description: "읽기 전용" },
+      ]
+    : [{ value: "fan", label: "팬" }, { value: "artist", label: "아티스트" }, { value: "admin", label: "관리자" }];
+  return `${drawerHeader("ACCESS", "역할 변경", `${member.displayName || member.email} 계정의 접근 범위를 변경합니다.`)}<form class="drawer-body form" id="role-change-form"><div class="assignment-member"><span class="person-avatar">${escapeHtml((member.displayName || member.email).slice(0, 1))}</span><div><strong>${escapeHtml(member.displayName || "-")}</strong><small>${escapeHtml(member.email)}</small></div></div><label class="field"><span>새 역할</span>${adminSelect({ id: "role-change-value", name: "role", value: isMember ? member.accessLevel : member.role, label: "새 역할", className: "form-select", options })}</label><p class="hint">권한을 낮추거나 변경하면 해당 계정의 기존 로그인 세션이 종료됩니다.</p><footer class="drawer-footer"><button class="secondary close-drawer" type="button">취소</button><button class="primary" type="submit">역할 저장</button></footer></form>`;
+}
+
+function memberPasswordDrawer() {
+  const member = state.drawerData?.member;
+  if (!member) return "";
+  return `${drawerHeader("SECURITY", "임시 비밀번호 재발급", `${member.displayName || member.email} 계정의 기존 세션을 종료했습니다.`)}<div class="drawer-body"><div class="security-callout">${icon("verified_user")}<span>새 임시 비밀번호로 한 번 로그인한 뒤, 담당자가 직접 비밀번호를 변경해야 합니다.</span></div>${temporaryCredentialPanel()}<footer class="drawer-footer"><button class="primary close-drawer" type="button">확인</button></footer></div>`;
 }
 
 function memberDrawer() {
@@ -775,9 +807,7 @@ function userRows() {
     return '<tr><td colspan="4" class="empty">사용자가 없습니다.</td></tr>';
   return state.users
     .map((user) => {
-      const roleControl = user.isCurrentUser
-        ? '<span class="badge draft">현재 세션</span>'
-        : adminSelect({ id: `user-role-${user.id}`, value: user.role, label: `${user.email} 역할`, className: "role-change", options: [{ value: "fan", label: "팬" }, { value: "artist", label: "아티스트" }, { value: "admin", label: "관리자" }] });
+      const roleControl = `${accessRoleBadge(user.role, user.isCurrentUser)}${user.isCurrentUser ? "" : `<button class="icon-button row-action role-edit-trigger" type="button" data-edit-user-role="${escapeHtml(user.id)}" aria-label="${escapeHtml(user.email)} 역할 변경" title="역할 변경">${icon("manage_accounts")}</button>`}`;
       return `<tr><td><strong>${escapeHtml(user.email)}</strong><small>${escapeHtml(user.id)}</small></td><td>${escapeHtml(user.nickname || "-")}</td><td>${user.onboardingCompleted ? "완료" : "미완료"}</td><td>${roleControl}</td></tr>`;
     })
     .join("");
@@ -1202,7 +1232,7 @@ function openDrawer(name, data = null) {
   if (name === "organization") resetOrganizationLogoState();
   state.drawer = name;
   state.drawerData = data;
-  if (name !== "member") state.temporaryCredential = null;
+  if (name !== "member" && name !== "member-password") state.temporaryCredential = null;
   layout();
   requestAnimationFrame(() =>
     document.querySelector(".drawer input, .drawer select")?.focus(),
@@ -1468,6 +1498,42 @@ async function toggleOrganizationMemberStatus(memberId, nextStatus) {
     { status: nextStatus },
     nextStatus === "active" ? "관리자를 활성화했습니다." : "관리자 접근을 중지했습니다.",
   );
+}
+
+async function resetOrganizationMemberPassword(memberId) {
+  const organization = state.selectedOrganization;
+  const member = state.organizationMembers.find((item) => item.id === memberId);
+  if (!organization || !member || !window.confirm(`${member.displayName} 관리자의 기존 로그인 세션을 종료하고 임시 비밀번호를 재발급할까요?`)) return;
+  try {
+    const result = await api(
+      `/admin/organizations/${encodeURIComponent(organization.id)}/members/${encodeURIComponent(memberId)}/reset-password`,
+      { method: "POST", body: "{}" },
+    );
+    state.temporaryCredential = { ...result.data, wasReset: true };
+    state.drawer = "member-password";
+    state.drawerData = { member: result.data };
+    await loadSelectedOrganization(organization.id, false);
+    layout();
+    toast("임시 비밀번호를 재발급하고 기존 세션을 종료했습니다.");
+  } catch {
+    toast("임시 비밀번호 재발급에 실패했습니다. 계정과 권한을 확인해 주세요.");
+  }
+}
+
+async function saveRoleChange(event) {
+  event.preventDefault();
+  const data = state.drawerData;
+  const role = new FormData(event.currentTarget).get("role");
+  if (!data?.member || !role) return;
+  if (data.kind === "member") {
+    state.drawer = null;
+    state.drawerData = null;
+    await updateOrganizationMember(data.member.id, { accessLevel: role }, "관리자 권한을 저장했습니다.");
+    return;
+  }
+  state.drawer = null;
+  state.drawerData = null;
+  await updateUserRole(data.member.id, role);
 }
 
 async function saveMemberArtists(event) {
@@ -2223,16 +2289,6 @@ function bind() {
       });
       control.classList.remove("open");
       control.querySelector(".admin-select-trigger").setAttribute("aria-expanded", "false");
-      if (control.classList.contains("role-change") && previous !== option.dataset.value) {
-        void updateUserRole(control.dataset.selectId.replace(/^user-role-/, ""), option.dataset.value);
-      }
-      if (control.classList.contains("member-role") && previous !== option.dataset.value) {
-        void updateOrganizationMember(
-          control.dataset.selectId.replace(/^member-role-/, ""),
-          { accessLevel: option.dataset.value },
-          "관리자 권한을 저장했습니다.",
-        );
-      }
       if (control.classList.contains("card-artist-filter") && previous !== option.dataset.value) {
         state.cardArtist = option.dataset.value;
         layout();
@@ -2273,6 +2329,22 @@ function bind() {
         () => void resetArtistPassword(button.dataset.artistReset),
       ),
     );
+  document.querySelector("#role-change-form")?.addEventListener("submit", saveRoleChange);
+  document.querySelectorAll("[data-edit-user-role]").forEach((button) =>
+    button.addEventListener("click", () => {
+      const member = state.users.find((item) => item.id === button.dataset.editUserRole);
+      if (member) openDrawer("role-change", { kind: "user", member });
+    }),
+  );
+  document.querySelectorAll("[data-edit-member-role]").forEach((button) =>
+    button.addEventListener("click", () => {
+      const member = state.organizationMembers.find((item) => item.id === button.dataset.editMemberRole);
+      if (member) openDrawer("role-change", { kind: "member", member });
+    }),
+  );
+  document.querySelectorAll("[data-reset-member-password]").forEach((button) =>
+    button.addEventListener("click", () => void resetOrganizationMemberPassword(button.dataset.resetMemberPassword)),
+  );
   document
     .querySelectorAll(".review-artist-profile")
     .forEach((button) =>

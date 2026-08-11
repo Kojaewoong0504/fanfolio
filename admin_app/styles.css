@@ -1239,6 +1239,76 @@ button:disabled {
   justify-content: flex-end;
 }
 
+.access-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  max-width: 100%;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.access-role .material-symbols-rounded {
+  font-size: 14px;
+}
+
+.access-role.violet { color: #5946d8; background: #f0eeff; border-color: #e1ddff; }
+.access-role.blue { color: #2464bc; background: #eef6ff; border-color: #dcecff; }
+.access-role.pink { color: #b64e7a; background: #fff0f5; border-color: #ffe0eb; }
+.access-role.gray { color: #66708a; background: #f4f5f9; border-color: #e7e9f0; }
+.access-role.current { color: #8b5d10; background: #fff6e5; border-color: #ffe8be; }
+
+.role-edit-trigger,
+.row-actions .row-action {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  color: #606982;
+  border-color: #e0e3ee;
+  background: #fff;
+}
+
+.role-edit-trigger:hover,
+.row-actions .row-action:hover {
+  color: var(--purple-dark);
+  border-color: #cfcaff;
+  background: var(--purple-soft);
+}
+
+.role-edit-trigger .material-symbols-rounded,
+.row-actions .row-action .material-symbols-rounded {
+  font-size: 17px;
+}
+
+.table td .access-role + .role-edit-trigger {
+  margin-left: 7px;
+  vertical-align: middle;
+}
+
+.security-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid #dfdbff;
+  border-radius: 12px;
+  color: #5c5682;
+  background: #f7f6ff;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.security-callout .material-symbols-rounded { color: var(--purple); font-size: 19px; }
+
 .artist-assignment-grid,
 .artist-overview-grid {
   display: grid;

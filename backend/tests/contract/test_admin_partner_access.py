@@ -387,6 +387,24 @@ def test_company_admin_can_manage_only_subordinate_members_in_own_organization(
     )
     assert updated["displayName"] == "콘텐츠 매니저"
     assert updated["accessLevel"] == "manager"
+
+    reset = assert_success(
+        partner.post(
+            f"/api/admin/organizations/{organization['id']}/members/{created['id']}/reset-password",
+            json={},
+        )
+    )
+    assert reset["id"] == created["id"]
+    assert len(reset["temporaryPassword"]) >= 16
+
+    reset_login = TestClient(app)
+    assert_success(
+        reset_login.post(
+            "/api/auth/admin/login",
+            headers={"X-Fanfolio-Client": "admin"},
+            json={"email": reset["email"], "password": reset["temporaryPassword"]},
+        )
+    )
     reassigned = assert_success(
         partner.put(
             f"/api/admin/organizations/{organization['id']}/members/{created['id']}/artists",

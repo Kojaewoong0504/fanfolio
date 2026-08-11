@@ -43,10 +43,13 @@ test('partner member role menu can escape the table row without being clipped', 
   )
 })
 
-test('partner member role menu persists a custom-select choice through the member API', () => {
-  assert.match(source, /control\.classList\.contains\("member-role"\)/)
-  assert.match(source, /updateOrganizationMember\(/)
-  assert.match(source, /member-role-/)
+test('table roles use compact badges and open a dedicated role editor instead of inline selects', () => {
+  assert.match(source, /function accessRoleBadge/)
+  assert.match(source, /data-edit-member-role/)
+  assert.match(source, /data-edit-user-role/)
+  assert.match(source, /function saveRoleChange/)
+  assert.doesNotMatch(source, /className: "member-role"/)
+  assert.doesNotMatch(source, /className: "role-change"/)
 })
 
 test('form custom selects preserve a hidden form value and do not collapse labels with descriptions', () => {
