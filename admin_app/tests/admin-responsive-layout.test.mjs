@@ -31,6 +31,18 @@ test('mobile tables become vertical records instead of widening the page', () =>
   assert.match(css, /display:\s*grid/)
 })
 
+test('partner member role menu can escape the table row without being clipped', () => {
+  assert.match(source, /table-wrap member-table-wrap/)
+  assertCssMatches(
+    /\.member-table-wrap\s*\{[^}]*overflow:\s*visible/s,
+    'allows the role menu to extend below the member table',
+  )
+  assertCssMatches(
+    /\.member-table td:nth-child\(2\)\s*\{[^}]*overflow:\s*visible/s,
+    'allows the role menu to extend outside its table cell',
+  )
+})
+
 test('card creation opens a right drawer and is not rendered as the old inline toolbar', () => {
   assert.match(source, /card-create-drawer/)
   assert.match(source, /open-card-drawer/)

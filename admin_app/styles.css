@@ -1093,6 +1093,14 @@ button:disabled {
   overflow: hidden;
 }
 
+.member-table-wrap {
+  overflow: visible;
+}
+
+.member-table td:nth-child(2) {
+  overflow: visible;
+}
+
 .table {
   width: 100%;
   table-layout: fixed;
