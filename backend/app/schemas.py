@@ -362,6 +362,8 @@ class AchievementDefinitionCreate(BaseModel):
     condition_payload: dict = Field(default_factory=dict, alias="conditionPayload")
     reward_ids: list[str] = Field(default_factory=list, alias="rewardIds", max_length=20)
     xp_bonus: int = Field(default=0, alias="xpBonus", ge=0)
+    starts_at: datetime | None = Field(default=None, alias="startsAt")
+    ends_at: datetime | None = Field(default=None, alias="endsAt")
     model_config = ConfigDict(populate_by_name=True)
 
     @model_validator(mode="after")
@@ -380,6 +382,8 @@ class AchievementDefinitionCreate(BaseModel):
             raise ValueError("specific_card 업적에는 conditionPayload.cardId가 필요합니다.")
         if self.condition_type == "drop_participation" and not self.condition_payload.get("dropId"):
             raise ValueError("drop_participation 업적에는 conditionPayload.dropId가 필요합니다.")
+        if self.starts_at and self.ends_at and self.ends_at <= self.starts_at:
+            raise ValueError("업적 종료 시각은 시작 시각 이후로 선택해 주세요.")
         return self
 
 

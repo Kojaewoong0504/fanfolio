@@ -447,6 +447,8 @@ class AchievementDefinition(Base):
     condition_payload: Mapped[dict] = mapped_column(JSON, default=dict)
     reward_rule_key: Mapped[str | None] = mapped_column(String, nullable=True)
     status: Mapped[str] = mapped_column(String, nullable=False, default="draft")
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class AchievementProgress(Base):

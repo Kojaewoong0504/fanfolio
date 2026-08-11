@@ -12,9 +12,20 @@ function assertMatches(value, pattern, contract) {
 test('fan growth navigation is scoped to engagement writers and global managers', () => {
   assert.match(source, /id: "fan-growth"/)
   assert.match(source, /label: "팬 성장"/)
+  assert.match(source, /canViewFanGrowth/)
   assert.match(source, /can\("engagement:write"\)/)
   assert.match(source, /can\("engagement:manage_global"\)/)
+  assert.match(source, /can\("engagement:approve_global"\)/)
   assert.match(source, /engagement\/achievements/)
+})
+
+test('platform approvers can view fan growth review queues without create controls', () => {
+  assert.match(source, /const canViewFanGrowth = \(\) =>/)
+  assert.match(source, /canManageFanGrowth\(\) \|\| canApproveFanGrowth\(\)/)
+  assert.match(source, /if \(!canViewFanGrowth\(\)\)/)
+  assert.match(source, /if \(!canViewFanGrowth\(\) && state\.view === "fan-growth"\)/)
+  assert.match(source, /canManageFanGrowth\(\) \? `[\s\S]*open-fan-pass-drawer/)
+  assert.match(source, /canManageFanGrowth\(\) \? `[\s\S]*open-achievement-drawer/)
 })
 
 test('fan growth loads achievements rewards and pass seasons in one isolated request group', () => {
@@ -48,6 +59,16 @@ test('achievement drawer exposes scoped Korean templates and separates draft rev
   assert.match(source, /검수 요청/)
   assert.match(source, /업적 공개 승인/)
   assert.match(source, /can\("engagement:approve"\)|can\("engagement:approve_global"\)/)
+})
+
+test('achievement drawer saves period fields in the achievement payload', () => {
+  assert.match(source, /name="startsAt"/)
+  assert.match(source, /name="endsAt"/)
+  assert.match(source, /toLocalInputDateTime\(achievement\.startsAt\)/)
+  assert.match(source, /toLocalInputDateTime\(achievement\.endsAt\)/)
+  assert.match(source, /startsAt:\s*startsAt \? new Date\(startsAt\)\.toISOString\(\) : null/)
+  assert.match(source, /endsAt:\s*endsAt \? new Date\(endsAt\)\.toISOString\(\) : null/)
+  assert.match(source, /업적 종료 시각은 시작 시각 이후로 선택해 주세요/)
 })
 
 test('free fan pass drawer omits paid fields and validates end after start inline', () => {

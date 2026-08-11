@@ -70,6 +70,37 @@ def test_company_manager_can_draft_only_assigned_artist_achievement(
     )
 
 
+def test_admin_achievement_persists_review_period(
+    actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
+) -> None:
+    _, member = create_partner(
+        actors["admin"],
+        email="company-achievement-period@starwave.com",
+        access_level="manager",
+    )
+    company_client = login_partner(app, member)
+
+    draft = assert_success(
+        company_client.post(
+            "/api/admin/engagement/achievements",
+            json=achievement_payload(
+                title="기간 업적",
+                startsAt="2026-08-01T00:00:00Z",
+                endsAt="2026-08-31T23:59:00Z",
+            ),
+        ),
+        201,
+    )
+
+    assert draft["startsAt"] == "2026-08-01T00:00:00+00:00"
+    assert draft["endsAt"] == "2026-08-31T23:59:00+00:00"
+
+    listed = assert_success(company_client.get("/api/admin/engagement/achievements"))["items"]
+    persisted = next(item for item in listed if item["id"] == draft["id"])
+    assert persisted["startsAt"] == "2026-08-01T00:00:00+00:00"
+    assert persisted["endsAt"] == "2026-08-31T23:59:00+00:00"
+
+
 def test_admin_creates_free_only_pass_season_and_ignores_paid_input(
     actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
 ) -> None:

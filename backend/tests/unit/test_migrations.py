@@ -224,6 +224,11 @@ def test_alembic_upgrade_creates_the_current_schema(tmp_path: Path) -> None:
             row[1] for row in connection.execute("PRAGMA table_info(reward_grants)").fetchall()
         }
         assert "claimed_at" in reward_grant_columns
+        achievement_columns = {
+            row[1]: row
+            for row in connection.execute("PRAGMA table_info(achievement_definitions)").fetchall()
+        }
+        assert {"starts_at", "ends_at"} <= set(achievement_columns)
         pass_season_columns = {
             row[1]: row for row in connection.execute("PRAGMA table_info(pass_seasons)").fetchall()
         }

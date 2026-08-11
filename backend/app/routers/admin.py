@@ -175,6 +175,14 @@ def drop_data(drop: Drop) -> dict:
     }
 
 
+def _iso_utc(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.isoformat()
+
+
 def achievement_data(achievement: AchievementDefinition) -> dict:
     payload = achievement.condition_payload or {}
     reward_ids = payload.get("rewardIds")
@@ -193,6 +201,8 @@ def achievement_data(achievement: AchievementDefinition) -> dict:
         "rewardIds": reward_ids,
         "xpBonus": payload.get("xpBonus", 0),
         "status": achievement.status,
+        "startsAt": _iso_utc(achievement.starts_at),
+        "endsAt": _iso_utc(achievement.ends_at),
     }
 
 
@@ -461,6 +471,8 @@ async def create_achievement(
         condition_payload=payload.condition_payload,
         reward_rule_key=payload.reward_ids[0] if payload.reward_ids else None,
         status="draft",
+        starts_at=payload.starts_at,
+        ends_at=payload.ends_at,
     )
     session.add(achievement)
     await record_audit(
