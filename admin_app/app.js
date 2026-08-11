@@ -872,7 +872,13 @@ function achievementRows(achievements) {
   return achievements
     .map((item) => {
       const rewards = (item.rewardIds || []).length;
-      return `<tr><td data-label="업적"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.description || item.id)}</small></td><td data-label="조건">${escapeHtml(conditionLabels[item.conditionType] || item.conditionType)}<small>목표 ${Number(item.targetValue || 1).toLocaleString()}</small></td><td data-label="범위">${escapeHtml(scopeText(item))}</td><td data-label="XP·보상"><strong>${Number(item.xpBonus || 0).toLocaleString()} XP</strong><small>보상 ${rewards}개</small></td><td data-label="상태"><span class="badge ${item.status === "published" ? "success-badge" : item.status === "pending_review" ? "warning-badge" : "draft"}">${escapeHtml(fanGrowthStatusLabel(item.status))}</span></td><td data-label="관리"><div class="row-actions"><button class="icon-button edit-achievement" type="button" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(item.title)} 수정">${icon("edit")}</button>${item.status === "draft" ? `<button class="secondary fan-growth-transition" type="button" data-kind="achievement" data-action="submit" data-id="${escapeHtml(item.id)}">검수 요청</button>` : ""}${canApproveFanGrowth() && item.status === "pending_review" ? `<button class="primary fan-growth-transition" type="button" data-kind="achievement" data-action="approve" data-id="${escapeHtml(item.id)}">업적 공개 승인</button>` : ""}</div></td></tr>`;
+      const writeActions = canManageFanGrowth()
+        ? `<button class="icon-button edit-achievement" type="button" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(item.title)} 수정">${icon("edit")}</button>${item.status === "draft" ? `<button class="secondary fan-growth-transition" type="button" data-kind="achievement" data-action="submit" data-id="${escapeHtml(item.id)}">검수 요청</button>` : ""}`
+        : "";
+      const approveAction = canApproveFanGrowth() && item.status === "pending_review"
+        ? `<button class="primary fan-growth-transition" type="button" data-kind="achievement" data-action="approve" data-id="${escapeHtml(item.id)}">업적 공개 승인</button>`
+        : "";
+      return `<tr><td data-label="업적"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.description || item.id)}</small></td><td data-label="조건">${escapeHtml(conditionLabels[item.conditionType] || item.conditionType)}<small>목표 ${Number(item.targetValue || 1).toLocaleString()}</small></td><td data-label="범위">${escapeHtml(scopeText(item))}</td><td data-label="XP·보상"><strong>${Number(item.xpBonus || 0).toLocaleString()} XP</strong><small>보상 ${rewards}개</small></td><td data-label="상태"><span class="badge ${item.status === "published" ? "success-badge" : item.status === "pending_review" ? "warning-badge" : "draft"}">${escapeHtml(fanGrowthStatusLabel(item.status))}</span></td><td data-label="관리"><div class="row-actions">${writeActions}${approveAction}</div></td></tr>`;
     })
     .join("");
 }
@@ -880,10 +886,15 @@ function achievementRows(achievements) {
 function fanPassRows(passSeasons) {
   if (!passSeasons.length) return '<tr><td colspan="6" class="empty">아직 등록된 무료 팬 패스가 없습니다.</td></tr>';
   return passSeasons
-    .map(
-      (item) =>
-        `<tr><td data-label="패스"><strong>${escapeHtml(item.title)}</strong><small>무료 Fan Pass</small></td><td data-label="범위">${escapeHtml(scopeText(item))}</td><td data-label="기간">${formatDate(item.startsAt)}<small>${formatDate(item.endsAt)}</small></td><td data-label="티어">${Number((item.tiers || []).length).toLocaleString()}개</td><td data-label="상태"><span class="badge ${item.status === "published" ? "success-badge" : item.status === "pending_review" ? "warning-badge" : "draft"}">${escapeHtml(fanGrowthStatusLabel(item.status))}</span></td><td data-label="관리"><div class="row-actions"><button class="icon-button edit-fan-pass" type="button" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(item.title)} 수정">${icon("edit")}</button>${item.status === "draft" ? `<button class="secondary fan-growth-transition" type="button" data-kind="pass" data-action="submit" data-id="${escapeHtml(item.id)}">검수 요청</button>` : ""}${canApproveFanGrowth() && item.status === "pending_review" ? `<button class="primary fan-growth-transition" type="button" data-kind="pass" data-action="approve" data-id="${escapeHtml(item.id)}">패스 공개 승인</button>` : ""}</div></td></tr>`,
-    )
+    .map((item) => {
+      const writeActions = canManageFanGrowth()
+        ? `<button class="icon-button edit-fan-pass" type="button" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(item.title)} 수정">${icon("edit")}</button>${item.status === "draft" ? `<button class="secondary fan-growth-transition" type="button" data-kind="pass" data-action="submit" data-id="${escapeHtml(item.id)}">검수 요청</button>` : ""}`
+        : "";
+      const approveAction = canApproveFanGrowth() && item.status === "pending_review"
+        ? `<button class="primary fan-growth-transition" type="button" data-kind="pass" data-action="approve" data-id="${escapeHtml(item.id)}">패스 공개 승인</button>`
+        : "";
+      return `<tr><td data-label="패스"><strong>${escapeHtml(item.title)}</strong><small>무료 Fan Pass</small></td><td data-label="범위">${escapeHtml(scopeText(item))}</td><td data-label="기간">${formatDate(item.startsAt)}<small>${formatDate(item.endsAt)}</small></td><td data-label="티어">${Number((item.tiers || []).length).toLocaleString()}개</td><td data-label="상태"><span class="badge ${item.status === "published" ? "success-badge" : item.status === "pending_review" ? "warning-badge" : "draft"}">${escapeHtml(fanGrowthStatusLabel(item.status))}</span></td><td data-label="관리"><div class="row-actions">${writeActions}${approveAction}</div></td></tr>`;
+    })
     .join("");
 }
 function releaseStatusLabel(status) {

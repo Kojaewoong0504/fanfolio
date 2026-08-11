@@ -28,6 +28,13 @@ test('platform approvers can view fan growth review queues without create contro
   assert.match(source, /canManageFanGrowth\(\) \? `[\s\S]*open-achievement-drawer/)
 })
 
+test('approve-only fan growth users do not see row edit or draft submit controls', () => {
+  assert.match(source, /const writeActions = canManageFanGrowth\(\)[\s\S]*edit-achievement/)
+  assert.match(source, /const writeActions = canManageFanGrowth\(\)[\s\S]*edit-fan-pass/)
+  assert.match(source, /canApproveFanGrowth\(\) && item\.status === "pending_review"[\s\S]*업적 공개 승인/)
+  assert.match(source, /canApproveFanGrowth\(\) && item\.status === "pending_review"[\s\S]*패스 공개 승인/)
+})
+
 test('fan growth loads achievements rewards and pass seasons in one isolated request group', () => {
   assert.match(source, /function loadFanGrowth/)
   assert.match(source, /Promise\.all\(\[/)
