@@ -6,7 +6,7 @@ from hashlib import sha256
 from secrets import token_urlsafe
 from uuid import uuid4
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -210,10 +210,31 @@ async def published_definitions_for_event(
     if event.kind != "card_collected":
         return []
     artist_id = event.payload.get("artistId")
+    organization_id = await organization_id_for_card_collected_event(session, event)
+    organization_filters = (
+        [
+            AchievementDefinition.organization_id.is_(None),
+            or_(
+                AchievementDefinition.artist_id.is_(None),
+                AchievementDefinition.artist_id == artist_id,
+            ),
+        ]
+        if organization_id is None
+        else [
+            or_(
+                AchievementDefinition.organization_id == organization_id,
+                and_(
+                    AchievementDefinition.organization_id.is_(None),
+                    AchievementDefinition.artist_id.is_(None),
+                ),
+            )
+        ]
+    )
     return list(
         await session.scalars(
             select(AchievementDefinition).where(
                 AchievementDefinition.status == "published",
+                *organization_filters,
                 or_(
                     AchievementDefinition.artist_id.is_(None),
                     AchievementDefinition.artist_id == artist_id,
@@ -221,6 +242,39 @@ async def published_definitions_for_event(
             )
         )
     )
+
+
+async def organization_id_for_card_collected_event(
+    session: AsyncSession, event: EngagementEvent
+) -> str | None:
+    if event.kind != "card_collected":
+        return None
+    if event.source_type == "user_card":
+        organization_id = await session.scalar(
+            select(Drop.organization_id)
+            .select_from(UserCard)
+            .join(Card, Card.id == UserCard.card_id)
+            .join(Drop, Drop.id == Card.drop_id)
+            .where(UserCard.id == event.source_id, UserCard.user_id == event.user_id)
+        )
+        if organization_id is not None:
+            return organization_id
+
+    card_id = event.payload.get("cardId")
+    drop_id = event.payload.get("dropId")
+    if card_id or drop_id:
+        conditions = []
+        if card_id:
+            conditions.append(Card.id == card_id)
+        if drop_id:
+            conditions.append(Drop.id == drop_id)
+        return await session.scalar(
+            select(Drop.organization_id)
+            .select_from(Card)
+            .join(Drop, Drop.id == Card.drop_id)
+            .where(*conditions)
+        )
+    return None
 
 
 def eligible_source_card_conditions(*, user_id: str) -> list[object]:
