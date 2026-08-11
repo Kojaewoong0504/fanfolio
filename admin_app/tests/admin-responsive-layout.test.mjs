@@ -75,7 +75,8 @@ test('operational list filters use the same accessible custom control as role ch
 
 test('company administrators can inspect but cannot alter their organization artist scope', () => {
   assert.match(source, /const canManageScope = isRoot\(\)/)
-  assert.match(source, /루트 관리자 관리 범위/)
+  assert.match(source, /연결된 아티스트 범위 안에서 카드와 드롭을 운영할 수 있습니다/)
+  assert.doesNotMatch(source, /루트 관리자 관리 범위/)
   assert.match(source, /canManageScope \? '<button class="primary" id="save-organization-artists"/)
 })
 
