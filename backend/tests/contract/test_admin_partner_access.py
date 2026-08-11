@@ -152,6 +152,10 @@ def test_root_can_manage_partner_organization_and_member(
     listed = assert_success(actors["admin"].get("/api/admin/organizations"))
     assert listed["meta"]["pagination"]["total"] == 1
     assert listed["items"][0]["id"] == organization["id"]
+    listed_by_slug = assert_success(
+        actors["admin"].get("/api/admin/organizations", params={"query": "starwave"})
+    )
+    assert listed_by_slug["items"][0]["id"] == organization["id"]
 
     detail = assert_success(actors["admin"].get(f"/api/admin/organizations/{organization['id']}"))
     assert detail["memberCount"] == 1

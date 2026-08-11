@@ -3,7 +3,7 @@ from secrets import token_urlsafe
 from uuid import uuid4
 
 from fastapi import APIRouter, Query, status
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import CurrentAdmin, DbSession
@@ -166,7 +166,14 @@ async def list_organizations(
     context.require_root()
     filters = []
     if query:
-        filters.append(Organization.name.ilike(f"%{query}%"))
+        search = f"%{query}%"
+        filters.append(
+            or_(
+                Organization.name.ilike(search),
+                Organization.slug.ilike(search),
+                Organization.contact_email.ilike(search),
+            )
+        )
     if organization_status:
         filters.append(Organization.status == organization_status)
     total = await session.scalar(select(func.count()).select_from(Organization).where(*filters))

@@ -1046,6 +1046,15 @@ async function saveOrganization(event) {
     );
   } catch (error) {
     submit.disabled = false;
+    if (error.status === 409) {
+      // A previous click may have committed before the UI lost its response.
+      // Refresh the directory so the conflicting record is visible immediately.
+      try {
+        await loadOrganizations(false);
+      } catch {
+        // Keep the actionable conflict message even if the directory is unavailable.
+      }
+    }
     const detail = String(error?.message || error).replace(/^API \d+\s*/, "");
     const message = error.status === 409
       ? "이미 사용 중인 파트너 코드입니다. 다른 코드를 입력해 주세요."
