@@ -109,7 +109,9 @@ class DropCreateRequest(BaseModel):
 
 
 class DropStatusUpdate(BaseModel):
-    status: Literal["draft", "pending_review", "scheduled", "live", "ended"]
+    # 발행 요청은 /submit 전용 흐름으로만 전환한다. 일반 상태 변경 API에서
+    # pending_review를 허용하면 초안 검증과 제출 감사 로그가 우회될 수 있다.
+    status: Literal["draft", "scheduled", "live", "ended"]
 
 
 class DropUpdateRequest(BaseModel):

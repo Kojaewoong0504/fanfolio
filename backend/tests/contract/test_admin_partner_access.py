@@ -321,6 +321,36 @@ def test_company_admin_can_read_only_own_organization_and_members(
     )
 
 
+def test_company_admin_catalog_includes_every_artist_linked_to_own_organization(
+    actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
+) -> None:
+    async def add_second_artist() -> None:
+        async with SessionLocal() as session:
+            session.add(Artist(id="artist_company_second", name="세컨드 웨이브"))
+            await session.commit()
+
+    asyncio.run(add_second_artist())
+    organization, company_admin = create_partner(
+        actors["admin"],
+        email="company-catalog@starwave.com",
+        access_level="company_admin",
+        artist_ids=["artist_nova3"],
+    )
+    assert_success(
+        actors["admin"].put(
+            f"/api/admin/organizations/{organization['id']}/artists",
+            json={"artistIds": ["artist_nova3", "artist_company_second"]},
+        )
+    )
+
+    catalog = assert_success(login_partner(app, company_admin).get("/api/admin/catalog"))
+
+    assert {item["id"] for item in catalog["artists"]} == {
+        "artist_nova3",
+        "artist_company_second",
+    }
+
+
 def test_company_admin_can_manage_only_subordinate_members_in_own_organization(
     actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
 ) -> None:

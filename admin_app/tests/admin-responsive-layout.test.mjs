@@ -43,6 +43,12 @@ test('partner member role menu can escape the table row without being clipped', 
   )
 })
 
+test('partner member role menu persists a custom-select choice through the member API', () => {
+  assert.match(source, /control\.classList\.contains\("member-role"\)/)
+  assert.match(source, /updateOrganizationMember\(/)
+  assert.match(source, /member-role-/)
+})
+
 test('card creation opens a right drawer and is not rendered as the old inline toolbar', () => {
   assert.match(source, /card-create-drawer/)
   assert.match(source, /open-card-drawer/)

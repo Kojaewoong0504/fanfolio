@@ -769,6 +769,8 @@ async def update_drop_status(
             entity_type="drop",
             entity_id=drop.id,
             details={"previousStatus": previous_status},
+            organization_id=drop.organization_id,
+            artist_id=drop.artist_id,
         )
         await notify_fans(
             session,

@@ -63,6 +63,24 @@ def test_admin_can_create_list_and_activate_a_drop(
     assert event["title"] == "새 드롭이 시작되었어요"
 
 
+def test_drop_status_endpoint_cannot_bypass_draft_submission_flow(
+    actors: dict[str, TestClient],
+) -> None:
+    created = assert_success(
+        actors["admin"].post("/api/admin/drops", json={"name": "제출 경로 검증"}),
+        201,
+    )
+
+    assert_error(
+        actors["admin"].patch(
+            f"/api/admin/drops/{created['id']}/status",
+            json={"status": "pending_review"},
+        ),
+        422,
+        "VALIDATION_ERROR",
+    )
+
+
 def test_fan_cannot_manage_drops(actors: dict[str, TestClient]) -> None:
     assert_error(actors["fan"].get("/api/admin/drops"), 403, "FORBIDDEN")
 

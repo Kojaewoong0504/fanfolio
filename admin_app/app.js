@@ -211,14 +211,18 @@ function title() {
 }
 
 function navItems() {
+  const companyWorkspace = !isRoot() && state.adminContext?.accessLevel === "company_admin";
   return [
     { id: "dashboard", label: "개요", icon: "space_dashboard" },
     ...(isRoot()
       ? [{ id: "partners", label: "파트너", icon: "domain" }]
       : []),
+    ...(companyWorkspace
+      ? [{ id: "partners", label: "우리 회사", icon: "domain" }]
+      : []),
     { id: "artists", label: "아티스트", icon: "recent_actors" },
     { id: "cards", label: "카드", icon: "style" },
-    ...(isRoot()
+    ...(can("drops:read")
       ? [{ id: "batches", label: "드롭·코드", icon: "qr_code_2" }]
       : []),
     ...(isRoot()
@@ -277,7 +281,7 @@ function adminSelect({ id, value, label, options, className = "" }) {
 }
 
 function guideView() {
-  return `<div class="page-heading"><div><p class="eyebrow">OPERATIONS PLAYBOOK</p><h2>관리자 웹 운영 가이드</h2><p>역할과 작업 경계를 먼저 확인하면 카드 공개까지의 흐름을 안전하게 운영할 수 있습니다.</p></div></div><div class="guide-grid"><section class="panel guide-hero"><span class="guide-icon">${icon("route")}</span><div><h3>팬에게 공개되기까지</h3><p>파트너 등록 → 아티스트 연결 → 담당자 발급 → 카드 제작·등록 → 검수 → 공개 순서로 진행합니다.</p></div></section><section class="panel"><p class="eyebrow">WORKSPACE BOUNDARY</p><h3>운영 카드와 아티스트 스튜디오</h3><div class="guide-compare"><article><span class="guide-icon purple">${icon("inventory_2")}</span><h4>운영 카드 등록</h4><p>관리자 또는 기업 담당자가 팬에게 공개할 카드의 이미지, 아티스트·멤버, 등급, 발행 수량과 공개 상태를 관리합니다.</p><span class="badge success-badge">운영·검수·공개</span></article><article><span class="guide-icon blue">${icon("design_services")}</span><h4>아티스트 스튜디오</h4><p>아티스트와 소속 스태프가 사진, 손글씨, 그림, 스티커, 보이스, 모션과 홀로그램 요소를 창작하고 검수를 요청합니다.</p><span class="badge draft">창작·초안·검수 요청</span></article></div></section><section class="panel"><p class="eyebrow">ROLE MAP</p><h3>권한별 책임</h3><div class="guide-steps"><div><strong>ROOT</strong><span>파트너와 기업 관리자 발급, 전체 아티스트 범위·사용자·카드 공개를 관리합니다.</span></div><div><strong>기업 관리자</strong><span>배정된 아티스트의 카드 운영과 검수 요청만 처리합니다.</span></div><div><strong>아티스트 스튜디오</strong><span>발급받은 전용 계정으로 특별 카드를 만들고 운영 검수를 요청합니다.</span></div></div></section><section class="panel"><p class="eyebrow">TROUBLESHOOTING</p><h3>문제가 생겼을 때</h3><ul class="guide-list"><li><strong>파트너 등록 실패</strong><span>파트너 코드는 영문 소문자·숫자·하이픈만 사용하며, 이미 등록된 코드는 사용할 수 없습니다.</span></li><li><strong>카드 미리보기 없음</strong><span>카드 원본 이미지가 저장소에 올라갔는지 확인하고, 카드 상세에서 이미지를 교체해 주세요.</span></li><li><strong>관리 범위가 보이지 않음</strong><span>ROOT가 파트너에 아티스트를 연결한 뒤 기업 관리자 계정에 담당 아티스트를 배정해야 합니다.</span></li></ul></section></div>`;
+  return `<div class="page-heading"><div><p class="eyebrow">OPERATIONS PLAYBOOK</p><h2>관리자 웹 운영 가이드</h2><p>조직·아티스트·드롭의 범위를 먼저 정하면 공개 과정에서 권한 충돌을 막을 수 있습니다.</p></div></div><div class="guide-grid"><section class="panel guide-hero"><span class="guide-icon">${icon("route")}</span><div><h3>팬에게 공개되기까지</h3><p>파트너 등록 → 아티스트 연결 → 기업 관리자 발급 → 카드 초안 → 드롭 발행 요청 → 루트 검수·공개 순서로 운영합니다.</p></div></section><section class="panel"><p class="eyebrow">WORKSPACE BOUNDARY</p><h3>운영 카드와 아티스트 스튜디오</h3><div class="guide-compare"><article><span class="guide-icon purple">${icon("inventory_2")}</span><h4>운영 카드·드롭</h4><p>회사 운영진이 담당 아티스트의 카드, 드롭, QR 코드와 공개 요청을 관리합니다. 코드는 공개 카드와 라이브 드롭에만 발행합니다.</p><span class="badge success-badge">운영·발행·공개</span></article><article><span class="guide-icon blue">${icon("design_services")}</span><h4>아티스트 스튜디오</h4><p>아티스트와 소속 스태프가 사진, 손글씨, 그림, 스티커, 보이스·모션·홀로그램 요소를 창작하고 검수를 요청합니다.</p><span class="badge draft">창작·초안·검수 요청</span></article></div></section><section class="panel"><p class="eyebrow">ROLE MAP</p><h3>권한별 책임</h3><div class="guide-steps"><div><strong>ROOT</strong><span>모든 파트너·계약·아티스트·공개 검수와 서비스 사용자를 관리합니다.</span></div><div><strong>기업 슈퍼 관리자</strong><span>자기 회사의 구성원과 연결 아티스트, 카드·드롭·코드를 운영합니다. 다른 회사에는 접근할 수 없습니다.</span></div><div><strong>매니저 / 에디터 / 뷰어</strong><span>매니저는 담당 아티스트의 드롭 발행 요청과 코드 운영, 에디터는 초안 편집, 뷰어는 조회만 할 수 있습니다.</span></div></div></section><section class="panel"><p class="eyebrow">TROUBLESHOOTING</p><h3>문제가 생겼을 때</h3><ul class="guide-list"><li><strong>파트너 등록 실패</strong><span>파트너 코드는 영문 소문자·숫자·하이픈만 사용하며, 이미 등록된 코드는 사용할 수 없습니다.</span></li><li><strong>드롭을 만들 수 없음</strong><span>회사에 연결된 아티스트가 있어야 합니다. 매니저·에디터는 배정된 아티스트만 선택할 수 있습니다.</span></li><li><strong>코드 배치가 비활성화됨</strong><span>공개 카드와 라이브 상태의 같은 아티스트 드롭을 먼저 준비해 주세요.</span></li></ul></section></div>`;
 }
 
 function layout() {
@@ -410,7 +414,10 @@ function partnersView() {
   if (!organization) {
     return `<div class="partner-empty-state">${icon("domain_add")}<h2>첫 파트너를 등록해 보세요</h2><p>계약 기업을 등록한 뒤 담당 관리자와 아티스트를 연결할 수 있습니다.</p><button class="primary" id="empty-add-organization" type="button">파트너 등록</button></div>`;
   }
-  return `<section class="partner-detail-view"><div class="partner-mobile-selector"><label>파트너 선택<select id="partner-mobile-select">${state.organizations.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === organization.id ? "selected" : ""}>${escapeHtml(item.name)}</option>`).join("")}</select></label></div><header class="partner-hero">${partnerLogoMarkup(organization, "large")}<div class="partner-identity"><div class="partner-name-row"><h2>${escapeHtml(organization.name)}</h2><span class="badge ${organization.status === "active" ? "success-badge" : "danger-badge"}">${organization.status === "active" ? "운영 중" : "운영 중지"}</span></div><p>${escapeHtml(organization.contactEmail || "대표 담당자 이메일 미등록")}</p><div class="partner-meta"><span>${icon("calendar_month")} ${formatContractDate(organization.contractStartsAt)} – ${formatContractDate(organization.contractEndsAt)}</span><span>${icon("update")} ${formatDate(organization.updatedAt)} 업데이트</span></div></div><div class="partner-hero-actions"><button class="secondary" id="edit-organization" type="button">${icon("edit")} 정보 수정</button><button class="secondary danger-button" id="toggle-organization-status" type="button" data-next-status="${organization.status === "active" ? "suspended" : "active"}">${icon(organization.status === "active" ? "pause_circle" : "play_circle")} ${organization.status === "active" ? "운영 중지" : "다시 활성화"}</button></div></header><nav class="detail-tabs" aria-label="파트너 상세 메뉴">${[
+  const managementActions = isRoot()
+    ? `<div class="partner-hero-actions"><button class="secondary" id="edit-organization" type="button">${icon("edit")} 정보 수정</button><button class="secondary danger-button" id="toggle-organization-status" type="button" data-next-status="${organization.status === "active" ? "suspended" : "active"}">${icon(organization.status === "active" ? "pause_circle" : "play_circle")} ${organization.status === "active" ? "운영 중지" : "다시 활성화"}</button></div>`
+    : `<div class="partner-hero-actions"><span class="scope-status">${icon("verified_user")} 내 회사 운영 범위</span></div>`;
+  return `<section class="partner-detail-view"><div class="partner-mobile-selector">${isRoot() ? `<label>파트너 선택<select id="partner-mobile-select">${state.organizations.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === organization.id ? "selected" : ""}>${escapeHtml(item.name)}</option>`).join("")}</select></label>` : ""}</div><header class="partner-hero">${partnerLogoMarkup(organization, "large")}<div class="partner-identity"><div class="partner-name-row"><h2>${escapeHtml(organization.name)}</h2><span class="badge ${organization.status === "active" ? "success-badge" : "danger-badge"}">${organization.status === "active" ? "운영 중" : "운영 중지"}</span></div><p>${escapeHtml(organization.contactEmail || "대표 담당자 이메일 미등록")}</p><div class="partner-meta"><span>${icon("calendar_month")} ${formatContractDate(organization.contractStartsAt)} – ${formatContractDate(organization.contractEndsAt)}</span><span>${icon("update")} ${formatDate(organization.updatedAt)} 업데이트</span></div></div>${managementActions}</header><nav class="detail-tabs" aria-label="파트너 상세 메뉴">${[
     ["overview", "개요"],
     ["members", "관리자"],
     ["artists", "아티스트"],
@@ -429,12 +436,20 @@ function partnerTabView(organization) {
 }
 
 function partnerMembersView() {
+  const roleOptions = [
+    ...(isRoot()
+      ? [{ value: "company_admin", label: "기업 슈퍼 관리자", description: "회사 운영과 구성원 관리" }]
+      : []),
+    { value: "manager", label: "매니저", description: "드롭·코드 운영 및 검수 요청" },
+    { value: "editor", label: "에디터", description: "카드·드롭 초안 편집" },
+    { value: "viewer", label: "뷰어", description: "읽기 전용" },
+  ];
   return `<section class="detail-section full"><div class="section-heading"><div><p class="eyebrow">ACCESS CONTROL</p><h3>기업 관리자</h3><p>담당 범위와 읽기·편집 권한을 계정별로 관리합니다.</p></div><button class="primary" id="open-member-drawer" type="button">${icon("person_add")} 관리자 추가</button></div>${
     state.organizationMembers.length
       ? `<div class="table-wrap member-table-wrap"><table class="table responsive-table member-table"><thead><tr><th>관리자</th><th>권한</th><th>담당 아티스트</th><th>최근 로그인</th><th>상태</th><th><span class="sr-only">관리</span></th></tr></thead><tbody>${state.organizationMembers
           .map(
             (member) =>
-              `<tr><td data-label="관리자"><div class="person-cell"><span class="person-avatar">${escapeHtml((member.displayName || member.email).slice(0, 1))}</span><div><strong>${escapeHtml(member.displayName)}</strong><small>${escapeHtml(member.email)}</small></div></div></td><td data-label="권한">${adminSelect({ id: `member-role-${member.id}`, value: member.accessLevel, label: `${member.displayName} 권한`, className: "member-role", options: [{ value: "manager", label: "매니저", description: "편집 및 검수 요청" }, { value: "editor", label: "에디터", description: "콘텐츠 편집" }, { value: "viewer", label: "뷰어", description: "읽기 전용" }] })}</td><td data-label="담당 아티스트"><button class="artist-assignment-trigger" type="button" data-assign-member="${escapeHtml(member.id)}">${member.assignedArtists.length ? member.assignedArtists.map((artist) => `<span>${escapeHtml(artist.name)}</span>`).join("") : "배정 없음"} ${icon("edit")}</button></td><td data-label="최근 로그인">${formatDate(member.lastLoginAt)}</td><td data-label="상태"><span class="badge ${member.status === "active" ? "success-badge" : "danger-badge"}">${member.status === "active" ? "활성" : "중지"}</span></td><td data-label="관리"><button class="icon-button member-status" type="button" data-member-id="${escapeHtml(member.id)}" data-next-status="${member.status === "active" ? "suspended" : "active"}" aria-label="${member.status === "active" ? "계정 중지" : "계정 활성화"}">${icon(member.status === "active" ? "person_off" : "person_check")}</button></td></tr>`,
+              `<tr><td data-label="관리자"><div class="person-cell"><span class="person-avatar">${escapeHtml((member.displayName || member.email).slice(0, 1))}</span><div><strong>${escapeHtml(member.displayName)}</strong><small>${escapeHtml(member.email)}</small></div></div></td><td data-label="권한">${adminSelect({ id: `member-role-${member.id}`, value: member.accessLevel, label: `${member.displayName} 권한`, className: "member-role", options: roleOptions })}</td><td data-label="담당 아티스트"><button class="artist-assignment-trigger" type="button" data-assign-member="${escapeHtml(member.id)}">${member.assignedArtists.length ? member.assignedArtists.map((artist) => `<span>${escapeHtml(artist.name)}</span>`).join("") : "배정 없음"} ${icon("edit")}</button></td><td data-label="최근 로그인">${formatDate(member.lastLoginAt)}</td><td data-label="상태"><span class="badge ${member.status === "active" ? "success-badge" : "danger-badge"}">${member.status === "active" ? "활성" : "중지"}</span></td><td data-label="관리">${member.accessLevel === "company_admin" && !isRoot() ? '<span class="muted">보호됨</span>' : `<button class="icon-button member-status" type="button" data-member-id="${escapeHtml(member.id)}" data-next-status="${member.status === "active" ? "suspended" : "active"}" aria-label="${member.status === "active" ? "계정 중지" : "계정 활성화"}">${icon(member.status === "active" ? "person_off" : "person_check")}</button>`}</td></tr>`,
           )
           .join("")}</tbody></table></div>`
       : `<div class="inline-empty">${icon("manage_accounts")}<h4>등록된 기업 관리자가 없습니다.</h4><p>첫 담당자 계정을 발급하고 담당 아티스트를 배정하세요.</p><button class="primary" id="empty-add-member" type="button">관리자 추가</button></div>`
@@ -616,13 +631,20 @@ function reviewPanel() {
 
 function batchesView() {
   const published = state.cards.filter((card) => card.status === "published");
+  const availableArtists = scopedArtists();
+  const artistChoices = availableArtists
+    .map(
+      (artist) =>
+        `<option value="${escapeHtml(artist.id)}">${escapeHtml(artist.name)}</option>`,
+    )
+    .join("");
   const dropOptions = state.drops
     .map(
       (drop) =>
         `<option value="${escapeHtml(drop.id)}">${escapeHtml(drop.name)} · ${escapeHtml(drop.status)}</option>`,
     )
     .join("");
-  return `<div class="batch-layout"><div class="panel"><h2>새 드롭 만들기</h2><form class="form" id="drop-form"><label class="field">드롭 이름<input name="name" placeholder="예: 2026 봄 컴백" required /></label><label class="field">시작 시각<input name="startsAt" type="datetime-local" /></label><label class="field">종료 시각<input name="endsAt" type="datetime-local" /></label><button class="primary" type="submit">드롭 생성</button></form><div class="table-wrap"><table class="table"><thead><tr><th>드롭</th><th>상태</th><th>기간</th><th>관리</th></tr></thead><tbody>${dropRows()}</tbody></table></div></div><div class="panel"><h2>새 코드 배치 만들기</h2><form class="form" id="batch-form"><label class="field">카드 선택<select name="cardId" required>${published.length ? published.map((card) => `<option value="${escapeHtml(card.id)}">${escapeHtml(card.name)}</option>`).join("") : '<option value="">공개 카드가 없습니다.</option>'}</select></label><label class="field">드롭 선택<select name="dropId" required>${dropOptions || '<option value="">먼저 드롭을 만드세요.</option>'}</select></label><label class="field">생성 수량<input name="quantity" type="number" min="1" value="1000" required /></label><label class="field">코드 최대 사용 횟수<input name="maxUsesPerCode" type="number" min="1" value="1" required /></label><label class="field">만료 시각<input name="expiresAt" type="datetime-local" required /></label><label class="field">코드 접두사<input name="prefix" value="FANFOLIO" maxlength="30" required /></label><button class="primary" type="submit" ${published.length && state.drops.some((drop) => drop.status === "live") ? "" : "disabled"}>코드 배치 생성</button></form>${state.batch ? `<div class="notice success">배치 ${escapeHtml(state.batch.id)}가 생성되었습니다. <button class="text-link" id="download-csv">CSV 다운로드</button> <button class="text-link" id="download-qr-zip">QR ZIP 다운로드</button></div>` : ""}</div></div>${codeBatchPanel()}<div class="panel"><h2>생성된 코드 배치</h2><p class="hint">코드 수와 실제 사용 수를 확인하고 필요한 파일을 다시 내려받을 수 있습니다.</p><div class="table-wrap"><table class="table"><thead><tr><th>배치</th><th>생성 수</th><th>사용 수</th><th>만료</th><th>다운로드</th><th>관리</th></tr></thead><tbody>${batchRows()}</tbody></table></div></div>`;
+  return `<div class="page-heading"><div><p class="eyebrow">DROP & REDEEM CODE</p><h2>드롭과 카드 코드를 운영합니다</h2><p>담당 아티스트의 공개 카드에만 코드를 발행하고, 매니저는 초안을 발행 요청으로 전달합니다.</p></div></div><div class="batch-layout"><div class="panel"><h2>새 드롭 만들기</h2><form class="form" id="drop-form"><label class="field">드롭 이름<input name="name" placeholder="예: 2026 봄 컴백" required /></label><label class="field">대상 아티스트<select name="artistId" required><option value="">아티스트 선택</option>${artistChoices}</select></label><label class="field">시작 시각<input name="startsAt" type="datetime-local" /></label><label class="field">종료 시각<input name="endsAt" type="datetime-local" /></label><button class="primary" type="submit" ${can("drops:write") && availableArtists.length ? "" : "disabled"}>드롭 초안 생성</button></form><div class="table-wrap"><table class="table"><thead><tr><th>드롭</th><th>상태</th><th>기간</th><th>관리</th></tr></thead><tbody>${dropRows()}</tbody></table></div></div><div class="panel"><h2>새 코드 배치 만들기</h2><form class="form" id="batch-form"><label class="field">카드 선택<select name="cardId" required>${published.length ? published.map((card) => `<option value="${escapeHtml(card.id)}">${escapeHtml(card.name)}</option>`).join("") : '<option value="">공개 카드가 없습니다.</option>'}</select></label><label class="field">드롭 선택<select name="dropId" required>${dropOptions || '<option value="">먼저 드롭을 만드세요.</option>'}</select></label><label class="field">생성 수량<input name="quantity" type="number" min="1" value="1000" required /></label><label class="field">코드 최대 사용 횟수<input name="maxUsesPerCode" type="number" min="1" value="1" required /></label><label class="field">만료 시각<input name="expiresAt" type="datetime-local" required /></label><label class="field">코드 접두사<input name="prefix" value="FANFOLIO" maxlength="30" required /></label><button class="primary" type="submit" ${can("codes:write") && published.length && state.drops.some((drop) => drop.status === "live") ? "" : "disabled"}>코드 배치 생성</button></form>${state.batch ? `<div class="notice success">배치 ${escapeHtml(state.batch.id)}가 생성되었습니다. <button class="text-link" id="download-csv">CSV 다운로드</button> <button class="text-link" id="download-qr-zip">QR ZIP 다운로드</button></div>` : ""}</div></div>${codeBatchPanel()}<div class="panel"><h2>생성된 코드 배치</h2><p class="hint">코드 수와 실제 사용 수를 확인하고 필요한 파일을 다시 내려받을 수 있습니다.</p><div class="table-wrap"><table class="table"><thead><tr><th>배치</th><th>생성 수</th><th>사용 수</th><th>만료</th><th>다운로드</th><th>관리</th></tr></thead><tbody>${batchRows()}</tbody></table></div></div>`;
 }
 function codeStatusLabel(status) {
   return (
@@ -654,13 +676,20 @@ function dropRows() {
     return '<tr><td colspan="4" class="empty">등록된 드롭이 없습니다.</td></tr>';
   return state.drops
     .map((drop) => {
-      const action =
-        drop.status === "live"
+      const action = isRoot()
+        ? drop.status === "live"
           ? `<button class="secondary drop-status" data-id="${escapeHtml(drop.id)}" data-status="ended">종료하기</button>`
           : drop.status === "ended"
             ? '<span class="eyebrow">종료됨</span>'
-            : `<button class="secondary drop-status" data-id="${escapeHtml(drop.id)}" data-status="live">활성화</button>`;
-      return `<tr><td>${escapeHtml(drop.name)}</td><td><span class="badge ${drop.status === "live" ? "" : "draft"}">${escapeHtml(drop.status)}</span></td><td>${escapeHtml(drop.startsAt ? new Date(drop.startsAt).toLocaleDateString("ko-KR") : "-")} ~ ${escapeHtml(drop.endsAt ? new Date(drop.endsAt).toLocaleDateString("ko-KR") : "-")}</td><td>${action}</td></tr>`;
+            : `<button class="secondary drop-status" data-id="${escapeHtml(drop.id)}" data-status="live">공개하기</button>`
+        : drop.status === "draft" && can("drops:submit")
+          ? `<button class="secondary submit-drop" data-id="${escapeHtml(drop.id)}">발행 요청</button>`
+          : drop.status === "pending_review"
+            ? '<span class="eyebrow">검수 대기</span>'
+            : drop.status === "live"
+              ? '<span class="badge success-badge">공개 중</span>'
+              : '<span class="eyebrow">종료됨</span>';
+      return `<tr><td><strong>${escapeHtml(drop.name)}</strong><small>${escapeHtml(drop.artistId || "아티스트 미지정")}</small></td><td><span class="badge ${drop.status === "live" ? "success-badge" : "draft"}">${escapeHtml(drop.status === "pending_review" ? "검수 대기" : drop.status)}</span></td><td>${escapeHtml(drop.startsAt ? new Date(drop.startsAt).toLocaleDateString("ko-KR") : "-")} ~ ${escapeHtml(drop.endsAt ? new Date(drop.endsAt).toLocaleDateString("ko-KR") : "-")}</td><td>${action}</td></tr>`;
     })
     .join("");
 }
@@ -919,7 +948,7 @@ async function loadData() {
     const me = await api("/admin/me");
     state.adminContext = me.data;
     state.authenticated = true;
-    if (!isRoot() && ["partners", "batches", "users"].includes(state.view)) {
+    if (!isRoot() && ["users"].includes(state.view)) {
       state.view = "dashboard";
     }
     const userParams = new URLSearchParams({
@@ -975,17 +1004,36 @@ async function loadData() {
       state.artistProfilesLoaded = true;
       await loadOrganizations(false);
     } else {
-      state.drops = [];
-      state.batches = [];
+      const requests = [api("/admin/drops"), api("/admin/redeem-code-batches")];
+      if (state.adminContext.accessLevel === "company_admin") {
+        requests.push(
+          api(
+            `/admin/organizations/${encodeURIComponent(state.adminContext.organization.id)}`,
+          ),
+          api(
+            `/admin/organizations/${encodeURIComponent(state.adminContext.organization.id)}/members`,
+          ),
+        );
+      }
+      const results = await Promise.all(requests);
+      state.drops = results[0].data.items;
+      state.batches = results[1].data.items;
       state.users = [];
       state.campaigns = [];
       state.artistAccounts = [];
       state.artistProfiles = [];
       state.artistProfilesLoaded = false;
-      state.organizations = [];
-      state.selectedOrganizationId = "";
-      state.selectedOrganization = null;
-      state.organizationMembers = [];
+      if (state.adminContext.accessLevel === "company_admin") {
+        state.selectedOrganization = results[2].data;
+        state.selectedOrganizationId = state.selectedOrganization.id;
+        state.organizations = [state.selectedOrganization];
+        state.organizationMembers = results[3].data.items;
+      } else {
+        state.organizations = [];
+        state.selectedOrganizationId = "";
+        state.selectedOrganization = null;
+        state.organizationMembers = [];
+      }
     }
   } catch (error) {
     if (error.status === 401) {
@@ -1724,6 +1772,7 @@ async function createDrop(event) {
       method: "POST",
       body: JSON.stringify({
         name: form.get("name"),
+        artistId: form.get("artistId"),
         startsAt: form.get("startsAt")
           ? new Date(form.get("startsAt")).toISOString()
           : null,
@@ -1756,6 +1805,18 @@ async function updateDropStatus(dropId, nextStatus) {
         ? "드롭 종료에 실패했습니다."
         : "드롭 활성화에 실패했습니다.",
     );
+  }
+}
+
+async function submitDrop(dropId) {
+  try {
+    await api(`/admin/drops/${encodeURIComponent(dropId)}/submit`, {
+      method: "POST",
+    });
+    await loadData();
+    toast("드롭 발행 요청을 전달했습니다.");
+  } catch {
+    toast("드롭 발행 요청에 실패했습니다. 현재 상태와 권한을 확인해 주세요.");
   }
 }
 async function updateUserRole(userId, role) {
@@ -1877,15 +1938,6 @@ function bind() {
       );
       if (artist) openDrawer("artist-edit", { artist });
     }),
-  );
-  document.querySelectorAll(".member-role").forEach((select) =>
-    select.addEventListener("change", () =>
-      void updateOrganizationMember(
-        select.dataset.memberId,
-        { accessLevel: select.value },
-        "관리자 권한을 저장했습니다.",
-      ),
-    ),
   );
   document.querySelectorAll(".member-status").forEach((button) =>
     button.addEventListener("click", () =>
@@ -2117,6 +2169,11 @@ function bind() {
         updateDropStatus(button.dataset.id, button.dataset.status),
       ),
     );
+  document
+    .querySelectorAll(".submit-drop")
+    .forEach((button) =>
+      button.addEventListener("click", () => void submitDrop(button.dataset.id)),
+    );
   document.querySelectorAll(".admin-select-trigger").forEach((trigger) => {
     trigger.addEventListener("click", () => {
       const control = trigger.closest(".admin-select");
@@ -2142,6 +2199,13 @@ function bind() {
       control.querySelector(".admin-select-trigger").setAttribute("aria-expanded", "false");
       if (control.classList.contains("role-change") && previous !== option.dataset.value) {
         void updateUserRole(control.dataset.selectId.replace(/^user-role-/, ""), option.dataset.value);
+      }
+      if (control.classList.contains("member-role") && previous !== option.dataset.value) {
+        void updateOrganizationMember(
+          control.dataset.selectId.replace(/^member-role-/, ""),
+          { accessLevel: option.dataset.value },
+          "관리자 권한을 저장했습니다.",
+        );
       }
     }),
   );
