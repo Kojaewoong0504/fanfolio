@@ -101,13 +101,15 @@ class CodeBatchRequest(BaseModel):
 
 class DropCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
+    organization_id: str | None = Field(default=None, alias="organizationId")
+    artist_id: str | None = Field(default=None, alias="artistId")
     starts_at: datetime | None = Field(default=None, alias="startsAt")
     ends_at: datetime | None = Field(default=None, alias="endsAt")
     model_config = ConfigDict(populate_by_name=True)
 
 
 class DropStatusUpdate(BaseModel):
-    status: Literal["draft", "scheduled", "live", "ended"]
+    status: Literal["draft", "pending_review", "scheduled", "live", "ended"]
 
 
 class DropUpdateRequest(BaseModel):

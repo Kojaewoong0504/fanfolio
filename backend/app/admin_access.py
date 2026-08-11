@@ -75,7 +75,6 @@ PARTNER_ACTIONS = {
             "drops:read",
             "drops:write",
             "codes:read",
-            "codes:write",
             "audit:read",
         }
     ),

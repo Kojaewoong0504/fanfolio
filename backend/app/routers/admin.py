@@ -24,6 +24,7 @@ from app.models import (
     CollectionCampaign,
     Drop,
     Member,
+    OrganizationArtist,
     RedeemCode,
     RedeemCodeBatch,
     RefreshToken,
@@ -99,9 +100,58 @@ def drop_data(drop: Drop) -> dict:
         "id": drop.id,
         "name": drop.name,
         "status": drop.status,
+        "organizationId": drop.organization_id,
+        "artistId": drop.artist_id,
         "startsAt": drop.starts_at.isoformat() if drop.starts_at else None,
         "endsAt": drop.ends_at.isoformat() if drop.ends_at else None,
     }
+
+
+def _require_scoped_action(context: AdminContext, action: str) -> None:
+    if not context.is_root:
+        context.require_action(action)
+
+
+async def _organization_artist_or_404(
+    session: DbSession,
+    context: AdminContext,
+    organization_id: str,
+    artist_id: str,
+) -> None:
+    organization_artist = await session.scalar(
+        select(OrganizationArtist).where(
+            OrganizationArtist.organization_id == organization_id,
+            OrganizationArtist.artist_id == artist_id,
+        )
+    )
+    if organization_artist is None:
+        raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
+    if (
+        not context.is_root
+        and context.membership.access_level != "company_admin"
+        and artist_id not in context.assigned_artist_ids
+    ):
+        raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
+
+
+async def scoped_drop_or_404(
+    drop_id: str,
+    context: AdminContext,
+    session: DbSession,
+) -> Drop:
+    drop = await session.get(Drop, drop_id)
+    if drop is None:
+        raise AppError(404, "DROP_NOT_FOUND", "드롭을 찾을 수 없습니다.")
+    if context.is_root:
+        return drop
+    if (
+        context.organization is None
+        or drop.organization_id != context.organization.id
+        or drop.artist_id is None
+    ):
+        raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
+    await _organization_artist_or_404(session, context, drop.organization_id, drop.artist_id)
+    return drop
 
 
 def qr_png_bytes(code: str) -> bytes:
@@ -306,16 +356,21 @@ async def cards(
 
 
 @router.get("/drops")
-async def list_drops(_: RootAdminUser, session: DbSession) -> dict:
-    drops = await session.scalars(select(Drop).order_by(Drop.id.desc()))
+async def list_drops(context: CurrentAdmin, session: DbSession) -> dict:
+    _require_scoped_action(context, "drops:read")
+    statement = select(Drop).order_by(Drop.id.desc())
+    if not context.is_root:
+        statement = statement.where(Drop.organization_id == context.membership.organization_id)
+        if context.membership.access_level != "company_admin":
+            statement = statement.where(Drop.artist_id.in_(context.assigned_artist_ids))
+    drops = await session.scalars(statement)
     return {"ok": True, "data": {"items": [drop_data(drop) for drop in drops]}}
 
 
 @router.get("/drops/{drop_id}")
-async def get_drop(drop_id: str, _: RootAdminUser, session: DbSession) -> dict:
-    drop = await session.get(Drop, drop_id)
-    if not drop:
-        raise AppError(404, "DROP_NOT_FOUND", "드롭을 찾을 수 없습니다.")
+async def get_drop(drop_id: str, context: CurrentAdmin, session: DbSession) -> dict:
+    _require_scoped_action(context, "drops:read")
+    drop = await scoped_drop_or_404(drop_id, context, session)
     return {"ok": True, "data": drop_data(drop)}
 
 
@@ -658,17 +713,41 @@ async def approve_card(card_id: str, admin: RootAdminUser, session: DbSession) -
 
 
 @router.post("/drops", status_code=status.HTTP_201_CREATED)
-async def create_drop(payload: DropCreateRequest, _: RootAdminUser, session: DbSession) -> dict:
+async def create_drop(
+    payload: DropCreateRequest, context: CurrentAdmin, session: DbSession
+) -> dict:
+    _require_scoped_action(context, "drops:write")
     if payload.starts_at and payload.ends_at and payload.ends_at <= payload.starts_at:
         raise AppError(422, "INVALID_DROP_WINDOW", "종료 시각은 시작 시각보다 늦어야 합니다.")
+    organization_id = payload.organization_id
+    artist_id = payload.artist_id
+    if not context.is_root:
+        organization_id = context.membership.organization_id
+        if artist_id is None:
+            raise AppError(422, "ARTIST_REQUIRED", "아티스트를 선택해 주세요.")
+    elif bool(organization_id) != bool(artist_id):
+        raise AppError(422, "DROP_SCOPE_REQUIRED", "조직과 아티스트 범위를 함께 선택해 주세요.")
+    if organization_id and artist_id:
+        await _organization_artist_or_404(session, context, organization_id, artist_id)
     drop = Drop(
         id=f"drop_{uuid4().hex[:10]}",
         name=payload.name,
         status="draft",
+        organization_id=organization_id,
+        artist_id=artist_id,
         starts_at=payload.starts_at,
         ends_at=payload.ends_at,
     )
     session.add(drop)
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="drop.created",
+        entity_type="drop",
+        entity_id=drop.id,
+        organization_id=drop.organization_id,
+        artist_id=drop.artist_id,
+    )
     await session.commit()
     return {"ok": True, "data": drop_data(drop)}
 
@@ -701,16 +780,35 @@ async def update_drop_status(
     return {"ok": True, "data": {"id": drop.id, "status": drop.status}}
 
 
+@router.post("/drops/{drop_id}/submit")
+async def submit_drop(drop_id: str, context: CurrentAdmin, session: DbSession) -> dict:
+    _require_scoped_action(context, "drops:submit")
+    drop = await scoped_drop_or_404(drop_id, context, session)
+    if drop.status != "draft":
+        raise AppError(409, "INVALID_DROP_STATUS", "초안 드롭만 발행 요청할 수 있습니다.")
+    drop.status = "pending_review"
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="drop.submitted",
+        entity_type="drop",
+        entity_id=drop.id,
+        organization_id=drop.organization_id,
+        artist_id=drop.artist_id,
+    )
+    await session.commit()
+    return {"ok": True, "data": drop_data(drop)}
+
+
 @router.patch("/drops/{drop_id}")
 async def update_drop(
     drop_id: str,
     payload: DropUpdateRequest,
-    _: RootAdminUser,
+    context: CurrentAdmin,
     session: DbSession,
 ) -> dict:
-    drop = await session.get(Drop, drop_id)
-    if not drop:
-        raise AppError(404, "DROP_NOT_FOUND", "드롭을 찾을 수 없습니다.")
+    _require_scoped_action(context, "drops:write")
+    drop = await scoped_drop_or_404(drop_id, context, session)
     values = payload.model_dump(exclude_unset=True, by_alias=False)
     starts_at = values.get("starts_at", drop.starts_at)
     ends_at = values.get("ends_at", drop.ends_at)
@@ -718,6 +816,16 @@ async def update_drop(
         raise AppError(422, "INVALID_DROP_WINDOW", "종료 시각은 시작 시각보다 늦어야 합니다.")
     for field, value in values.items():
         setattr(drop, field, value)
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="drop.updated",
+        entity_type="drop",
+        entity_id=drop.id,
+        organization_id=drop.organization_id,
+        artist_id=drop.artist_id,
+        details={"fields": sorted(values)},
+    )
     await session.commit()
     return {"ok": True, "data": drop_data(drop)}
 
@@ -1037,14 +1145,39 @@ async def review_artist_profile(
     return {"ok": True, "data": artist_profile_data(user, profile, artist)}
 
 
+async def scoped_code_batch_or_404(
+    batch_id: str,
+    context: AdminContext,
+    session: DbSession,
+) -> RedeemCodeBatch:
+    batch = await session.get(RedeemCodeBatch, batch_id)
+    if batch is None:
+        raise AppError(404, "BATCH_NOT_FOUND", "코드 배치를 찾을 수 없습니다.")
+    await scoped_drop_or_404(batch.drop_id, context, session)
+    return batch
+
+
+async def scoped_redeem_code_or_404(
+    code_id: str,
+    context: AdminContext,
+    session: DbSession,
+) -> RedeemCode:
+    code = await session.get(RedeemCode, code_id)
+    if code is None:
+        raise AppError(404, "REDEEM_CODE_NOT_FOUND", "코드를 찾을 수 없습니다.")
+    await scoped_drop_or_404(code.drop_id, context, session)
+    return code
+
+
 @router.post("/redeem-code-batches", status_code=status.HTTP_201_CREATED)
-async def code_batch(payload: CodeBatchRequest, _: RootAdminUser, session: DbSession) -> dict:
-    drop = await session.get(Drop, payload.drop_id)
+async def code_batch(payload: CodeBatchRequest, context: CurrentAdmin, session: DbSession) -> dict:
+    _require_scoped_action(context, "codes:write")
+    drop = await scoped_drop_or_404(payload.drop_id, context, session)
     card = await session.get(Card, payload.card_id)
-    if not drop:
-        raise AppError(404, "DROP_NOT_FOUND", "드롭을 찾을 수 없습니다.")
     if not card:
         raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
+    if not context.is_root and card.artist_id != drop.artist_id:
+        raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
     if drop.status != "live":
         raise AppError(409, "DROP_NOT_LIVE", "진행 중인 드롭에만 코드를 발급할 수 있습니다.")
     if card.status != "published":
@@ -1075,6 +1208,16 @@ async def code_batch(payload: CodeBatchRequest, _: RootAdminUser, session: DbSes
                 batch_id=batch_id,
             )
         )
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="redeem_code_batch.created",
+        entity_type="redeem_code_batch",
+        entity_id=batch.id,
+        organization_id=drop.organization_id,
+        artist_id=drop.artist_id,
+        details={"quantity": payload.quantity, "cardId": card.id},
+    )
     await session.commit()
     return {
         "ok": True,
@@ -1104,8 +1247,18 @@ def redeem_code_status(code: RedeemCode) -> str:
 
 
 @router.get("/redeem-code-batches")
-async def list_code_batches(_: RootAdminUser, session: DbSession) -> dict:
-    batches = await session.scalars(select(RedeemCodeBatch).order_by(RedeemCodeBatch.id.desc()))
+async def list_code_batches(context: CurrentAdmin, session: DbSession) -> dict:
+    _require_scoped_action(context, "codes:read")
+    statement = (
+        select(RedeemCodeBatch)
+        .join(Drop, RedeemCodeBatch.drop_id == Drop.id)
+        .order_by(RedeemCodeBatch.id.desc())
+    )
+    if not context.is_root:
+        statement = statement.where(Drop.organization_id == context.membership.organization_id)
+        if context.membership.access_level != "company_admin":
+            statement = statement.where(Drop.artist_id.in_(context.assigned_artist_ids))
+    batches = await session.scalars(statement)
     usage_rows = (
         await session.execute(
             select(
@@ -1146,11 +1299,10 @@ async def list_code_batches(_: RootAdminUser, session: DbSession) -> dict:
 
 @router.get("/redeem-code-batches/{batch_id}/export")
 async def export_code_batch(
-    batch_id: str, _: RootAdminUser, session: DbSession
+    batch_id: str, context: CurrentAdmin, session: DbSession
 ) -> StreamingResponse:
-    batch = await session.get(RedeemCodeBatch, batch_id)
-    if not batch:
-        raise AppError(404, "BATCH_NOT_FOUND", "코드 배치를 찾을 수 없습니다.")
+    _require_scoped_action(context, "codes:read")
+    batch = await scoped_code_batch_or_404(batch_id, context, session)
     codes = await session.scalars(
         select(RedeemCode).where(RedeemCode.batch_id == batch_id).order_by(RedeemCode.code)
     )
@@ -1182,7 +1334,7 @@ async def export_code_batch(
 @router.get("/redeem-code-batches/{batch_id}/codes")
 async def list_redeem_codes(
     batch_id: str,
-    _: RootAdminUser,
+    context: CurrentAdmin,
     session: DbSession,
     code_status: str | None = Query(default=None, alias="status"),
     limit: int = Query(default=100, ge=1, le=500),
@@ -1194,9 +1346,8 @@ async def list_redeem_codes(
     operational exceptions such as a damaged or leaked physical card. Raw codes
     are intentionally available only behind the admin role, just like the CSV.
     """
-    batch = await session.get(RedeemCodeBatch, batch_id)
-    if not batch:
-        raise AppError(404, "BATCH_NOT_FOUND", "코드 배치를 찾을 수 없습니다.")
+    _require_scoped_action(context, "codes:read")
+    await scoped_code_batch_or_404(batch_id, context, session)
     if code_status not in {None, "active", "disabled", "expired", "exhausted"}:
         raise AppError(422, "INVALID_CODE_STATUS", "코드 상태가 올바르지 않습니다.")
 
@@ -1235,11 +1386,10 @@ async def list_redeem_codes(
 
 
 @router.get("/redeem-codes/{code_id}/qr")
-async def redeem_code_qr(code_id: str, _: RootAdminUser, session: DbSession) -> Response:
+async def redeem_code_qr(code_id: str, context: CurrentAdmin, session: DbSession) -> Response:
     """Render a printable QR whose payload is the redeem code itself."""
-    code = await session.get(RedeemCode, code_id)
-    if not code:
-        raise AppError(404, "REDEEM_CODE_NOT_FOUND", "코드를 찾을 수 없습니다.")
+    _require_scoped_action(context, "codes:read")
+    code = await scoped_redeem_code_or_404(code_id, context, session)
     return Response(
         content=await asyncio.to_thread(qr_png_bytes, code.code),
         media_type="image/png",
@@ -1248,11 +1398,12 @@ async def redeem_code_qr(code_id: str, _: RootAdminUser, session: DbSession) -> 
 
 
 @router.get("/redeem-code-batches/{batch_id}/qr.zip")
-async def redeem_code_batch_qr_zip(batch_id: str, _: RootAdminUser, session: DbSession) -> Response:
+async def redeem_code_batch_qr_zip(
+    batch_id: str, context: CurrentAdmin, session: DbSession
+) -> Response:
     """Package a batch's printable QR PNGs for production fulfillment."""
-    batch = await session.get(RedeemCodeBatch, batch_id)
-    if not batch:
-        raise AppError(404, "BATCH_NOT_FOUND", "코드 배치를 찾을 수 없습니다.")
+    _require_scoped_action(context, "codes:read")
+    await scoped_code_batch_or_404(batch_id, context, session)
     codes = await session.scalars(
         select(RedeemCode).where(RedeemCode.batch_id == batch_id).order_by(RedeemCode.code)
     )
@@ -1272,12 +1423,11 @@ async def redeem_code_batch_qr_zip(batch_id: str, _: RootAdminUser, session: DbS
 async def update_redeem_code(
     code_id: str,
     payload: RedeemCodeStatusUpdate,
-    admin: RootAdminUser,
+    context: CurrentAdmin,
     session: DbSession,
 ) -> dict:
-    code = await session.get(RedeemCode, code_id)
-    if not code:
-        raise AppError(404, "REDEEM_CODE_NOT_FOUND", "코드를 찾을 수 없습니다.")
+    _require_scoped_action(context, "codes:write")
+    code = await scoped_redeem_code_or_404(code_id, context, session)
     if payload.status == "disabled":
         code.disabled_at = datetime.now(UTC)
     elif payload.status == "expired":
@@ -1287,10 +1437,12 @@ async def update_redeem_code(
         code.disabled_at = None
     await record_audit(
         session,
-        actor_user_id=admin.id,
+        actor_user_id=context.user.id,
         action="redeem_code.status_changed",
         entity_type="redeem_code",
         entity_id=code.code,
+        organization_id=(await session.get(Drop, code.drop_id)).organization_id,
+        artist_id=(await session.get(Drop, code.drop_id)).artist_id,
         details={"status": payload.status},
     )
     await session.commit()

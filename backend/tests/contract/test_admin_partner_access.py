@@ -16,6 +16,7 @@ from app.models import (
     Artist,
     Asset,
     Card,
+    Drop,
     OrganizationArtist,
     RefreshToken,
     Session,
@@ -197,8 +198,9 @@ def test_partner_action_map_includes_company_admin_and_drop_code_scope() -> None
     )
     assert {"drops:read", "drops:write", "drops:submit"} <= PARTNER_ACTIONS["manager"]
     assert {"codes:read", "codes:write"} <= PARTNER_ACTIONS["manager"]
-    assert {"drops:read", "drops:write", "codes:read", "codes:write"} <= PARTNER_ACTIONS["editor"]
+    assert {"drops:read", "drops:write", "codes:read"} <= PARTNER_ACTIONS["editor"]
     assert "drops:submit" not in PARTNER_ACTIONS["editor"]
+    assert "codes:write" not in PARTNER_ACTIONS["editor"]
     assert "codes:read" in PARTNER_ACTIONS["viewer"]
     assert "codes:write" not in PARTNER_ACTIONS["viewer"]
     assert "drops:write" not in PARTNER_ACTIONS["viewer"]
@@ -1072,6 +1074,8 @@ def test_partner_manager_can_only_create_and_list_own_assigned_artist_drops(
     assert created["artistId"] == "artist_nova3"
     listed = assert_success(partner.get("/api/admin/drops"))["items"]
     assert [item["id"] for item in listed] == [created["id"]]
+    submitted = assert_success(partner.post(f"/api/admin/drops/{created['id']}/submit"))
+    assert submitted["status"] == "pending_review"
 
     assert_error(
         partner.post(
@@ -1080,6 +1084,83 @@ def test_partner_manager_can_only_create_and_list_own_assigned_artist_drops(
         ),
         404,
         "RESOURCE_NOT_FOUND",
+    )
+
+
+def test_partner_editor_can_save_drop_draft_but_cannot_submit_or_mutate_codes(
+    actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
+) -> None:
+    _, editor_member = create_partner(
+        actors["admin"],
+        email="editor@starwave.com",
+        access_level="editor",
+    )
+    editor = login_partner(app, editor_member)
+    draft = assert_success(
+        editor.post(
+            "/api/admin/drops",
+            json={"name": "에디터 초안", "artistId": "artist_nova3"},
+        ),
+        201,
+    )
+    assert_error(
+        editor.post(f"/api/admin/drops/{draft['id']}/submit"),
+        403,
+        "ADMIN_WRITE_REQUIRED",
+    )
+    assert_error(
+        editor.post(
+            "/api/admin/redeem-code-batches",
+            json={
+                "dropId": draft["id"],
+                "cardId": "card_published",
+                "quantity": 1,
+                "maxUsesPerCode": 1,
+                "expiresAt": "2030-01-01T00:00:00+00:00",
+                "prefix": "EDITOR",
+            },
+        ),
+        403,
+        "ADMIN_WRITE_REQUIRED",
+    )
+
+
+def test_partner_manager_can_operate_codes_only_for_own_scoped_drop(
+    actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
+) -> None:
+    organization, member = create_partner(actors["admin"])
+
+    async def scope_live_drop() -> None:
+        async with SessionLocal() as session:
+            drop = await session.get(Drop, "drop_live")
+            assert drop is not None
+            drop.organization_id = organization["id"]
+            drop.artist_id = "artist_nova3"
+            await session.commit()
+
+    asyncio.run(scope_live_drop())
+    partner = login_partner(app, member)
+    batch = assert_success(
+        partner.post(
+            "/api/admin/redeem-code-batches",
+            json={
+                "dropId": "drop_live",
+                "cardId": "card_published",
+                "quantity": 1,
+                "maxUsesPerCode": 1,
+                "expiresAt": "2030-01-01T00:00:00+00:00",
+                "prefix": "STARWAVE",
+            },
+        ),
+        201,
+    )
+    batches = assert_success(partner.get("/api/admin/redeem-code-batches"))["items"]
+    assert [item["id"] for item in batches] == [batch["id"]]
+    assert partner.get(batch["csvExportUrl"]).status_code == 200
+    assert_error(
+        partner.get("/api/admin/redeem-code-batches/missing/export"),
+        404,
+        "BATCH_NOT_FOUND",
     )
 
 
@@ -1187,17 +1268,10 @@ def test_partner_root_only_route_matrix_is_denied(
 
     requests = [
         partner.get("/api/admin/organizations"),
-        partner.get("/api/admin/drops"),
         partner.get("/api/admin/users"),
         partner.get("/api/admin/artist-accounts"),
         partner.get("/api/admin/artist-profiles"),
         partner.get("/api/admin/collection-campaigns"),
-        partner.get("/api/admin/redeem-code-batches"),
-        partner.get("/api/admin/redeem-code-batches/missing/export"),
-        partner.get("/api/admin/redeem-code-batches/missing/codes"),
-        partner.get("/api/admin/redeem-code-batches/missing/qr.zip"),
-        partner.get("/api/admin/redeem-codes/NOVA-VALID-01/qr"),
-        partner.patch("/api/admin/redeem-codes/NOVA-VALID-01", json={"status": "disabled"}),
         partner.patch("/api/admin/users/fan/role", json={"role": "artist"}),
         partner.post(
             "/api/admin/artist-accounts",
