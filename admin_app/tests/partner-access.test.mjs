@@ -73,3 +73,25 @@ test('assigned artists expose an editable profile drawer for authorized staff', 
   assert.match(source, /아티스트 정보 수정/)
   assert.match(source, /\/admin\/artists\/\$\{[^}]+\}/)
 })
+
+test('admin explains partner operations and separates studio creation from operations publishing', () => {
+  assert.match(source, /id: "guide"/)
+  assert.match(source, /운영 가이드/)
+  assert.match(source, /아티스트 스튜디오/)
+  assert.match(source, /운영 카드 등록/)
+  assert.match(source, /organization-form-error/)
+})
+
+test('admin uses accessible custom controls for role and artist review changes', () => {
+  assert.doesNotMatch(source, /<select class="role-change"/)
+  assert.doesNotMatch(source, /<select class="artist-profile-artist"/)
+  assert.match(source, /admin-select-trigger/)
+  assert.match(source, /admin-select-option/)
+  assert.match(source, /profile-review-actions/)
+})
+
+test('admin gives a useful card preview fallback when stored media is unavailable', () => {
+  assert.match(source, /review-image-fallback/)
+  assert.match(source, /원본 이미지가 등록되지 않았거나 저장소에서 찾을 수 없습니다/)
+  assert.match(source, /previewImageUrl.*sourceImageUrl/)
+})
