@@ -4,6 +4,7 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy.dialects import postgresql
 from starlette.background import BackgroundTasks
 
 from app.db.session import SessionLocal
@@ -22,7 +23,7 @@ from app.models import (
     XpLedger,
 )
 from app.routers import fan as fan_router
-from app.services import now, process_engagement_event, record_engagement_event
+from app.services import claim_reward_grant, now, process_engagement_event, record_engagement_event
 from tests.conftest import assert_error, assert_success
 
 
@@ -234,6 +235,52 @@ def test_claiming_a_reward_is_idempotent_for_the_owner(actors: dict[str, TestCli
     assert assert_success(actors["fan"].get("/api/me/progression"))["claimableRewards"] == []
 
 
+def test_claim_reward_locks_only_the_owner_grant_row() -> None:
+    class SpySession:
+        def __init__(self) -> None:
+            self.lock_sql: str | None = None
+
+        async def scalar(self, statement: Any) -> RewardGrant:
+            self.lock_sql = str(
+                statement.compile(
+                    dialect=postgresql.dialect(),
+                    compile_kwargs={"literal_binds": True},
+                )
+            )
+            return RewardGrant(
+                id="reward_grant_fan_title",
+                user_id="fan",
+                reward_id="reward_title",
+                source_event_id="evt_1",
+                rule_key="test:title",
+            )
+
+        async def get(self, model: Any, key: str) -> RewardCatalog:
+            assert model is RewardCatalog
+            assert key == "reward_title"
+            return RewardCatalog(
+                id="reward_title",
+                reward_type="title",
+                name="Title Reward",
+                status="published",
+            )
+
+        async def commit(self) -> None:
+            return None
+
+    session = SpySession()
+
+    data = asyncio.run(
+        claim_reward_grant(session, user_id="fan", grant_id="reward_grant_fan_title")
+    )
+
+    assert data["claimedAt"] is not None
+    assert session.lock_sql is not None
+    assert "FROM reward_grants" in session.lock_sql
+    assert "reward_catalog" not in session.lock_sql
+    assert "FOR UPDATE" in session.lock_sql
+
+
 def test_fan_can_equip_claimed_rewards_by_type(actors: dict[str, TestClient]) -> None:
     title_grant_id = seed_reward_grants("fan", ["title"])[0]
     badge_grant_ids = seed_reward_grants("fan", ["badge", "badge", "badge"])
@@ -293,6 +340,24 @@ def test_profile_equipment_rejects_more_than_three_badges(
         422,
         "VALIDATION_ERROR",
     )
+
+
+def test_profile_equipment_rejects_blank_reward_ids(
+    actors: dict[str, TestClient],
+) -> None:
+    payloads = [
+        {"titleRewardId": ""},
+        {"badgeRewardIds": [""]},
+        {"frameRewardId": ""},
+        {"themeRewardId": ""},
+    ]
+
+    for payload in payloads:
+        assert_error(
+            actors["fan"].put("/api/me/profile/equipment", json=payload),
+            422,
+            "VALIDATION_ERROR",
+        )
 
 
 def test_profile_equipment_requires_owner_grant_and_matching_reward_type(

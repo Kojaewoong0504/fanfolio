@@ -436,21 +436,36 @@ def _reward_grant_data(grant: RewardGrant, reward: RewardCatalog) -> dict:
 
 
 async def _reward_grant_with_catalog(
-    session: AsyncSession, *, user_id: str, grant_id: str, lock: bool = False
+    session: AsyncSession, *, user_id: str, grant_id: str
 ) -> tuple[RewardGrant, RewardCatalog] | None:
-    statement = (
-        select(RewardGrant, RewardCatalog)
-        .join(RewardCatalog, RewardCatalog.id == RewardGrant.reward_id)
-        .where(
-            RewardGrant.id == grant_id,
-            RewardGrant.user_id == user_id,
-            RewardCatalog.status == "published",
+    row = (
+        await session.execute(
+            select(RewardGrant, RewardCatalog)
+            .join(RewardCatalog, RewardCatalog.id == RewardGrant.reward_id)
+            .where(
+                RewardGrant.id == grant_id,
+                RewardGrant.user_id == user_id,
+                RewardCatalog.status == "published",
+            )
         )
-    )
-    if lock:
-        statement = statement.with_for_update()
-    row = (await session.execute(statement)).one_or_none()
+    ).one_or_none()
     return row if row else None
+
+
+async def _locked_reward_grant_with_catalog(
+    session: AsyncSession, *, user_id: str, grant_id: str
+) -> tuple[RewardGrant, RewardCatalog] | None:
+    grant = await session.scalar(
+        select(RewardGrant)
+        .where(RewardGrant.id == grant_id, RewardGrant.user_id == user_id)
+        .with_for_update()
+    )
+    if grant is None:
+        return None
+    reward = await session.get(RewardCatalog, grant.reward_id)
+    if reward is None or reward.status != "published":
+        return None
+    return grant, reward
 
 
 async def _equipment_data(session: AsyncSession, *, user_id: str) -> dict:
@@ -556,7 +571,7 @@ async def fan_progression_data(session: AsyncSession, user_id: str) -> dict:
 
 
 async def claim_reward_grant(session: AsyncSession, *, user_id: str, grant_id: str) -> dict:
-    row = await _reward_grant_with_catalog(session, user_id=user_id, grant_id=grant_id, lock=True)
+    row = await _locked_reward_grant_with_catalog(session, user_id=user_id, grant_id=grant_id)
     if row is None:
         raise AppError(404, "REWARD_GRANT_NOT_FOUND", "수령할 보상을 찾을 수 없습니다.")
     grant, reward = row

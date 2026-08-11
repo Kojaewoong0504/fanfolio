@@ -1,9 +1,10 @@
 from datetime import datetime
-from typing import Generic, Literal, TypeVar
+from typing import Annotated, Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 T = TypeVar("T")
+RewardGrantId = Annotated[str, Field(min_length=1)]
 
 ReleaseStatus = Literal[
     "draft",
@@ -83,14 +84,14 @@ class ProfileUpdate(BaseModel):
 
 
 class ProfileEquipmentUpdate(BaseModel):
-    title_reward_id: str | None = Field(default=None, alias="titleRewardId")
-    badge_reward_ids: list[str] = Field(
+    title_reward_id: RewardGrantId | None = Field(default=None, alias="titleRewardId")
+    badge_reward_ids: list[RewardGrantId] = Field(
         default_factory=list,
         alias="badgeRewardIds",
         max_length=3,
     )
-    frame_reward_id: str | None = Field(default=None, alias="frameRewardId")
-    theme_reward_id: str | None = Field(default=None, alias="themeRewardId")
+    frame_reward_id: RewardGrantId | None = Field(default=None, alias="frameRewardId")
+    theme_reward_id: RewardGrantId | None = Field(default=None, alias="themeRewardId")
     public_profile_enabled: bool = Field(default=False, alias="publicProfileEnabled")
     model_config = ConfigDict(populate_by_name=True)
 
