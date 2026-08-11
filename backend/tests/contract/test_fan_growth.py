@@ -88,3 +88,24 @@ def test_successful_redemption_enqueues_committed_growth_event(
     assert len(events) == 1
     assert enqueued_event_ids == [events[0].id]
     assert events[0].source_id == redeemed["userCardId"]
+
+
+def test_successful_redemption_returns_created_when_enqueue_fails(
+    actors: dict[str, TestClient], seeded: dict[str, Any], monkeypatch: Any
+) -> None:
+    def fail_enqueue(event_id: str, background_tasks: BackgroundTasks) -> None:
+        raise RuntimeError(f"queue unavailable for {event_id}")
+
+    monkeypatch.setattr(fan_router, "enqueue_engagement_event", fail_enqueue)
+
+    redeemed = assert_success(
+        actors["fan"].post(
+            "/api/redemptions", json={"code": seeded["codes"]["valid"], "source": "qr"}
+        ),
+        201,
+    )
+
+    events = load_fan_growth_events()
+    assert len(events) == 1
+    assert events[0].source_id == redeemed["userCardId"]
+    assert events[0].status == "pending"

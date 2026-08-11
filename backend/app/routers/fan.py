@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from datetime import UTC, datetime
 from typing import Literal
 from uuid import uuid4
@@ -35,6 +36,7 @@ from app.storage import configured_asset_storage, storage_response
 from app.tasks import enqueue_engagement_event
 
 router = APIRouter(prefix="/api", tags=["fan"])
+logger = logging.getLogger(__name__)
 
 
 def catalog_release_visible() -> object:
@@ -110,10 +112,21 @@ async def create_redemption(
     user: FanUser,
     session: DbSession,
 ) -> dict:
+    user_id = user.id
     client_host = request.client.host if request.client else "unknown"
-    await enforce_rate_limit(f"redemption:{user.id}:{client_host}", limit=10, window_seconds=60)
+    await enforce_rate_limit(f"redemption:{user_id}:{client_host}", limit=10, window_seconds=60)
     redeemed, engagement_event_id = await redeem(session, user, payload.code, payload.source)
-    enqueue_engagement_event(engagement_event_id, background_tasks)
+    try:
+        enqueue_engagement_event(engagement_event_id, background_tasks)
+    except Exception:
+        logger.exception(
+            "Could not enqueue engagement event after redemption commit",
+            extra={
+                "engagement_event_id": engagement_event_id,
+                "user_card_id": redeemed["userCardId"],
+                "user_id": user_id,
+            },
+        )
     return {"ok": True, "data": redeemed}
 
 

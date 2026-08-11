@@ -170,7 +170,13 @@ async def process_engagement_event(event_id: str) -> None:
     state.
     """
     async with SessionLocal() as session:
-        await session.get(EngagementEvent, event_id)
+        event = await session.get(EngagementEvent, event_id)
+        if event is None:
+            raise AppError(
+                404,
+                "ENGAGEMENT_EVENT_NOT_FOUND",
+                "처리할 팬 성장 이벤트를 찾을 수 없습니다.",
+            )
 
 
 async def ensure_demo_catalog(session: AsyncSession) -> None:
