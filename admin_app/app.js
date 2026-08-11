@@ -1823,52 +1823,6 @@ async function logoutAdmin() {
   state.loginError = "";
   layout();
 }
-function toggleDesktopNavigation() {
-  state.navCollapsed = !state.navCollapsed;
-  window.localStorage.setItem(
-    "fanfolio.admin.navCollapsed",
-    String(state.navCollapsed),
-  );
-  layout();
-}
-function closeAccountMenu() {
-  if (!state.accountMenuOpen) return;
-  state.accountMenuOpen = false;
-  layout();
-}
-async function logoutAdmin() {
-  try {
-    await api("/auth/logout", { method: "POST", body: "{}" });
-  } catch {
-    /* The local credential is still cleared below. */
-  }
-  ACCESS_TOKEN = "";
-  state.authenticated = false;
-  state.adminContext = null;
-  state.metrics = null;
-  state.recentActivity = [];
-  state.cards = [];
-  state.drops = [];
-  state.batches = [];
-  state.users = [];
-  state.artistAccounts = [];
-  state.auditLogs = [];
-  state.campaigns = [];
-  state.userQuery = "";
-  state.userRole = "all";
-  state.userPage = 1;
-  state.userPagination = { page: 1, pageSize: 20, total: 0 };
-  state.auditQuery = "";
-  state.auditAction = "all";
-  state.auditPage = 1;
-  state.auditPagination = { page: 1, pageSize: 50, total: 0 };
-  state.codeBatch = null;
-  state.reviewCard = null;
-  state.reviewImageSrc = "";
-  state.accountMenuOpen = false;
-  state.loginError = "";
-  layout();
-}
 async function createAdminCard(event) {
   event.preventDefault();
   const form = new FormData(event.target);
