@@ -1,5 +1,6 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -16,6 +17,9 @@ from app.models import (
     EngagementEvent,
     FanLevel,
     Notification,
+    PassProgress,
+    PassSeason,
+    PassTier,
     ProfileEquipment,
     RewardCatalog,
     RewardGrant,
@@ -102,6 +106,123 @@ def seed_reward_grants(user_id: str, reward_types: list[str]) -> list[str]:
     return asyncio.run(seed())
 
 
+def seed_pass_reward() -> None:
+    async def seed() -> None:
+        async with SessionLocal() as session:
+            session.add(
+                RewardCatalog(
+                    id="reward_pass_badge",
+                    artist_id="artist_nova3",
+                    reward_type="badge",
+                    name="Pass Badge",
+                    status="published",
+                )
+            )
+            await session.commit()
+
+    asyncio.run(seed())
+
+
+def seed_pass_xp(user_id: str, amount: int = 30) -> None:
+    async def seed() -> None:
+        async with SessionLocal() as session:
+            event = EngagementEvent(
+                id=f"evt_{user_id}_pass_xp",
+                user_id=user_id,
+                kind="card_collected",
+                source_type="test",
+                source_id=f"source_{user_id}_pass_xp",
+                payload={"artistId": "artist_nova3"},
+                status="processed",
+                processed_at=now(),
+            )
+            session.add(event)
+            session.add(
+                XpLedger(
+                    id=f"xp_{user_id}_pass",
+                    user_id=user_id,
+                    event_id=event.id,
+                    rule_key="card_collected",
+                    amount=amount,
+                )
+            )
+            await session.commit()
+
+    asyncio.run(seed())
+
+
+def seed_pass_seasons() -> dict[str, str]:
+    async def seed() -> dict[str, str]:
+        async with SessionLocal() as session:
+            session.add_all(
+                [
+                    PassSeason(
+                        id="pass_active_free",
+                        artist_id="artist_nova3",
+                        title="NOVA Free Pass",
+                        status="published",
+                        starts_at=now() - timedelta(days=1),
+                        ends_at=now() + timedelta(days=7),
+                        is_paid=False,
+                    ),
+                    PassSeason(
+                        id="pass_draft_free",
+                        artist_id="artist_nova3",
+                        title="Draft Free Pass",
+                        status="draft",
+                        starts_at=now() - timedelta(days=1),
+                        ends_at=now() + timedelta(days=7),
+                        is_paid=False,
+                    ),
+                    PassSeason(
+                        id="pass_active_paid",
+                        artist_id="artist_nova3",
+                        title="Paid Pass",
+                        status="published",
+                        starts_at=now() - timedelta(days=1),
+                        ends_at=now() + timedelta(days=7),
+                        is_paid=True,
+                    ),
+                ]
+            )
+            session.add_all(
+                [
+                    PassTier(
+                        id="pass_tier_1",
+                        season_id="pass_active_free",
+                        tier=1,
+                        required_xp=20,
+                        reward_id="reward_pass_badge",
+                    ),
+                    PassTier(
+                        id="pass_tier_2",
+                        season_id="pass_active_free",
+                        tier=2,
+                        required_xp=60,
+                        reward_id=None,
+                    ),
+                    PassTier(
+                        id="pass_tier_draft",
+                        season_id="pass_draft_free",
+                        tier=1,
+                        required_xp=10,
+                        reward_id=None,
+                    ),
+                    PassTier(
+                        id="pass_tier_paid",
+                        season_id="pass_active_paid",
+                        tier=1,
+                        required_xp=10,
+                        reward_id=None,
+                    ),
+                ]
+            )
+            await session.commit()
+            return {"seasonId": "pass_active_free", "tierId": "pass_tier_1"}
+
+    return asyncio.run(seed())
+
+
 def test_redeeming_a_live_card_records_one_pending_growth_event(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:
@@ -128,6 +249,150 @@ def test_redeeming_a_live_card_records_one_pending_growth_event(
             "status": "processed",
         }
     ]
+
+
+def test_fan_pass_lists_only_published_free_seasons_and_refreshes_progress(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    seed_pass_reward()
+    seed_pass_xp("fan", amount=30)
+    seeded_pass = seed_pass_seasons()
+
+    fan_pass = assert_success(actors["fan"].get("/api/me/pass"))
+
+    assert [season["id"] for season in fan_pass["seasons"]] == [seeded_pass["seasonId"]]
+    season = fan_pass["seasons"][0]
+    assert season["isPaid"] is False
+    assert season["status"] == "published"
+    assert season["progress"]["currentXp"] == 30
+    assert season["tiers"] == [
+        {
+            "id": "pass_tier_1",
+            "tier": 1,
+            "requiredXp": 20,
+            "rewardId": "reward_pass_badge",
+            "claimed": False,
+            "claimable": True,
+        },
+        {
+            "id": "pass_tier_2",
+            "tier": 2,
+            "requiredXp": 60,
+            "rewardId": None,
+            "claimed": False,
+            "claimable": False,
+        },
+    ]
+
+    async def load_progress() -> PassProgress | None:
+        async with SessionLocal() as session:
+            return await session.get(PassProgress, "pass_progress_fan_pass_active_free")
+
+    progress = asyncio.run(load_progress())
+    assert progress is not None
+    assert progress.current_xp == 30
+
+
+def test_fan_can_claim_unlocked_pass_tier_once(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    seed_pass_reward()
+    seed_pass_xp("fan", amount=30)
+    seeded_pass = seed_pass_seasons()
+
+    claimed = assert_success(
+        actors["fan"].post(f"/api/me/pass-tiers/{seeded_pass['tierId']}/claim")
+    )
+
+    assert claimed["tierId"] == seeded_pass["tierId"]
+    assert claimed["seasonId"] == seeded_pass["seasonId"]
+    assert claimed["rewardGrant"]["rewardId"] == "reward_pass_badge"
+    assert claimed["claimedAt"] is not None
+
+    assert_error(
+        actors["fan"].post(f"/api/me/pass-tiers/{seeded_pass['tierId']}/claim"),
+        409,
+        "PASS_TIER_ALREADY_CLAIMED",
+    )
+
+    fan_pass = assert_success(actors["fan"].get("/api/me/pass"))
+    assert fan_pass["seasons"][0]["tiers"][0]["claimed"] is True
+    assert fan_pass["seasons"][0]["tiers"][0]["claimable"] is False
+
+
+def test_pass_tier_claim_requires_owner_progress_and_required_xp(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    seed_pass_reward()
+    seed_pass_xp("fan", amount=30)
+    seeded_pass = seed_pass_seasons()
+
+    assert_error(
+        actors["otherFan"].post(f"/api/me/pass-tiers/{seeded_pass['tierId']}/claim"),
+        409,
+        "PASS_TIER_LOCKED",
+    )
+
+
+def test_pass_tier_claim_allows_fourteen_day_post_season_grace(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    seed_pass_reward()
+    seed_pass_xp("fan", amount=30)
+
+    async def seed_ended_passes() -> dict[str, str]:
+        async with SessionLocal() as session:
+            session.add_all(
+                [
+                    PassSeason(
+                        id="pass_grace",
+                        artist_id="artist_nova3",
+                        title="Grace Pass",
+                        status="published",
+                        starts_at=now() - timedelta(days=40),
+                        ends_at=now() - timedelta(days=13),
+                        is_paid=False,
+                    ),
+                    PassSeason(
+                        id="pass_expired",
+                        artist_id="artist_nova3",
+                        title="Expired Pass",
+                        status="published",
+                        starts_at=now() - timedelta(days=40),
+                        ends_at=now() - timedelta(days=15),
+                        is_paid=False,
+                    ),
+                ]
+            )
+            session.add_all(
+                [
+                    PassTier(
+                        id="pass_tier_grace",
+                        season_id="pass_grace",
+                        tier=1,
+                        required_xp=20,
+                        reward_id=None,
+                    ),
+                    PassTier(
+                        id="pass_tier_expired",
+                        season_id="pass_expired",
+                        tier=1,
+                        required_xp=20,
+                        reward_id=None,
+                    ),
+                ]
+            )
+            await session.commit()
+            return {"graceTierId": "pass_tier_grace", "expiredTierId": "pass_tier_expired"}
+
+    tier_ids = asyncio.run(seed_ended_passes())
+
+    assert_success(actors["fan"].post(f"/api/me/pass-tiers/{tier_ids['graceTierId']}/claim"))
+    assert_error(
+        actors["fan"].post(f"/api/me/pass-tiers/{tier_ids['expiredTierId']}/claim"),
+        409,
+        "PASS_SEASON_CLAIM_CLOSED",
+    )
 
 
 def test_redeeming_a_live_card_processes_xp_achievement_reward_and_notification(

@@ -27,6 +27,8 @@ from app.models import (
     Member,
     Notification,
     OrganizationArtist,
+    PassSeason,
+    PassTier,
     RedeemCode,
     RedeemCodeBatch,
     RefreshToken,
@@ -56,6 +58,7 @@ from app.schemas import (
     DropCreateRequest,
     DropStatusUpdate,
     DropUpdateRequest,
+    PassSeasonCreate,
     RedeemCodeStatusUpdate,
 )
 from app.services import (
@@ -205,6 +208,37 @@ def reward_data(reward: RewardCatalog) -> dict:
     }
 
 
+def pass_tier_data(tier: PassTier) -> dict:
+    return {
+        "id": tier.id,
+        "seasonId": tier.season_id,
+        "tier": tier.tier,
+        "requiredXp": tier.required_xp,
+        "rewardId": tier.reward_id,
+    }
+
+
+async def pass_season_data(session: DbSession, season: PassSeason) -> dict:
+    tiers = list(
+        await session.scalars(
+            select(PassTier)
+            .where(PassTier.season_id == season.id)
+            .order_by(PassTier.tier, PassTier.id)
+        )
+    )
+    return {
+        "id": season.id,
+        "title": season.title,
+        "organizationId": season.organization_id,
+        "artistId": season.artist_id,
+        "status": season.status,
+        "isPaid": False,
+        "startsAt": season.starts_at.isoformat() if season.starts_at else None,
+        "endsAt": season.ends_at.isoformat() if season.ends_at else None,
+        "tiers": [pass_tier_data(tier) for tier in tiers],
+    }
+
+
 def _require_scoped_action(context: AdminContext, action: str) -> None:
     if not context.is_root:
         context.require_action(action)
@@ -302,10 +336,30 @@ def ensure_achievement_visible(context: AdminContext, achievement: AchievementDe
         raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
 
 
+def ensure_pass_season_visible(context: AdminContext, season: PassSeason) -> None:
+    if context.is_root or context.is_platform_operator:
+        return
+    if context.organization is None or season.organization_id != context.organization.id:
+        raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
+    if context.membership.access_level == "company_admin":
+        return
+    if season.artist_id is None or season.artist_id not in context.assigned_artist_ids:
+        raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
+
+
 def ensure_engagement_approver_scope(
     context: AdminContext, achievement: AchievementDefinition
 ) -> None:
     if achievement.organization_id is None:
+        if "engagement:approve_global" not in context.allowed_actions:
+            raise AppError(403, "ADMIN_WRITE_REQUIRED", "이 작업을 수행할 권한이 없습니다.")
+        return
+    if context.membership.access_level != "company_admin":
+        raise AppError(403, "ADMIN_WRITE_REQUIRED", "이 작업을 수행할 권한이 없습니다.")
+
+
+def ensure_pass_season_approver_scope(context: AdminContext, season: PassSeason) -> None:
+    if season.organization_id is None:
         if "engagement:approve_global" not in context.allowed_actions:
             raise AppError(403, "ADMIN_WRITE_REQUIRED", "이 작업을 수행할 권한이 없습니다.")
         return
@@ -540,6 +594,156 @@ async def list_admin_rewards(context: CurrentAdmin, session: DbSession) -> dict:
         .order_by(RewardCatalog.name, RewardCatalog.id)
     )
     return {"ok": True, "data": {"items": [reward_data(item) for item in rows]}}
+
+
+@router.get("/engagement/pass-seasons")
+async def list_admin_pass_seasons(context: CurrentAdmin, session: DbSession) -> dict:
+    rows = list(
+        await session.scalars(
+            select(PassSeason)
+            .where(*engagement_scope_filters(context, PassSeason))
+            .order_by(PassSeason.title, PassSeason.id)
+        )
+    )
+    return {
+        "ok": True,
+        "data": {"items": [await pass_season_data(session, season) for season in rows]},
+    }
+
+
+@router.post("/engagement/pass-seasons", status_code=status.HTTP_201_CREATED)
+async def create_pass_season(
+    payload: PassSeasonCreate, context: CurrentAdmin, session: DbSession
+) -> dict:
+    _require_engagement_write(context)
+    organization_id, artist_id = await require_engagement_scope(
+        session, context, payload.organization_id, payload.artist_id
+    )
+    reward_ids = [tier.reward_id for tier in payload.tiers if tier.reward_id]
+    await validate_reward_scope(session, reward_ids, organization_id, artist_id)
+    season = PassSeason(
+        id=f"pass_season_{uuid4().hex[:12]}",
+        organization_id=organization_id,
+        artist_id=artist_id,
+        title=payload.title,
+        status="draft",
+        is_paid=False,
+        starts_at=payload.starts_at,
+        ends_at=payload.ends_at,
+    )
+    session.add(season)
+    for tier in payload.tiers:
+        session.add(
+            PassTier(
+                id=f"pass_tier_{uuid4().hex[:12]}",
+                season_id=season.id,
+                tier=tier.tier,
+                required_xp=tier.required_xp,
+                reward_id=tier.reward_id,
+            )
+        )
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="pass_season.created",
+        entity_type="pass_season",
+        entity_id=season.id,
+        organization_id=season.organization_id,
+        artist_id=season.artist_id,
+        details={"isPaid": False, "tierCount": len(payload.tiers)},
+    )
+    await session.commit()
+    return {"ok": True, "data": await pass_season_data(session, season)}
+
+
+async def scoped_pass_season_or_404(
+    season_id: str,
+    context: AdminContext,
+    session: DbSession,
+) -> PassSeason:
+    season = await session.get(PassSeason, season_id)
+    if season is None:
+        raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
+    ensure_pass_season_visible(context, season)
+    return season
+
+
+async def transition_pass_season_status(
+    season_id: str,
+    context: AdminContext,
+    session: DbSession,
+    *,
+    required_status: str,
+    next_status: str,
+    action: str,
+) -> dict:
+    season = await scoped_pass_season_or_404(season_id, context, session)
+    if season.status != required_status:
+        raise AppError(
+            409,
+            "INVALID_PASS_SEASON_STATUS",
+            "현재 상태에서는 팬 패스 검수 상태를 전환할 수 없습니다.",
+        )
+    season.status = next_status
+    season.is_paid = False
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action=action,
+        entity_type="pass_season",
+        entity_id=season.id,
+        organization_id=season.organization_id,
+        artist_id=season.artist_id,
+        details={"previousStatus": required_status, "nextStatus": next_status, "isPaid": False},
+    )
+    await session.commit()
+    return {"ok": True, "data": await pass_season_data(session, season)}
+
+
+@router.post("/engagement/pass-seasons/{season_id}/submit")
+async def submit_pass_season_review(
+    season_id: str, context: CurrentAdmin, session: DbSession
+) -> dict:
+    _require_engagement_write(context)
+    return await transition_pass_season_status(
+        season_id,
+        context,
+        session,
+        required_status="draft",
+        next_status="pending_review",
+        action="pass_season.submitted",
+    )
+
+
+@router.post("/engagement/pass-seasons/{season_id}/approve")
+async def approve_pass_season(season_id: str, context: CurrentAdmin, session: DbSession) -> dict:
+    season = await session.get(PassSeason, season_id)
+    if season is not None:
+        ensure_pass_season_visible(context, season)
+    _require_engagement_approve(context)
+    if season is None:
+        raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
+    ensure_pass_season_approver_scope(context, season)
+    if season.status != "pending_review":
+        raise AppError(
+            409,
+            "INVALID_PASS_SEASON_STATUS",
+            "검수 대기 중인 팬 패스만 공개 승인할 수 있습니다.",
+        )
+    season.status = "published"
+    season.is_paid = False
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="pass_season.published",
+        entity_type="pass_season",
+        entity_id=season.id,
+        organization_id=season.organization_id,
+        artist_id=season.artist_id,
+        details={"previousStatus": "pending_review", "nextStatus": "published", "isPaid": False},
+    )
+    await session.commit()
+    return {"ok": True, "data": await pass_season_data(session, season)}
 
 
 def qr_png_bytes(code: str) -> bytes:

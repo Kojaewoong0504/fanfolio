@@ -224,6 +224,11 @@ def test_alembic_upgrade_creates_the_current_schema(tmp_path: Path) -> None:
             row[1] for row in connection.execute("PRAGMA table_info(reward_grants)").fetchall()
         }
         assert "claimed_at" in reward_grant_columns
+        pass_season_columns = {
+            row[1]: row for row in connection.execute("PRAGMA table_info(pass_seasons)").fetchall()
+        }
+        assert "is_paid" in pass_season_columns
+        assert pass_season_columns["is_paid"][3] == 1
 
 
 def test_growth_migration_enforces_idempotency_constraints(tmp_path: Path) -> None:
@@ -423,6 +428,51 @@ def test_reward_claim_migration_emits_offline_sql_without_database_inspection(
 
     assert generated.returncode == 0, generated.stderr
     assert "ALTER TABLE reward_grants ADD COLUMN claimed_at" in generated.stdout
+
+
+def test_free_pass_season_migration_adds_required_is_paid_default(tmp_path: Path) -> None:
+    database_path = tmp_path / "free-pass-seasons.db"
+    backend_dir = Path(__file__).parents[2]
+
+    upgraded = run_alembic(backend_dir, database_path, "upgrade", "head")
+    assert upgraded.returncode == 0, upgraded.stderr
+
+    with sqlite3.connect(database_path) as connection:
+        pass_season_columns = {
+            row[1]: row for row in connection.execute("PRAGMA table_info(pass_seasons)").fetchall()
+        }
+        assert "is_paid" in pass_season_columns
+        assert pass_season_columns["is_paid"][3] == 1
+        connection.execute(
+            """
+            INSERT INTO pass_seasons (id, title, status)
+            VALUES (?, ?, ?)
+            """,
+            ("season_free_default", "무료 팬 패스", "draft"),
+        )
+        is_paid = connection.execute(
+            "SELECT is_paid FROM pass_seasons WHERE id = ?",
+            ("season_free_default",),
+        ).fetchone()[0]
+        assert is_paid == 0
+
+
+def test_free_pass_season_migration_emits_offline_sql_without_database_inspection(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "offline-free-pass-seasons.db"
+    backend_dir = Path(__file__).parents[2]
+
+    generated = run_alembic(
+        backend_dir,
+        database_path,
+        "upgrade",
+        "0032_fan_reward_claims:0033_free_pass_seasons",
+        "--sql",
+    )
+
+    assert generated.returncode == 0, generated.stderr
+    assert "ALTER TABLE pass_seasons ADD COLUMN is_paid" in generated.stdout
 
 
 def test_card_release_migration_creates_review_workflow_storage(tmp_path: Path) -> None:

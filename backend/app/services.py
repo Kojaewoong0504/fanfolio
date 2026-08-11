@@ -58,6 +58,7 @@ from app.passwords import hash_password
 from app.storage import configured_asset_storage
 
 logger = logging.getLogger(__name__)
+PASS_CLAIM_GRACE_DAYS = 14
 
 
 def now() -> datetime:
@@ -774,7 +775,219 @@ async def update_achievement_progress(
 
 
 async def update_pass_progress(session: AsyncSession, *, event: EngagementEvent) -> None:
-    return None
+    seasons = list(
+        await session.scalars(
+            select(PassSeason).where(
+                PassSeason.status == "published",
+                PassSeason.is_paid.is_(False),
+                or_(PassSeason.starts_at.is_(None), PassSeason.starts_at <= now()),
+                or_(PassSeason.ends_at.is_(None), PassSeason.ends_at >= now()),
+            )
+        )
+    )
+    for season in seasons:
+        await refresh_pass_progress(session, user_id=event.user_id, season=season)
+
+
+async def current_user_xp(session: AsyncSession, *, user_id: str) -> int:
+    total = await session.scalar(
+        select(func.coalesce(func.sum(XpLedger.amount), 0)).where(XpLedger.user_id == user_id)
+    )
+    return int(total or 0)
+
+
+async def refresh_pass_progress(
+    session: AsyncSession, *, user_id: str, season: PassSeason
+) -> PassProgress:
+    progress = await session.scalar(
+        select(PassProgress).where(
+            PassProgress.user_id == user_id,
+            PassProgress.season_id == season.id,
+        )
+    )
+    if progress is None:
+        progress = PassProgress(
+            id=f"pass_progress_{user_id}_{season.id}",
+            user_id=user_id,
+            season_id=season.id,
+            claimed_tier_ids=[],
+        )
+        try:
+            async with session.begin_nested():
+                session.add(progress)
+                await session.flush()
+        except IntegrityError:
+            existing = await session.scalar(
+                select(PassProgress).where(
+                    PassProgress.user_id == user_id,
+                    PassProgress.season_id == season.id,
+                )
+            )
+            if existing is None:
+                raise
+            progress = existing
+    progress.current_xp = await current_user_xp(session, user_id=user_id)
+    progress.updated_at = now()
+    return progress
+
+
+def _season_active_for_pass_view(season: PassSeason, current_time: datetime) -> bool:
+    starts_at = (
+        season.starts_at.replace(tzinfo=UTC)
+        if season.starts_at and season.starts_at.tzinfo is None
+        else season.starts_at
+    )
+    ends_at = (
+        season.ends_at.replace(tzinfo=UTC)
+        if season.ends_at and season.ends_at.tzinfo is None
+        else season.ends_at
+    )
+    return (starts_at is None or starts_at <= current_time) and (
+        ends_at is None or ends_at >= current_time
+    )
+
+
+def _season_open_for_claim(season: PassSeason, current_time: datetime) -> bool:
+    starts_at = (
+        season.starts_at.replace(tzinfo=UTC)
+        if season.starts_at and season.starts_at.tzinfo is None
+        else season.starts_at
+    )
+    ends_at = (
+        season.ends_at.replace(tzinfo=UTC)
+        if season.ends_at and season.ends_at.tzinfo is None
+        else season.ends_at
+    )
+    if starts_at is not None and starts_at > current_time:
+        return False
+    if ends_at is None:
+        return True
+    return current_time <= ends_at + timedelta(days=PASS_CLAIM_GRACE_DAYS)
+
+
+def _pass_tier_data(tier: PassTier, progress: PassProgress) -> dict:
+    claimed_tier_ids = set(progress.claimed_tier_ids or [])
+    claimed = tier.id in claimed_tier_ids
+    return {
+        "id": tier.id,
+        "tier": tier.tier,
+        "requiredXp": tier.required_xp,
+        "rewardId": tier.reward_id,
+        "claimed": claimed,
+        "claimable": not claimed and progress.current_xp >= tier.required_xp,
+    }
+
+
+async def fan_pass_data(session: AsyncSession, *, user_id: str) -> dict:
+    current_time = now()
+    seasons = list(
+        await session.scalars(
+            select(PassSeason)
+            .where(PassSeason.status == "published", PassSeason.is_paid.is_(False))
+            .order_by(PassSeason.starts_at, PassSeason.id)
+        )
+    )
+    items = []
+    for season in seasons:
+        if not _season_active_for_pass_view(season, current_time):
+            continue
+        progress = await refresh_pass_progress(session, user_id=user_id, season=season)
+        tiers = list(
+            await session.scalars(
+                select(PassTier)
+                .where(PassTier.season_id == season.id)
+                .order_by(PassTier.tier, PassTier.id)
+            )
+        )
+        items.append(
+            {
+                "id": season.id,
+                "title": season.title,
+                "organizationId": season.organization_id,
+                "artistId": season.artist_id,
+                "status": season.status,
+                "isPaid": False,
+                "startsAt": _datetime_data(season.starts_at),
+                "endsAt": _datetime_data(season.ends_at),
+                "progress": {
+                    "currentXp": progress.current_xp,
+                    "claimedTierIds": list(progress.claimed_tier_ids or []),
+                },
+                "tiers": [_pass_tier_data(tier, progress) for tier in tiers],
+            }
+        )
+    await session.commit()
+    return {"seasons": items}
+
+
+async def claim_pass_tier(session: AsyncSession, *, user_id: str, tier_id: str) -> dict:
+    row = (
+        await session.execute(
+            select(PassTier, PassSeason)
+            .join(PassSeason, PassSeason.id == PassTier.season_id)
+            .where(PassTier.id == tier_id)
+        )
+    ).one_or_none()
+    if row is None:
+        raise AppError(404, "PASS_TIER_NOT_FOUND", "팬 패스 티어를 찾을 수 없습니다.")
+    tier, season = row
+    if season.status != "published" or season.is_paid:
+        raise AppError(404, "PASS_TIER_NOT_FOUND", "팬 패스 티어를 찾을 수 없습니다.")
+    if not _season_open_for_claim(season, now()):
+        raise AppError(409, "PASS_SEASON_CLAIM_CLOSED", "팬 패스 수령 기간이 지났습니다.")
+
+    progress = await refresh_pass_progress(session, user_id=user_id, season=season)
+    claimed_tier_ids = list(progress.claimed_tier_ids or [])
+    if tier.id in claimed_tier_ids:
+        raise AppError(409, "PASS_TIER_ALREADY_CLAIMED", "이미 수령한 팬 패스 티어입니다.")
+    if progress.current_xp < tier.required_xp:
+        raise AppError(409, "PASS_TIER_LOCKED", "필요한 XP를 달성한 뒤 수령할 수 있습니다.")
+
+    event = await record_engagement_event(
+        session,
+        user_id=user_id,
+        kind="pass_tier_claimed",
+        source_type="pass_tier",
+        source_id=tier.id,
+        payload={"seasonId": season.id, "requiredXp": tier.required_xp},
+    )
+    event.status = "processed"
+    event.processed_at = now()
+
+    reward_grant_data = None
+    if tier.reward_id:
+        grant = await grant_reward(
+            session,
+            user_id=user_id,
+            reward_id=tier.reward_id,
+            source_event_id=event.id,
+            rule_key=f"pass_tier:{tier.id}",
+        )
+        reward = await session.get(RewardCatalog, tier.reward_id)
+        if reward is not None:
+            reward_grant_data = _reward_grant_data(grant, reward)
+
+    claimed_tier_ids.append(tier.id)
+    progress.claimed_tier_ids = claimed_tier_ids
+    progress.updated_at = now()
+    claimed_at = now()
+    await record_audit(
+        session,
+        actor_user_id=user_id,
+        action="pass_tier.claimed",
+        entity_type="pass_tier",
+        entity_id=tier.id,
+        organization_id=season.organization_id,
+        artist_id=season.artist_id,
+        details={"seasonId": season.id, "requiredXp": tier.required_xp},
+    )
+    await session.commit()
+    return {
+        "seasonId": season.id,
+        "tierId": tier.id,
+        "claimedAt": _datetime_data(claimed_at),
+        "rewardGrant": reward_grant_data,
+    }
 
 
 async def process_engagement_event(event_id: str) -> None:

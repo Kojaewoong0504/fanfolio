@@ -23,6 +23,21 @@ def achievement_payload(**overrides: Any) -> dict[str, Any]:
     return payload
 
 
+def pass_season_payload(**overrides: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "title": "NOVA Free Pass",
+        "artistId": "artist_nova3",
+        "startsAt": "2026-08-01T00:00:00Z",
+        "endsAt": "2026-08-31T00:00:00Z",
+        "tiers": [
+            {"tier": 1, "requiredXp": 30, "rewardId": None},
+            {"tier": 2, "requiredXp": 60, "rewardId": None},
+        ],
+    }
+    payload.update(overrides)
+    return payload
+
+
 def test_company_manager_can_draft_only_assigned_artist_achievement(
     actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
 ) -> None:
@@ -49,6 +64,89 @@ def test_company_manager_can_draft_only_assigned_artist_achievement(
         company_client.post(
             "/api/admin/engagement/achievements",
             json=achievement_payload(title="범위 밖 업적", artistId="artist_other"),
+        ),
+        404,
+        "RESOURCE_NOT_FOUND",
+    )
+
+
+def test_admin_creates_free_only_pass_season_and_ignores_paid_input(
+    actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
+) -> None:
+    _, member = create_partner(
+        actors["admin"],
+        email="company-pass-manager@starwave.com",
+        access_level="manager",
+    )
+    company_client = login_partner(app, member)
+
+    draft = assert_success(
+        company_client.post(
+            "/api/admin/engagement/pass-seasons",
+            json=pass_season_payload(isPaid=True),
+        ),
+        201,
+    )
+
+    assert draft["status"] == "draft"
+    assert draft["artistId"] == "artist_nova3"
+    assert draft["isPaid"] is False
+    assert [tier["requiredXp"] for tier in draft["tiers"]] == [30, 60]
+
+
+def test_pass_season_review_status_transitions_match_achievements(
+    actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
+) -> None:
+    _, member = create_partner(
+        actors["admin"],
+        email="company-admin-pass-flow@starwave.com",
+        access_level="company_admin",
+    )
+    company_admin_client = login_partner(app, member)
+
+    draft = assert_success(
+        company_admin_client.post(
+            "/api/admin/engagement/pass-seasons",
+            json=pass_season_payload(title="상태 전이 패스"),
+        ),
+        201,
+    )
+    assert_error(
+        company_admin_client.post(f"/api/admin/engagement/pass-seasons/{draft['id']}/approve"),
+        409,
+        "INVALID_PASS_SEASON_STATUS",
+    )
+
+    pending = assert_success(
+        company_admin_client.post(f"/api/admin/engagement/pass-seasons/{draft['id']}/submit")
+    )
+    assert pending["status"] == "pending_review"
+    published = assert_success(
+        company_admin_client.post(f"/api/admin/engagement/pass-seasons/{draft['id']}/approve")
+    )
+    assert published["status"] == "published"
+
+
+def test_pass_season_scope_is_hidden_from_unassigned_partner_manager(
+    actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
+) -> None:
+    async def add_unassigned_artist() -> None:
+        async with SessionLocal() as session:
+            session.add(Artist(id="artist_other", name="문라이트"))
+            await session.commit()
+
+    asyncio.run(add_unassigned_artist())
+    _, member = create_partner(
+        actors["admin"],
+        email="company-pass-scope@starwave.com",
+        access_level="manager",
+    )
+    company_client = login_partner(app, member)
+
+    assert_error(
+        company_client.post(
+            "/api/admin/engagement/pass-seasons",
+            json=pass_season_payload(title="범위 밖 패스", artistId="artist_other"),
         ),
         404,
         "RESOURCE_NOT_FOUND",

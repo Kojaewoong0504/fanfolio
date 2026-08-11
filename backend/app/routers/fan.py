@@ -33,7 +33,9 @@ from app.schemas import (
     RedemptionRequest,
 )
 from app.services import (
+    claim_pass_tier,
     claim_reward_grant,
+    fan_pass_data,
     fan_progression_data,
     record_audit,
     redeem,
@@ -181,6 +183,16 @@ async def collection(user: FanUser, session: DbSession) -> dict:
 @router.get("/me/progression")
 async def progression(user: FanUser, session: DbSession) -> dict:
     return {"ok": True, "data": await fan_progression_data(session, user.id)}
+
+
+@router.get("/me/pass")
+async def fan_pass(user: FanUser, session: DbSession) -> dict:
+    return {"ok": True, "data": await fan_pass_data(session, user_id=user.id)}
+
+
+@router.post("/me/pass-tiers/{tier_id}/claim")
+async def claim_fan_pass_tier(tier_id: str, user: FanUser, session: DbSession) -> dict:
+    return {"ok": True, "data": await claim_pass_tier(session, user_id=user.id, tier_id=tier_id)}
 
 
 @router.post("/me/rewards/{grant_id}/claim")

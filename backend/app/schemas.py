@@ -383,6 +383,24 @@ class AchievementDefinitionCreate(BaseModel):
         return self
 
 
+class PassTierCreate(BaseModel):
+    tier: int = Field(ge=1)
+    required_xp: int = Field(alias="requiredXp", ge=0)
+    reward_id: str | None = Field(default=None, alias="rewardId")
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class PassSeasonCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    description: str | None = Field(default=None, max_length=500)
+    organization_id: str | None = Field(default=None, alias="organizationId")
+    artist_id: str | None = Field(default=None, alias="artistId")
+    starts_at: datetime | None = Field(default=None, alias="startsAt")
+    ends_at: datetime | None = Field(default=None, alias="endsAt")
+    tiers: list[PassTierCreate] = Field(min_length=1, max_length=50)
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class CardReleaseState(BaseModel):
     release_policy: ReleasePolicy = Field(alias="releasePolicy")
     release_status: ReleaseStatus = Field(alias="releaseStatus")
