@@ -808,14 +808,17 @@ async function api(path, options = {}, allowRefresh = true) {
   }
   if (!response.ok) {
     let detail = "";
+    let errorCode = "";
     try {
       const body = await response.json();
       detail = body?.error?.message || body?.detail || "";
+      errorCode = body?.error?.code || "";
     } catch {
       detail = "";
     }
     const error = new Error(detail || `API ${response.status}`);
     error.status = response.status;
+    error.code = errorCode;
     throw error;
   }
   return response.status === 204 ? null : response.json();
@@ -1028,6 +1031,12 @@ async function loadOrganizations(renderAfter = true) {
   if (renderAfter) layout();
 }
 
+async function recoverOrganizationBySlug(slug) {
+  const params = new URLSearchParams({ query: slug, page: "1", pageSize: "100" });
+  const result = await api(`/admin/organizations?${params}`);
+  return result.data.items.find((organization) => organization.slug === slug) || null;
+}
+
 async function loadSelectedOrganization(organizationId, renderAfter = true) {
   if (!organizationId) return;
   const [organization, members] = await Promise.all([
@@ -1180,17 +1189,32 @@ async function saveOrganization(event) {
     );
   } catch (error) {
     submit.disabled = false;
-    if (error.status === 409) {
+    if (error.code === "ORGANIZATION_SLUG_TAKEN") {
       // A previous click may have committed before the UI lost its response.
-      // Refresh the directory so the conflicting record is visible immediately.
+      // Look up the exact slug without the directory's current search/status filters.
       try {
-        await loadOrganizations(false);
+        const recovered = await recoverOrganizationBySlug(payload.slug);
+        if (recovered && recovered.name === payload.name) {
+          state.drawer = null;
+          state.drawerData = null;
+          state.selectedOrganizationId = recovered.id;
+          state.selectedOrganization = recovered;
+          state.organizationMembers = [];
+          state.organizations = [
+            recovered,
+            ...state.organizations.filter((item) => item.id !== recovered.id),
+          ];
+          resetOrganizationLogoState();
+          toast("이미 저장된 파트너를 불러왔습니다.");
+          layout();
+          return;
+        }
       } catch {
-        // Keep the actionable conflict message even if the directory is unavailable.
+        // Keep the actionable duplicate message if recovery is temporarily unavailable.
       }
     }
     const detail = String(error?.message || error).replace(/^API \d+\s*/, "");
-    const message = error.status === 409
+    const message = error.code === "ORGANIZATION_SLUG_TAKEN"
       ? "이미 사용 중인 파트너 코드입니다. 다른 코드를 입력해 주세요."
       : `파트너 ${editing ? "수정" : "등록"} 요청에 실패했습니다${detail ? `: ${detail}` : "."}`;
     errorBox.textContent = message;

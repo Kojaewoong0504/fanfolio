@@ -206,11 +206,25 @@ test('partner contract dates are submitted and displayed without timezone drift'
 })
 
 test('partner registration reports the failing stage instead of masking API errors', () => {
+  const api = functionBody('api')
+  const save = functionBody('saveOrganization')
+  assert.match(api, /errorCode\s*=\s*body\?\.error\?\.code/)
+  assert.match(api, /error\.code\s*=\s*errorCode/)
+  assert.match(save, /error\.code\s*===\s*["']ORGANIZATION_SLUG_TAKEN["']/)
+  assert.match(save, /recoverOrganizationBySlug\(payload\.slug\)/)
+  assert.doesNotMatch(save, /error\.status\s*===\s*409\s*\?\s*["']이미 사용 중인 파트너 코드/)
   assert.match(source, /let writeResult/)
   assert.match(source, /요청에 실패했습니다/)
   assert.match(source, /파트너 목록을 새로 고치지 못했습니다/)
   assert.match(source, /String\(error\?\.message \|\| error\)/)
   assert.match(source, /loadOrganizations\(false\)/)
+})
+
+test('duplicate partner recovery bypasses active directory filters and requires an exact slug', () => {
+  const recovery = functionBody('recoverOrganizationBySlug')
+  assert.match(recovery, /new URLSearchParams\(\{ query: slug, page: ["']1["'], pageSize: ["']100["'] \}\)/)
+  assert.match(recovery, /organization\.slug === slug/)
+  assert.doesNotMatch(recovery, /partnerStatus/)
 })
 
 test('partner card detail exposes the scoped review request action', () => {
