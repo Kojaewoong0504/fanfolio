@@ -120,7 +120,14 @@ function organizationLogoPickerContents(editing) {
     ? ""
     : state.organizationLogoPreviewUrl || editing?.logoUrl || "";
   const hasLogo = Boolean(previewLogoUrl);
-  return `<div class="organization-logo-preview" id="organization-logo-preview">${partnerLogoMarkup({ name: editing?.name || "파트너", logoUrl: previewLogoUrl }, "large")}</div><div class="organization-logo-copy"><strong>회사 로고 <span class="optional-label">선택</span></strong><p>PNG, JPG, WebP · 최대 2MB · 원본 비율 유지</p><div class="inline-actions"><label class="secondary upload-button" for="organization-logo-input">${hasLogo ? "로고 교체" : "로고 선택"}</label><input id="organization-logo-input" name="logo" type="file" accept="image/png,image/jpeg,image/webp" hidden />${hasLogo ? `<button class="text-button danger-text" id="remove-organization-logo" type="button">로고 제거</button>` : ""}</div></div>`;
+  const selectedFileName = state.organizationLogoFile?.name || "";
+  const previewMarkup = hasLogo
+    ? partnerLogoMarkup(
+        { name: editing?.name || "파트너", logoUrl: previewLogoUrl },
+        "large",
+      )
+    : `<span class="company-avatar large organization-logo-empty">${icon("add_photo_alternate")}</span>`;
+  return `<div class="organization-logo-preview" id="organization-logo-preview">${previewMarkup}</div><div class="organization-logo-copy"><strong>회사 로고 <span class="optional-label">선택</span></strong><p>PNG, JPG, WebP · 최대 2MB · 원본 비율 유지</p>${selectedFileName ? `<p class="organization-logo-file-name" title="${escapeHtml(selectedFileName)}">${escapeHtml(selectedFileName)}</p>` : ""}<div class="inline-actions"><label class="secondary upload-button" for="organization-logo-input">${hasLogo ? "로고 교체" : "로고 선택"}</label><input id="organization-logo-input" name="logo" type="file" accept="image/png,image/jpeg,image/webp" hidden />${hasLogo ? `<button class="text-button danger-text" id="remove-organization-logo" type="button">로고 제거</button>` : ""}</div></div>`;
 }
 
 function bindOrganizationLogoPicker(form) {

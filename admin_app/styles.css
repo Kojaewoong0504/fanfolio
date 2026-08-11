@@ -1436,6 +1436,26 @@ button:disabled {
   line-height: 1.5;
 }
 
+.organization-logo-empty {
+  display: grid;
+  place-items: center;
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.organization-logo-empty .material-symbols-rounded {
+  font-size: 28px;
+}
+
+.organization-logo-copy .organization-logo-file-name {
+  max-width: 280px;
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .optional-label {
   display: inline-flex;
   align-items: center;

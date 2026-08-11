@@ -255,6 +255,8 @@ test('partner logo picker is optional and exposes preview replacement and remova
   assertMatches(picker, /organization-logo-preview/, 'renders a partner logo preview frame')
   assertMatches(picker, /remove-organization-logo/, 'renders a partner logo removal action')
   assertMatches(picker, /optional-label/, 'marks partner logo selection as optional')
+  assertMatches(picker, /add_photo_alternate/, 'shows an upload icon when no partner logo is selected')
+  assertMatches(picker, /organizationLogoFile\?\.name/, 'shows the selected partner logo file name')
   assertMatches(
     picker,
     /<input\b(?=[^>]*\bid=["']organization-logo-input["'])(?=[^>]*\btype=["']file["'])(?=[^>]*\baccept=["']image\/png,image\/jpeg,image\/webp["'])[^>]*>/s,
