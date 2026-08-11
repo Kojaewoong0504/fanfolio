@@ -82,6 +82,19 @@ class ProfileUpdate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class ProfileEquipmentUpdate(BaseModel):
+    title_reward_id: str | None = Field(default=None, alias="titleRewardId")
+    badge_reward_ids: list[str] = Field(
+        default_factory=list,
+        alias="badgeRewardIds",
+        max_length=3,
+    )
+    frame_reward_id: str | None = Field(default=None, alias="frameRewardId")
+    theme_reward_id: str | None = Field(default=None, alias="themeRewardId")
+    public_profile_enabled: bool = Field(default=True, alias="publicProfileEnabled")
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class ArtistProfileUpdate(BaseModel):
     nickname: str | None = Field(default=None, min_length=1, max_length=40)
     email_enabled: bool | None = Field(default=None, alias="emailEnabled")

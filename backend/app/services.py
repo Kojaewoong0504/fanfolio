@@ -416,6 +416,207 @@ async def grant_reward(
     return grant
 
 
+def _datetime_data(value: datetime | None) -> str | None:
+    return value.isoformat() if value else None
+
+
+def _reward_grant_data(grant: RewardGrant, reward: RewardCatalog) -> dict:
+    return {
+        "id": grant.id,
+        "rewardId": reward.id,
+        "type": reward.reward_type,
+        "name": reward.name,
+        "grantedAt": _datetime_data(grant.granted_at),
+    }
+
+
+async def _reward_grant_with_catalog(
+    session: AsyncSession, *, user_id: str, grant_id: str
+) -> tuple[RewardGrant, RewardCatalog] | None:
+    row = (
+        await session.execute(
+            select(RewardGrant, RewardCatalog)
+            .join(RewardCatalog, RewardCatalog.id == RewardGrant.reward_id)
+            .where(
+                RewardGrant.id == grant_id,
+                RewardGrant.user_id == user_id,
+                RewardCatalog.status == "published",
+            )
+        )
+    ).one_or_none()
+    return row if row else None
+
+
+async def _equipment_data(session: AsyncSession, *, user_id: str) -> dict:
+    equipment = await session.get(ProfileEquipment, user_id)
+    equipped_reward_ids = list(equipment.equipped_reward_ids if equipment else [])
+    result = {
+        "titleRewardId": None,
+        "badgeRewardIds": [],
+        "frameRewardId": None,
+        "themeRewardId": None,
+        "publicProfileEnabled": equipment.is_public if equipment else True,
+    }
+    if not equipped_reward_ids:
+        return result
+
+    rows = (
+        await session.execute(
+            select(RewardGrant.id, RewardCatalog.reward_type)
+            .join(RewardCatalog, RewardCatalog.id == RewardGrant.reward_id)
+            .where(RewardGrant.user_id == user_id, RewardGrant.id.in_(equipped_reward_ids))
+        )
+    ).all()
+    reward_type_by_grant_id = {grant_id: reward_type for grant_id, reward_type in rows}
+    for grant_id in equipped_reward_ids:
+        reward_type = reward_type_by_grant_id.get(grant_id)
+        if reward_type == "title" and result["titleRewardId"] is None:
+            result["titleRewardId"] = grant_id
+        elif reward_type == "badge" and len(result["badgeRewardIds"]) < 3:
+            result["badgeRewardIds"].append(grant_id)
+        elif reward_type == "profile_frame" and result["frameRewardId"] is None:
+            result["frameRewardId"] = grant_id
+        elif reward_type == "collection_theme" and result["themeRewardId"] is None:
+            result["themeRewardId"] = grant_id
+    return result
+
+
+async def fan_progression_data(session: AsyncSession, user_id: str) -> dict:
+    level = await session.get(FanLevel, user_id)
+    definitions = list(
+        await session.scalars(
+            select(AchievementDefinition)
+            .where(AchievementDefinition.status == "published")
+            .order_by(AchievementDefinition.title, AchievementDefinition.id)
+        )
+    )
+    achievements = []
+    for definition in definitions:
+        progress = await session.scalar(
+            select(AchievementProgress).where(
+                AchievementProgress.user_id == user_id,
+                AchievementProgress.achievement_id == definition.id,
+            )
+        )
+        current_value = progress.current_value if progress else 0
+        achievements.append(
+            {
+                "id": definition.id,
+                "title": definition.title,
+                "description": definition.description,
+                "conditionType": definition.condition_type,
+                "targetValue": definition.target_value,
+                "currentValue": current_value,
+                "completedAt": _datetime_data(progress.completed_at if progress else None),
+            }
+        )
+
+    reward_rows = (
+        await session.execute(
+            select(RewardGrant, RewardCatalog)
+            .join(RewardCatalog, RewardCatalog.id == RewardGrant.reward_id)
+            .where(RewardGrant.user_id == user_id, RewardCatalog.status == "published")
+            .order_by(RewardGrant.granted_at, RewardGrant.id)
+        )
+    ).all()
+    events = list(
+        await session.scalars(
+            select(EngagementEvent)
+            .where(EngagementEvent.user_id == user_id)
+            .order_by(EngagementEvent.id)
+        )
+    )
+    return {
+        "level": {
+            "level": level.level if level else 1,
+            "totalXp": level.total_xp if level else 0,
+        },
+        "achievements": achievements,
+        "claimableRewards": [_reward_grant_data(grant, reward) for grant, reward in reward_rows],
+        "equipment": await _equipment_data(session, user_id=user_id),
+        "debugEvents": [
+            {
+                "kind": event.kind,
+                "sourceUserCardId": event.source_id if event.source_type == "user_card" else None,
+                "status": event.status,
+            }
+            for event in events
+        ],
+    }
+
+
+async def claim_reward_grant(session: AsyncSession, *, user_id: str, grant_id: str) -> dict:
+    row = await _reward_grant_with_catalog(session, user_id=user_id, grant_id=grant_id)
+    if row is None:
+        raise AppError(404, "REWARD_GRANT_NOT_FOUND", "수령할 보상을 찾을 수 없습니다.")
+    grant, reward = row
+    return _reward_grant_data(grant, reward)
+
+
+async def _validate_equipment_reward(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    grant_id: str,
+    expected_type: str,
+) -> None:
+    row = await _reward_grant_with_catalog(session, user_id=user_id, grant_id=grant_id)
+    if row is None:
+        raise AppError(404, "REWARD_GRANT_NOT_FOUND", "장착할 보상을 찾을 수 없습니다.")
+    _, reward = row
+    if reward.reward_type != expected_type:
+        raise AppError(
+            422,
+            "INVALID_EQUIPMENT_REWARD_TYPE",
+            "장착 위치와 보상 유형이 일치하지 않습니다.",
+        )
+
+
+async def update_profile_equipment(session: AsyncSession, *, user_id: str, payload: object) -> dict:
+    reward_ids = [
+        payload.title_reward_id,
+        *payload.badge_reward_ids,
+        payload.frame_reward_id,
+        payload.theme_reward_id,
+    ]
+    equipped_reward_ids = [reward_id for reward_id in reward_ids if reward_id]
+    if len(equipped_reward_ids) != len(set(equipped_reward_ids)):
+        raise AppError(422, "DUPLICATE_EQUIPMENT_REWARD", "같은 보상을 중복 장착할 수 없습니다.")
+
+    if payload.title_reward_id:
+        await _validate_equipment_reward(
+            session, user_id=user_id, grant_id=payload.title_reward_id, expected_type="title"
+        )
+    for badge_reward_id in payload.badge_reward_ids:
+        await _validate_equipment_reward(
+            session, user_id=user_id, grant_id=badge_reward_id, expected_type="badge"
+        )
+    if payload.frame_reward_id:
+        await _validate_equipment_reward(
+            session,
+            user_id=user_id,
+            grant_id=payload.frame_reward_id,
+            expected_type="profile_frame",
+        )
+    if payload.theme_reward_id:
+        await _validate_equipment_reward(
+            session,
+            user_id=user_id,
+            grant_id=payload.theme_reward_id,
+            expected_type="collection_theme",
+        )
+
+    equipment = await session.get(ProfileEquipment, user_id)
+    if equipment is None:
+        equipment = ProfileEquipment(user_id=user_id)
+        session.add(equipment)
+    equipment.equipped_reward_ids = equipped_reward_ids
+    equipment.is_public = payload.public_profile_enabled
+    equipment.updated_at = now()
+    await session.commit()
+    return await _equipment_data(session, user_id=user_id)
+
+
 async def notify_fan_once(
     session: AsyncSession,
     *,

@@ -15,6 +15,7 @@ from app.models import (
     EngagementEvent,
     FanLevel,
     Notification,
+    ProfileEquipment,
     RewardCatalog,
     RewardGrant,
     UserCard,
@@ -22,7 +23,7 @@ from app.models import (
 )
 from app.routers import fan as fan_router
 from app.services import now, process_engagement_event, record_engagement_event
-from tests.conftest import assert_success
+from tests.conftest import assert_error, assert_success
 
 
 def load_fan_growth_events() -> list[EngagementEvent]:
@@ -59,6 +60,43 @@ def seed_first_card_achievement() -> str:
             session.add_all([reward, achievement])
             await session.commit()
             return achievement.id
+
+    return asyncio.run(seed())
+
+
+def seed_reward_grants(user_id: str, reward_types: list[str]) -> list[str]:
+    async def seed() -> list[str]:
+        async with SessionLocal() as session:
+            grant_ids: list[str] = []
+            for index, reward_type in enumerate(reward_types, start=1):
+                reward = RewardCatalog(
+                    id=f"reward_{user_id}_{reward_type}_{index}",
+                    artist_id="artist_nova3",
+                    reward_type=reward_type,
+                    name=f"{reward_type.title()} Reward {index}",
+                    status="published",
+                )
+                event = EngagementEvent(
+                    id=f"evt_{user_id}_{reward_type}_{index}",
+                    user_id=user_id,
+                    kind="card_collected",
+                    source_type="test",
+                    source_id=f"source_{reward_type}_{index}",
+                    payload={},
+                    status="processed",
+                    processed_at=now(),
+                )
+                grant = RewardGrant(
+                    id=f"reward_grant_{user_id}_{reward_type}_{index}",
+                    user_id=user_id,
+                    reward_id=reward.id,
+                    source_event_id=event.id,
+                    rule_key=f"test:{reward_type}:{index}",
+                )
+                session.add_all([reward, event, grant])
+                grant_ids.append(grant.id)
+            await session.commit()
+            return grant_ids
 
     return asyncio.run(seed())
 
@@ -141,6 +179,143 @@ def test_redeeming_a_live_card_processes_xp_achievement_reward_and_notification(
     assert growth["notification"].kind == "achievement_unlocked"
     assert [row.amount for row in growth["xpRows"]] == [30]
     assert growth["level"].total_xp == 30
+
+
+def test_fan_can_read_progression_with_only_their_reward_grants(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    seed_first_card_achievement()
+    other_grant_id = seed_reward_grants("otherFan", ["title"])[0]
+
+    assert_success(
+        actors["fan"].post(
+            "/api/redemptions", json={"code": seeded["codes"]["valid"], "source": "qr"}
+        ),
+        201,
+    )
+
+    progression = assert_success(actors["fan"].get("/api/me/progression"))
+
+    assert progression["level"] == {"level": 1, "totalXp": 30}
+    assert progression["achievements"][0]["completedAt"] is not None
+    assert progression["claimableRewards"][0]["type"] == "title"
+    assert progression["claimableRewards"][0]["id"] != other_grant_id
+    assert all(item["id"] != other_grant_id for item in progression["claimableRewards"])
+    assert progression["equipment"] == {
+        "titleRewardId": None,
+        "badgeRewardIds": [],
+        "frameRewardId": None,
+        "themeRewardId": None,
+        "publicProfileEnabled": True,
+    }
+
+
+def test_fan_cannot_claim_another_fans_reward(actors: dict[str, TestClient]) -> None:
+    other_grant_id = seed_reward_grants("otherFan", ["title"])[0]
+
+    assert_error(
+        actors["fan"].post(f"/api/me/rewards/{other_grant_id}/claim"),
+        404,
+        "REWARD_GRANT_NOT_FOUND",
+    )
+
+
+def test_claiming_a_reward_is_idempotent_for_the_owner(actors: dict[str, TestClient]) -> None:
+    grant_id = seed_reward_grants("fan", ["title"])[0]
+
+    first = assert_success(actors["fan"].post(f"/api/me/rewards/{grant_id}/claim"))
+    second = assert_success(actors["fan"].post(f"/api/me/rewards/{grant_id}/claim"))
+
+    assert first == second
+    assert first["id"] == grant_id
+    assert first["type"] == "title"
+
+
+def test_fan_can_equip_claimed_rewards_by_type(actors: dict[str, TestClient]) -> None:
+    title_grant_id = seed_reward_grants("fan", ["title"])[0]
+    badge_grant_ids = seed_reward_grants("fan", ["badge", "badge", "badge"])
+    frame_grant_id = seed_reward_grants("fan", ["profile_frame"])[0]
+    theme_grant_id = seed_reward_grants("fan", ["collection_theme"])[0]
+
+    assert_success(actors["fan"].post(f"/api/me/rewards/{title_grant_id}/claim"))
+    for grant_id in [*badge_grant_ids, frame_grant_id, theme_grant_id]:
+        assert_success(actors["fan"].post(f"/api/me/rewards/{grant_id}/claim"))
+
+    equipped = assert_success(
+        actors["fan"].put(
+            "/api/me/profile/equipment",
+            json={
+                "titleRewardId": title_grant_id,
+                "badgeRewardIds": badge_grant_ids,
+                "frameRewardId": frame_grant_id,
+                "themeRewardId": theme_grant_id,
+                "publicProfileEnabled": False,
+            },
+        )
+    )
+
+    assert equipped == {
+        "titleRewardId": title_grant_id,
+        "badgeRewardIds": badge_grant_ids,
+        "frameRewardId": frame_grant_id,
+        "themeRewardId": theme_grant_id,
+        "publicProfileEnabled": False,
+    }
+
+    async def load_equipment() -> ProfileEquipment | None:
+        async with SessionLocal() as session:
+            return await session.get(ProfileEquipment, "fan")
+
+    equipment = asyncio.run(load_equipment())
+    assert equipment is not None
+    assert equipment.equipped_reward_ids == [
+        title_grant_id,
+        *badge_grant_ids,
+        frame_grant_id,
+        theme_grant_id,
+    ]
+    assert equipment.is_public is False
+
+
+def test_profile_equipment_rejects_more_than_three_badges(
+    actors: dict[str, TestClient],
+) -> None:
+    badge_grant_ids = seed_reward_grants("fan", ["badge", "badge", "badge", "badge"])
+
+    assert_error(
+        actors["fan"].put(
+            "/api/me/profile/equipment",
+            json={"badgeRewardIds": badge_grant_ids},
+        ),
+        422,
+        "VALIDATION_ERROR",
+    )
+
+
+def test_profile_equipment_requires_owner_grant_and_matching_reward_type(
+    actors: dict[str, TestClient],
+) -> None:
+    title_grant_id = seed_reward_grants("fan", ["title"])[0]
+    other_badge_grant_id = seed_reward_grants("otherFan", ["badge"])[0]
+
+    assert_success(actors["fan"].post(f"/api/me/rewards/{title_grant_id}/claim"))
+
+    assert_error(
+        actors["fan"].put(
+            "/api/me/profile/equipment",
+            json={"badgeRewardIds": [other_badge_grant_id]},
+        ),
+        404,
+        "REWARD_GRANT_NOT_FOUND",
+    )
+    assert_error(
+        actors["fan"].put(
+            "/api/me/profile/equipment",
+            json={"badgeRewardIds": [title_grant_id]},
+        ),
+        422,
+        "INVALID_EQUIPMENT_REWARD_TYPE",
+    )
 
 
 def test_non_live_source_card_does_not_advance_achievement(seeded: dict[str, Any]) -> None:

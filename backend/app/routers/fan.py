@@ -27,11 +27,18 @@ from app.models import (
 from app.rate_limit import enforce_rate_limit
 from app.schemas import (
     NotificationPreferencesUpdate,
+    ProfileEquipmentUpdate,
     ProfileUpdate,
     ReadNotification,
     RedemptionRequest,
 )
-from app.services import record_audit, redeem
+from app.services import (
+    claim_reward_grant,
+    fan_progression_data,
+    record_audit,
+    redeem,
+    update_profile_equipment,
+)
 from app.storage import configured_asset_storage, storage_response
 from app.tasks import enqueue_engagement_event
 
@@ -168,6 +175,27 @@ async def collection(user: FanUser, session: DbSession) -> dict:
             },
             "cards": cards,
         },
+    }
+
+
+@router.get("/me/progression")
+async def progression(user: FanUser, session: DbSession) -> dict:
+    return {"ok": True, "data": await fan_progression_data(session, user.id)}
+
+
+@router.post("/me/rewards/{grant_id}/claim")
+async def claim_reward(grant_id: str, user: FanUser, session: DbSession) -> dict:
+    return {
+        "ok": True,
+        "data": await claim_reward_grant(session, user_id=user.id, grant_id=grant_id),
+    }
+
+
+@router.put("/me/profile/equipment")
+async def equip_profile(payload: ProfileEquipmentUpdate, user: FanUser, session: DbSession) -> dict:
+    return {
+        "ok": True,
+        "data": await update_profile_equipment(session, user_id=user.id, payload=payload),
     }
 
 
