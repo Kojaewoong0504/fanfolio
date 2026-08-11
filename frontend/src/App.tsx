@@ -3,11 +3,12 @@ import './App.css'
 import cardExample from './assets/card-example.svg'
 import cardExampleBlue from './assets/card-example-blue.svg'
 import cardExamplePink from './assets/card-example-pink.svg'
-import { ApiError, apiFetch, clearAccessToken, notificationStreamUrl, oauthStartUrl, resolveApiUrl, setAccessToken, type CatalogArtist, type CatalogCard, type CatalogMember, type CatalogSort, type CollectionBenefit, type CollectionCard, type CollectionSummary, type CurrentUser, type NotificationItem, type UserCardDetail } from './api/client'
+import { ApiError, apiFetch, claimPassTier, claimReward, clearAccessToken, getFanPass, getProgression, notificationStreamUrl, oauthStartUrl, resolveApiUrl, setAccessToken, updateProfileEquipment, type CatalogArtist, type CatalogCard, type CatalogMember, type CatalogSort, type CollectionBenefit, type CollectionCard, type CollectionSummary, type CurrentUser, type FanProgression, type NotificationItem, type ProfileEquipment, type RewardGrant, type UserCardDetail } from './api/client'
 import { QrRedeemModal } from './components/QrRedeemModal'
 import { CardDetail } from './components/CardDetail'
 import { Settings } from './components/Settings'
 import { ProfileAvatar } from './components/ProfileAvatar'
+import { FanGrowth } from './components/FanGrowth'
 import type { Card } from './types'
 import { demoCardImage, demoMemberImage, keepCardVisual } from './utils/cardVisual'
 
@@ -134,6 +135,10 @@ function App() {
   const [collectionLoading, setCollectionLoading] = useState(false)
   const [collectionError, setCollectionError] = useState('')
   const [collectionBenefits, setCollectionBenefits] = useState<CollectionBenefit[]>([])
+  const [fanProgression, setFanProgression] = useState<FanProgression | null>(null)
+  const [growthLoading, setGrowthLoading] = useState(false)
+  const [growthError, setGrowthError] = useState('')
+  const [claimedGrowthRewards, setClaimedGrowthRewards] = useState<RewardGrant[]>([])
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [notificationError, setNotificationError] = useState('')
@@ -257,6 +262,9 @@ function App() {
     setCollectionSummary({ ownedCount: 0, totalSlots: 9, completionRate: 0 })
     setCollectionBenefits([])
     setCollectionError('')
+    setFanProgression(null)
+    setGrowthError('')
+    setClaimedGrowthRewards([])
     setNotifications([])
     setUnreadCount(0)
     setNotificationError('')
@@ -283,6 +291,27 @@ function App() {
     }
   }, [clearLocalSession])
 
+  const refreshGrowth = useCallback(async () => {
+    setGrowthLoading(true)
+    setGrowthError('')
+    try {
+      const [progression, pass] = await Promise.all([
+        getProgression(),
+        getFanPass(),
+      ])
+      setFanProgression(current => ({
+        ...progression.data,
+        pass: pass.data,
+        claimedRewards: current?.claimedRewards ?? claimedGrowthRewards,
+      }))
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) clearLocalSession()
+      else setGrowthError('성장 정보를 불러오지 못했어요.')
+    } finally {
+      setGrowthLoading(false)
+    }
+  }, [claimedGrowthRewards, clearLocalSession])
+
   const refreshUser = async () => {
     const result = await apiFetch<{ ok: true, data: CurrentUser }>('/me')
     setCurrentUser(result.data)
@@ -297,12 +326,15 @@ function App() {
     // session's state. Read the authenticated user as part of this transition.
     const user = await refreshUser()
     setSignedIn(true)
-    if (user.onboardingCompleted) await refreshCollection()
+    if (user.onboardingCompleted) await Promise.allSettled([
+      refreshCollection(),
+      refreshGrowth(),
+    ])
   }
 
   useEffect(() => {
     void refreshUser()
-      .then(() => { setSignedIn(true); void refreshCollection() })
+      .then(() => { setSignedIn(true); void Promise.allSettled([refreshCollection(), refreshGrowth()]) })
       .catch(() => {
         // The login screen may complete a magic-link request while this
         // initial session probe is still in flight. The app starts signed
@@ -311,7 +343,7 @@ function App() {
       .finally(() => {
         setSessionChecking(false)
       })
-  }, [refreshCollection])
+  }, [refreshCollection, refreshGrowth])
 
   useEffect(() => {
     if (!signedIn) return
@@ -416,6 +448,32 @@ function App() {
     await refreshCollection()
   }
 
+  const claimGrowthReward = async (grantId: string): Promise<RewardGrant> => {
+    const result = await claimReward(grantId)
+    setClaimedGrowthRewards(rewards => rewards.some(reward => reward.id === result.data.id) ? rewards : [...rewards, result.data])
+    setFanProgression(current => current ? {
+      ...current,
+      claimableRewards: current.claimableRewards.filter(reward => reward.id !== grantId),
+      claimedRewards: [...(current.claimedRewards ?? []).filter(reward => reward.id !== result.data.id), result.data],
+    } : current)
+    void refreshGrowth()
+    return result.data
+  }
+
+  const claimGrowthPassTier = async (tierId: string) => {
+    const result = await claimPassTier(tierId)
+    if (result.data.rewardGrant) {
+      setClaimedGrowthRewards(rewards => rewards.some(reward => reward.id === result.data.rewardGrant?.id) ? rewards : [...rewards, result.data.rewardGrant as RewardGrant])
+    }
+    await refreshGrowth()
+    return result.data
+  }
+
+  const saveGrowthEquipment = async (equipment: ProfileEquipment) => {
+    const result = await updateProfileEquipment(equipment)
+    setFanProgression(current => current ? { ...current, equipment: result.data } : current)
+  }
+
   if (sessionChecking) {
     return <SessionLoading />
   }
@@ -425,7 +483,7 @@ function App() {
   }
 
   if (showOnboarding) {
-    return <Onboarding userId={currentUser?.id ?? 'fan'} profileImageUrl={currentUser?.profileImageUrl ?? null} onComplete={() => { setShowOnboarding(false); void refreshUser(); void refreshCollection() }} onBack={logout} />
+    return <Onboarding userId={currentUser?.id ?? 'fan'} profileImageUrl={currentUser?.profileImageUrl ?? null} onComplete={() => { setShowOnboarding(false); void refreshUser(); void Promise.allSettled([refreshCollection(), refreshGrowth()]) }} onBack={logout} />
   }
 
   if (revealedCardId) {
@@ -448,11 +506,11 @@ function App() {
 
       <section className="screen">
         {collectionError && <div className="service-notice" role="alert"><span>{collectionError}</span><button onClick={() => void refreshCollection()} disabled={collectionLoading}>{collectionLoading ? '확인 중...' : '다시 시도'}</button></div>}
-        {tab === 'home' && <Home cards={collectionCards} savedCards={savedCards} summary={collectionSummary} loading={collectionLoading} onSelect={openCard} onDiscover={() => navigateTab('discover')} onRedeem={openRedeem} />}
+        {tab === 'home' && <><FanGrowth progression={fanProgression} loading={growthLoading} error={growthError} mode="summary" onRetry={refreshGrowth} onClaim={claimGrowthReward} onClaimPassTier={claimGrowthPassTier} onEquip={saveGrowthEquipment} fanGrowthMode="summary" /> <Home cards={collectionCards} savedCards={savedCards} summary={collectionSummary} loading={collectionLoading} onSelect={openCard} onDiscover={() => navigateTab('discover')} onRedeem={openRedeem} /></>}
         {tab === 'collection' && <Collection cards={collectionCards} summary={collectionSummary} benefits={collectionBenefits} loading={collectionLoading} onSelect={openCard} onRedeem={openRedeem} onDiscover={() => navigateTab('discover')} onClaim={claimBenefit} />}
         {tab === 'discover' && <Discover onSelect={openCard} />}
         {tab === 'alerts' && <Alerts items={notifications} error={notificationError} actionError={notificationActionError} onDismissActionError={() => setNotificationActionError('')} onRetry={() => window.dispatchEvent(new Event('fanfolio:refresh-notifications'))} onRead={markNotificationRead} onReadAll={markAllNotificationsRead} onNavigate={navigateTab} />}
-        {tab === 'settings' && currentUser && <Settings user={currentUser} onUserUpdated={setCurrentUser} onLogout={logout} />}
+        {tab === 'settings' && currentUser && <><Settings user={currentUser} onUserUpdated={setCurrentUser} onLogout={logout} /><FanGrowth progression={fanProgression} loading={growthLoading} error={growthError} mode="full" onRetry={refreshGrowth} onClaim={claimGrowthReward} onClaimPassTier={claimGrowthPassTier} onEquip={saveGrowthEquipment} fanGrowthMode="full" /></>}
       </section>
 
       <nav className="bottom-nav" aria-label="주요 메뉴">
@@ -463,7 +521,7 @@ function App() {
         <NavItem active={tab === 'settings'} label="설정" onClick={() => navigateTab('settings')} />
       </nav>
 
-      {showRedeem && <QrRedeemModal onClose={closeRedeem} onRedeemed={(id) => { closeRedeem(); openReveal(id); void refreshCollection() }} />}
+      {showRedeem && <QrRedeemModal onClose={closeRedeem} onRedeemed={(id) => { closeRedeem(); openReveal(id); void Promise.allSettled([refreshCollection(), refreshGrowth()]) }} />}
       <button className="floating-register" aria-label="카드 등록" onClick={openRedeem}><span className="floating-register-icon" aria-hidden="true"><InlineIcon name="plus" /></span><span>카드 등록</span></button>
       {selectedCard && <CardDetail card={selectedCard} isSaved={savedCardIds.includes(selectedCard.userCardId ?? selectedCard.id)} onClose={closeCard} onToggleSaved={() => { const id = selectedCard.userCardId ?? selectedCard.id; setSavedCards(cards => cards.some(item => (item.userCardId ?? item.id) === id) ? cards.filter(item => (item.userCardId ?? item.id) !== id) : [...cards, selectedCard]) }} onRedeem={() => { closeCard(); openRedeem() }} imageFor={demoCardImage} onImageError={keepCardVisual} cardTypeLabel={cardTypeLabel} />}
     </main>

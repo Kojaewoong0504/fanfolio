@@ -144,6 +144,84 @@ export type CurrentUser = {
   onboardingCompleted: boolean
 }
 
+export type RewardType = 'badge' | 'title' | 'profile_frame' | 'collection_theme' | 'digital_bonus'
+
+export type AchievementProgress = {
+  id: string
+  title: string
+  description: string
+  conditionType: string
+  targetValue: number
+  currentValue: number
+  completedAt: string | null
+}
+
+export type RewardGrant = {
+  id: string
+  rewardId: string
+  type: RewardType
+  name: string
+  grantedAt: string | null
+  claimedAt: string | null
+}
+
+export type ProfileEquipment = {
+  titleRewardId: string | null
+  badgeRewardIds: string[]
+  frameRewardId: string | null
+  themeRewardId: string | null
+  publicProfileEnabled: boolean
+}
+
+export type FanLevel = {
+  level: number
+  totalXp: number
+  nextLevelXp?: number
+}
+
+export type PassTier = {
+  id: string
+  tier: number
+  requiredXp: number
+  rewardId: string | null
+  claimed: boolean
+  claimable: boolean
+}
+
+export type PassSeason = {
+  id: string
+  title: string
+  organizationId: string | null
+  artistId: string | null
+  status: string
+  isPaid: boolean
+  startsAt: string | null
+  endsAt: string | null
+  progress: { currentXp: number; claimedTierIds: string[] }
+  tiers: PassTier[]
+}
+
+export type FanPass = {
+  seasons: PassSeason[]
+}
+
+export type PassTierClaim = {
+  seasonId: string
+  tierId: string
+  claimedAt: string | null
+  rewardGrant: RewardGrant | null
+}
+
+export type FanProgression = {
+  level: FanLevel
+  achievements: AchievementProgress[]
+  claimableRewards: RewardGrant[]
+  claimedRewards?: RewardGrant[]
+  pass: FanPass
+  equipment: ProfileEquipment
+  debugEvents?: Array<{ kind: string; sourceUserCardId?: string; status: string }>
+}
+
 export type CardMaterial = 'matte' | 'pearl' | 'chrome'
 export type FoilPattern =
   | 'aurora-wave'
@@ -288,4 +366,27 @@ export async function apiFetch<T>(path: string, init?: RequestInit, allowRefresh
     globalThis.clearTimeout(timeoutId)
     callerSignal?.removeEventListener('abort', abortFromCaller)
   }
+}
+
+export function getProgression(): Promise<{ ok: true, data: FanProgression }> {
+  return apiFetch<{ ok: true, data: FanProgression }>('/me/progression')
+}
+
+export function claimReward(grantId: string): Promise<{ ok: true, data: RewardGrant }> {
+  return apiFetch<{ ok: true, data: RewardGrant }>(`/me/rewards/${encodeURIComponent(grantId)}/claim`, { method: 'POST' })
+}
+
+export function updateProfileEquipment(equipment: ProfileEquipment): Promise<{ ok: true, data: ProfileEquipment }> {
+  return apiFetch<{ ok: true, data: ProfileEquipment }>('/me/profile/equipment', {
+    method: 'PUT',
+    body: JSON.stringify(equipment),
+  })
+}
+
+export function getFanPass(): Promise<{ ok: true, data: FanPass }> {
+  return apiFetch<{ ok: true, data: FanPass }>('/me/pass')
+}
+
+export function claimPassTier(tierId: string): Promise<{ ok: true, data: PassTierClaim }> {
+  return apiFetch<{ ok: true, data: PassTierClaim }>(`/me/pass-tiers/${encodeURIComponent(tierId)}/claim`, { method: 'POST' })
 }
