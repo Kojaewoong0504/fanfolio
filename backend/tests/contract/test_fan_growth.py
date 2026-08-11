@@ -1,6 +1,6 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -123,27 +123,35 @@ def seed_pass_reward() -> None:
     asyncio.run(seed())
 
 
-def seed_pass_xp(user_id: str, amount: int = 30) -> None:
+def seed_pass_xp(
+    user_id: str,
+    amount: int = 30,
+    *,
+    created_at: datetime | None = None,
+    suffix: str = "pass",
+) -> None:
     async def seed() -> None:
+        ledger_created_at = created_at or now()
         async with SessionLocal() as session:
             event = EngagementEvent(
-                id=f"evt_{user_id}_pass_xp",
+                id=f"evt_{user_id}_{suffix}_xp",
                 user_id=user_id,
                 kind="card_collected",
                 source_type="test",
-                source_id=f"source_{user_id}_pass_xp",
+                source_id=f"source_{user_id}_{suffix}_xp",
                 payload={"artistId": "artist_nova3"},
                 status="processed",
-                processed_at=now(),
+                processed_at=ledger_created_at,
             )
             session.add(event)
             session.add(
                 XpLedger(
-                    id=f"xp_{user_id}_pass",
+                    id=f"xp_{user_id}_{suffix}",
                     user_id=user_id,
                     event_id=event.id,
                     rule_key="card_collected",
                     amount=amount,
+                    created_at=ledger_created_at,
                 )
             )
             await session.commit()
@@ -293,6 +301,31 @@ def test_fan_pass_lists_only_published_free_seasons_and_refreshes_progress(
     assert progress.current_xp == 30
 
 
+def test_fan_pass_progress_ignores_xp_before_season_start(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    seed_pass_reward()
+    seed_pass_xp(
+        "fan",
+        amount=100,
+        created_at=now() - timedelta(days=30),
+        suffix="prior_season",
+    )
+    seeded_pass = seed_pass_seasons()
+
+    fan_pass = assert_success(actors["fan"].get("/api/me/pass"))
+
+    season = fan_pass["seasons"][0]
+    assert season["id"] == seeded_pass["seasonId"]
+    assert season["progress"]["currentXp"] == 0
+    assert season["tiers"][0]["claimable"] is False
+    assert_error(
+        actors["fan"].post(f"/api/me/pass-tiers/{seeded_pass['tierId']}/claim"),
+        409,
+        "PASS_TIER_LOCKED",
+    )
+
+
 def test_fan_can_claim_unlocked_pass_tier_once(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:
@@ -338,7 +371,12 @@ def test_pass_tier_claim_allows_fourteen_day_post_season_grace(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:
     seed_pass_reward()
-    seed_pass_xp("fan", amount=30)
+    seed_pass_xp(
+        "fan",
+        amount=30,
+        created_at=now() - timedelta(days=14),
+        suffix="grace_season",
+    )
 
     async def seed_ended_passes() -> dict[str, str]:
         async with SessionLocal() as session:
@@ -452,6 +490,8 @@ def test_fan_can_read_progression_with_only_their_reward_grants(
 ) -> None:
     seed_first_card_achievement()
     other_grant_id = seed_reward_grants("otherFan", ["title"])[0]
+    seed_pass_reward()
+    seed_pass_seasons()
 
     assert_success(
         actors["fan"].post(
@@ -468,6 +508,9 @@ def test_fan_can_read_progression_with_only_their_reward_grants(
     assert progression["claimableRewards"][0]["claimedAt"] is None
     assert progression["claimableRewards"][0]["id"] != other_grant_id
     assert all(item["id"] != other_grant_id for item in progression["claimableRewards"])
+    assert progression["pass"]["seasons"][0]["id"] == "pass_active_free"
+    assert progression["pass"]["seasons"][0]["progress"]["currentXp"] == 30
+    assert progression["pass"]["seasons"][0]["tiers"][0]["claimable"] is True
     assert progression["equipment"] == {
         "titleRewardId": None,
         "badgeRewardIds": [],

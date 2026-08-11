@@ -626,6 +626,7 @@ async def fan_progression_data(session: AsyncSession, user_id: str) -> dict:
         },
         "achievements": achievements,
         "claimableRewards": [_reward_grant_data(grant, reward) for grant, reward in reward_rows],
+        "pass": await fan_pass_data(session, user_id=user_id),
         "equipment": await _equipment_data(session, user_id=user_id),
         "debugEvents": [
             {
@@ -790,8 +791,33 @@ async def update_pass_progress(session: AsyncSession, *, event: EngagementEvent)
 
 
 async def current_user_xp(session: AsyncSession, *, user_id: str) -> int:
+    return await scoped_user_xp(session, user_id=user_id)
+
+
+def _as_aware_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value
+
+
+async def scoped_user_xp(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    starts_at: datetime | None = None,
+    ends_at: datetime | None = None,
+) -> int:
+    conditions = [XpLedger.user_id == user_id]
+    season_starts_at = _as_aware_utc(starts_at)
+    season_ends_at = _as_aware_utc(ends_at)
+    if season_starts_at is not None:
+        conditions.append(XpLedger.created_at >= season_starts_at)
+    if season_ends_at is not None:
+        conditions.append(XpLedger.created_at <= season_ends_at)
     total = await session.scalar(
-        select(func.coalesce(func.sum(XpLedger.amount), 0)).where(XpLedger.user_id == user_id)
+        select(func.coalesce(func.sum(XpLedger.amount), 0)).where(*conditions)
     )
     return int(total or 0)
 
@@ -826,38 +852,27 @@ async def refresh_pass_progress(
             if existing is None:
                 raise
             progress = existing
-    progress.current_xp = await current_user_xp(session, user_id=user_id)
+    progress.current_xp = await scoped_user_xp(
+        session,
+        user_id=user_id,
+        starts_at=season.starts_at,
+        ends_at=season.ends_at,
+    )
     progress.updated_at = now()
     return progress
 
 
 def _season_active_for_pass_view(season: PassSeason, current_time: datetime) -> bool:
-    starts_at = (
-        season.starts_at.replace(tzinfo=UTC)
-        if season.starts_at and season.starts_at.tzinfo is None
-        else season.starts_at
-    )
-    ends_at = (
-        season.ends_at.replace(tzinfo=UTC)
-        if season.ends_at and season.ends_at.tzinfo is None
-        else season.ends_at
-    )
+    starts_at = _as_aware_utc(season.starts_at)
+    ends_at = _as_aware_utc(season.ends_at)
     return (starts_at is None or starts_at <= current_time) and (
         ends_at is None or ends_at >= current_time
     )
 
 
 def _season_open_for_claim(season: PassSeason, current_time: datetime) -> bool:
-    starts_at = (
-        season.starts_at.replace(tzinfo=UTC)
-        if season.starts_at and season.starts_at.tzinfo is None
-        else season.starts_at
-    )
-    ends_at = (
-        season.ends_at.replace(tzinfo=UTC)
-        if season.ends_at and season.ends_at.tzinfo is None
-        else season.ends_at
-    )
+    starts_at = _as_aware_utc(season.starts_at)
+    ends_at = _as_aware_utc(season.ends_at)
     if starts_at is not None and starts_at > current_time:
         return False
     if ends_at is None:
