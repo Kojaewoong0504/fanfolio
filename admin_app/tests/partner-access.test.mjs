@@ -66,6 +66,7 @@ test('partner registration reports the failing stage instead of masking API erro
   assert.match(source, /요청에 실패했습니다/)
   assert.match(source, /파트너 목록을 새로 고치지 못했습니다/)
   assert.match(source, /String\(error\?\.message \|\| error\)/)
+  assert.match(source, /loadOrganizations\(false\)/)
 })
 
 test('partner card detail exposes the scoped review request action', () => {
