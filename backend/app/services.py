@@ -16,6 +16,8 @@ from app.errors import AppError
 from app.image_processing import remove_light_background_bytes
 from app.mailer import MailDeliveryError, deliver_notification_email
 from app.models import (
+    AchievementDefinition,
+    AchievementProgress,
     AdminArtistAssignment,
     AdminMembership,
     Artist,
@@ -37,9 +39,15 @@ from app.models import (
     Notification,
     Organization,
     OrganizationArtist,
+    PassProgress,
+    PassSeason,
+    PassTier,
+    ProfileEquipment,
     RedeemCode,
     RedeemCodeBatch,
     RefreshToken,
+    RewardCatalog,
+    RewardGrant,
     Role,
     Session,
     User,
@@ -161,22 +169,307 @@ async def grant_xp(
     return row
 
 
-async def process_engagement_event(event_id: str) -> None:
-    """Shared task entry point for growth event consumption.
+def base_xp_for(event: EngagementEvent) -> int:
+    if event.kind == "card_collected":
+        return 30
+    if event.kind == "card_revoked":
+        return -30
+    return 0
 
-    Task 1 only guarantees durable post-commit enqueueing. Achievement and XP
-    consumption are added by the follow-up task, so this entry point validates
-    that workers can load the committed event without mutating its pending
-    state.
-    """
+
+async def published_definitions_for_event(
+    session: AsyncSession, event: EngagementEvent
+) -> list[AchievementDefinition]:
+    if event.kind != "card_collected":
+        return []
+    artist_id = event.payload.get("artistId")
+    definitions = await session.scalars(
+        select(AchievementDefinition).where(AchievementDefinition.status == "published")
+    )
+    return [
+        definition
+        for definition in definitions
+        if definition.artist_id is None or definition.artist_id == artist_id
+    ]
+
+
+async def owned_card_query_value(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    achievement: AchievementDefinition,
+    value: str,
+) -> int:
+    conditions = [UserCard.user_id == user_id]
+    if achievement.artist_id is not None:
+        conditions.append(Card.artist_id == achievement.artist_id)
+    member_id = achievement.condition_payload.get("memberId")
+    if member_id:
+        conditions.append(Card.member_id == member_id)
+    return int(
+        await session.scalar(
+            select(func.count(func.distinct(value)))
+            .select_from(UserCard)
+            .join(Card, Card.id == UserCard.card_id)
+            .where(*conditions)
+        )
+        or 0
+    )
+
+
+async def achievement_current_value(
+    session: AsyncSession,
+    *,
+    event: EngagementEvent,
+    definition: AchievementDefinition,
+) -> int:
+    payload = definition.condition_payload or {}
+    if definition.condition_type == "first_card":
+        return min(
+            1,
+            await owned_card_query_value(
+                session, user_id=event.user_id, achievement=definition, value=Card.id
+            ),
+        )
+    if definition.condition_type == "card_count":
+        return await owned_card_query_value(
+            session, user_id=event.user_id, achievement=definition, value=Card.id
+        )
+    if definition.condition_type == "member_count":
+        return await owned_card_query_value(
+            session, user_id=event.user_id, achievement=definition, value=Card.member_id
+        )
+    if definition.condition_type == "specific_card":
+        card_id = payload.get("cardId")
+        if not card_id:
+            return 0
+        return int(
+            bool(
+                await session.scalar(
+                    select(UserCard.id).where(
+                        UserCard.user_id == event.user_id,
+                        UserCard.card_id == card_id,
+                    )
+                )
+            )
+        )
+    if definition.condition_type == "set_complete":
+        campaign_id = payload.get("campaignId")
+        campaign = await session.get(CollectionCampaign, campaign_id) if campaign_id else None
+        required_card_ids = list(
+            campaign.required_card_ids if campaign else payload.get("cardIds", [])
+        )
+        if not required_card_ids:
+            return 0
+        owned_card_ids = set(
+            await session.scalars(
+                select(UserCard.card_id).where(
+                    UserCard.user_id == event.user_id,
+                    UserCard.card_id.in_(required_card_ids),
+                )
+            )
+        )
+        return len(owned_card_ids)
+    if definition.condition_type == "drop_participation":
+        drop_id = payload.get("dropId") or event.payload.get("dropId")
+        if not drop_id:
+            return 0
+        return int(
+            bool(
+                await session.scalar(
+                    select(UserCard.id).where(
+                        UserCard.user_id == event.user_id,
+                        UserCard.drop_id == drop_id,
+                    )
+                )
+            )
+        )
+    return 0
+
+
+async def get_or_create_achievement_progress(
+    session: AsyncSession, *, user_id: str, achievement_id: str
+) -> AchievementProgress:
+    progress = await session.scalar(
+        select(AchievementProgress).where(
+            AchievementProgress.user_id == user_id,
+            AchievementProgress.achievement_id == achievement_id,
+        )
+    )
+    if progress:
+        return progress
+    progress = AchievementProgress(
+        id=f"achievement_progress_{uuid4().hex[:12]}",
+        user_id=user_id,
+        achievement_id=achievement_id,
+    )
+    try:
+        async with session.begin_nested():
+            session.add(progress)
+            await session.flush()
+    except IntegrityError:
+        existing = await session.scalar(
+            select(AchievementProgress).where(
+                AchievementProgress.user_id == user_id,
+                AchievementProgress.achievement_id == achievement_id,
+            )
+        )
+        if existing:
+            return existing
+        raise
+    return progress
+
+
+async def grant_reward(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    reward_id: str,
+    source_event_id: str,
+    rule_key: str,
+) -> RewardGrant:
+    existing = await session.scalar(
+        select(RewardGrant).where(
+            RewardGrant.user_id == user_id,
+            RewardGrant.source_event_id == source_event_id,
+            RewardGrant.rule_key == rule_key,
+        )
+    )
+    if existing:
+        return existing
+    reward = await session.get(RewardCatalog, reward_id)
+    if reward is None or reward.status != "published":
+        raise AppError(409, "REWARD_NOT_PUBLISHED", "공개된 보상을 찾을 수 없습니다.")
+    grant = RewardGrant(
+        id=f"reward_grant_{uuid4().hex[:12]}",
+        user_id=user_id,
+        reward_id=reward_id,
+        source_event_id=source_event_id,
+        rule_key=rule_key,
+    )
+    try:
+        async with session.begin_nested():
+            session.add(grant)
+            await session.flush()
+    except IntegrityError:
+        existing = await session.scalar(
+            select(RewardGrant).where(
+                RewardGrant.user_id == user_id,
+                RewardGrant.source_event_id == source_event_id,
+                RewardGrant.rule_key == rule_key,
+            )
+        )
+        if existing:
+            return existing
+        raise
+    return grant
+
+
+async def notify_fan_once(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    achievement: AchievementDefinition,
+) -> None:
+    event_key = f"achievement:{achievement.id}:{user_id}"
+    if await session.scalar(
+        select(Notification.id).where(
+            Notification.user_id == user_id,
+            Notification.event_key == event_key,
+        )
+    ):
+        return
+    session.add(
+        Notification(
+            id=f"notification_{uuid4().hex[:12]}",
+            user_id=user_id,
+            kind="achievement_unlocked",
+            title="업적을 달성했어요",
+            body=f"{achievement.title} 업적을 완료했습니다.",
+            entity_type="achievement",
+            entity_id=achievement.id,
+            event_key=event_key,
+        )
+    )
+
+
+async def update_achievement_progress(
+    session: AsyncSession,
+    *,
+    event: EngagementEvent,
+    definition: AchievementDefinition,
+) -> AchievementProgress:
+    progress = await get_or_create_achievement_progress(
+        session, user_id=event.user_id, achievement_id=definition.id
+    )
+    was_completed = progress.completed_at is not None
+    current_value = await achievement_current_value(session, event=event, definition=definition)
+    progress.current_value = min(current_value, definition.target_value)
+    progress.updated_at = now()
+    if progress.current_value >= definition.target_value and progress.completed_at is None:
+        progress.completed_at = now()
+    if progress.completed_at is not None and not was_completed:
+        reward_id = definition.reward_rule_key or (definition.condition_payload or {}).get(
+            "rewardId"
+        )
+        if reward_id:
+            await grant_reward(
+                session,
+                user_id=event.user_id,
+                reward_id=reward_id,
+                source_event_id=event.id,
+                rule_key=f"achievement:{definition.id}",
+            )
+        await notify_fan_once(session, user_id=event.user_id, achievement=definition)
+    return progress
+
+
+async def update_pass_progress(session: AsyncSession, *, event: EngagementEvent) -> None:
+    return None
+
+
+async def process_engagement_event(event_id: str) -> None:
+    """Shared task entry point for idempotent growth event consumption."""
     async with SessionLocal() as session:
-        event = await session.get(EngagementEvent, event_id)
+        event = await session.scalar(
+            select(EngagementEvent).where(EngagementEvent.id == event_id).with_for_update()
+        )
         if event is None:
             raise AppError(
                 404,
                 "ENGAGEMENT_EVENT_NOT_FOUND",
                 "처리할 팬 성장 이벤트를 찾을 수 없습니다.",
             )
+        if event.status == "processed":
+            return
+        amount = base_xp_for(event)
+        if amount:
+            await grant_xp(
+                session,
+                user_id=event.user_id,
+                event_id=event.id,
+                rule_key=event.kind,
+                amount=amount,
+            )
+        for definition in await published_definitions_for_event(session, event):
+            await update_achievement_progress(session, event=event, definition=definition)
+        await update_pass_progress(session, event=event)
+        event.status = "processed"
+        event.processed_at = now()
+        await session.commit()
+
+
+async def revoke_card_growth(
+    session: AsyncSession, *, user_card: UserCard, reason: str
+) -> EngagementEvent:
+    return await record_engagement_event(
+        session,
+        user_id=user_card.user_id,
+        kind="card_revoked",
+        source_type="user_card",
+        source_id=user_card.id,
+        payload={"cardId": user_card.card_id, "reason": reason},
+    )
 
 
 async def ensure_demo_catalog(session: AsyncSession) -> None:
@@ -293,6 +586,17 @@ async def ensure_data_identity(session: AsyncSession) -> None:
 async def reset_database(session: AsyncSession) -> None:
     for model in (
         BackgroundRemovalJob,
+        ProfileEquipment,
+        PassProgress,
+        PassTier,
+        PassSeason,
+        RewardGrant,
+        XpLedger,
+        AchievementProgress,
+        AchievementDefinition,
+        RewardCatalog,
+        FanLevel,
+        EngagementEvent,
         CollectionBenefitClaim,
         AuditLog,
         CardReviewDecision,
