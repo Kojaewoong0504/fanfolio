@@ -1014,10 +1014,10 @@ async function saveOrganization(event) {
   const form = new FormData(event.currentTarget);
   const editing = state.drawerData?.organization;
   const payload = {
-    name: form.get("name"),
-    slug: form.get("slug"),
-    contactName: form.get("contactName") || null,
-    contactEmail: form.get("contactEmail") || null,
+    name: String(form.get("name") || "").trim(),
+    slug: String(form.get("slug") || "").trim().toLowerCase(),
+    contactName: String(form.get("contactName") || "").trim() || null,
+    contactEmail: String(form.get("contactEmail") || "").trim() || null,
     contractStartsAt: form.get("contractStartsAt")
       ? `${form.get("contractStartsAt")}T00:00:00.000Z`
       : null,
@@ -1043,10 +1043,21 @@ async function saveOrganization(event) {
         : "/admin/organizations",
       { method: editing ? "PATCH" : "POST", body: JSON.stringify(payload) },
     );
-    state.selectedOrganizationId = result.data.id;
     state.drawer = null;
     state.drawerData = null;
-    await loadOrganizations(false);
+    state.selectedOrganizationId = result.data.id;
+    try {
+      await loadOrganizations(false);
+    } catch {
+      // The write already succeeded. Keep the returned record visible if a
+      // follow-up list refresh is briefly unavailable after a cold start.
+      state.organizations = [
+        result.data,
+        ...state.organizations.filter((item) => item.id !== result.data.id),
+      ];
+      state.selectedOrganization = result.data;
+      state.organizationMembers = [];
+    }
     toast(editing ? "파트너 정보를 저장했습니다." : "파트너를 등록했습니다.");
     layout();
   } catch (error) {
