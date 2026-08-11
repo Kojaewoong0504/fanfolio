@@ -1,4 +1,5 @@
 import asyncio
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import FastAPI
@@ -6,10 +7,12 @@ from fastapi.testclient import TestClient
 
 from app.db.session import SessionLocal
 from app.models import (
+    AchievementDefinition,
     AdminArtistAssignment,
     AdminMembership,
     Organization,
     OrganizationArtist,
+    RewardCatalog,
     Role,
     User,
 )
@@ -17,6 +20,35 @@ from app.models import (
     Session as LoginSession,
 )
 from tests.conftest import assert_error, assert_success
+
+
+def seed_release_growth_reward() -> str:
+    async def seed() -> str:
+        async with SessionLocal() as session:
+            reward = RewardCatalog(
+                id="reward_release_growth_title",
+                organization_id="org_starwave",
+                artist_id="artist_nova3",
+                reward_type="title",
+                name="Release Growth Fan",
+                status="published",
+            )
+            achievement = AchievementDefinition(
+                id="achievement_release_growth",
+                organization_id="org_starwave",
+                artist_id="artist_nova3",
+                title="Release Growth",
+                condition_type="first_card",
+                target_value=1,
+                condition_payload={"rewardId": reward.id, "xpBonus": 30},
+                reward_rule_key=reward.id,
+                status="published",
+            )
+            session.add_all([reward, achievement])
+            await session.commit()
+            return achievement.id
+
+    return asyncio.run(seed())
 
 
 def admin_client(app: FastAPI, session_token: str) -> TestClient:
@@ -194,6 +226,90 @@ def test_special_card_needs_company_and_platform_approval(
         )
     )
     assert platform_approved["releaseStatus"] == "approved"
+
+
+def test_special_card_release_to_fan_growth_e2e(
+    app: FastAPI, actors: dict[str, TestClient]
+) -> None:
+    achievement_id = seed_release_growth_reward()
+    partner = create_partner_client(
+        app, user_id="partner_release_growth", access_level="company_admin"
+    )
+    platform = create_platform_client(app, user_id="platform_release_growth")
+    card = submit_studio_card(actors["artist"], rarity="Special")
+
+    assert card["releaseStatus"] == "pending_partner_review"
+    partner_approved = assert_success(
+        partner.post(f"/api/admin/cards/{card['id']}/review/partner", json={"decision": "approved"})
+    )
+    assert partner_approved["releaseStatus"] == "pending_platform_review"
+
+    platform_approved = assert_success(
+        platform.post(
+            f"/api/admin/cards/{card['id']}/review/platform",
+            json={"decision": "approved"},
+        )
+    )
+    assert platform_approved["releaseStatus"] == "approved"
+
+    assert_error(
+        actors["admin"].post(
+            "/api/admin/drops",
+            json={
+                "name": "Root must not publish partner drop",
+                "organizationId": "org_starwave",
+                "artistId": "artist_nova3",
+            },
+        ),
+        403,
+        "ADMIN_WRITE_REQUIRED",
+    )
+    drop = assert_success(
+        partner.post(
+            "/api/admin/drops",
+            json={"name": "스페셜 성장 드롭", "artistId": "artist_nova3"},
+        ),
+        201,
+    )
+    linked = assert_success(
+        partner.post(f"/api/admin/drops/{drop['id']}/cards", json={"cardId": card["id"]})
+    )
+    assert linked["releaseStatus"] == "drop_ready"
+    assert_success(partner.patch(f"/api/admin/drops/{drop['id']}/status", json={"status": "live"}))
+
+    batch = assert_success(
+        partner.post(
+            "/api/admin/redeem-code-batches",
+            json={
+                "dropId": drop["id"],
+                "cardId": card["id"],
+                "quantity": 1,
+                "maxUsesPerCode": 1,
+                "expiresAt": (datetime.now(UTC) + timedelta(days=7)).isoformat(),
+                "prefix": "QA-E2E",
+            },
+        ),
+        201,
+    )
+    code = assert_success(partner.get(f"/api/admin/redeem-code-batches/{batch['id']}/codes"))[
+        "items"
+    ][0]["code"]
+
+    assert_success(actors["fan"].post("/api/redemptions", json={"code": code, "source": "qr"}), 201)
+    assert_error(
+        actors["fan"].post("/api/redemptions", json={"code": code, "source": "qr"}),
+        409,
+        "REDEEM_CODE_ALREADY_USED",
+    )
+
+    progression = assert_success(actors["fan"].get("/api/me/progression"))
+    assert progression["level"]["totalXp"] >= 60
+    completed = next(item for item in progression["achievements"] if item["id"] == achievement_id)
+    assert completed["completedAt"] is not None
+    reward = progression["claimableRewards"][0]
+    first_claim = assert_success(actors["fan"].post(f"/api/me/rewards/{reward['id']}/claim"))
+    second_claim = assert_success(actors["fan"].post(f"/api/me/rewards/{reward['id']}/claim"))
+    assert first_claim == second_claim
 
 
 def test_stage_decisions_reject_wrong_roles_and_scope(

@@ -24,6 +24,7 @@ from app.models import (
     Card,
     CollectionCampaign,
     Drop,
+    EngagementEvent,
     Member,
     Notification,
     OrganizationArtist,
@@ -33,8 +34,11 @@ from app.models import (
     RedeemCodeBatch,
     RefreshToken,
     RewardCatalog,
+    RewardGrant,
     Role,
     User,
+    UserCard,
+    XpLedger,
 )
 from app.passwords import hash_password
 from app.routers.admin_partners import router as partner_router
@@ -426,6 +430,15 @@ async def scoped_drop_or_404(
         raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
     await _organization_artist_or_404(session, context, drop.organization_id, drop.artist_id)
     return drop
+
+
+def ensure_not_root_partner_drop(context: AdminContext, drop: Drop) -> None:
+    if context.is_root and drop.organization_id is not None:
+        raise AppError(
+            403,
+            "ADMIN_WRITE_REQUIRED",
+            "파트너 범위 드롭은 해당 조직 관리자가 발행해야 합니다.",
+        )
 
 
 def engagement_scope_filters(context: AdminContext, model: type) -> list[object]:
@@ -870,6 +883,50 @@ async def dashboard(context: CurrentAdmin, session: DbSession) -> dict:
         redeemed_count = await session.scalar(
             select(func.coalesce(func.sum(RedeemCode.used_count), 0))
         )
+    xp_filters = []
+    reward_filters = []
+    if not context.is_root:
+        if context.organization is None:
+            xp_filters.append(Drop.organization_id.is_(None))
+            reward_filters.append(RewardCatalog.organization_id.is_(None))
+        else:
+            xp_filters.append(Drop.organization_id == context.organization.id)
+            reward_filters.append(RewardCatalog.organization_id == context.organization.id)
+            if context.membership.access_level != "company_admin":
+                xp_filters.append(Card.artist_id.in_(context.assigned_artist_ids))
+                reward_filters.append(RewardCatalog.artist_id.in_(context.assigned_artist_ids))
+    today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    active_achievements = await session.scalar(
+        select(func.count())
+        .select_from(AchievementDefinition)
+        .where(
+            *engagement_scope_filters(context, AchievementDefinition),
+            AchievementDefinition.status == "published",
+        )
+    )
+    earned_xp_today = await session.scalar(
+        select(func.coalesce(func.sum(XpLedger.amount), 0))
+        .select_from(XpLedger)
+        .join(EngagementEvent, EngagementEvent.id == XpLedger.event_id)
+        .join(UserCard, UserCard.id == EngagementEvent.source_id)
+        .join(Card, Card.id == UserCard.card_id)
+        .join(Drop, Drop.id == UserCard.drop_id)
+        .where(
+            XpLedger.created_at >= today_start,
+            EngagementEvent.source_type == "user_card",
+            *xp_filters,
+        )
+    )
+    claimable_rewards = await session.scalar(
+        select(func.count())
+        .select_from(RewardGrant)
+        .join(RewardCatalog, RewardCatalog.id == RewardGrant.reward_id)
+        .where(
+            RewardGrant.claimed_at.is_(None),
+            RewardCatalog.status == "published",
+            *reward_filters,
+        )
+    )
     audit_filters = []
     if not context.is_root:
         audit_filters.extend(
@@ -897,6 +954,11 @@ async def dashboard(context: CurrentAdmin, session: DbSession) -> dict:
                 "publishedCards": published_cards or 0,
                 "activeDrops": active_drops or 0,
                 "redeemedCount": redeemed_count or 0,
+            },
+            "growthSummary": {
+                "activeAchievements": active_achievements or 0,
+                "earnedXpToday": earned_xp_today or 0,
+                "claimableRewards": claimable_rewards or 0,
             },
             "recentActivity": [
                 {
@@ -1449,8 +1511,12 @@ async def create_drop(
         organization_id = context.membership.organization_id
         if artist_id is None:
             raise AppError(422, "ARTIST_REQUIRED", "아티스트를 선택해 주세요.")
-    elif bool(organization_id) != bool(artist_id):
-        raise AppError(422, "DROP_SCOPE_REQUIRED", "조직과 아티스트 범위를 함께 선택해 주세요.")
+    elif organization_id is not None or artist_id is not None:
+        raise AppError(
+            403,
+            "ADMIN_WRITE_REQUIRED",
+            "파트너 범위 드롭은 해당 조직 관리자가 발행해야 합니다.",
+        )
     if organization_id and artist_id:
         await _organization_artist_or_404(session, context, organization_id, artist_id)
     drop = Drop(
@@ -1485,6 +1551,7 @@ async def link_card_to_drop(
 ) -> dict:
     _require_scoped_action(context, "drops:write")
     drop = await scoped_drop_or_404(drop_id, context, session)
+    ensure_not_root_partner_drop(context, drop)
     card = await session.get(Card, payload.card_id)
     if not card:
         raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
@@ -1520,11 +1587,11 @@ async def link_card_to_drop(
 
 @router.patch("/drops/{drop_id}/status")
 async def update_drop_status(
-    drop_id: str, payload: DropStatusUpdate, admin: RootAdminUser, session: DbSession
+    drop_id: str, payload: DropStatusUpdate, context: CurrentAdmin, session: DbSession
 ) -> dict:
-    drop = await session.get(Drop, drop_id)
-    if not drop:
-        raise AppError(404, "DROP_NOT_FOUND", "드롭을 찾을 수 없습니다.")
+    _require_scoped_action(context, "drops:write")
+    drop = await scoped_drop_or_404(drop_id, context, session)
+    ensure_not_root_partner_drop(context, drop)
     previous_status = drop.status
     drop.status = payload.status
     if previous_status != "live" and payload.status == "live":
@@ -1536,7 +1603,7 @@ async def update_drop_status(
             card.status = "published"
         await record_audit(
             session,
-            actor_user_id=admin.id,
+            actor_user_id=context.user.id,
             action="drop.started",
             entity_type="drop",
             entity_id=drop.id,
@@ -1947,6 +2014,7 @@ async def scoped_redeem_code_or_404(
 async def code_batch(payload: CodeBatchRequest, context: CurrentAdmin, session: DbSession) -> dict:
     _require_scoped_action(context, "codes:write")
     drop = await scoped_drop_or_404(payload.drop_id, context, session)
+    ensure_not_root_partner_drop(context, drop)
     card = await session.get(Card, payload.card_id)
     if not card:
         raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")

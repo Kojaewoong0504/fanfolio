@@ -777,6 +777,15 @@ async def update_achievement_progress(
     if progress.current_value >= definition.target_value and progress.completed_at is None:
         progress.completed_at = now()
     if progress.completed_at is not None and not was_completed:
+        xp_bonus = int((definition.condition_payload or {}).get("xpBonus") or 0)
+        if xp_bonus:
+            await grant_xp(
+                session,
+                user_id=event.user_id,
+                event_id=event.id,
+                rule_key=f"achievement:{definition.id}",
+                amount=xp_bonus,
+            )
         reward_id = definition.reward_rule_key or (definition.condition_payload or {}).get(
             "rewardId"
         )
@@ -1756,15 +1765,15 @@ async def redeem(
         card = await session.scalar(select(Card).where(Card.id == code.card_id).with_for_update())
         if card is None or card.status != "published":
             raise AppError(409, "CARD_NOT_PUBLISHED", "공개되지 않은 카드입니다.")
+        drop = await session.get(Drop, code.drop_id)
+        if drop is None or drop.status != "live":
+            raise AppError(409, "DROP_NOT_LIVE", "현재 진행 중인 드롭이 아닙니다.")
         if card.drop_id is None or code.drop_id != card.drop_id:
             raise AppError(
                 409,
                 "CARD_DROP_MISMATCH",
                 "카드 발행 드롭과 코드 드롭이 일치하지 않습니다.",
             )
-        drop = await session.get(Drop, card.drop_id)
-        if drop is None or drop.status != "live":
-            raise AppError(409, "DROP_NOT_LIVE", "현재 진행 중인 드롭이 아닙니다.")
         code.used_count += 1
         serial = (
             await session.scalar(

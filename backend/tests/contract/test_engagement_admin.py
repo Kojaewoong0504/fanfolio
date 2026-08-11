@@ -1,10 +1,23 @@
 import asyncio
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi.testclient import TestClient
 
 from app.db.session import SessionLocal
-from app.models import Artist, Organization, RewardCatalog
+from app.models import (
+    AchievementDefinition,
+    Artist,
+    Card,
+    Drop,
+    EngagementEvent,
+    Organization,
+    OrganizationArtist,
+    RewardCatalog,
+    RewardGrant,
+    UserCard,
+    XpLedger,
+)
 from tests.conftest import assert_error, assert_success
 from tests.contract.test_admin_partner_access import create_partner, login_partner
 
@@ -38,6 +51,169 @@ def pass_season_payload(**overrides: Any) -> dict[str, Any]:
     return payload
 
 
+def seed_dashboard_growth_scope(org_id: str) -> None:
+    async def seed() -> None:
+        async with SessionLocal() as session:
+            session.add_all(
+                [
+                    Artist(id="artist_dashboard_other", name="다른 아티스트"),
+                    Organization(
+                        id="org_dashboard_other",
+                        name="다른 엔터테인먼트",
+                        slug="dashboard-other",
+                        status="active",
+                    ),
+                    OrganizationArtist(
+                        organization_id="org_dashboard_other",
+                        artist_id="artist_dashboard_other",
+                    ),
+                    Drop(
+                        id="drop_dashboard_own",
+                        name="대시보드 자사 드롭",
+                        organization_id=org_id,
+                        artist_id="artist_nova3",
+                        status="live",
+                    ),
+                    Drop(
+                        id="drop_dashboard_other",
+                        name="대시보드 타사 드롭",
+                        organization_id="org_dashboard_other",
+                        artist_id="artist_dashboard_other",
+                        status="live",
+                    ),
+                    Card(
+                        id="card_dashboard_own",
+                        name="대시보드 자사 카드",
+                        artist_id="artist_nova3",
+                        status="published",
+                        release_status="published",
+                        drop_id="drop_dashboard_own",
+                    ),
+                    Card(
+                        id="card_dashboard_other",
+                        name="대시보드 타사 카드",
+                        artist_id="artist_dashboard_other",
+                        status="published",
+                        release_status="published",
+                        drop_id="drop_dashboard_other",
+                    ),
+                    UserCard(
+                        id="uc_dashboard_own",
+                        user_id="fan",
+                        card_id="card_dashboard_own",
+                        drop_id="drop_dashboard_own",
+                        serial_number=1,
+                        acquired_at=datetime.now(UTC),
+                    ),
+                    UserCard(
+                        id="uc_dashboard_other",
+                        user_id="otherFan",
+                        card_id="card_dashboard_other",
+                        drop_id="drop_dashboard_other",
+                        serial_number=1,
+                        acquired_at=datetime.now(UTC),
+                    ),
+                    EngagementEvent(
+                        id="evt_dashboard_own",
+                        user_id="fan",
+                        kind="card_collected",
+                        source_type="user_card",
+                        source_id="uc_dashboard_own",
+                        payload={"cardId": "card_dashboard_own", "artistId": "artist_nova3"},
+                        status="processed",
+                        processed_at=datetime.now(UTC),
+                    ),
+                    EngagementEvent(
+                        id="evt_dashboard_other",
+                        user_id="otherFan",
+                        kind="card_collected",
+                        source_type="user_card",
+                        source_id="uc_dashboard_other",
+                        payload={
+                            "cardId": "card_dashboard_other",
+                            "artistId": "artist_dashboard_other",
+                        },
+                        status="processed",
+                        processed_at=datetime.now(UTC),
+                    ),
+                    XpLedger(
+                        id="xp_dashboard_own",
+                        user_id="fan",
+                        event_id="evt_dashboard_own",
+                        rule_key="card_collected",
+                        amount=40,
+                    ),
+                    XpLedger(
+                        id="xp_dashboard_other",
+                        user_id="otherFan",
+                        event_id="evt_dashboard_other",
+                        rule_key="card_collected",
+                        amount=60,
+                    ),
+                    RewardCatalog(
+                        id="reward_dashboard_own",
+                        organization_id=org_id,
+                        artist_id="artist_nova3",
+                        reward_type="title",
+                        name="자사 보상",
+                        status="published",
+                    ),
+                    RewardCatalog(
+                        id="reward_dashboard_other",
+                        organization_id="org_dashboard_other",
+                        artist_id="artist_dashboard_other",
+                        reward_type="title",
+                        name="타사 보상",
+                        status="published",
+                    ),
+                    RewardGrant(
+                        id="grant_dashboard_own",
+                        user_id="fan",
+                        reward_id="reward_dashboard_own",
+                        source_event_id="evt_dashboard_own",
+                        rule_key="dashboard:own",
+                    ),
+                    RewardGrant(
+                        id="grant_dashboard_other",
+                        user_id="otherFan",
+                        reward_id="reward_dashboard_other",
+                        source_event_id="evt_dashboard_other",
+                        rule_key="dashboard:other",
+                    ),
+                    AchievementDefinition(
+                        id="achievement_dashboard_own",
+                        organization_id=org_id,
+                        artist_id="artist_nova3",
+                        title="자사 공개 업적",
+                        condition_type="first_card",
+                        target_value=1,
+                        status="published",
+                    ),
+                    AchievementDefinition(
+                        id="achievement_dashboard_other",
+                        organization_id="org_dashboard_other",
+                        artist_id="artist_dashboard_other",
+                        title="타사 공개 업적",
+                        condition_type="first_card",
+                        target_value=1,
+                        status="published",
+                    ),
+                    AchievementDefinition(
+                        id="achievement_dashboard_draft",
+                        organization_id=org_id,
+                        artist_id="artist_nova3",
+                        title="초안 업적",
+                        condition_type="first_card",
+                        target_value=1,
+                        status="draft",
+                    ),
+                ]
+            )
+            await session.commit()
+
+    asyncio.run(seed())
+
+
 def test_company_manager_can_draft_only_assigned_artist_achievement(
     actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
 ) -> None:
@@ -68,6 +244,36 @@ def test_company_manager_can_draft_only_assigned_artist_achievement(
         404,
         "RESOURCE_NOT_FOUND",
     )
+
+
+def test_admin_dashboard_growth_summary_is_scoped_without_fan_rankings(
+    actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
+) -> None:
+    organization, member = create_partner(
+        actors["admin"],
+        email="company-dashboard-growth@starwave.com",
+        access_level="company_admin",
+    )
+    company_client = login_partner(app, member)
+    seed_dashboard_growth_scope(organization["id"])
+
+    root_dashboard = assert_success(actors["admin"].get("/api/admin/dashboard"))
+    company_dashboard = assert_success(company_client.get("/api/admin/dashboard"))
+
+    assert root_dashboard["growthSummary"] == {
+        "activeAchievements": 2,
+        "earnedXpToday": 100,
+        "claimableRewards": 2,
+    }
+    assert company_dashboard["growthSummary"] == {
+        "activeAchievements": 1,
+        "earnedXpToday": 40,
+        "claimableRewards": 1,
+    }
+    assert "fans" not in root_dashboard
+    assert "rankings" not in root_dashboard
+    assert "fans" not in company_dashboard
+    assert "rankings" not in company_dashboard
 
 
 def test_admin_achievement_persists_review_period(
