@@ -14,6 +14,7 @@ from app.models import (
     AdminArtistAssignment,
     AdminMembership,
     Artist,
+    Asset,
     Card,
     OrganizationArtist,
     RefreshToken,
@@ -21,6 +22,7 @@ from app.models import (
     User,
 )
 from app.services import ensure_admin_bootstrap
+from app.storage import configured_asset_storage
 from tests.conftest import assert_error, assert_success
 
 PNG_1X1 = base64.b64decode(
@@ -462,6 +464,20 @@ def test_partner_logo_is_optional_and_ready_logo_asset_is_exposed(
     assert without_logo["logoAssetId"] is None
     assert without_logo["logoUrl"] is None
 
+    legacy_logo = assert_success(
+        actors["admin"].post(
+            "/api/admin/organizations",
+            json={
+                "name": "기존 로고 URL 회사",
+                "slug": "legacy-logo-url",
+                "logoUrl": "https://cdn.example.test/legacy-logo.png",
+            },
+        ),
+        201,
+    )
+    assert legacy_logo["logoAssetId"] is None
+    assert legacy_logo["logoUrl"] == "https://cdn.example.test/legacy-logo.png"
+
     asset_id = upload_organization_logo(actors["admin"], content=ORGANIZATION_LOGO_BYTES)
     with_logo = assert_success(
         actors["admin"].post(
@@ -554,6 +570,66 @@ def test_partner_logo_rejects_unready_or_wrong_purpose_assets(
         ),
         422,
         "INVALID_LOGO_ASSET",
+    )
+
+
+def test_partner_logo_rejects_wrong_owner_non_image_or_missing_storage_assets(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    other_owner_asset_id = upload_organization_logo(actors["artist"])
+    assert_error(
+        actors["admin"].post(
+            "/api/admin/organizations",
+            json={
+                "name": "다른 소유자",
+                "slug": "logo-owner",
+                "logoAssetId": other_owner_asset_id,
+            },
+        ),
+        422,
+        "INVALID_LOGO_ASSET",
+    )
+
+    non_image_asset_id = upload_organization_logo(actors["admin"])
+    missing_storage_asset_id = upload_organization_logo(actors["admin"])
+
+    async def corrupt_assets() -> None:
+        async with SessionLocal() as session:
+            non_image = await session.get(Asset, non_image_asset_id)
+            assert non_image is not None
+            non_image.content_type = "application/pdf"
+
+            missing_storage = await session.get(Asset, missing_storage_asset_id)
+            assert missing_storage is not None
+            assert missing_storage.storage_path is not None
+            configured_asset_storage().delete(missing_storage.storage_path)
+            await session.commit()
+
+    asyncio.run(corrupt_assets())
+
+    assert_error(
+        actors["admin"].post(
+            "/api/admin/organizations",
+            json={
+                "name": "이미지 아님",
+                "slug": "logo-content-type",
+                "logoAssetId": non_image_asset_id,
+            },
+        ),
+        422,
+        "INVALID_LOGO_ASSET",
+    )
+    assert_error(
+        actors["admin"].post(
+            "/api/admin/organizations",
+            json={
+                "name": "파일 없음",
+                "slug": "logo-missing-storage",
+                "logoAssetId": missing_storage_asset_id,
+            },
+        ),
+        409,
+        "ASSET_NOT_READY",
     )
 
 

@@ -12,6 +12,7 @@ from app.models import (
     AdminArtistAssignment,
     AdminMembership,
     Artist,
+    Asset,
     Card,
     Organization,
     OrganizationArtist,
@@ -30,6 +31,7 @@ from app.schemas import (
     OrganizationUpdate,
 )
 from app.services import record_audit
+from app.storage import configured_asset_storage
 
 router = APIRouter(prefix="/organizations")
 
@@ -43,6 +45,31 @@ async def _organization_or_404(session: DbSession, organization_id: str) -> Orga
     if organization is None:
         raise AppError(404, "RESOURCE_NOT_FOUND", "파트너를 찾을 수 없습니다.")
     return organization
+
+
+async def _validated_logo_asset(
+    session: DbSession,
+    *,
+    asset_id: str | None,
+    owner_id: str,
+) -> Asset | None:
+    if asset_id is None:
+        return None
+    asset = await session.get(Asset, asset_id)
+    if (
+        asset is None
+        or asset.owner_id != owner_id
+        or asset.purpose != "organization_logo"
+        or asset.content_type not in {"image/png", "image/jpeg", "image/webp"}
+    ):
+        raise AppError(422, "INVALID_LOGO_ASSET", "파트너 로고 자산을 확인해 주세요.")
+    if (
+        asset.upload_completed_at is None
+        or asset.storage_path is None
+        or not configured_asset_storage().exists(asset.storage_path)
+    ):
+        raise AppError(409, "ASSET_NOT_READY", "파트너 로고 업로드가 완료되지 않았습니다.")
+    return asset
 
 
 async def _organization_artist_ids(session: DbSession, organization_id: str) -> set[str]:
@@ -80,7 +107,12 @@ async def _organization_data(session: DbSession, organization: Organization) -> 
         "contactEmail": organization.contact_email,
         "contractStartsAt": _iso(organization.contract_starts_at),
         "contractEndsAt": _iso(organization.contract_ends_at),
-        "logoUrl": organization.logo_url,
+        "logoAssetId": organization.logo_asset_id,
+        "logoUrl": (
+            f"/api/organizations/{organization.id}/logo"
+            if organization.logo_asset_id
+            else organization.logo_url
+        ),
         "memberCount": member_count or 0,
         "artistCount": artist_count or 0,
         "cardCount": card_count or 0,
@@ -214,9 +246,15 @@ async def create_organization(
     if existing:
         raise AppError(409, "ORGANIZATION_SLUG_TAKEN", "이미 사용 중인 파트너 식별자입니다.")
     _validate_contract_window(payload.contract_starts_at, payload.contract_ends_at)
+    values = payload.model_dump(exclude_unset=True, by_alias=False)
+    logo_asset_id = values.pop("logo_asset_id", None)
+    await _validated_logo_asset(session, asset_id=logo_asset_id, owner_id=context.user.id)
+    if logo_asset_id is not None:
+        values["logo_url"] = None
     organization = Organization(
         id=f"org_{uuid4().hex[:12]}",
-        **payload.model_dump(exclude_unset=True, by_alias=False),
+        logo_asset_id=logo_asset_id,
+        **values,
     )
     session.add(organization)
     await record_audit(
@@ -280,6 +318,8 @@ async def update_organization(
     context.require_root()
     organization = await _organization_or_404(session, organization_id)
     values = payload.model_dump(exclude_unset=True, by_alias=False)
+    logo_asset_updated = "logo_asset_id" in values
+    logo_asset_id = values.pop("logo_asset_id", None)
     slug = values.get("slug")
     if slug and slug != organization.slug:
         existing = await session.scalar(select(Organization).where(Organization.slug == slug))
@@ -293,8 +333,13 @@ async def update_organization(
         values.get("contract_starts_at", organization.contract_starts_at),
         values.get("contract_ends_at", organization.contract_ends_at),
     )
+    if logo_asset_updated:
+        await _validated_logo_asset(session, asset_id=logo_asset_id, owner_id=context.user.id)
     for field, value in values.items():
         setattr(organization, field, value)
+    if logo_asset_updated:
+        organization.logo_asset_id = logo_asset_id
+        organization.logo_url = None
     organization.updated_at = datetime.now(UTC)
     await record_audit(
         session,
@@ -303,7 +348,7 @@ async def update_organization(
         entity_type="organization",
         entity_id=organization.id,
         organization_id=organization.id,
-        details={"fields": sorted(values)},
+        details={"fields": sorted([*values, *(["logo_asset_id"] if logo_asset_updated else [])])},
     )
     await session.commit()
     return {"ok": True, "data": await _organization_data(session, organization)}

@@ -7,7 +7,7 @@ from app.admin_access import load_admin_context
 from app.core.config import get_settings
 from app.dependencies import CurrentUser, DbSession
 from app.errors import AppError
-from app.models import Asset, Role
+from app.models import Asset, Organization, Role
 from app.schemas import AssetTransformUpdate, UploadPresignRequest
 from app.storage import configured_asset_storage, storage_response
 from app.upload_safety import scan_uploaded_content
@@ -174,6 +174,24 @@ async def get_owned_asset_content(asset_id: str, user: CurrentUser, session: DbS
         configured_asset_storage(),
         path,
         media_type=asset.content_type or "application/octet-stream",
+    )
+
+
+@router.get("/organizations/{organization_id}/logo")
+async def get_organization_logo(organization_id: str, session: DbSession) -> Response:
+    organization = await session.get(Organization, organization_id)
+    if organization is None or organization.logo_asset_id is None:
+        raise AppError(404, "ASSET_NOT_FOUND", "파트너 로고를 찾을 수 없습니다.")
+    asset = await session.get(Asset, organization.logo_asset_id)
+    if asset is None or asset.storage_path is None or asset.upload_completed_at is None:
+        raise AppError(404, "ASSET_NOT_FOUND", "파트너 로고를 찾을 수 없습니다.")
+    storage = configured_asset_storage()
+    if not storage.exists(asset.storage_path):
+        raise AppError(404, "ASSET_NOT_FOUND", "파트너 로고를 찾을 수 없습니다.")
+    return storage_response(
+        storage,
+        asset.storage_path,
+        media_type=asset.content_type or "image/png",
     )
 
 
