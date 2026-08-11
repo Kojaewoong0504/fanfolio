@@ -672,6 +672,148 @@ def test_same_artist_collection_only_grants_matching_organization_reward() -> No
     asyncio.run(scenario())
 
 
+def test_org_scoped_card_count_ignores_same_artist_cards_from_other_organizations() -> None:
+    async def scenario() -> None:
+        engine, session_factory = await create_growth_test_session()
+        async with session_factory() as session:
+            session.add(models.User(id="fan", email="fan@example.com", role=models.Role.FAN))
+            session.add(models.Artist(id="artist_nova3", name="NOVA-3"))
+            session.add_all(
+                [
+                    models.Organization(
+                        id="org_source_count",
+                        name="Source Count Entertainment",
+                        slug="source-count-entertainment",
+                    ),
+                    models.Organization(
+                        id="org_other_count",
+                        name="Other Count Entertainment",
+                        slug="other-count-entertainment",
+                    ),
+                ]
+            )
+            await session.flush()
+            session.add_all(
+                [
+                    models.Drop(
+                        id="drop_source_count",
+                        name="Source Count Drop",
+                        status="live",
+                        organization_id="org_source_count",
+                        artist_id="artist_nova3",
+                    ),
+                    models.Drop(
+                        id="drop_other_count",
+                        name="Other Count Drop",
+                        status="live",
+                        organization_id="org_other_count",
+                        artist_id="artist_nova3",
+                    ),
+                ]
+            )
+            await session.flush()
+            session.add_all(
+                [
+                    models.Card(
+                        id="card_source_count",
+                        name="Source Count Card",
+                        status="published",
+                        release_status="published",
+                        release_policy="partner_and_platform",
+                        artist_id="artist_nova3",
+                        drop_id="drop_source_count",
+                    ),
+                    models.Card(
+                        id="card_other_count",
+                        name="Other Count Card",
+                        status="published",
+                        release_status="published",
+                        release_policy="partner_and_platform",
+                        artist_id="artist_nova3",
+                        drop_id="drop_other_count",
+                    ),
+                    models.RewardCatalog(
+                        id="reward_source_count",
+                        organization_id="org_source_count",
+                        artist_id="artist_nova3",
+                        reward_type="title",
+                        name="Source Count Reward",
+                        status="published",
+                    ),
+                    models.RewardCatalog(
+                        id="reward_global_count",
+                        organization_id=None,
+                        artist_id=None,
+                        reward_type="title",
+                        name="Global Count Reward",
+                        status="published",
+                    ),
+                    models.AchievementDefinition(
+                        id="achievement_source_count",
+                        organization_id="org_source_count",
+                        artist_id="artist_nova3",
+                        title="Source Count Achievement",
+                        condition_type="card_count",
+                        target_value=2,
+                        reward_rule_key="reward_source_count",
+                        status="published",
+                    ),
+                    models.AchievementDefinition(
+                        id="achievement_global_count",
+                        organization_id=None,
+                        artist_id=None,
+                        title="Global Count Achievement",
+                        condition_type="card_count",
+                        target_value=2,
+                        reward_rule_key="reward_global_count",
+                        status="published",
+                    ),
+                ]
+            )
+            await session.commit()
+            session.add(
+                models.UserCard(
+                    id="uc_other_count",
+                    user_id="fan",
+                    card_id="card_other_count",
+                    drop_id="drop_other_count",
+                    serial_number=1,
+                    acquisition_source="test",
+                    acquired_at=services.now(),
+                )
+            )
+            await session.commit()
+
+            await process_test_card_collected(
+                session,
+                session_factory,
+                card_id="card_source_count",
+                drop_id="drop_source_count",
+            )
+
+            grants = list(await session.scalars(select(models.RewardGrant)))
+            source_progress = await get_progress(
+                session,
+                user_id="fan",
+                achievement_id="achievement_source_count",
+            )
+            global_progress = await get_progress(
+                session,
+                user_id="fan",
+                achievement_id="achievement_global_count",
+            )
+
+            assert {grant.reward_id for grant in grants} == {"reward_global_count"}
+            assert source_progress.current_value == 1
+            assert source_progress.completed_at is None
+            assert global_progress.current_value == 2
+            assert global_progress.completed_at is not None
+
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
 def test_card_revoked_records_negative_xp_without_deleting_reward_grants() -> None:
     async def scenario() -> None:
         engine, session_factory = await create_growth_test_session()

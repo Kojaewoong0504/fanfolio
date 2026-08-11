@@ -288,6 +288,15 @@ def eligible_source_card_conditions(*, user_id: str) -> list[object]:
     ]
 
 
+def achievement_source_scope_conditions(achievement: AchievementDefinition) -> list[object]:
+    conditions = []
+    if achievement.organization_id is not None:
+        conditions.append(Drop.organization_id == achievement.organization_id)
+    if achievement.artist_id is not None:
+        conditions.append(Card.artist_id == achievement.artist_id)
+    return conditions
+
+
 async def owned_card_query_value(
     session: AsyncSession,
     *,
@@ -295,9 +304,10 @@ async def owned_card_query_value(
     achievement: AchievementDefinition,
     value: str,
 ) -> int:
-    conditions = eligible_source_card_conditions(user_id=user_id)
-    if achievement.artist_id is not None:
-        conditions.append(Card.artist_id == achievement.artist_id)
+    conditions = [
+        *eligible_source_card_conditions(user_id=user_id),
+        *achievement_source_scope_conditions(achievement),
+    ]
     member_id = achievement.condition_payload.get("memberId")
     if member_id:
         conditions.append(Card.member_id == member_id)
@@ -347,6 +357,7 @@ async def achievement_current_value(
                     .join(Drop, Drop.id == Card.drop_id)
                     .where(
                         *eligible_source_card_conditions(user_id=event.user_id),
+                        *achievement_source_scope_conditions(definition),
                         UserCard.card_id == card_id,
                     )
                 )
@@ -367,6 +378,7 @@ async def achievement_current_value(
                 .join(Drop, Drop.id == Card.drop_id)
                 .where(
                     *eligible_source_card_conditions(user_id=event.user_id),
+                    *achievement_source_scope_conditions(definition),
                     UserCard.card_id.in_(required_card_ids),
                 )
             )
@@ -384,6 +396,7 @@ async def achievement_current_value(
                     .join(Drop, Drop.id == Card.drop_id)
                     .where(
                         *eligible_source_card_conditions(user_id=event.user_id),
+                        *achievement_source_scope_conditions(definition),
                         Card.drop_id == drop_id,
                     )
                 )
