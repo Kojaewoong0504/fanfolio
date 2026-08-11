@@ -5,6 +5,10 @@ import test from 'node:test'
 const css = await readFile(new URL('../styles.css', import.meta.url), 'utf8')
 const source = await readFile(new URL('../app.js', import.meta.url), 'utf8')
 
+function assertCssMatches(pattern, contract) {
+  assert.ok(pattern.test(css), contract)
+}
+
 test('page root clips accidental horizontal overflow and layout children can shrink', () => {
   assert.match(css, /overflow-x:\s*clip/)
   assert.match(css, /min-width:\s*0/)
@@ -36,4 +40,25 @@ test('card creation opens a right drawer and is not rendered as the old inline t
 test('card artist choices use the current administrator assignment scope', () => {
   assert.match(source, /assignedArtists/)
   assert.match(source, /scopedArtists/)
+})
+
+test('partner list logos render in fixed forty four pixel frames without distortion', () => {
+  assertCssMatches(/\.company-avatar\s*\{[^}]*width:\s*44px/s, 'fixes partner list logo frame width at 44px')
+  assertCssMatches(/\.company-avatar\s*\{[^}]*height:\s*44px/s, 'fixes partner list logo frame height at 44px')
+  assertCssMatches(/\.company-avatar\s*\{[^}]*flex:\s*0\s+0\s+44px/s, 'prevents partner list logo frames from resizing')
+  assertCssMatches(/\.company-avatar img\s*\{[^}]*object-fit:\s*contain/s, 'preserves partner logo image aspect ratio')
+})
+
+test('partner detail logos render in fixed ninety six pixel frames without distortion', () => {
+  assertCssMatches(/\.company-avatar\.large\s*\{[^}]*width:\s*96px/s, 'fixes partner detail logo frame width at 96px')
+  assertCssMatches(/\.company-avatar\.large\s*\{[^}]*height:\s*96px/s, 'fixes partner detail logo frame height at 96px')
+  assertCssMatches(/\.company-avatar\.large\s*\{[^}]*flex-basis:\s*96px/s, 'prevents partner detail logo frames from resizing')
+})
+
+test('partner logo picker has responsive layout styles for narrow admin drawers', () => {
+  assertCssMatches(/\.organization-logo-picker/, 'styles the partner logo picker')
+  assertCssMatches(
+    /@media\s*\(max-width:\s*767px\)[\s\S]*\.organization-logo-picker/,
+    'keeps the partner logo picker responsive on narrow drawers',
+  )
 })

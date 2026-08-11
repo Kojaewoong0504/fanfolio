@@ -4,6 +4,10 @@ import test from 'node:test'
 
 const source = await readFile(new URL('../app.js', import.meta.url), 'utf8')
 
+function assertSourceMatches(pattern, contract) {
+  assert.ok(pattern.test(source), contract)
+}
+
 test('admin restores the live administrator scope before rendering navigation', () => {
   assert.match(source, /api\(["']\/admin\/me["']\)/)
   assert.match(source, /adminContext/)
@@ -102,4 +106,39 @@ test('admin gives a useful card preview fallback when stored media is unavailabl
   assert.match(source, /review-image-fallback/)
   assert.match(source, /원본 이미지가 등록되지 않았거나 저장소에서 찾을 수 없습니다/)
   assert.match(source, /previewImageUrl.*sourceImageUrl/)
+})
+
+test('partner logo picker is optional and exposes preview replacement and removal controls', () => {
+  assertSourceMatches(/organization-logo-input/, 'renders a partner logo file input')
+  assertSourceMatches(/type=["']file["']/, 'uses a file input for partner logos')
+  assertSourceMatches(
+    /accept=["']image\/png,image\/jpeg,image\/webp["']/,
+    'limits picker choices to PNG JPEG and WebP images',
+  )
+  assertSourceMatches(/organization-logo-preview/, 'renders a partner logo preview frame')
+  assertSourceMatches(/remove-organization-logo/, 'renders a partner logo removal action')
+  assertSourceMatches(/optional-label/, 'marks partner logo selection as optional')
+})
+
+test('partner logo upload uses organization logo purpose and logo asset payload', () => {
+  assertSourceMatches(/organization_logo/, 'uploads partner logos with organization_logo purpose')
+  assertSourceMatches(/logoAssetId/, 'submits the uploaded logo asset id in organization payloads')
+})
+
+test('partner logo upload rejects unsupported file types and files over two megabytes', () => {
+  assertSourceMatches(
+    /image\/png.*image\/jpeg.*image\/webp/s,
+    'validates PNG JPEG and WebP logo MIME types',
+  )
+  assertSourceMatches(/2\s*\*\s*1024\s*\*\s*1024/, 'validates partner logos against a 2MB limit')
+  assertSourceMatches(/PNG.*JPG.*WebP/s, 'explains supported logo formats in validation errors')
+})
+
+test('partner logos use a shared renderer with image error fallback', () => {
+  assertSourceMatches(/function\s+partnerLogoMarkup/, 'centralizes partner logo markup in a shared renderer')
+  assertSourceMatches(/company-avatar-fallback/, 'renders an initial fallback for partners without usable logos')
+  assertSourceMatches(
+    /onerror=["'][^"']*hidden\s*=\s*true[^"']*nextElementSibling[^"']*hidden\s*=\s*false/s,
+    'falls back to initials when partner logo images fail to load',
+  )
 })
