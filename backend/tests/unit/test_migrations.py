@@ -274,6 +274,101 @@ def test_growth_migration_enforces_idempotency_constraints(tmp_path: Path) -> No
                 ("xp_2", "fan", "evt_1", "card_collected", 30),
             )
 
+        connection.execute(
+            """
+            INSERT INTO achievement_definitions (
+                id, title, condition_type, target_value, condition_payload, status
+            ) VALUES (?, ?, ?, ?, json('{}'), ?)
+            """,
+            ("achievement_1", "첫 카드", "first_card", 1, "published"),
+        )
+        connection.execute(
+            """
+            INSERT INTO achievement_progress (
+                id, user_id, achievement_id, current_value, updated_at
+            ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """,
+            ("achievement_progress_1", "fan", "achievement_1", 1),
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                INSERT INTO achievement_progress (
+                    id, user_id, achievement_id, current_value, updated_at
+                ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                ("achievement_progress_2", "fan", "achievement_1", 1),
+            )
+
+        connection.execute(
+            """
+            INSERT INTO reward_catalog (
+                id, reward_type, name, metadata, status
+            ) VALUES (?, ?, ?, json('{}'), ?)
+            """,
+            ("reward_1", "badge", "첫 카드 배지", "published"),
+        )
+        connection.execute(
+            """
+            INSERT INTO reward_grants (
+                id, user_id, reward_id, source_event_id, rule_key, granted_at
+            ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """,
+            ("reward_grant_1", "fan", "reward_1", "evt_1", "first_card"),
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                INSERT INTO reward_grants (
+                    id, user_id, reward_id, source_event_id, rule_key, granted_at
+                ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                ("reward_grant_2", "fan", "reward_1", "evt_1", "first_card"),
+            )
+
+        connection.execute(
+            """
+            INSERT INTO pass_seasons (id, title, status)
+            VALUES (?, ?, ?)
+            """,
+            ("season_1", "무료 팬 패스", "published"),
+        )
+        connection.execute(
+            """
+            INSERT INTO pass_progress (
+                id, user_id, season_id, current_xp, claimed_tier_ids, updated_at
+            ) VALUES (?, ?, ?, ?, json('[]'), CURRENT_TIMESTAMP)
+            """,
+            ("pass_progress_1", "fan", "season_1", 30),
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                INSERT INTO pass_progress (
+                    id, user_id, season_id, current_xp, claimed_tier_ids, updated_at
+                ) VALUES (?, ?, ?, ?, json('[]'), CURRENT_TIMESTAMP)
+                """,
+                ("pass_progress_2", "fan", "season_1", 30),
+            )
+
+        connection.execute(
+            """
+            INSERT INTO profile_equipment (
+                user_id, equipped_reward_ids, is_public, updated_at
+            ) VALUES (?, json('[]'), ?, CURRENT_TIMESTAMP)
+            """,
+            ("fan", True),
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                INSERT INTO profile_equipment (
+                    user_id, equipped_reward_ids, is_public, updated_at
+                ) VALUES (?, json('[]'), ?, CURRENT_TIMESTAMP)
+                """,
+                ("fan", True),
+            )
+
 
 def test_card_release_migration_creates_review_workflow_storage(tmp_path: Path) -> None:
     database_path = tmp_path / "card-release-workflow.db"
