@@ -378,6 +378,107 @@ button.top-avatar {
   position: relative;
 }
 
+.notification-menu {
+  position: relative;
+}
+
+.notification-button {
+  position: relative;
+}
+
+.notification-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  display: grid;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  place-items: center;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 850;
+  background: var(--red);
+  border: 2px solid #fff;
+  border-radius: 999px;
+}
+
+.notification-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 75;
+  display: none;
+  width: min(340px, calc(100vw - 24px));
+  padding: 8px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 18px 44px #17172b24;
+}
+
+.notification-menu.open .notification-popover {
+  display: grid;
+}
+
+.notification-popover-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px 10px;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.notification-popover-heading span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.notification-list {
+  display: grid;
+  gap: 5px;
+}
+
+.notification-item,
+.notification-empty {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  min-height: 58px;
+  padding: 9px 10px;
+  color: #4d5269;
+  text-align: left;
+  background: #fff;
+  border-radius: 8px;
+}
+
+.notification-item:hover,
+.notification-item.unread {
+  color: var(--ink);
+  background: #f4f4fa;
+}
+
+.notification-item strong,
+.notification-item span,
+.notification-item small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notification-item strong {
+  font-size: 12px;
+}
+
+.notification-item span,
+.notification-item small,
+.notification-empty {
+  color: var(--muted);
+  font-size: 10px;
+}
+
 .account-popover {
   position: absolute;
   top: calc(100% + 8px);
@@ -2336,6 +2437,33 @@ button.top-avatar {
   margin-bottom: 14px;
 }
 
+.release-queue {
+  margin-bottom: 14px;
+}
+
+.release-queue-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.release-queue-item {
+  display: grid;
+  gap: 6px;
+  min-height: 88px;
+  padding: 12px;
+  color: var(--ink);
+  text-align: left;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.release-queue-item:hover {
+  border-color: var(--purple);
+  box-shadow: 0 10px 26px #6357e814;
+}
+
 .review-heading,
 .review-actions {
   display: flex;
@@ -2393,6 +2521,64 @@ button.top-avatar {
 
 .review-note {
   margin-top: 16px;
+}
+
+.release-status-grid,
+.snapshot-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.release-status-grid div,
+.snapshot-grid div,
+.release-history-item {
+  padding: 10px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.release-status-grid span,
+.snapshot-grid span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.release-status-grid strong,
+.snapshot-grid strong {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.release-snapshot h3,
+.release-history h3 {
+  margin: 16px 0 8px;
+  font-size: 13px;
+}
+
+.release-history {
+  display: grid;
+  gap: 8px;
+}
+
+.release-history-item {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.release-history-item span,
+.release-history-item small {
+  color: var(--muted);
+}
+
+.drop-link-drawer .assignment-member {
+  margin-bottom: 10px;
 }
 
 .review-actions {
@@ -2893,7 +3079,9 @@ code {
   }
 
   .review-content,
-  .review-meta {
+  .review-meta,
+  .release-status-grid,
+  .snapshot-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 

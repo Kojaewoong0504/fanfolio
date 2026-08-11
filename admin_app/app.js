@@ -18,8 +18,11 @@ const state = {
   navCollapsed:
     window.localStorage.getItem("fanfolio.admin.navCollapsed") === "true",
   accountMenuOpen: false,
+  notificationPanelOpen: false,
   metrics: null,
   recentActivity: [],
+  notifications: [],
+  unreadNotificationCount: 0,
   cards: [],
   drops: [],
   batches: [],
@@ -265,7 +268,32 @@ function topbarView() {
   const person = state.adminContext?.user || {};
   const personName = person.displayName || "관리자";
   const personInitial = escapeHtml((person.displayName || person.email || "관").slice(0, 1));
-  return `<header class="topbar"><div class="topbar-title"><button class="icon-button mobile-nav-toggle" id="mobile-nav-toggle" type="button" aria-label="메뉴 열기">${icon("menu")}</button><div><p class="eyebrow">FANFOLIO OPERATIONS</p><h1 class="title">${title()}</h1></div></div><div class="top-actions"><button class="icon-button" type="button" aria-label="알림">${icon("notifications")}</button><div class="account-menu ${state.accountMenuOpen ? "open" : ""}"><button class="top-avatar" id="account-menu-toggle" type="button" aria-haspopup="menu" aria-expanded="${state.accountMenuOpen}" aria-label="${escapeHtml(personName)} 계정 메뉴" title="${escapeHtml(person.email || personName)}">${personInitial}</button><div class="account-popover" role="menu" aria-label="계정 메뉴"><button type="button" id="account-settings" role="menuitem">${icon("manage_accounts")}<span>계정 설정</span></button><button type="button" id="account-password-change" role="menuitem">${icon("password")}<span>비밀번호 변경</span></button><button type="button" id="account-logout" role="menuitem">${icon("logout")}<span>로그아웃</span></button></div></div></div></header>`;
+  const unreadBadge = state.unreadNotificationCount
+    ? `<span class="notification-badge">${state.unreadNotificationCount}</span>`
+    : "";
+  return `<header class="topbar"><div class="topbar-title"><button class="icon-button mobile-nav-toggle" id="mobile-nav-toggle" type="button" aria-label="메뉴 열기">${icon("menu")}</button><div><p class="eyebrow">FANFOLIO OPERATIONS</p><h1 class="title">${title()}</h1></div></div><div class="top-actions"><div class="notification-menu ${state.notificationPanelOpen ? "open" : ""}"><button class="icon-button notification-button" type="button" aria-label="알림" aria-expanded="${state.notificationPanelOpen}" data-open-notification="toggle">${icon("notifications")}${unreadBadge}</button>${notificationPanelView()}</div><div class="account-menu ${state.accountMenuOpen ? "open" : ""}"><button class="top-avatar" id="account-menu-toggle" type="button" aria-haspopup="menu" aria-expanded="${state.accountMenuOpen}" aria-label="${escapeHtml(personName)} 계정 메뉴" title="${escapeHtml(person.email || personName)}">${personInitial}</button><div class="account-popover" role="menu" aria-label="계정 메뉴"><button type="button" id="account-settings" role="menuitem">${icon("manage_accounts")}<span>계정 설정</span></button><button type="button" id="account-password-change" role="menuitem">${icon("password")}<span>비밀번호 변경</span></button><button type="button" id="account-logout" role="menuitem">${icon("logout")}<span>로그아웃</span></button></div></div></div></header>`;
+}
+
+function notificationPanelView() {
+  const items = state.notifications.length
+    ? state.notifications
+        .slice(0, 8)
+        .map(
+          (item) =>
+            `<button class="notification-item ${item.isRead ? "" : "unread"}" type="button" data-open-notification="${escapeHtml(item.id)}" data-card-id="${escapeHtml(item.entityType === "card" ? item.entityId || "" : "")}"><strong>${escapeHtml(item.title || notificationKindLabel(item.kind))}</strong><span>${escapeHtml(item.body || notificationKindLabel(item.kind))}</span><small>${formatDate(item.createdAt)}</small></button>`,
+        )
+        .join("")
+    : `<div class="notification-empty">${icon("notifications_off")}<span>새 알림이 없습니다.</span></div>`;
+  return `<div class="notification-popover" role="menu" aria-label="알림 목록"><div class="notification-popover-heading"><strong>알림</strong><span>${state.unreadNotificationCount} unread</span></div><div class="notification-list">${items}</div></div>`;
+}
+
+function notificationKindLabel(kind) {
+  return (
+    {
+      card_partner_review_requested: "회사 검수 요청",
+      card_platform_review_requested: "플랫폼 검수 요청",
+    }[kind] || "운영 알림"
+  );
 }
 
 function currentView() {
@@ -525,6 +553,7 @@ function drawerView() {
     "artist-assignment": artistAssignmentDrawer,
     "artist-edit": artistEditDrawer,
     "card-create": cardCreateDrawer,
+    "drop-link": dropLinkDrawer,
     "role-change": roleChangeDrawer,
     "member-password": memberPasswordDrawer,
   }[state.drawer]?.();
@@ -532,7 +561,7 @@ function drawerView() {
   const cardOperationsNote = state.drawer === "card-create"
     ? `<div class="drawer-context-note">${icon("info")}<span><strong>아티스트 스튜디오와 다른 작업입니다.</strong><br />스튜디오는 창작·검수 요청, 이 화면은 메타데이터·발행량·공개 상태를 관리합니다.</span></div>`
     : "";
-  return `<div class="drawer-backdrop" id="drawer-backdrop"><aside class="drawer ${state.drawer === "card-create" ? "card-create-drawer" : state.drawer === "member" ? "member-drawer" : state.drawer === "artist-assignment" ? "artist-assignment-drawer" : state.drawer === "artist-edit" ? "artist-edit-drawer" : ""}" role="dialog" aria-modal="true" aria-label="작업 패널">${cardOperationsNote}${contents}</aside></div>`;
+  return `<div class="drawer-backdrop" id="drawer-backdrop"><aside class="drawer ${state.drawer === "card-create" ? "card-create-drawer" : state.drawer === "member" ? "member-drawer" : state.drawer === "artist-assignment" ? "artist-assignment-drawer" : state.drawer === "artist-edit" ? "artist-edit-drawer" : state.drawer === "drop-link" ? "drop-link-drawer" : ""}" role="dialog" aria-modal="true" aria-label="작업 패널">${cardOperationsNote}${contents}</aside></div>`;
 }
 
 function drawerHeader(eyebrow, title, description) {
@@ -578,6 +607,16 @@ function roleChangeDrawer() {
   return `${drawerHeader("ACCESS", "역할 변경", `${member.displayName || member.email} 계정의 접근 범위를 변경합니다.`)}<form class="drawer-body form" id="role-change-form"><div class="assignment-member"><span class="person-avatar">${escapeHtml((member.displayName || member.email).slice(0, 1))}</span><div><strong>${escapeHtml(member.displayName || "-")}</strong><small>${escapeHtml(member.email)}</small></div></div><label class="field"><span>새 역할</span>${adminSelect({ id: "role-change-value", name: "role", value: isMember ? member.accessLevel : member.role, label: "새 역할", className: "form-select", options })}</label><p class="hint">권한을 낮추거나 변경하면 해당 계정의 기존 로그인 세션이 종료됩니다.</p><footer class="drawer-footer"><button class="secondary close-drawer" type="button">취소</button><button class="primary" type="submit">역할 저장</button></footer></form>`;
 }
 
+function dropLinkDrawer() {
+  const card = state.drawerData?.card;
+  if (!card) return "";
+  const scoped = state.drops.filter((drop) => !card.artistId || drop.artistId === card.artistId);
+  const options = scoped.length
+    ? scoped.map((drop) => ({ value: drop.id, label: `${drop.name} · ${drop.status}` }))
+    : [{ value: "", label: "연결 가능한 드롭이 없습니다." }];
+  return `${drawerHeader("DROP READY", "승인 카드 드롭 연결", "승인된 카드를 같은 아티스트의 드롭에 연결해 코드 발행 준비 상태로 전환합니다.")}<form class="drawer-body form" id="drop-link-form" data-card-id="${escapeHtml(card.id)}"><div class="assignment-member"><span class="card-thumb">${icon("style")}</span><div><strong>${escapeHtml(card.name)}</strong><small>${escapeHtml(card.artistId || card.ownerArtistId || "아티스트 미지정")}</small></div></div><label class="field"><span>연결할 드롭</span>${adminSelect({ id: "drop-link-drop", name: "dropId", value: options[0].value, label: "연결할 드롭", className: "form-select", options })}</label><p class="hint">드롭이 라이브 상태이면 연결 즉시 공개 카드로 전환되고, 초안이면 드롭 준비 상태로 보관됩니다.</p><footer class="drawer-footer"><button class="secondary close-drawer" type="button">취소</button><button class="primary" type="submit" ${scoped.length ? "" : "disabled"}>드롭 준비됨</button></footer></form>`;
+}
+
 function memberPasswordDrawer() {
   const member = state.drawerData?.member;
   if (!member) return "";
@@ -619,7 +658,10 @@ function cardsView() {
     { value: "published", label: "공개됨" },
     { value: "draft", label: "초안" },
     { value: "pending_review", label: "검수 중" },
+    { value: "pending_partner_review", label: "회사 검수 대기" },
+    { value: "pending_platform_review", label: "플랫폼 검수 대기" },
     { value: "approved", label: "공개 승인" },
+    { value: "drop_ready", label: "드롭 준비됨" },
     { value: "changes_requested", label: "수정 요청" },
   ];
   const visible = state.cards.filter(
@@ -630,9 +672,11 @@ function cardsView() {
       (state.cardArtist === "all" ||
         card.ownerArtistId === state.cardArtist ||
         card.artistId === state.cardArtist) &&
-      (state.status === "all" || card.status === state.status),
+      (state.status === "all" ||
+        card.status === state.status ||
+        releaseStatus(card) === state.status),
   );
-  return `<div class="page-heading with-actions"><div><p class="eyebrow">CARD LIBRARY</p><h2>${isRoot() ? "전체 카드 운영" : "담당 카드 운영"}</h2><p>${isRoot() ? "아티스트 카드의 검수와 공개 상태를 관리합니다." : "배정된 아티스트의 카드 초안을 만들고 검수를 요청합니다."}</p></div>${can("cards:write") ? `<button class="primary" id="open-card-drawer" type="button">${icon("add_card")} 카드 등록</button>` : ""}</div>${reviewPanel()}<section class="panel"><div class="toolbar compact-toolbar"><label class="search-field grow">${icon("search")}<input id="card-search" placeholder="카드명, 아티스트 검색" value="${escapeHtml(state.query)}" /></label>${adminSelect({ id: "card-artist-filter", value: state.cardArtist, label: "아티스트 필터", className: "filter-select card-artist-filter", options: artistOptions })}${adminSelect({ id: "card-status", value: state.status, label: "카드 상태 필터", className: "filter-select card-status-filter", options: statusOptions })}</div><div class="table-wrap"><table class="table responsive-table card-table"><thead><tr><th>카드</th><th>아티스트</th><th>등급</th><th>발행 수량</th><th>상태</th><th><span class="sr-only">관리</span></th></tr></thead><tbody>${cardRows(visible)}</tbody></table></div></section>`;
+  return `<div class="page-heading with-actions"><div><p class="eyebrow">CARD LIBRARY</p><h2>${isRoot() ? "전체 카드 운영" : "담당 카드 운영"}</h2><p>${isRoot() ? "아티스트 카드의 검수와 공개 상태를 관리합니다." : "배정된 아티스트의 카드 초안을 만들고 검수를 요청합니다."}</p></div>${can("cards:write") ? `<button class="primary" id="open-card-drawer" type="button">${icon("add_card")} 카드 등록</button>` : ""}</div>${releaseQueue()}${reviewPanel()}<section class="panel"><div class="toolbar compact-toolbar"><label class="search-field grow">${icon("search")}<input id="card-search" placeholder="카드명, 아티스트 검색" value="${escapeHtml(state.query)}" /></label>${adminSelect({ id: "card-artist-filter", value: state.cardArtist, label: "아티스트 필터", className: "filter-select card-artist-filter", options: artistOptions })}${adminSelect({ id: "card-status", value: state.status, label: "카드 상태 필터", className: "filter-select card-status-filter", options: statusOptions })}</div><div class="table-wrap"><table class="table responsive-table card-table"><thead><tr><th>카드</th><th>아티스트</th><th>등급</th><th>발행 수량</th><th>상태</th><th><span class="sr-only">관리</span></th></tr></thead><tbody>${cardRows(visible)}</tbody></table></div></section>`;
 }
 function statusLabel(status) {
   return (
@@ -645,17 +689,74 @@ function statusLabel(status) {
     }[status] || status
   );
 }
+function releaseStatusLabel(status) {
+  return (
+    {
+      draft: "초안",
+      pending_partner_review: "회사 검수 대기",
+      pending_platform_review: "플랫폼 검수 대기",
+      changes_requested: "수정 요청",
+      approved: "승인 완료",
+      drop_ready: "드롭 준비됨",
+      published: "공개됨",
+    }[status] || statusLabel(status)
+  );
+}
+function releasePolicyLabel(policy) {
+  return (
+    {
+      partner_only: "회사 검수",
+      partner_and_platform: "회사·플랫폼 검수",
+    }[policy] || "회사 검수"
+  );
+}
+function releaseBadgeClass(status) {
+  if (["approved", "drop_ready", "published"].includes(status)) return "success-badge";
+  if (status === "changes_requested") return "danger-badge";
+  if (["pending_partner_review", "pending_platform_review"].includes(status)) return "warning-badge";
+  return "draft";
+}
+function releaseStatus(card) {
+  return card.releaseStatus || card.status || "draft";
+}
+function cardNextAction(card) {
+  if (card.nextAction) return card.nextAction;
+  const status = releaseStatus(card);
+  if (status === "pending_partner_review") return "partner_review";
+  if (status === "pending_platform_review") return "platform_review";
+  if (status === "approved") return "prepare_drop";
+  return "";
+}
+function nextActionLabel(action) {
+  return (
+    {
+      partner_review: "회사 검수",
+      platform_review: "플랫폼 검수",
+      prepare_drop: "드롭 연결",
+    }[action] || "대기"
+  );
+}
+function releaseQueue() {
+  const actionable = state.cards.filter((card) => cardNextAction(card));
+  if (!actionable.length) return "";
+  const items = actionable
+    .map((card) => {
+      const action = cardNextAction(card);
+      return `<button class="release-queue-item" type="button" data-id="${escapeHtml(card.id)}"><span class="badge ${releaseBadgeClass(releaseStatus(card))}">${escapeHtml(releaseStatusLabel(releaseStatus(card)))}</span><strong>${escapeHtml(card.name)}</strong><small>${escapeHtml(nextActionLabel(action))} · v${Number(card.reviewVersion || 0)}</small></button>`;
+    })
+    .join("");
+  return `<section class="panel release-queue"><div class="panel-heading"><div><p class="eyebrow">RELEASE REVIEW</p><h2>검수 대기열</h2></div></div><div class="release-queue-list">${items}</div></section>`;
+}
 function cardRows(cards) {
   if (!cards.length)
     return '<tr><td colspan="6" class="empty">조건에 맞는 카드가 없습니다.</td></tr>';
   return cards
     .map((card) => {
-      const canPublishCard = can("cards:publish") && card.status !== "published";
-      const action = `<button class="icon-button review-card" type="button" data-id="${escapeHtml(card.id)}" aria-label="${escapeHtml(card.name)} 상세 보기">${icon("more_horiz")}</button>${canPublishCard && (card.status === "approved" || (card.status === "draft" && !card.ownerArtistId)) ? `<button class="secondary publish" data-id="${escapeHtml(card.id)}">공개</button>` : ""}`;
+      const action = `<button class="icon-button review-card" type="button" data-id="${escapeHtml(card.id)}" aria-label="${escapeHtml(card.name)} 상세 보기">${icon("more_horiz")}</button>`;
       const catalogArtist = state.catalog.artists.find(
         (artist) => artist.id === card.artistId,
       );
-      return `<tr><td data-label="카드"><div class="card-cell"><span class="card-thumb">${icon("style")}</span><div><strong>${escapeHtml(card.name)}</strong><small>${escapeHtml(card.seasonName || card.id)}</small></div></div></td><td data-label="아티스트">${escapeHtml(catalogArtist?.name || card.ownerArtistId || card.artistId || "미지정")}</td><td data-label="등급"><strong>${escapeHtml(card.rarity || "-")}</strong></td><td data-label="발행 수량">${card.issueLimit ? Number(card.issueLimit).toLocaleString() : "제한 없음"}</td><td data-label="상태"><span class="badge ${card.status === "published" ? "success-badge" : card.status === "changes_requested" ? "danger-badge" : "warning-badge"}">${escapeHtml(statusLabel(card.status))}</span></td><td data-label="관리" class="row-actions">${action}</td></tr>`;
+      return `<tr><td data-label="카드"><div class="card-cell"><span class="card-thumb">${icon("style")}</span><div><strong>${escapeHtml(card.name)}</strong><small>${escapeHtml(card.seasonName || card.id)}</small></div></div></td><td data-label="아티스트">${escapeHtml(catalogArtist?.name || card.ownerArtistId || card.artistId || "미지정")}</td><td data-label="등급"><strong>${escapeHtml(card.rarity || "-")}</strong></td><td data-label="발행 수량">${card.issueLimit ? Number(card.issueLimit).toLocaleString() : "제한 없음"}</td><td data-label="상태"><span class="badge ${releaseBadgeClass(releaseStatus(card))}">${escapeHtml(releaseStatusLabel(releaseStatus(card)))}</span></td><td data-label="관리" class="row-actions">${action}</td></tr>`;
     })
     .join("");
 }
@@ -665,36 +766,62 @@ function reviewPanel() {
   const image = state.reviewImageSrc
     ? `<img class="review-image" src="${escapeHtml(state.reviewImageSrc)}" alt="${escapeHtml(card.name)} 미리보기" />`
     : `<div class="review-image empty review-image-fallback">${icon(state.reviewImageError ? "image_not_supported" : "hourglass_top")}<strong>${state.reviewImageError ? "원본 이미지가 등록되지 않았거나 저장소에서 찾을 수 없습니다." : "미리보기를 불러오는 중입니다."}</strong><small>${state.reviewImageError ? "카드 정보에서 이미지를 교체한 뒤 다시 확인해 주세요." : "잠시만 기다려 주세요."}</small></div>`;
-  const canReview = can("cards:review") && card.status === "pending_review";
+  const status = releaseStatus(card);
+  const nextAction = cardNextAction(card);
+  const policy = card.releasePolicy || (card.rarity === "Special" ? "partner_and_platform" : "partner_only");
+  const canReviewPartner = nextAction === "partner_review" && ["company_admin", "manager"].includes(state.adminContext?.accessLevel);
+  const canReviewPlatform = nextAction === "platform_review" && can("cards:review_platform");
   const canSubmitReview =
     can("cards:submit_review") &&
-    ["draft", "changes_requested"].includes(card.status);
-  const canPublish =
-    can("cards:publish") &&
-    (card.status === "approved" ||
-      (card.status === "draft" && !card.ownerArtistId));
-  const canEdit = can("cards:write") && card.status !== "published";
+    ["draft", "changes_requested"].includes(status);
+  const canPrepareDrop = status === "approved" && can("drops:write");
+  const canEdit = can("cards:write") && !["pending_partner_review", "pending_platform_review", "drop_ready", "published"].includes(status);
   const editForm = canEdit
     ? `<form class="form edit-card-form" id="admin-card-edit-form" data-id="${escapeHtml(card.id)}"><label class="field">카드명<input name="name" value="${escapeHtml(card.name)}" required /></label><label class="field">시즌<input name="seasonName" value="${escapeHtml(card.seasonName || "")}" placeholder="예: 2026 SUMMER" /></label><label class="field">등급<select name="rarity"><option value="N" ${card.rarity === "N" ? "selected" : ""}>N (노멀)</option><option value="R" ${card.rarity === "R" ? "selected" : ""}>R (레어)</option><option value="SR" ${card.rarity === "SR" ? "selected" : ""}>SR (슈퍼 레어)</option><option value="Special" ${card.rarity === "Special" ? "selected" : ""}>Special</option></select></label><label class="field">발행 수량<input name="issueLimit" type="number" min="1" value="${card.issueLimit || ""}" placeholder="제한 없음" /></label><label class="field">카드 이미지 교체<input name="cardImage" type="file" accept="image/png,image/jpeg,image/webp" /><span class="hint">선택하지 않으면 기존 이미지를 유지합니다.</span></label><button class="primary" type="submit">변경 저장</button></form>`
     : "";
   const reviewNote =
-    canReview || canSubmitReview
-      ? `<label class="field review-note">검수 메모<textarea id="review-note" maxlength="500" placeholder="${canSubmitReview ? "루트 관리자에게 전달할 확인 사항을 입력하세요." : "수정 요청 또는 승인 사유를 입력하세요."}">${escapeHtml(card.reviewNote || "")}</textarea></label>`
+    canReviewPartner || canReviewPlatform || canSubmitReview
+      ? `<label class="field review-note">검수 메모<textarea id="review-note" maxlength="500" placeholder="${canSubmitReview ? "회사 검수자에게 전달할 확인 사항을 입력하세요." : "수정 요청 시 사유를 입력하세요."}">${escapeHtml(card.reviewNote || "")}</textarea></label>`
       : "";
-  const reviewActions = canReview
+  const reviewActions = canReviewPartner || canReviewPlatform
     ? '<div class="review-actions"><button class="secondary review-decision" data-id="' +
       escapeHtml(card.id) +
-      '" data-decision="request_changes">수정 요청</button><button class="primary review-decision" data-id="' +
+      '" data-stage="' +
+      (canReviewPartner ? "partner" : "platform") +
+      '" data-decision="changes_requested">수정 요청</button><button class="primary review-decision" data-id="' +
       escapeHtml(card.id) +
-      '" data-decision="approve">검수 승인</button></div>'
+      '" data-stage="' +
+      (canReviewPartner ? "partner" : "platform") +
+      '" data-decision="approved">검수 승인</button></div>'
     : canSubmitReview
-      ? `<div class="notice">검수를 요청하면 루트 관리자가 확인하기 전까지 카드가 잠깁니다.</div><div class="review-actions"><button class="primary submit-review-request" data-id="${escapeHtml(card.id)}">검수 요청하기</button></div>`
-      : canPublish
-        ? '<div class="notice success">검수가 승인되었습니다. 공개하기를 누르면 팬에게 카드가 노출됩니다.</div><div class="review-actions"><button class="primary review-publish" data-id="' +
-          escapeHtml(card.id) +
-          '">공개하기</button></div>'
+      ? `<div class="notice">검수를 요청하면 회사 검수자가 확인하기 전까지 카드가 잠깁니다.</div><div class="review-actions"><button class="primary submit-review-request" data-id="${escapeHtml(card.id)}">검수 요청하기</button></div>`
+      : canPrepareDrop
+        ? `<div class="notice success">검수가 승인되었습니다. 드롭에 연결하면 코드 배치 작업으로 이어집니다.</div><div class="review-actions"><button class="primary open-drop-link" data-id="${escapeHtml(card.id)}">드롭 준비됨</button></div>`
         : "";
-  return `<div class="panel review-panel"><div class="review-heading"><div><p class="eyebrow">카드 검수</p><h2>${escapeHtml(card.name)}</h2><span class="badge">${escapeHtml(statusLabel(card.status))}</span></div><button class="secondary" id="close-review">닫기</button></div><div class="review-content"><div>${image}</div><dl class="review-meta"><div><dt>제작자</dt><dd>${escapeHtml(card.ownerArtistId || "-")}</dd></div><div><dt>시즌</dt><dd>${escapeHtml(card.seasonName || "-")}</dd></div><div><dt>등급</dt><dd>${escapeHtml(card.rarity || "-")}</dd></div><div><dt>발행 수량</dt><dd>${card.issueLimit ? Number(card.issueLimit).toLocaleString() : "-"}</dd></div><div><dt>사인 메시지</dt><dd>${escapeHtml(card.signatureText || "없음")}</dd></div><div><dt>특전</dt><dd>${card.hasVoice ? "보이스 포함" : "보이스 없음"}${card.handwritingAssetId ? " · 손글씨 포함" : ""}</dd></div></dl></div>${editForm}${reviewNote}${reviewActions}</div>`;
+  return `<div class="panel review-panel"><div class="review-heading"><div><p class="eyebrow">카드 검수</p><h2>${escapeHtml(card.name)}</h2><span class="badge ${releaseBadgeClass(status)}">${escapeHtml(releaseStatusLabel(status))}</span></div><button class="secondary" id="close-review">닫기</button></div><div class="review-content"><div>${image}</div><dl class="review-meta"><div><dt>제작자</dt><dd>${escapeHtml(card.ownerArtistId || "-")}</dd></div><div><dt>시즌</dt><dd>${escapeHtml(card.seasonName || "-")}</dd></div><div><dt>등급</dt><dd>${escapeHtml(card.rarity || "-")}</dd></div><div><dt>발행 수량</dt><dd>${card.issueLimit ? Number(card.issueLimit).toLocaleString() : "-"}</dd></div><div><dt>사인 메시지</dt><dd>${escapeHtml(card.signatureText || "없음")}</dd></div><div><dt>특전</dt><dd>${card.hasVoice ? "보이스 포함" : "보이스 없음"}${card.videoAssetId ? " · 영상 포함" : ""}${card.handwritingAssetId ? " · 손글씨 포함" : ""}</dd></div></dl></div><div class="release-status-grid"><div><span>정책</span><strong>${escapeHtml(releasePolicyLabel(policy))}</strong></div><div><span>검수 버전</span><strong>v${Number(card.reviewVersion || 0)}</strong></div><div><span>다음 작업</span><strong>${escapeHtml(nextActionLabel(nextAction))}</strong></div></div>${releaseSnapshot(card)}${releaseHistory(card)}${editForm}${reviewNote}${reviewActions}</div>`;
+}
+
+function releaseSnapshot(card) {
+  const snapshot = card.reviewSnapshot || card.snapshot || {};
+  const design = snapshot.designConfig || card.designConfig || {};
+  const rows = [
+    ["앞면", snapshot.previewImageUrl || snapshot.sourceImageUrl || card.previewImageUrl || card.sourceImageUrl || "미등록"],
+    ["뒷면", design.backImageAssetId || card.backImageAssetId || "기본 템플릿"],
+    ["미디어", [snapshot.voiceAssetId || card.voiceAssetId ? "보이스" : "", snapshot.videoAssetId || card.videoAssetId ? "영상" : "", snapshot.handwritingAssetId || card.handwritingAssetId ? "손글씨" : "", design.lenticular || design.motion ? "렌티큘러" : ""].filter(Boolean).join(" · ") || "없음"],
+    ["제출 메모", card.reviewNote || snapshot.reviewNote || "없음"],
+  ];
+  return `<section class="release-snapshot"><h3>제출 스냅샷</h3><div class="snapshot-grid">${rows.map(([label, value]) => `<div><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`).join("")}</div></section>`;
+}
+
+function releaseHistory(card) {
+  const history = card.reviewDecisions || card.reviewHistory || card.reviewRequests || [];
+  if (!history.length) return "";
+  return `<section class="release-history"><h3>검수 이력</h3>${history
+    .map(
+      (item) =>
+        `<div class="release-history-item"><strong>${escapeHtml(item.stage || item.decision || item.status || "review")}</strong><span>${escapeHtml(item.note || item.status || "기록됨")}</span><small>${formatDate(item.decidedAt || item.createdAt)}</small></div>`,
+    )
+    .join("")}</section>`;
 }
 
 function batchesView() {
@@ -1033,11 +1160,12 @@ async function loadData() {
     if (state.auditQuery.trim()) auditParams.set("q", state.auditQuery.trim());
     if (state.auditAction !== "all")
       auditParams.set("action", state.auditAction);
-    const [dashboard, cards, auditLogs, catalog] = await Promise.all([
+    const [dashboard, cards, auditLogs, catalog, notifications] = await Promise.all([
       api("/admin/dashboard"),
       api("/admin/cards"),
       api(`/admin/audit-logs?${auditParams}`),
       api("/admin/catalog"),
+      api("/admin/notifications"),
     ]);
     state.metrics = dashboard.data.metrics;
     state.recentActivity = dashboard.data.recentActivity || [];
@@ -1045,6 +1173,8 @@ async function loadData() {
     state.auditLogs = auditLogs.data.items;
     state.auditPagination = auditLogs.data.meta.pagination;
     state.catalog = catalog.data;
+    state.notifications = notifications.data.items || [];
+    state.unreadNotificationCount = notifications.data.unreadCount || 0;
 
     if (isRoot()) {
       const [
@@ -1073,7 +1203,13 @@ async function loadData() {
       state.artistProfilesLoaded = true;
       await loadOrganizations(false);
     } else {
-      const requests = [api("/admin/drops"), api("/admin/redeem-code-batches")];
+      const dropsRequest = can("drops:read")
+        ? api("/admin/drops")
+        : Promise.resolve({ data: { items: [] } });
+      const batchesRequest = can("codes:read")
+        ? api("/admin/redeem-code-batches")
+        : Promise.resolve({ data: { items: [] } });
+      const requests = [dropsRequest, batchesRequest];
       if (state.adminContext.accessLevel === "company_admin") {
         requests.push(
           api(
@@ -1118,6 +1254,13 @@ async function loadData() {
     }
   }
   layout();
+}
+
+async function loadAdminNotifications(renderAfter = true) {
+  const result = await api("/admin/notifications");
+  state.notifications = result.data.items || [];
+  state.unreadNotificationCount = result.data.unreadCount || 0;
+  if (renderAfter) layout();
 }
 
 async function loadOrganizations(renderAfter = true) {
@@ -1631,18 +1774,6 @@ async function updateCampaignStatus(campaignId, status) {
     toast("특전 캠페인 상태 변경에 실패했습니다.");
   }
 }
-async function publishCard(cardId) {
-  try {
-    await api(`/admin/cards/${cardId}/publish`, { method: "POST", body: "{}" });
-    state.reviewCard = null;
-    if (state.reviewImageSrc) URL.revokeObjectURL(state.reviewImageSrc);
-    state.reviewImageSrc = "";
-    await loadData();
-    toast("카드를 공개했습니다.");
-  } catch {
-    toast("카드 공개에 실패했습니다.");
-  }
-}
 function toggleDesktopNavigation() {
   state.navCollapsed = !state.navCollapsed;
   window.localStorage.setItem(
@@ -1667,6 +1798,9 @@ async function logoutAdmin() {
   state.adminContext = null;
   state.metrics = null;
   state.recentActivity = [];
+  state.notifications = [];
+  state.unreadNotificationCount = 0;
+  state.notificationPanelOpen = false;
   state.cards = [];
   state.drops = [];
   state.batches = [];
@@ -1782,25 +1916,30 @@ async function openReview(cardId) {
     toast("카드 상세 정보를 불러오지 못했습니다.");
   }
 }
-async function submitReview(cardId, decision) {
+async function submitReleaseDecision(cardId, stage, decision) {
   const note = document.querySelector("#review-note")?.value.trim() || null;
+  if (decision === "changes_requested" && !note) {
+    toast("수정 요청 사유를 입력해 주세요.");
+    return;
+  }
   try {
-    await api(`/admin/cards/${cardId}/review`, {
+    const reviewEndpoint = {
+      partner: `/admin/cards/${cardId}/review/partner`,
+      platform: `/admin/cards/${cardId}/review/platform`,
+    }[stage];
+    if (!reviewEndpoint) {
+      toast("검수 단계를 확인해 주세요.");
+      return;
+    }
+    await api(reviewEndpoint, {
       method: "POST",
       body: JSON.stringify({ decision, note }),
     });
-    if (decision === "approve") await openReview(cardId);
-    else {
-      state.reviewCard = null;
-      await loadData();
-    }
-    toast(
-      decision === "approve"
-        ? "검수를 승인했습니다."
-        : "아티스트에게 수정 요청을 보냈습니다.",
-    );
+    await loadData();
+    await openReview(cardId);
+    toast(decision === "approved" ? "검수를 승인했습니다." : "수정 요청을 보냈습니다.");
   } catch {
-    toast("검수 처리에 실패했습니다. 카드 상태를 확인해 주세요.");
+    toast("검수 처리에 실패했습니다. 카드 상태와 권한을 확인해 주세요.");
   }
 }
 async function submitPartnerReviewRequest(cardId) {
@@ -1815,6 +1954,48 @@ async function submitPartnerReviewRequest(cardId) {
     toast("루트 관리자에게 검수를 요청했습니다.");
   } catch {
     toast("검수 요청에 실패했습니다. 카드 상태와 권한을 확인해 주세요.");
+  }
+}
+async function openNotification(notificationId, cardId) {
+  if (notificationId === "toggle") {
+    state.notificationPanelOpen = !state.notificationPanelOpen;
+    state.accountMenuOpen = false;
+    layout();
+    return;
+  }
+  try {
+    await api(`/admin/notifications/${notificationId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ read: true }),
+    });
+    state.notificationPanelOpen = false;
+    await loadAdminNotifications(false);
+    if (cardId) await openReview(cardId);
+    else layout();
+  } catch {
+    toast("알림 처리에 실패했습니다.");
+  }
+}
+async function linkApprovedCardToDrop(event) {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  const dropId = form.get("dropId");
+  const cardId = event.currentTarget.dataset.cardId;
+  if (!dropId || !cardId) {
+    toast("연결할 드롭을 선택해 주세요.");
+    return;
+  }
+  try {
+    await api(`/admin/drops/${encodeURIComponent(dropId)}/cards`, {
+      method: "POST",
+      body: JSON.stringify({ cardId }),
+    });
+    closeDrawer();
+    await loadData();
+    await openReview(cardId);
+    toast("드롭 준비됨");
+  } catch {
+    toast("드롭 연결에 실패했습니다. 카드와 드롭 범위를 확인해 주세요.");
   }
 }
 async function createBatch(event) {
@@ -2034,8 +2215,14 @@ function bind() {
   });
   document.querySelector("#account-menu-toggle")?.addEventListener("click", () => {
     state.accountMenuOpen = !state.accountMenuOpen;
+    state.notificationPanelOpen = false;
     layout();
   });
+  document.querySelectorAll("[data-open-notification]").forEach((button) =>
+    button.addEventListener("click", () =>
+      void openNotification(button.dataset.openNotification, button.dataset.cardId),
+    ),
+  );
   document.querySelector("#account-settings")?.addEventListener("click", () => {
     toast("계정 설정은 관리자 API 연결 후 제공됩니다.");
     closeAccountMenu();
@@ -2213,6 +2400,9 @@ function bind() {
     .querySelector("#admin-card-edit-form")
     ?.addEventListener("submit", updateAdminCard);
   document
+    .querySelector("#drop-link-form")
+    ?.addEventListener("submit", linkApprovedCardToDrop);
+  document
     .querySelector('#admin-card-form select[name="artistId"]')
     ?.addEventListener("change", (event) => {
       const artistId = event.currentTarget.value;
@@ -2232,12 +2422,12 @@ function bind() {
     layout();
   });
   document
-    .querySelectorAll(".publish")
+    .querySelectorAll(".review-card")
     .forEach((button) =>
-      button.addEventListener("click", () => publishCard(button.dataset.id)),
+      button.addEventListener("click", () => openReview(button.dataset.id)),
     );
   document
-    .querySelectorAll(".review-card")
+    .querySelectorAll(".release-queue-item")
     .forEach((button) =>
       button.addEventListener("click", () => openReview(button.dataset.id)),
     );
@@ -2245,7 +2435,11 @@ function bind() {
     .querySelectorAll(".review-decision")
     .forEach((button) =>
       button.addEventListener("click", () =>
-        submitReview(button.dataset.id, button.dataset.decision),
+        submitReleaseDecision(
+          button.dataset.id,
+          button.dataset.stage,
+          button.dataset.decision,
+        ),
       ),
     );
   document
@@ -2256,9 +2450,12 @@ function bind() {
       ),
     );
   document
-    .querySelectorAll(".review-publish")
+    .querySelectorAll(".open-drop-link")
     .forEach((button) =>
-      button.addEventListener("click", () => publishCard(button.dataset.id)),
+      button.addEventListener("click", () => {
+        const card = state.cards.find((item) => item.id === button.dataset.id) || state.reviewCard;
+        openDrawer("drop-link", { card });
+      }),
     );
   document.querySelector("#close-review")?.addEventListener("click", () => {
     state.reviewCard = null;
