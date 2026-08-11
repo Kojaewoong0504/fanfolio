@@ -4,8 +4,21 @@ import test from 'node:test'
 
 const source = await readFile(new URL('../app.js', import.meta.url), 'utf8')
 
-function assertSourceMatches(pattern, contract) {
-  assert.ok(pattern.test(source), contract)
+function functionBody(name) {
+  const signature = new RegExp(`function\\s+${name}\\s*\\([^)]*\\)\\s*\\{`).exec(source)
+  assert.ok(signature, `defines ${name}`)
+  let depth = 1
+  let index = signature.index + signature[0].length
+  for (; index < source.length; index += 1) {
+    if (source[index] === '{') depth += 1
+    if (source[index] === '}') depth -= 1
+    if (depth === 0) return source.slice(signature.index, index + 1)
+  }
+  assert.fail(`closes ${name} function body`)
+}
+
+function assertMatches(input, pattern, contract) {
+  assert.ok(pattern.test(input), contract)
 }
 
 test('admin restores the live administrator scope before rendering navigation', () => {
@@ -109,35 +122,42 @@ test('admin gives a useful card preview fallback when stored media is unavailabl
 })
 
 test('partner logo picker is optional and exposes preview replacement and removal controls', () => {
-  assertSourceMatches(/organization-logo-input/, 'renders a partner logo file input')
-  assertSourceMatches(/type=["']file["']/, 'uses a file input for partner logos')
-  assertSourceMatches(
-    /accept=["']image\/png,image\/jpeg,image\/webp["']/,
+  const drawer = functionBody('organizationDrawer')
+  assertMatches(drawer, /organization-logo-preview/, 'renders a partner logo preview frame')
+  assertMatches(drawer, /remove-organization-logo/, 'renders a partner logo removal action')
+  assertMatches(drawer, /optional-label/, 'marks partner logo selection as optional')
+  assertMatches(
+    drawer,
+    /<input\b(?=[^>]*\bid=["']organization-logo-input["'])(?=[^>]*\btype=["']file["'])(?=[^>]*\baccept=["']image\/png,image\/jpeg,image\/webp["'])[^>]*>/s,
     'limits picker choices to PNG JPEG and WebP images',
   )
-  assertSourceMatches(/organization-logo-preview/, 'renders a partner logo preview frame')
-  assertSourceMatches(/remove-organization-logo/, 'renders a partner logo removal action')
-  assertSourceMatches(/optional-label/, 'marks partner logo selection as optional')
 })
 
-test('partner logo upload uses organization logo purpose and logo asset payload', () => {
-  assertSourceMatches(/organization_logo/, 'uploads partner logos with organization_logo purpose')
-  assertSourceMatches(/logoAssetId/, 'submits the uploaded logo asset id in organization payloads')
+test('partner logo save uploads the selected file as an organization logo asset payload', () => {
+  const save = functionBody('saveOrganization')
+  assertMatches(
+    save,
+    /payload\.logoAssetId\s*=\s*await\s+uploadAsset\(\s*state\.organizationLogoFile\s*,\s*["']organization_logo["']\s*\)/,
+    'sets logoAssetId from uploadAsset(state.organizationLogoFile, organization_logo)',
+  )
 })
 
 test('partner logo upload rejects unsupported file types and files over two megabytes', () => {
-  assertSourceMatches(
-    /image\/png.*image\/jpeg.*image\/webp/s,
+  const setter = functionBody('setOrganizationLogoFile')
+  assertMatches(
+    setter,
+    /allowedTypes\s*=\s*\[[^\]]*["']image\/png["'][^\]]*["']image\/jpeg["'][^\]]*["']image\/webp["'][^\]]*\]/s,
     'validates PNG JPEG and WebP logo MIME types',
   )
-  assertSourceMatches(/2\s*\*\s*1024\s*\*\s*1024/, 'validates partner logos against a 2MB limit')
-  assertSourceMatches(/PNG.*JPG.*WebP/s, 'explains supported logo formats in validation errors')
+  assertMatches(setter, /file\.size\s*>\s*2\s*\*\s*1024\s*\*\s*1024/, 'validates partner logos against a 2MB limit')
+  assertMatches(setter, /PNG.*JPG.*WebP/s, 'explains supported logo formats in validation errors')
 })
 
 test('partner logos use a shared renderer with image error fallback', () => {
-  assertSourceMatches(/function\s+partnerLogoMarkup/, 'centralizes partner logo markup in a shared renderer')
-  assertSourceMatches(/company-avatar-fallback/, 'renders an initial fallback for partners without usable logos')
-  assertSourceMatches(
+  const renderer = functionBody('partnerLogoMarkup')
+  assertMatches(renderer, /company-avatar-fallback/, 'renders an initial fallback for partners without usable logos')
+  assertMatches(
+    renderer,
     /onerror=["'][^"']*hidden\s*=\s*true[^"']*nextElementSibling[^"']*hidden\s*=\s*false/s,
     'falls back to initials when partner logo images fail to load',
   )

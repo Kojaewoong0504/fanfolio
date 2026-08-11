@@ -58,7 +58,7 @@ test('partner detail logos render in fixed ninety six pixel frames without disto
 test('partner logo picker has responsive layout styles for narrow admin drawers', () => {
   assertCssMatches(/\.organization-logo-picker/, 'styles the partner logo picker')
   assertCssMatches(
-    /@media\s*\(max-width:\s*767px\)[\s\S]*\.organization-logo-picker/,
+    /@media\s*\(max-width:\s*640px\)[\s\S]*\.organization-logo-picker/,
     'keeps the partner logo picker responsive on narrow drawers',
   )
 })
