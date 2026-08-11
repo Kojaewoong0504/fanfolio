@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Query, status
 from sqlalchemy import delete, func, select, update
+from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import CurrentAdmin, DbSession
 from app.errors import AppError
@@ -220,7 +221,22 @@ async def create_organization(
         organization_id=organization.id,
         details={"slug": organization.slug},
     )
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError as error:
+        await session.rollback()
+        # The preflight lookup above prevents the usual duplicate case, but
+        # the unique constraint is still the final authority under a race.
+        # Convert that database failure into the same actionable API contract.
+        if "slug" in str(error.orig).lower():
+            raise AppError(
+                409, "ORGANIZATION_SLUG_TAKEN", "이미 사용 중인 파트너 식별자입니다."
+            ) from error
+        raise AppError(
+            409,
+            "ORGANIZATION_CONFLICT",
+            "파트너 정보를 저장할 수 없습니다. 입력값을 확인해 주세요.",
+        ) from error
     return {"ok": True, "data": await _organization_data(session, organization)}
 
 

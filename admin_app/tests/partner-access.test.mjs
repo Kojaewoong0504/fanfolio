@@ -61,6 +61,13 @@ test('partner contract dates are submitted and displayed without timezone drift'
   assert.match(source, /formatContractDate/)
 })
 
+test('partner registration reports the failing stage instead of masking API errors', () => {
+  assert.match(source, /let writeResult/)
+  assert.match(source, /요청에 실패했습니다/)
+  assert.match(source, /파트너 목록을 새로 고치지 못했습니다/)
+  assert.match(source, /String\(error\?\.message \|\| error\)/)
+})
+
 test('partner card detail exposes the scoped review request action', () => {
   assert.match(source, /cards:submit_review/)
   assert.match(source, /검수 요청하기/)

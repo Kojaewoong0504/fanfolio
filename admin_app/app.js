@@ -1036,19 +1036,35 @@ async function saveOrganization(event) {
   }
   const submit = event.currentTarget.querySelector('[type="submit"]');
   submit.disabled = true;
+  let writeResult;
   try {
-    const result = await api(
+    writeResult = await api(
       editing
         ? `/admin/organizations/${encodeURIComponent(editing.id)}`
         : "/admin/organizations",
       { method: editing ? "PATCH" : "POST", body: JSON.stringify(payload) },
     );
+  } catch (error) {
+    submit.disabled = false;
+    const detail = String(error?.message || error).replace(/^API \d+\s*/, "");
+    const message = error.status === 409
+      ? "이미 사용 중인 파트너 코드입니다. 다른 코드를 입력해 주세요."
+      : `파트너 ${editing ? "수정" : "등록"} 요청에 실패했습니다${detail ? `: ${detail}` : "."}`;
+    errorBox.textContent = message;
+    errorBox.hidden = false;
+    return;
+  }
+
+  try {
+    const result = writeResult;
+    let refreshFailed = false;
     state.drawer = null;
     state.drawerData = null;
     state.selectedOrganizationId = result.data.id;
     try {
       await loadOrganizations(false);
     } catch {
+      refreshFailed = true;
       // The write already succeeded. Keep the returned record visible if a
       // follow-up list refresh is briefly unavailable after a cold start.
       state.organizations = [
@@ -1058,13 +1074,14 @@ async function saveOrganization(event) {
       state.selectedOrganization = result.data;
       state.organizationMembers = [];
     }
-    toast(editing ? "파트너 정보를 저장했습니다." : "파트너를 등록했습니다.");
+    toast(refreshFailed
+      ? "파트너 정보는 저장되었지만 목록을 새로 고치지 못했습니다."
+      : editing ? "파트너 정보를 저장했습니다." : "파트너를 등록했습니다.");
     layout();
   } catch (error) {
     submit.disabled = false;
-    const message = error.status === 409
-      ? "이미 사용 중인 파트너 코드입니다. 다른 코드를 입력해 주세요."
-      : error.message?.replace(/^API \d+\s*/, "") || "파트너 정보를 저장하지 못했습니다.";
+    const detail = String(error?.message || error).replace(/^API \d+\s*/, "");
+    const message = `파트너 목록을 새로 고치지 못했습니다${detail ? `: ${detail}` : "."}`;
     errorBox.textContent = message;
     errorBox.hidden = false;
   }
