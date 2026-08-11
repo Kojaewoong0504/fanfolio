@@ -82,6 +82,28 @@ def login_partner(app: Any, member: dict[str, Any]) -> TestClient:
     return partner
 
 
+def upload_organization_logo(admin: TestClient, *, purpose: str = "organization_logo") -> str:
+    presigned = assert_success(
+        admin.post(
+            "/api/uploads/presign",
+            json={
+                "fileName": "starwave-logo.png",
+                "contentType": "image/png",
+                "purpose": purpose,
+            },
+        ),
+        201,
+    )
+    asset_id = presigned["assetId"]
+    response = admin.put(
+        f"/api/uploads/{asset_id}/content",
+        content=b"\x89PNG\r\n\x1a\n" + b"logo-bytes",
+        headers={"Content-Type": "image/png"},
+    )
+    assert response.status_code == 204
+    return asset_id
+
+
 def test_seeded_admin_has_a_root_membership(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:
@@ -412,6 +434,103 @@ def test_partner_card_list_includes_catalog_metadata_for_the_admin_table(
     assert published["artistId"] == "artist_nova3"
     assert published["memberId"] == "member_yuna"
     assert published["seasonName"] == "2026 SPRING"
+
+
+def test_partner_logo_is_optional_and_ready_logo_asset_is_exposed(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    without_logo = assert_success(
+        actors["admin"].post(
+            "/api/admin/organizations",
+            json={"name": "로고 없는 회사", "slug": "without-logo"},
+        ),
+        201,
+    )
+    assert without_logo["logoAssetId"] is None
+    assert without_logo["logoUrl"] is None
+
+    asset_id = upload_organization_logo(actors["admin"])
+    with_logo = assert_success(
+        actors["admin"].post(
+            "/api/admin/organizations",
+            json={
+                "name": "스타웨이브 엔터테인먼트",
+                "slug": "starwave-logo",
+                "logoAssetId": asset_id,
+            },
+        ),
+        201,
+    )
+    assert with_logo["logoAssetId"] == asset_id
+    assert with_logo["logoUrl"] == f"/api/organizations/{with_logo['id']}/logo"
+
+    logo = actors["admin"].get(with_logo["logoUrl"])
+    assert logo.status_code == 200
+    assert logo.headers["content-type"] == "image/png"
+
+
+def test_partner_logo_can_be_replaced_and_removed(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    first_asset_id = upload_organization_logo(actors["admin"])
+    organization = assert_success(
+        actors["admin"].post(
+            "/api/admin/organizations",
+            json={"name": "교체 테스트", "slug": "logo-replace", "logoAssetId": first_asset_id},
+        ),
+        201,
+    )
+    second_asset_id = upload_organization_logo(actors["admin"])
+    replaced = assert_success(
+        actors["admin"].patch(
+            f"/api/admin/organizations/{organization['id']}",
+            json={"logoAssetId": second_asset_id},
+        )
+    )
+    assert replaced["logoAssetId"] == second_asset_id
+
+    removed = assert_success(
+        actors["admin"].patch(
+            f"/api/admin/organizations/{organization['id']}",
+            json={"logoAssetId": None},
+        )
+    )
+    assert removed["logoAssetId"] is None
+    assert removed["logoUrl"] is None
+
+
+def test_partner_logo_rejects_unready_or_wrong_purpose_assets(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    unready = assert_success(
+        actors["admin"].post(
+            "/api/uploads/presign",
+            json={
+                "fileName": "unready.png",
+                "contentType": "image/png",
+                "purpose": "organization_logo",
+            },
+        ),
+        201,
+    )
+    assert_error(
+        actors["admin"].post(
+            "/api/admin/organizations",
+            json={"name": "준비 안 됨", "slug": "logo-unready", "logoAssetId": unready["assetId"]},
+        ),
+        409,
+        "ASSET_NOT_READY",
+    )
+
+    wrong_purpose_id = upload_organization_logo(actors["admin"], purpose="card")
+    assert_error(
+        actors["admin"].post(
+            "/api/admin/organizations",
+            json={"name": "잘못된 목적", "slug": "logo-purpose", "logoAssetId": wrong_purpose_id},
+        ),
+        422,
+        "INVALID_LOGO_ASSET",
+    )
 
 
 def test_partner_manager_can_update_only_an_assigned_artist(

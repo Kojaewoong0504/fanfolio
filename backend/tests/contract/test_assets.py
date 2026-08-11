@@ -199,6 +199,45 @@ def test_upload_rejects_obvious_executable_content(
     )
 
 
+def test_organization_logo_upload_accepts_only_images(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    assert_error(
+        actors["admin"].post(
+            "/api/uploads/presign",
+            json={
+                "fileName": "logo.pdf",
+                "contentType": "application/pdf",
+                "purpose": "organization_logo",
+            },
+        ),
+        422,
+        "VALIDATION_ERROR",
+    )
+
+
+def test_organization_logo_upload_is_limited_to_two_megabytes(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    presigned = assert_success(
+        actors["admin"].post(
+            "/api/uploads/presign",
+            json={
+                "fileName": "oversized-logo.png",
+                "contentType": "image/png",
+                "purpose": "organization_logo",
+            },
+        ),
+        201,
+    )
+    response = actors["admin"].put(
+        f"/api/uploads/{presigned['assetId']}/content",
+        content=b"x" * (2 * 1024 * 1024 + 1),
+        headers={"Content-Type": "image/png"},
+    )
+    assert_error(response, 413, "UPLOAD_TOO_LARGE")
+
+
 def test_s3_direct_upload_is_completed_only_after_server_scan(
     actors: dict[str, TestClient], monkeypatch: Any
 ) -> None:
