@@ -244,6 +244,15 @@ function scopeLabel() {
   return state.adminContext?.organization?.name || "파트너";
 }
 
+function scopeContextChip() {
+  const root = isRoot();
+  const label = root ? "ROOT 운영 영역" : "기업 운영 영역";
+  const detail = root
+    ? "전체 파트너와 서비스 운영을 관리합니다."
+    : `${scopeLabel()} 범위에서만 운영할 수 있습니다.`;
+  return `<span class="scope-chip ${root ? "root-scope" : "company-scope"}" title="${escapeHtml(detail)}">${icon(root ? "shield_person" : "domain")}<span>${label}</span></span>`;
+}
+
 function sessionLoadingView() {
   return `<main class="admin-login"><div class="admin-login-card" role="status" aria-live="polite"><div class="brand-lockup">${icon("auto_awesome_motion")}<span>FANFOLIO</span></div><div class="session-loader" aria-hidden="true"></div><h1>관리자 세션 확인 중</h1><p class="hint">안전한 운영 환경을 준비하고 있습니다.</p></div></main>`;
 }
@@ -271,7 +280,7 @@ function topbarView() {
   const unreadBadge = state.unreadNotificationCount
     ? `<span class="notification-badge">${state.unreadNotificationCount}</span>`
     : "";
-  return `<header class="topbar"><div class="topbar-title"><button class="icon-button mobile-nav-toggle" id="mobile-nav-toggle" type="button" aria-label="메뉴 열기">${icon("menu")}</button><div><p class="eyebrow">FANFOLIO OPERATIONS</p><h1 class="title">${title()}</h1></div></div><div class="top-actions"><div class="notification-menu ${state.notificationPanelOpen ? "open" : ""}"><button class="icon-button notification-button" type="button" aria-label="알림" aria-expanded="${state.notificationPanelOpen}" data-open-notification="toggle">${icon("notifications")}${unreadBadge}</button>${notificationPanelView()}</div><div class="account-menu ${state.accountMenuOpen ? "open" : ""}"><button class="top-avatar" id="account-menu-toggle" type="button" aria-haspopup="menu" aria-expanded="${state.accountMenuOpen}" aria-label="${escapeHtml(personName)} 계정 메뉴" title="${escapeHtml(person.email || personName)}">${personInitial}</button><div class="account-popover" role="menu" aria-label="계정 메뉴"><button type="button" id="account-settings" role="menuitem">${icon("manage_accounts")}<span>계정 설정</span></button><button type="button" id="account-password-change" role="menuitem">${icon("password")}<span>비밀번호 변경</span></button><button type="button" id="account-logout" role="menuitem">${icon("logout")}<span>로그아웃</span></button></div></div></div></header>`;
+  return `<header class="topbar"><div class="topbar-title"><button class="icon-button mobile-nav-toggle" id="mobile-nav-toggle" type="button" aria-label="메뉴 열기">${icon("menu")}</button><div><p class="eyebrow">FANFOLIO OPERATIONS</p><h1 class="title">${title()}</h1></div></div><div class="top-actions">${scopeContextChip()}<div class="notification-menu ${state.notificationPanelOpen ? "open" : ""}"><button class="icon-button notification-button" type="button" aria-label="알림" aria-expanded="${state.notificationPanelOpen}" data-open-notification="toggle">${icon("notifications")}${unreadBadge}</button>${notificationPanelView()}</div><div class="account-menu ${state.accountMenuOpen ? "open" : ""}"><button class="top-avatar" id="account-menu-toggle" type="button" aria-haspopup="menu" aria-expanded="${state.accountMenuOpen}" aria-label="${escapeHtml(personName)} 계정 메뉴" title="${escapeHtml(person.email || personName)}">${personInitial}</button><div class="account-popover" role="menu" aria-label="계정 메뉴"><button type="button" id="account-settings" role="menuitem">${icon("manage_accounts")}<span>계정 설정</span></button><button type="button" id="account-password-change" role="menuitem">${icon("password")}<span>비밀번호 변경</span></button><button type="button" id="account-logout" role="menuitem">${icon("logout")}<span>로그아웃</span></button></div></div></div></header>`;
 }
 
 function notificationPanelView() {
@@ -342,14 +351,13 @@ function layout() {
         () => void resetArtistPassword(button.dataset.artistReset),
       ),
     );
-  document
-    .querySelectorAll(".review-artist-profile")
-    .forEach((button) =>
-      button.addEventListener(
-        "click",
-        () => void updateArtistProfile(button.dataset.id),
-      ),
-    );
+  document.querySelector("#artist-profile-review-form")?.addEventListener("submit", saveArtistProfileReview);
+  document.querySelectorAll("[data-edit-artist-profile]").forEach((button) =>
+    button.addEventListener("click", () => {
+      const profile = state.artistProfiles.find((item) => item.userId === button.dataset.editArtistProfile);
+      if (profile) openDrawer("artist-profile-review", { profile });
+    }),
+  );
 }
 
 function dashboardView() {
@@ -484,7 +492,7 @@ function partnerMembersView() {
           .map(
             (member) => {
               const protectedMember = member.accessLevel === "company_admin" && !isRoot();
-              return `<tr><td data-label="관리자"><div class="person-cell"><span class="person-avatar">${escapeHtml((member.displayName || member.email).slice(0, 1))}</span><div><strong>${escapeHtml(member.displayName)}</strong><small>${escapeHtml(member.email)}</small></div></div></td><td data-label="권한"><div class="role-cell">${accessRoleBadge(member.accessLevel)}${protectedMember ? "" : `<button class="role-edit-action" type="button" data-edit-member-role="${escapeHtml(member.id)}">${icon("edit")} 권한 변경</button>`}</div></td><td data-label="담당 아티스트"><button class="artist-assignment-trigger" type="button" data-assign-member="${escapeHtml(member.id)}">${member.assignedArtists.length ? member.assignedArtists.map((artist) => `<span>${escapeHtml(artist.name)}</span>`).join("") : "배정 없음"} ${icon("edit")}</button></td><td data-label="최근 로그인">${formatDate(member.lastLoginAt)}</td><td data-label="상태"><span class="badge ${member.status === "active" ? "success-badge" : "danger-badge"}">${member.status === "active" ? "활성" : "중지"}</span></td><td data-label="관리"><div class="row-actions">${protectedMember ? '<span class="muted">보호됨</span>' : `<button class="icon-button row-action" type="button" data-reset-member-password="${escapeHtml(member.id)}" aria-label="${escapeHtml(member.displayName)} 비밀번호 재발급" title="비밀번호 재발급">${icon("key")}</button><button class="icon-button row-action member-status" type="button" data-member-id="${escapeHtml(member.id)}" data-next-status="${member.status === "active" ? "suspended" : "active"}" aria-label="${member.status === "active" ? "계정 중지" : "계정 활성화"}" title="${member.status === "active" ? "계정 중지" : "계정 활성화"}">${icon(member.status === "active" ? "person_off" : "person_check")}</button>`}</div></td></tr>`;
+              return `<tr><td data-label="관리자"><div class="person-cell"><span class="person-avatar">${escapeHtml((member.displayName || member.email).slice(0, 1))}</span><div><strong>${escapeHtml(member.displayName)}</strong><small>${escapeHtml(member.email)}</small></div></div></td><td data-label="권한"><div class="table-summary-control">${accessRoleBadge(member.accessLevel)}${protectedMember ? "" : `<button class="summary-edit-button" type="button" data-edit-member-role="${escapeHtml(member.id)}">${icon("edit")} 수정</button>`}</div></td><td data-label="담당 아티스트"><button class="artist-assignment-trigger" type="button" data-assign-member="${escapeHtml(member.id)}"><span class="assignment-label">${member.assignedArtists.length ? member.assignedArtists.map((artist) => escapeHtml(artist.name)).join(", ") : "배정 없음"}</span><span class="assignment-edit">${icon("edit")} 배정</span></button></td><td data-label="최근 로그인">${formatDate(member.lastLoginAt)}</td><td data-label="상태"><span class="badge ${member.status === "active" ? "success-badge" : "danger-badge"}">${member.status === "active" ? "활성" : "중지"}</span></td><td data-label="관리"><div class="row-actions">${protectedMember ? '<span class="muted">보호됨</span>' : `<button class="icon-button row-action" type="button" data-reset-member-password="${escapeHtml(member.id)}" aria-label="${escapeHtml(member.displayName)} 비밀번호 재발급" title="비밀번호 재발급">${icon("key")}</button><button class="icon-button row-action member-status" type="button" data-member-id="${escapeHtml(member.id)}" data-next-status="${member.status === "active" ? "suspended" : "active"}" aria-label="${member.status === "active" ? "계정 중지" : "계정 활성화"}" title="${member.status === "active" ? "계정 중지" : "계정 활성화"}">${icon(member.status === "active" ? "person_off" : "person_check")}</button>`}</div></td></tr>`;
             },
           )
           .join("")}</tbody></table></div>`
@@ -522,7 +530,8 @@ function scopedArtists() {
 
 function artistsView() {
   const artists = scopedArtists();
-  return `<div class="page-heading with-actions"><div><p class="eyebrow">ARTISTS</p><h2>${isRoot() ? "전체 아티스트 운영" : "담당 아티스트"}</h2><p>${isRoot() ? "아티스트 소속과 스튜디오 계정을 관리합니다." : "배정받은 아티스트와 카드 운영 상태를 확인합니다."}</p></div></div><div class="artist-overview-grid">${
+  const root = isRoot();
+  return `<div class="page-heading with-actions"><div><p class="eyebrow">${root ? "ROOT ARTIST OPERATIONS" : "COMPANY ARTIST OPERATIONS"}</p><h2>${root ? "루트 전용 아티스트·스튜디오 운영" : "내 회사 아티스트 운영"}</h2><p>${root ? "모든 파트너의 아티스트 소속, 스튜디오 계정과 팬 프로필 검수를 관리합니다." : `${scopeLabel()}에 연결되고 배정된 아티스트의 카드·드롭 운영 상태를 확인합니다.`}</p></div>${scopeContextChip()}</div><div class="artist-overview-grid">${
     artists.length
       ? artists
           .map(
@@ -556,6 +565,7 @@ function drawerView() {
     "drop-link": dropLinkDrawer,
     "role-change": roleChangeDrawer,
     "member-password": memberPasswordDrawer,
+    "artist-profile-review": artistProfileReviewDrawer,
   }[state.drawer]?.();
   if (!contents) return "";
   const cardOperationsNote = state.drawer === "card-create"
@@ -605,6 +615,21 @@ function roleChangeDrawer() {
       ]
     : [{ value: "fan", label: "팬" }, { value: "artist", label: "아티스트" }, { value: "admin", label: "관리자" }];
   return `${drawerHeader("ACCESS", "역할 변경", `${member.displayName || member.email} 계정의 접근 범위를 변경합니다.`)}<form class="drawer-body form" id="role-change-form"><div class="assignment-member"><span class="person-avatar">${escapeHtml((member.displayName || member.email).slice(0, 1))}</span><div><strong>${escapeHtml(member.displayName || "-")}</strong><small>${escapeHtml(member.email)}</small></div></div><label class="field"><span>새 역할</span>${adminSelect({ id: "role-change-value", name: "role", value: isMember ? member.accessLevel : member.role, label: "새 역할", className: "form-select", options })}</label><p class="hint">권한을 낮추거나 변경하면 해당 계정의 기존 로그인 세션이 종료됩니다.</p><footer class="drawer-footer"><button class="secondary close-drawer" type="button">취소</button><button class="primary" type="submit">역할 저장</button></footer></form>`;
+}
+
+function artistProfileReviewDrawer() {
+  const profile = state.drawerData?.profile;
+  if (!profile) return "";
+  const artistOptions = state.catalog.artists.map((artist) => ({
+    value: artist.id,
+    label: artist.name,
+  }));
+  const statusOptions = [
+    { value: "pending", label: "검수 대기" },
+    { value: "verified", label: "승인" },
+    { value: "rejected", label: "반려" },
+  ];
+  return `${drawerHeader("ROOT REVIEW", "아티스트 소속 검수", "아티스트 계정이 연결할 수 있는 그룹과 공개 전 검수 상태를 설정합니다.")}<form class="drawer-body form" id="artist-profile-review-form" data-profile-id="${escapeHtml(profile.userId)}"><div class="assignment-member"><span class="person-avatar">${escapeHtml((profile.nickname || profile.email || "아").slice(0, 1))}</span><div><strong>${escapeHtml(profile.nickname || "닉네임 미설정")}</strong><small>${escapeHtml(profile.email)}</small></div></div><label class="field"><span>소속 그룹</span>${adminSelect({ id: "artist-profile-review-artist", name: "artistId", value: profile.artistId, label: "소속 그룹", className: "form-select", options: artistOptions })}</label><label class="field"><span>검수 상태</span>${adminSelect({ id: "artist-profile-review-status", name: "verificationStatus", value: profile.verificationStatus, label: "검수 상태", className: "form-select", options: statusOptions })}</label><p class="hint">승인된 계정만 해당 그룹의 스튜디오 카탈로그와 카드 작업을 사용할 수 있습니다.</p><footer class="drawer-footer"><button class="secondary close-drawer" type="button">취소</button><button class="primary" type="submit">검수 상태 저장</button></footer></form>`;
 }
 
 function dropLinkDrawer() {
@@ -926,14 +951,13 @@ function artistProfileRows() {
     return '<tr><td colspan="5" class="empty">검수할 아티스트가 없습니다.</td></tr>';
   return state.artistProfiles
     .map((profile) => {
-      const artistOptions = state.catalog.artists.map((artist) => ({ value: artist.id, label: artist.name }));
-      const statusOptions = [{ value: "pending", label: "검수 대기" }, { value: "verified", label: "승인" }, { value: "rejected", label: "반려" }];
-      return `<tr><td><strong>${escapeHtml(profile.email)}</strong><small>${escapeHtml(profile.userId)}</small></td><td>${escapeHtml(profile.nickname || "-")}</td><td>${adminSelect({ id: `profile-artist-${profile.userId}`, value: profile.artistId, label: "소속 그룹", className: "artist-profile-artist", options: artistOptions })}</td><td><span class="badge ${profile.verificationStatus === "verified" ? "" : "draft"}">${escapeHtml(artistProfileStatusLabel(profile.verificationStatus))}</span></td><td><div class="profile-review-actions">${adminSelect({ id: `profile-status-${profile.userId}`, value: profile.verificationStatus, label: "검수 상태", className: "artist-profile-status", options: statusOptions })}<button class="secondary review-artist-profile" data-id="${escapeHtml(profile.userId)}">저장</button></div></td></tr>`;
+      const artist = state.catalog.artists.find((item) => item.id === profile.artistId);
+      return `<tr><td><strong>${escapeHtml(profile.email)}</strong><small>${escapeHtml(profile.userId)}</small></td><td>${escapeHtml(profile.nickname || "-")}</td><td><span class="scope-summary">${icon("group")} ${escapeHtml(artist?.name || "소속 미지정")}</span></td><td><span class="badge ${profile.verificationStatus === "verified" ? "" : "draft"}">${escapeHtml(artistProfileStatusLabel(profile.verificationStatus))}</span></td><td><button class="summary-edit-button profile-review-button" type="button" data-edit-artist-profile="${escapeHtml(profile.userId)}">${icon("fact_check")} 검수 설정</button></td></tr>`;
     })
     .join("");
 }
 function artistProfilesPanel() {
-  return `<div class="panel"><h2>아티스트 소속 검수</h2><p class="hint">아티스트가 카드에 연결할 수 있는 그룹을 지정하고 검수 상태를 관리합니다. 승인된 계정만 해당 그룹의 카탈로그를 사용할 수 있습니다.</p><div class="table-wrap"><table class="table"><thead><tr><th>계정</th><th>닉네임</th><th>소속 그룹</th><th>현재 상태</th><th>검수 처리</th></tr></thead><tbody>${artistProfileRows()}</tbody></table></div></div>`;
+  return `<div class="panel"><div class="panel-heading"><div><p class="eyebrow">ROOT ONLY</p><h2>아티스트 소속 검수</h2><p class="hint">루트 관리자만 아티스트가 카드에 연결할 그룹과 검수 상태를 변경할 수 있습니다.</p></div>${scopeContextChip()}</div><div class="table-wrap"><table class="table"><thead><tr><th>계정</th><th>닉네임</th><th>소속 그룹</th><th>현재 상태</th><th>검수 처리</th></tr></thead><tbody>${artistProfileRows()}</tbody></table></div></div>`;
 }
 function userRows() {
   if (!state.users.length)
@@ -2170,13 +2194,13 @@ async function updateUserRole(userId, role) {
     await loadData();
   }
 }
-async function updateArtistProfile(userId) {
-  const artistId = document.querySelector(
-    `.artist-profile-artist[data-select-id="profile-artist-${CSS.escape(userId)}"]`,
-  )?.dataset.value;
-  const verificationStatus = document.querySelector(
-    `.artist-profile-status[data-select-id="profile-status-${CSS.escape(userId)}"]`,
-  )?.dataset.value;
+async function updateArtistProfile(userId, values = {}) {
+  const artistId = values.artistId;
+  const verificationStatus = values.verificationStatus;
+  if (!artistId || !verificationStatus) {
+    toast("소속 그룹과 검수 상태를 선택해 주세요.");
+    return false;
+  }
   try {
     await api(`/admin/artist-profiles/${encodeURIComponent(userId)}`, {
       method: "PATCH",
@@ -2185,9 +2209,21 @@ async function updateArtistProfile(userId) {
     state.artistProfilesLoaded = false;
     await loadArtistProfiles();
     toast("아티스트 소속 검수 상태를 저장했습니다.");
+    return true;
   } catch {
     toast("아티스트 소속 검수에 실패했습니다. 그룹과 상태를 확인해 주세요.");
+    return false;
   }
+}
+
+async function saveArtistProfileReview(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const saved = await updateArtistProfile(form.dataset.profileId, {
+    artistId: form.querySelector('[data-select-id="artist-profile-review-artist"]')?.dataset.value,
+    verificationStatus: form.querySelector('[data-select-id="artist-profile-review-status"]')?.dataset.value,
+  });
+  if (saved) closeDrawer();
 }
 function bind() {
   document
@@ -2594,14 +2630,13 @@ function bind() {
   document.querySelectorAll("[data-reset-member-password]").forEach((button) =>
     button.addEventListener("click", () => void resetOrganizationMemberPassword(button.dataset.resetMemberPassword)),
   );
-  document
-    .querySelectorAll(".review-artist-profile")
-    .forEach((button) =>
-      button.addEventListener(
-        "click",
-        () => void updateArtistProfile(button.dataset.id),
-      ),
-    );
+  document.querySelector("#artist-profile-review-form")?.addEventListener("submit", saveArtistProfileReview);
+  document.querySelectorAll("[data-edit-artist-profile]").forEach((button) =>
+    button.addEventListener("click", () => {
+      const profile = state.artistProfiles.find((item) => item.userId === button.dataset.editArtistProfile);
+      if (profile) openDrawer("artist-profile-review", { profile });
+    }),
+  );
   document.onkeydown = (event) => {
     if (event.key === "Escape" && state.accountMenuOpen) {
       closeAccountMenu();

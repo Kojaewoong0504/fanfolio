@@ -375,6 +375,16 @@ button:disabled {
   border-radius: 999px;
 }
 
+.scope-chip.root-scope {
+  color: #5148cb;
+  background: #f0eeff;
+}
+
+.scope-chip.company-scope {
+  color: #166b57;
+  background: #e8f8f1;
+}
+
 .scope-chip .material-symbols-rounded {
   font-size: 17px;
 }
@@ -1502,11 +1512,45 @@ button.top-avatar {
   font-size: 17px;
 }
 
-.role-cell {
+.role-cell,
+.table-summary-control {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.table-summary-control {
+  justify-content: space-between;
+  max-width: 220px;
+}
+
+.summary-edit-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 9px;
+  color: #5148cb;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  background: #fff;
+  border: 1px solid #dcd9ff;
+  border-radius: 8px;
+}
+
+.summary-edit-button:hover,
+.summary-edit-button:focus-visible {
+  background: var(--purple-soft);
+  border-color: #aaa3ff;
+}
+
+.summary-edit-button .material-symbols-rounded {
+  font-size: 15px;
 }
 
 .role-edit-action {
@@ -1982,6 +2026,60 @@ button.top-avatar {
 
 .profile-review-actions .admin-select {
   min-width: 126px;
+}
+
+.profile-review-button {
+  min-width: 92px;
+}
+
+.scope-summary {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  max-width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  overflow: hidden;
+  color: #4d5672;
+  font-size: 11px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: #f6f7fb;
+  border-radius: 7px;
+}
+
+.scope-summary .material-symbols-rounded {
+  flex: 0 0 auto;
+  font-size: 15px;
+}
+
+.artist-assignment-trigger {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  max-width: 100%;
+}
+
+.assignment-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assignment-edit {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 3px;
+  align-items: center;
+  color: #6257c9;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.assignment-edit .material-symbols-rounded {
+  font-size: 14px;
 }
 
 .drawer-context-note {

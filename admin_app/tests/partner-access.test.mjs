@@ -248,12 +248,13 @@ test('admin explains partner operations and separates studio creation from opera
   assert.match(source, /organization-form-error/)
 })
 
-test('admin uses accessible custom controls for role and artist review changes', () => {
+test('admin uses accessible custom controls in dedicated role and artist review panels', () => {
   assert.doesNotMatch(source, /<select class="role-change"/)
   assert.doesNotMatch(source, /<select class="artist-profile-artist"/)
   assert.match(source, /admin-select-trigger/)
   assert.match(source, /admin-select-option/)
-  assert.match(source, /profile-review-actions/)
+  assert.match(source, /function artistProfileReviewDrawer/)
+  assert.match(source, /id="artist-profile-review-form"/)
 })
 
 test('admin gives a useful card preview fallback when stored media is unavailable', () => {

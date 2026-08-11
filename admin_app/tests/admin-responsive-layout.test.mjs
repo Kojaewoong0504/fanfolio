@@ -52,6 +52,22 @@ test('table roles use compact badges and open a dedicated role editor instead of
   assert.doesNotMatch(source, /className: "role-change"/)
 })
 
+test('artist profile reviews keep dense table cells as summaries and edit in a dedicated drawer', () => {
+  assert.match(source, /data-edit-artist-profile/)
+  assert.match(source, /function artistProfileReviewDrawer/)
+  assert.match(source, /id="artist-profile-review-form"/)
+  assert.doesNotMatch(source, /className: "artist-profile-artist"/)
+  assert.doesNotMatch(source, /className: "artist-profile-status"/)
+})
+
+test('root and company workspaces expose their operating boundary in the topbar and artist page', () => {
+  assert.match(source, /function scopeContextChip/)
+  assert.match(source, /ROOT 운영 영역/)
+  assert.match(source, /기업 운영 영역/)
+  assert.match(source, /루트 전용 아티스트·스튜디오 운영/)
+  assert.match(source, /내 회사 아티스트 운영/)
+})
+
 test('form custom selects preserve a hidden form value and do not collapse labels with descriptions', () => {
   assert.match(source, /name = ""/)
   assert.match(source, /admin-select-value/)
