@@ -257,6 +257,9 @@ async def create_organization(
         **values,
     )
     session.add(organization)
+    # 감사 로그가 새 파트너를 외래키로 참조하므로 부모 행을 먼저 INSERT한다.
+    # commit 전 flush라서 이후 작업이 실패하면 전체 트랜잭션은 함께 rollback된다.
+    await session.flush()
     await record_audit(
         session,
         actor_user_id=context.user.id,
