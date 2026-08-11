@@ -14,6 +14,14 @@ from app.upload_safety import scan_uploaded_content
 
 router = APIRouter(prefix="/api", tags=["assets"])
 
+ORGANIZATION_LOGO_MAX_BYTES = 2 * 1024 * 1024
+
+
+def upload_limit_bytes(asset: Asset) -> int:
+    if asset.purpose == "organization_logo":
+        return ORGANIZATION_LOGO_MAX_BYTES
+    return get_settings().max_upload_bytes
+
 
 async def require_upload_role(user: CurrentUser, session: DbSession) -> None:
     if user.role not in {Role.ADMIN, Role.ARTIST}:
@@ -61,7 +69,7 @@ async def presign_upload(
             "uploadMode": upload_mode,
             "completeUrl": complete_url,
             "expiresAt": expires_at.isoformat(),
-            "maxUploadBytes": settings.max_upload_bytes,
+            "maxUploadBytes": upload_limit_bytes(asset),
         },
     }
 
@@ -78,16 +86,17 @@ async def upload_asset_content(
     if asset.upload_expires_at and datetime.now(UTC) > asset.upload_expires_at.replace(tzinfo=UTC):
         raise AppError(410, "UPLOAD_URL_EXPIRED", "업로드 URL이 만료되었습니다.")
     content_length = request.headers.get("content-length")
+    upload_limit = upload_limit_bytes(asset)
     if content_length:
         try:
-            if int(content_length) > get_settings().max_upload_bytes:
+            if int(content_length) > upload_limit:
                 raise AppError(413, "UPLOAD_TOO_LARGE", "업로드 파일이 너무 큽니다.")
         except ValueError:
             raise AppError(400, "INVALID_CONTENT_LENGTH", "업로드 크기를 확인할 수 없습니다.")
     content = await request.body()
     if not content:
         raise AppError(422, "EMPTY_UPLOAD", "업로드할 파일이 없습니다.")
-    if len(content) > get_settings().max_upload_bytes:
+    if len(content) > upload_limit:
         raise AppError(413, "UPLOAD_TOO_LARGE", "업로드 파일이 너무 큽니다.")
     await scan_uploaded_content(
         content_type=asset.content_type,
@@ -119,7 +128,7 @@ async def complete_asset_upload(asset_id: str, user: CurrentUser, session: DbSes
     storage = configured_asset_storage()
     if not storage.exists(asset.storage_path):
         raise AppError(409, "UPLOAD_NOT_READY", "업로드된 파일을 찾을 수 없습니다.")
-    if storage.size_bytes(asset.storage_path) > get_settings().max_upload_bytes:
+    if storage.size_bytes(asset.storage_path) > upload_limit_bytes(asset):
         storage.delete(asset.storage_path)
         asset.storage_path = None
         await session.commit()

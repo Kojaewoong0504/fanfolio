@@ -63,6 +63,7 @@ class Organization(Base):
             "status IN ('active', 'suspended')",
             name="ck_organization_status",
         ),
+        Index("ix_organizations_logo_asset_id", "logo_asset_id"),
         Index("ix_organizations_status_name", "status", "name"),
     )
 
@@ -79,6 +80,9 @@ class Organization(Base):
         DateTime(timezone=True), nullable=True
     )
     logo_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    logo_asset_id: Mapped[str | None] = mapped_column(
+        ForeignKey("assets.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )

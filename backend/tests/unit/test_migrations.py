@@ -70,6 +70,10 @@ def test_alembic_upgrade_creates_the_current_schema(tmp_path: Path) -> None:
             "organization_artists",
             "admin_artist_assignments",
         } <= partner_tables
+        organization_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(organizations)").fetchall()
+        }
+        assert "logo_asset_id" in organization_columns
         membership_columns = {
             row[1] for row in connection.execute("PRAGMA table_info(admin_memberships)").fetchall()
         }

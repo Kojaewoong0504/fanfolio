@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Generic, Literal, TypeVar
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 T = TypeVar("T")
 
@@ -203,6 +203,7 @@ class OrganizationCreate(BaseModel):
     contract_starts_at: datetime | None = Field(default=None, alias="contractStartsAt")
     contract_ends_at: datetime | None = Field(default=None, alias="contractEndsAt")
     logo_url: str | None = Field(default=None, alias="logoUrl", max_length=500)
+    logo_asset_id: str | None = Field(default=None, alias="logoAssetId", max_length=80)
     model_config = ConfigDict(populate_by_name=True)
 
 
@@ -220,6 +221,7 @@ class OrganizationUpdate(BaseModel):
     contract_starts_at: datetime | None = Field(default=None, alias="contractStartsAt")
     contract_ends_at: datetime | None = Field(default=None, alias="contractEndsAt")
     logo_url: str | None = Field(default=None, alias="logoUrl", max_length=500)
+    logo_asset_id: str | None = Field(default=None, alias="logoAssetId", max_length=80)
     model_config = ConfigDict(populate_by_name=True)
 
 
@@ -354,5 +356,22 @@ class UploadPresignRequest(BaseModel):
         "video/webm",
         "application/pdf",
     ] = Field(alias="contentType")
-    purpose: Literal["card", "handwriting", "voice", "video", "collection_benefit"]
+    purpose: Literal[
+        "card",
+        "handwriting",
+        "voice",
+        "video",
+        "collection_benefit",
+        "organization_logo",
+    ]
     model_config = ConfigDict(populate_by_name=True)
+
+    @model_validator(mode="after")
+    def organization_logo_must_be_an_image(self) -> "UploadPresignRequest":
+        if self.purpose == "organization_logo" and self.content_type not in {
+            "image/png",
+            "image/jpeg",
+            "image/webp",
+        }:
+            raise ValueError("organization_logo uploads must be PNG, JPEG, or WebP")
+        return self
