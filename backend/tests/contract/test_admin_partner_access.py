@@ -219,6 +219,20 @@ def test_organization_member_schemas_accept_company_admin_access_level() -> None
     assert update_payload.access_level == "company_admin"
 
 
+def test_root_can_create_company_admin_partner_member(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    organization, member = create_partner(
+        actors["admin"],
+        email="company-admin@starwave.com",
+        access_level="company_admin",
+    )
+
+    assert organization["status"] == "active"
+    assert member["accessLevel"] == "company_admin"
+    assert len(member["temporaryPassword"]) >= 16
+
+
 def test_root_can_manage_partner_organization_and_member(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:
@@ -269,6 +283,39 @@ def test_partner_context_is_scoped_and_cannot_use_root_routes(
         partner.get("/api/admin/organizations"),
         403,
         "ADMIN_ROOT_REQUIRED",
+    )
+
+
+def test_company_admin_can_read_only_own_organization_and_members(
+    actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
+) -> None:
+    first_org, company_admin = create_partner(
+        actors["admin"],
+        email="company-admin@starwave.com",
+        access_level="company_admin",
+    )
+    second_org, _ = create_partner(
+        actors["admin"],
+        slug="moonlight",
+        email="manager@moonlight.com",
+    )
+    partner = login_partner(app, company_admin)
+
+    detail = assert_success(partner.get(f"/api/admin/organizations/{first_org['id']}"))
+    assert detail["id"] == first_org["id"]
+    members = assert_success(partner.get(f"/api/admin/organizations/{first_org['id']}/members"))
+    assert [item["id"] for item in members["items"]] == [company_admin["id"]]
+
+    assert_error(partner.get("/api/admin/organizations"), 403, "ADMIN_ROOT_REQUIRED")
+    assert_error(
+        partner.get(f"/api/admin/organizations/{second_org['id']}"),
+        404,
+        "RESOURCE_NOT_FOUND",
+    )
+    assert_error(
+        partner.get(f"/api/admin/organizations/{second_org['id']}/members"),
+        404,
+        "RESOURCE_NOT_FOUND",
     )
 
 

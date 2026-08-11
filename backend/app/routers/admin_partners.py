@@ -47,6 +47,19 @@ async def _organization_or_404(session: DbSession, organization_id: str) -> Orga
     return organization
 
 
+async def _require_root_or_same_organization_read(
+    session: DbSession,
+    context: CurrentAdmin,
+    organization_id: str,
+) -> Organization:
+    if context.is_root:
+        return await _organization_or_404(session, organization_id)
+    if context.organization is None or context.organization.id != organization_id:
+        raise AppError(404, "RESOURCE_NOT_FOUND", "파트너를 찾을 수 없습니다.")
+    context.require_action("organization:read")
+    return context.organization
+
+
 async def _validated_logo_asset(
     session: DbSession,
     *,
@@ -294,8 +307,7 @@ async def get_organization(
     context: CurrentAdmin,
     session: DbSession,
 ) -> dict:
-    context.require_root()
-    organization = await _organization_or_404(session, organization_id)
+    organization = await _require_root_or_same_organization_read(session, context, organization_id)
     data = await _organization_data(session, organization)
     artist_ids = await _organization_artist_ids(session, organization.id)
     if artist_ids:
@@ -419,8 +431,7 @@ async def list_organization_members(
     context: CurrentAdmin,
     session: DbSession,
 ) -> dict:
-    context.require_root()
-    await _organization_or_404(session, organization_id)
+    await _require_root_or_same_organization_read(session, context, organization_id)
     rows = (
         await session.execute(
             select(User, AdminMembership)
