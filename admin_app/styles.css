@@ -1264,6 +1264,12 @@ button:disabled {
   border-color: #a59ef1;
 }
 
+.artist-check-card.read-only-card {
+  cursor: default;
+  background: #faf9ff;
+  border-color: #dedafc;
+}
+
 .artist-check-card input {
   position: absolute;
   opacity: 0;
@@ -1563,6 +1569,20 @@ button:disabled {
 .admin-select {
   position: relative;
   min-width: 132px;
+}
+
+.field .admin-select.form-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.field .admin-select.form-select .admin-select-trigger {
+  min-height: 40px;
+  background: #fff;
+}
+
+.admin-select-value {
+  display: none;
 }
 
 .admin-select-trigger {

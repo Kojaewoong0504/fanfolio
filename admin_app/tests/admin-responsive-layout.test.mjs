@@ -49,6 +49,25 @@ test('partner member role menu persists a custom-select choice through the membe
   assert.match(source, /member-role-/)
 })
 
+test('form custom selects preserve a hidden form value and do not collapse labels with descriptions', () => {
+  assert.match(source, /name = ""/)
+  assert.match(source, /admin-select-value/)
+  assert.match(source, /option\.dataset\.label/)
+  assert.match(source, /hiddenValue\.value = option\.dataset\.value/)
+})
+
+test('drop and code forms use the reusable form select with client-side empty-state feedback', () => {
+  assert.match(source, /id: "drop-artist", name: "artistId"/)
+  assert.match(source, /id: "batch-card", name: "cardId"/)
+  assert.match(source, /공개 카드와 라이브 드롭을 각각 선택해 주세요/)
+})
+
+test('company administrators can inspect but cannot alter their organization artist scope', () => {
+  assert.match(source, /const canManageScope = isRoot\(\)/)
+  assert.match(source, /루트 관리자 관리 범위/)
+  assert.match(source, /canManageScope \? '<button class="primary" id="save-organization-artists"/)
+})
+
 test('card creation opens a right drawer and is not rendered as the old inline toolbar', () => {
   assert.match(source, /card-create-drawer/)
   assert.match(source, /open-card-drawer/)
