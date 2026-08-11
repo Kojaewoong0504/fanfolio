@@ -4,6 +4,7 @@ from fastapi import Cookie, Depends, Header, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.admin_access import AdminContext, load_admin_context
 from app.auth_tokens import AuthTokenError, decode_access_token
 from app.core.config import get_settings
 from app.db.session import get_session
@@ -96,6 +97,21 @@ FanUser = Annotated[User, Depends(fan_user)]
 AdminUser = Annotated[User, Depends(admin_user)]
 ArtistUser = Annotated[User, Depends(artist_user)]
 CurrentUser = Annotated[User, Depends(current_user)]
+
+
+async def current_admin_context(admin: AdminUser, session: DbSession) -> AdminContext:
+    return await load_admin_context(session, admin)
+
+
+CurrentAdmin = Annotated[AdminContext, Depends(current_admin_context)]
+
+
+async def root_admin_user(context: CurrentAdmin) -> User:
+    context.require_root()
+    return context.user
+
+
+RootAdminUser = Annotated[User, Depends(root_admin_user)]
 
 
 async def optional_current_user(

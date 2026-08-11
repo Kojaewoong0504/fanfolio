@@ -15,6 +15,8 @@ from app.errors import AppError
 from app.image_processing import remove_light_background_bytes
 from app.mailer import MailDeliveryError, deliver_notification_email
 from app.models import (
+    AdminArtistAssignment,
+    AdminMembership,
     Artist,
     ArtistProfile,
     Asset,
@@ -28,6 +30,8 @@ from app.models import (
     MagicLink,
     Member,
     Notification,
+    Organization,
+    OrganizationArtist,
     RedeemCode,
     RedeemCodeBatch,
     RefreshToken,
@@ -110,11 +114,29 @@ async def ensure_admin_bootstrap(session: AsyncSession) -> None:
             must_change_password=False,
         )
         session.add(user)
+        await session.flush()
     elif not user.password_hash:
         user.password_hash = hash_password(password)
     # The bootstrap administrator is trusted to choose their own password
     # during deployment; only delegated accounts are forced to rotate one.
     user.must_change_password = False
+    membership = await session.get(AdminMembership, user.id)
+    if membership is None:
+        session.add(
+            AdminMembership(
+                user_id=user.id,
+                organization_id=None,
+                access_level="root",
+                status="active",
+                display_name=user.nickname or "운영 관리자",
+                created_by_user_id=user.id,
+            )
+        )
+    else:
+        membership.organization_id = None
+        membership.access_level = "root"
+        membership.status = "active"
+        membership.display_name = user.nickname or membership.display_name
     await session.commit()
 
 
@@ -147,6 +169,10 @@ async def reset_database(session: AsyncSession) -> None:
         BackgroundRemovalJob,
         CollectionBenefitClaim,
         AuditLog,
+        AdminArtistAssignment,
+        OrganizationArtist,
+        AdminMembership,
+        Organization,
         Notification,
         UserCard,
         RedeemCode,
@@ -188,6 +214,16 @@ async def seed_core(session: AsyncSession) -> dict:
                 token=f"test-session-{user_id.replace('otherFan', 'other-fan')}", user_id=user_id
             )
         )
+    session.add(
+        AdminMembership(
+            user_id="admin",
+            organization_id=None,
+            access_level="root",
+            status="active",
+            display_name="운영 관리자",
+            created_by_user_id="admin",
+        )
+    )
     session.add_all(
         [
             MagicLink(
@@ -387,6 +423,8 @@ async def record_audit(
     action: str,
     entity_type: str,
     entity_id: str,
+    organization_id: str | None = None,
+    artist_id: str | None = None,
     details: dict | None = None,
 ) -> None:
     session.add(
@@ -396,6 +434,8 @@ async def record_audit(
             action=action,
             entity_type=entity_type,
             entity_id=entity_id,
+            organization_id=organization_id,
+            artist_id=artist_id,
             details=details or {},
         )
     )

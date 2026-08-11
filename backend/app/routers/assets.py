@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Request, Response, status
 
+from app.admin_access import load_admin_context
 from app.core.config import get_settings
 from app.dependencies import CurrentUser, DbSession
 from app.errors import AppError
@@ -14,9 +15,11 @@ from app.upload_safety import scan_uploaded_content
 router = APIRouter(prefix="/api", tags=["assets"])
 
 
-def require_upload_role(user: CurrentUser) -> None:
+async def require_upload_role(user: CurrentUser, session: DbSession) -> None:
     if user.role not in {Role.ADMIN, Role.ARTIST}:
         raise AppError(403, "FORBIDDEN", "권한이 없습니다.")
+    if user.role == Role.ADMIN:
+        await load_admin_context(session, user)
 
 
 @router.post("/uploads/presign", status_code=status.HTTP_201_CREATED)
@@ -24,7 +27,7 @@ async def presign_upload(
     payload: UploadPresignRequest, user: CurrentUser, session: DbSession
 ) -> dict:
     """Create an owned asset and return a short-lived upload URL."""
-    require_upload_role(user)
+    await require_upload_role(user, session)
     settings = get_settings()
     expires_at = datetime.now(UTC) + timedelta(seconds=settings.upload_url_ttl_seconds)
     storage = configured_asset_storage()
@@ -68,7 +71,7 @@ async def upload_asset_content(
     asset_id: str, request: Request, user: CurrentUser, session: DbSession
 ) -> Response:
     """Accept bytes for local development; object storage replaces this endpoint later."""
-    require_upload_role(user)
+    await require_upload_role(user, session)
     asset = await session.get(Asset, asset_id)
     if not asset or asset.owner_id != user.id:
         raise AppError(404, "ASSET_NOT_FOUND", "자산을 찾을 수 없습니다.")
@@ -100,7 +103,7 @@ async def upload_asset_content(
 @router.post("/uploads/{asset_id}/complete")
 async def complete_asset_upload(asset_id: str, user: CurrentUser, session: DbSession) -> dict:
     """Finalize a direct object-store upload after server-side safety checks."""
-    require_upload_role(user)
+    await require_upload_role(user, session)
     asset = await session.get(Asset, asset_id)
     if not asset or asset.owner_id != user.id:
         raise AppError(404, "ASSET_NOT_FOUND", "자산을 찾을 수 없습니다.")
@@ -139,7 +142,7 @@ async def complete_asset_upload(asset_id: str, user: CurrentUser, session: DbSes
 
 @router.get("/assets/{asset_id}/transparent")
 async def get_transparent_asset(asset_id: str, user: CurrentUser, session: DbSession) -> Response:
-    require_upload_role(user)
+    await require_upload_role(user, session)
     asset = await session.get(Asset, asset_id)
     if not asset or asset.owner_id != user.id or not asset.processed_storage_path:
         raise AppError(404, "ASSET_NOT_FOUND", "처리된 자산을 찾을 수 없습니다.")
@@ -151,7 +154,7 @@ async def get_transparent_asset(asset_id: str, user: CurrentUser, session: DbSes
 @router.get("/assets/{asset_id}/content")
 async def get_owned_asset_content(asset_id: str, user: CurrentUser, session: DbSession) -> Response:
     """Serve a reusable creative layer only to its admin or artist owner."""
-    require_upload_role(user)
+    await require_upload_role(user, session)
     asset = await session.get(Asset, asset_id)
     if not asset or asset.owner_id != user.id:
         raise AppError(404, "ASSET_NOT_FOUND", "자산을 찾을 수 없습니다.")
@@ -172,7 +175,7 @@ async def update_asset_transform(
     user: CurrentUser,
     session: DbSession,
 ) -> dict:
-    require_upload_role(user)
+    await require_upload_role(user, session)
     asset = await session.get(Asset, asset_id)
     if not asset or asset.owner_id != user.id:
         raise AppError(404, "ASSET_NOT_FOUND", "자산을 찾을 수 없습니다.")

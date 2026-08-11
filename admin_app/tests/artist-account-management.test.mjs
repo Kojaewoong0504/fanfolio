@@ -6,7 +6,7 @@ const source = await readFile(new URL('../app.js', import.meta.url), 'utf8')
 
 test('admin keeps a visible list of issued artist studio accounts', () => {
   assert.match(source, /artistAccounts:\s*\[\]/)
-  assert.match(source, /api\('\/admin\/artist-accounts'\)/)
+  assert.match(source, /api\(["']\/admin\/artist-accounts["']\)/)
   assert.match(source, /아티스트 스튜디오 계정 목록/)
 })
 
@@ -17,7 +17,7 @@ test('admin can issue a one-time replacement password for an existing account', 
 
 test('hosted admin routes authentication through its same-origin API proxy', async () => {
   assert.doesNotMatch(source, /https:\/\/fanfolio-api\.onrender\.com\/api/)
-  assert.match(source, /:\s*'\/api'/)
+  assert.match(source, /:\s*["']\/api["']/)
 
   const config = JSON.parse(
     await readFile(new URL('../vercel.json', import.meta.url), 'utf8'),
@@ -33,6 +33,6 @@ test('hosted admin routes authentication through its same-origin API proxy', asy
 
 test('admin keeps the login form hidden while restoring a refresh-cookie session', () => {
   assert.match(source, /restoringSession:\s*true/)
-  assert.match(source, /관리자 세션을 확인하고 있습니다/)
+  assert.match(source, /관리자 세션 확인 중/)
   assert.match(source, /state\.restoringSession = false/)
 })

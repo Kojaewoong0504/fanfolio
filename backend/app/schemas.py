@@ -165,6 +165,12 @@ class AdminCardUpdate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class AdminArtistUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    image_url: str | None = Field(default=None, alias="imageUrl", max_length=2048)
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class AssetTransformUpdate(BaseModel):
     transform: dict[str, float]
 
@@ -182,6 +188,67 @@ class ArtistAccountCreate(BaseModel):
 class AdminAccountCreate(BaseModel):
     email: EmailStr
     display_name: str = Field(alias="displayName", min_length=1, max_length=120)
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class OrganizationCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    slug: str = Field(
+        min_length=2,
+        max_length=80,
+        pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$",
+    )
+    contact_name: str | None = Field(default=None, alias="contactName", max_length=120)
+    contact_email: EmailStr | None = Field(default=None, alias="contactEmail")
+    contract_starts_at: datetime | None = Field(default=None, alias="contractStartsAt")
+    contract_ends_at: datetime | None = Field(default=None, alias="contractEndsAt")
+    logo_url: str | None = Field(default=None, alias="logoUrl", max_length=500)
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class OrganizationUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    slug: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=80,
+        pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$",
+    )
+    status: Literal["active", "suspended"] | None = None
+    contact_name: str | None = Field(default=None, alias="contactName", max_length=120)
+    contact_email: EmailStr | None = Field(default=None, alias="contactEmail")
+    contract_starts_at: datetime | None = Field(default=None, alias="contractStartsAt")
+    contract_ends_at: datetime | None = Field(default=None, alias="contractEndsAt")
+    logo_url: str | None = Field(default=None, alias="logoUrl", max_length=500)
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class OrganizationArtistsUpdate(BaseModel):
+    artist_ids: list[str] = Field(alias="artistIds", max_length=500)
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class OrganizationMemberCreate(BaseModel):
+    email: EmailStr
+    display_name: str = Field(alias="displayName", min_length=1, max_length=120)
+    access_level: Literal["manager", "editor", "viewer"] = Field(alias="accessLevel")
+    artist_ids: list[str] = Field(default_factory=list, alias="artistIds", max_length=500)
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class OrganizationMemberUpdate(BaseModel):
+    display_name: str | None = Field(
+        default=None, alias="displayName", min_length=1, max_length=120
+    )
+    access_level: Literal["manager", "editor", "viewer"] | None = Field(
+        default=None, alias="accessLevel"
+    )
+    status: Literal["active", "suspended"] | None = None
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class OrganizationMemberArtistsUpdate(BaseModel):
+    artist_ids: list[str] = Field(alias="artistIds", max_length=500)
     model_config = ConfigDict(populate_by_name=True)
 
 

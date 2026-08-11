@@ -1,0 +1,23 @@
+{
+  "name": "Fanfolio · 내 손안의 팬 컬렉션",
+  "short_name": "Fanfolio",
+  "description": "좋아하는 아티스트의 순간을 디지털 카드로 간직하는 팬 컬렉션",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8f7ff",
+  "theme_color": "#070b34",
+  "icons": [
+    {
+      "src": "/fanfolio-app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/fanfolio-app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

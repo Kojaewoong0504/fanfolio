@@ -11,9 +11,11 @@ from fastapi import APIRouter, Query, status
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import func, or_, select, update
 
-from app.dependencies import AdminUser, DbSession
+from app.admin_access import AdminContext
+from app.dependencies import CurrentAdmin, DbSession, RootAdminUser
 from app.errors import AppError
 from app.models import (
+    AdminMembership,
     Artist,
     ArtistProfile,
     Asset,
@@ -29,14 +31,17 @@ from app.models import (
     User,
 )
 from app.passwords import hash_password
+from app.routers.admin_partners import router as partner_router
 from app.schemas import (
     AdminAccountCreate,
     AdminArtistProfileUpdate,
+    AdminArtistUpdate,
     AdminCardCreate,
     AdminCardReviewRequest,
     AdminCardUpdate,
     AdminUserRoleUpdate,
     ArtistAccountCreate,
+    ArtistReviewSubmitRequest,
     CodeBatchRequest,
     CollectionCampaignCreate,
     CollectionCampaignUpdate,
@@ -49,7 +54,44 @@ from app.services import notify_fans, record_audit
 from app.storage import configured_asset_storage, storage_response
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+router.include_router(partner_router)
 LENTICULAR_IMAGE_CONTENT_TYPES = {"image/png", "image/jpeg", "image/webp"}
+
+
+@router.get("/me")
+async def admin_me(context: CurrentAdmin, session: DbSession) -> dict:
+    artists = []
+    if context.assigned_artist_ids:
+        rows = await session.scalars(
+            select(Artist).where(Artist.id.in_(context.assigned_artist_ids)).order_by(Artist.name)
+        )
+        artists = [
+            {"id": artist.id, "name": artist.name, "imageUrl": artist.image_url} for artist in rows
+        ]
+    organization = None
+    if context.organization is not None:
+        organization = {
+            "id": context.organization.id,
+            "name": context.organization.name,
+            "slug": context.organization.slug,
+            "status": context.organization.status,
+            "logoUrl": context.organization.logo_url,
+        }
+    return {
+        "ok": True,
+        "data": {
+            "user": {
+                "id": context.user.id,
+                "email": context.user.email,
+                "displayName": context.membership.display_name,
+            },
+            "accessLevel": context.membership.access_level,
+            "status": context.membership.status,
+            "organization": organization,
+            "assignedArtists": artists,
+            "allowedActions": sorted(context.allowed_actions),
+        },
+    }
 
 
 def drop_data(drop: Drop) -> dict:
@@ -101,7 +143,7 @@ async def validate_campaign_cards(card_ids: list[str], session: DbSession) -> No
 
 
 @router.get("/collection-campaigns")
-async def list_collection_campaigns(_: AdminUser, session: DbSession) -> dict:
+async def list_collection_campaigns(_: RootAdminUser, session: DbSession) -> dict:
     campaigns = await session.scalars(
         select(CollectionCampaign).order_by(CollectionCampaign.status, CollectionCampaign.name)
     )
@@ -110,7 +152,7 @@ async def list_collection_campaigns(_: AdminUser, session: DbSession) -> dict:
 
 @router.post("/collection-campaigns", status_code=status.HTTP_201_CREATED)
 async def create_collection_campaign(
-    payload: CollectionCampaignCreate, admin: AdminUser, session: DbSession
+    payload: CollectionCampaignCreate, admin: RootAdminUser, session: DbSession
 ) -> dict:
     await validate_campaign_cards(payload.required_card_ids, session)
     await validate_admin_assets(payload.model_dump(exclude_unset=True, by_alias=False), session)
@@ -134,7 +176,7 @@ async def create_collection_campaign(
 async def update_collection_campaign(
     campaign_id: str,
     payload: CollectionCampaignUpdate,
-    admin: AdminUser,
+    admin: RootAdminUser,
     session: DbSession,
 ) -> dict:
     campaign = await session.get(CollectionCampaign, campaign_id)
@@ -159,18 +201,38 @@ async def update_collection_campaign(
 
 
 @router.get("/dashboard")
-async def dashboard(_: AdminUser, session: DbSession) -> dict:
-    total_cards = await session.scalar(select(func.count()).select_from(Card))
+async def dashboard(context: CurrentAdmin, session: DbSession) -> dict:
+    card_filters = [] if context.is_root else [Card.artist_id.in_(context.assigned_artist_ids)]
+    total_cards = await session.scalar(select(func.count()).select_from(Card).where(*card_filters))
     published_cards = await session.scalar(
-        select(func.count()).select_from(Card).where(Card.status == "published")
+        select(func.count()).select_from(Card).where(*card_filters, Card.status == "published")
     )
-    active_drops = await session.scalar(
-        select(func.count()).select_from(Drop).where(Drop.status == "live")
-    )
-    redeemed_count = await session.scalar(select(func.coalesce(func.sum(RedeemCode.used_count), 0)))
+    active_drops = 0
+    redeemed_count = 0
+    if context.is_root:
+        active_drops = await session.scalar(
+            select(func.count()).select_from(Drop).where(Drop.status == "live")
+        )
+        redeemed_count = await session.scalar(
+            select(func.coalesce(func.sum(RedeemCode.used_count), 0))
+        )
+    audit_filters = []
+    if not context.is_root:
+        audit_filters.extend(
+            [
+                AuditLog.organization_id == context.membership.organization_id,
+                or_(
+                    AuditLog.artist_id.is_(None),
+                    AuditLog.artist_id.in_(context.assigned_artist_ids),
+                ),
+            ]
+        )
     recent_logs = (
         await session.scalars(
-            select(AuditLog).order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).limit(5)
+            select(AuditLog)
+            .where(*audit_filters)
+            .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+            .limit(5)
         )
     ).all()
     return {
@@ -197,7 +259,7 @@ async def dashboard(_: AdminUser, session: DbSession) -> dict:
 
 @router.get("/cards")
 async def cards(
-    _: AdminUser,
+    context: CurrentAdmin,
     session: DbSession,
     q: str | None = None,
     card_status: str | None = Query(default=None, alias="status"),
@@ -209,6 +271,8 @@ async def cards(
         filters.append(Card.name.ilike(f"%{q}%"))
     if card_status:
         filters.append(Card.status == card_status)
+    if not context.is_root:
+        filters.append(Card.artist_id.in_(context.assigned_artist_ids))
     total = await session.scalar(select(func.count()).select_from(Card).where(*filters)) or 0
     results = await session.scalars(
         select(Card)
@@ -226,6 +290,9 @@ async def cards(
             "issueLimit": card.issue_limit,
             "imageAssetId": card.image_asset_id,
             "ownerArtistId": card.owner_artist_id,
+            "artistId": card.artist_id,
+            "memberId": card.member_id,
+            "seasonName": card.season_name,
         }
         for card in results
     ]
@@ -239,13 +306,13 @@ async def cards(
 
 
 @router.get("/drops")
-async def list_drops(_: AdminUser, session: DbSession) -> dict:
+async def list_drops(_: RootAdminUser, session: DbSession) -> dict:
     drops = await session.scalars(select(Drop).order_by(Drop.id.desc()))
     return {"ok": True, "data": {"items": [drop_data(drop) for drop in drops]}}
 
 
 @router.get("/drops/{drop_id}")
-async def get_drop(drop_id: str, _: AdminUser, session: DbSession) -> dict:
+async def get_drop(drop_id: str, _: RootAdminUser, session: DbSession) -> dict:
     drop = await session.get(Drop, drop_id)
     if not drop:
         raise AppError(404, "DROP_NOT_FOUND", "드롭을 찾을 수 없습니다.")
@@ -280,7 +347,12 @@ def admin_card_data(card: Card) -> dict:
     }
 
 
-async def validate_admin_assets(values: dict, session: DbSession) -> None:
+async def validate_admin_assets(
+    values: dict,
+    session: DbSession,
+    *,
+    context: AdminContext | None = None,
+) -> None:
     storage = None
     for field in (
         "image_asset_id",
@@ -293,7 +365,9 @@ async def validate_admin_assets(values: dict, session: DbSession) -> None:
         if not asset_id:
             continue
         asset = await session.get(Asset, asset_id)
-        if not asset:
+        if not asset or (
+            context is not None and not context.is_root and asset.owner_id != context.user.id
+        ):
             raise AppError(404, "ASSET_NOT_FOUND", "카드 자산을 찾을 수 없습니다.")
         if asset.storage_path:
             if storage is None:
@@ -317,7 +391,9 @@ async def validate_admin_assets(values: dict, session: DbSession) -> None:
             "렌티큘러 이미지 자산 정보를 확인해 주세요.",
         )
     asset = await session.get(Asset, lenticular_asset_id)
-    if not asset:
+    if not asset or (
+        context is not None and not context.is_root and asset.owner_id != context.user.id
+    ):
         raise AppError(404, "ASSET_NOT_FOUND", "카드 자산을 찾을 수 없습니다.")
     if asset.purpose != "card" or asset.content_type not in LENTICULAR_IMAGE_CONTENT_TYPES:
         raise AppError(
@@ -351,9 +427,14 @@ async def resolve_admin_catalog_ids(
 
 
 @router.get("/catalog")
-async def admin_catalog(_: AdminUser, session: DbSession) -> dict:
-    artists = (await session.scalars(select(Artist).order_by(Artist.name))).all()
-    members = (await session.scalars(select(Member).order_by(Member.name))).all()
+async def admin_catalog(context: CurrentAdmin, session: DbSession) -> dict:
+    artist_query = select(Artist).order_by(Artist.name)
+    member_query = select(Member).order_by(Member.name)
+    if not context.is_root:
+        artist_query = artist_query.where(Artist.id.in_(context.assigned_artist_ids))
+        member_query = member_query.where(Member.artist_id.in_(context.assigned_artist_ids))
+    artists = (await session.scalars(artist_query)).all()
+    members = (await session.scalars(member_query)).all()
     return {
         "ok": True,
         "data": {
@@ -365,32 +446,72 @@ async def admin_catalog(_: AdminUser, session: DbSession) -> dict:
     }
 
 
-@router.post("/cards", status_code=status.HTTP_201_CREATED)
-async def create_admin_card(payload: AdminCardCreate, admin: AdminUser, session: DbSession) -> dict:
+@router.patch("/artists/{artist_id}")
+async def update_admin_artist(
+    artist_id: str,
+    payload: AdminArtistUpdate,
+    context: CurrentAdmin,
+    session: DbSession,
+) -> dict:
+    context.require_action("artists:write")
+    context.require_artist(artist_id)
+    artist = await session.get(Artist, artist_id)
+    if artist is None:
+        raise AppError(404, "RESOURCE_NOT_FOUND", "아티스트를 찾을 수 없습니다.")
     values = payload.model_dump(exclude_unset=True, by_alias=False)
-    await validate_admin_assets(values, session)
+    for field, value in values.items():
+        setattr(artist, field, value)
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="artist.updated",
+        entity_type="artist",
+        entity_id=artist.id,
+        organization_id=context.membership.organization_id,
+        artist_id=artist.id,
+        details={"fields": sorted(values)},
+    )
+    await session.commit()
+    return {
+        "ok": True,
+        "data": {"id": artist.id, "name": artist.name, "imageUrl": artist.image_url},
+    }
+
+
+@router.post("/cards", status_code=status.HTTP_201_CREATED)
+async def create_admin_card(
+    payload: AdminCardCreate, context: CurrentAdmin, session: DbSession
+) -> dict:
+    context.require_write()
+    values = payload.model_dump(exclude_unset=True, by_alias=False)
+    await validate_admin_assets(values, session, context=context)
     if "artist_id" in values or "member_id" in values:
         values["artist_id"] = await resolve_admin_catalog_ids(
             artist_id=values.get("artist_id"), member_id=values.get("member_id"), session=session
         )
+    if not context.is_root:
+        values["artist_id"] = context.require_artist(values.get("artist_id"))
     card = Card(id=f"card_{uuid4().hex[:10]}", **values)
     session.add(card)
     await record_audit(
         session,
-        actor_user_id=admin.id,
+        actor_user_id=context.user.id,
         action="card.created",
         entity_type="card",
         entity_id=card.id,
+        organization_id=context.membership.organization_id,
+        artist_id=card.artist_id,
     )
     await session.commit()
     return {"ok": True, "data": admin_card_data(card)}
 
 
 @router.get("/cards/{card_id}")
-async def card_detail(card_id: str, _: AdminUser, session: DbSession) -> dict:
+async def card_detail(card_id: str, context: CurrentAdmin, session: DbSession) -> dict:
     card = await session.get(Card, card_id)
     if not card:
         raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
+    context.require_artist(card.artist_id)
     return {"ok": True, "data": admin_card_data(card)}
 
 
@@ -398,32 +519,38 @@ async def card_detail(card_id: str, _: AdminUser, session: DbSession) -> dict:
 async def update_admin_card(
     card_id: str,
     payload: AdminCardUpdate,
-    admin: AdminUser,
+    context: CurrentAdmin,
     session: DbSession,
 ) -> dict:
     card = await session.get(Card, card_id)
     if not card:
         raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
+    context.require_artist(card.artist_id)
+    context.require_write()
     if card.status == "published":
         raise AppError(
             409, "INVALID_CARD_STATUS", "공개된 카드는 운영 화면에서 수정할 수 없습니다."
         )
     values = payload.model_dump(exclude_unset=True, by_alias=False)
-    await validate_admin_assets(values, session)
+    await validate_admin_assets(values, session, context=context)
     if "artist_id" in values or "member_id" in values:
         values["artist_id"] = await resolve_admin_catalog_ids(
             artist_id=values.get("artist_id", card.artist_id),
             member_id=values.get("member_id", card.member_id),
             session=session,
         )
+    if not context.is_root:
+        values["artist_id"] = context.require_artist(values.get("artist_id", card.artist_id))
     for field, value in values.items():
         setattr(card, field, value)
     await record_audit(
         session,
-        actor_user_id=admin.id,
+        actor_user_id=context.user.id,
         action="card.updated",
         entity_type="card",
         entity_id=card.id,
+        organization_id=context.membership.organization_id,
+        artist_id=card.artist_id,
         details={"fields": sorted(values)},
     )
     await session.commit()
@@ -431,21 +558,23 @@ async def update_admin_card(
 
 
 @router.get("/cards/{card_id}/preview/image")
-async def card_preview_image(card_id: str, _: AdminUser, session: DbSession) -> Response:
+async def card_preview_image(card_id: str, context: CurrentAdmin, session: DbSession) -> Response:
     card = await session.get(Card, card_id)
     if not card or not card.preview_storage_path:
         raise AppError(404, "PREVIEW_NOT_READY", "카드 미리보기가 아직 준비되지 않았습니다.")
+    context.require_artist(card.artist_id)
     return storage_response(
         configured_asset_storage(), card.preview_storage_path, media_type="image/png"
     )
 
 
 @router.get("/cards/{card_id}/image")
-async def card_source_image(card_id: str, _: AdminUser, session: DbSession) -> Response:
+async def card_source_image(card_id: str, context: CurrentAdmin, session: DbSession) -> Response:
     """Serve the uploaded source image to operators during card review."""
     card = await session.get(Card, card_id)
     if not card or not card.image_asset_id:
         raise AppError(404, "CARD_IMAGE_NOT_FOUND", "카드 원본 이미지를 찾을 수 없습니다.")
+    context.require_artist(card.artist_id)
     asset = await session.get(Asset, card.image_asset_id)
     if not asset or not asset.storage_path:
         raise AppError(404, "CARD_IMAGE_NOT_READY", "카드 원본 이미지가 아직 준비되지 않았습니다.")
@@ -454,11 +583,48 @@ async def card_source_image(card_id: str, _: AdminUser, session: DbSession) -> R
     )
 
 
+@router.post("/cards/{card_id}/submit-review")
+async def submit_admin_card_review(
+    card_id: str,
+    context: CurrentAdmin,
+    session: DbSession,
+    payload: ArtistReviewSubmitRequest | None = None,
+) -> dict:
+    context.require_action("cards:submit_review")
+    card = await session.get(Card, card_id)
+    if not card:
+        raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
+    context.require_artist(card.artist_id)
+    if card.status not in {"draft", "changes_requested"}:
+        raise AppError(409, "INVALID_CARD_STATUS", "검수 요청할 수 없는 상태입니다.")
+    card.review_note = payload.review_note if payload else None
+    card.status = "pending_review"
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="card.review_submitted",
+        entity_type="card",
+        entity_id=card.id,
+        organization_id=context.membership.organization_id,
+        artist_id=card.artist_id,
+        details={"reviewNote": card.review_note},
+    )
+    await session.commit()
+    return {
+        "ok": True,
+        "data": {
+            "id": card.id,
+            "status": card.status,
+            "reviewNote": card.review_note,
+        },
+    }
+
+
 @router.post("/cards/{card_id}/review")
 async def review_card(
     card_id: str,
     payload: AdminCardReviewRequest,
-    admin: AdminUser,
+    admin: RootAdminUser,
     session: DbSession,
 ) -> dict:
     card = await session.get(Card, card_id)
@@ -482,7 +648,7 @@ async def review_card(
 
 
 @router.post("/cards/{card_id}/approve")
-async def approve_card(card_id: str, admin: AdminUser, session: DbSession) -> dict:
+async def approve_card(card_id: str, admin: RootAdminUser, session: DbSession) -> dict:
     return await review_card(
         card_id,
         AdminCardReviewRequest(decision="approve"),
@@ -492,7 +658,7 @@ async def approve_card(card_id: str, admin: AdminUser, session: DbSession) -> di
 
 
 @router.post("/drops", status_code=status.HTTP_201_CREATED)
-async def create_drop(payload: DropCreateRequest, _: AdminUser, session: DbSession) -> dict:
+async def create_drop(payload: DropCreateRequest, _: RootAdminUser, session: DbSession) -> dict:
     if payload.starts_at and payload.ends_at and payload.ends_at <= payload.starts_at:
         raise AppError(422, "INVALID_DROP_WINDOW", "종료 시각은 시작 시각보다 늦어야 합니다.")
     drop = Drop(
@@ -509,7 +675,7 @@ async def create_drop(payload: DropCreateRequest, _: AdminUser, session: DbSessi
 
 @router.patch("/drops/{drop_id}/status")
 async def update_drop_status(
-    drop_id: str, payload: DropStatusUpdate, admin: AdminUser, session: DbSession
+    drop_id: str, payload: DropStatusUpdate, admin: RootAdminUser, session: DbSession
 ) -> dict:
     drop = await session.get(Drop, drop_id)
     if not drop:
@@ -539,7 +705,7 @@ async def update_drop_status(
 async def update_drop(
     drop_id: str,
     payload: DropUpdateRequest,
-    _: AdminUser,
+    _: RootAdminUser,
     session: DbSession,
 ) -> dict:
     drop = await session.get(Drop, drop_id)
@@ -558,7 +724,7 @@ async def update_drop(
 
 @router.get("/users")
 async def list_users(
-    admin: AdminUser,
+    admin: RootAdminUser,
     session: DbSession,
     q: str | None = None,
     role: Role | None = None,
@@ -608,7 +774,7 @@ async def list_users(
 async def update_user_role(
     user_id: str,
     payload: AdminUserRoleUpdate,
-    admin: AdminUser,
+    admin: RootAdminUser,
     session: DbSession,
 ) -> dict:
     if user_id == admin.id:
@@ -642,7 +808,7 @@ async def update_user_role(
 @router.post("/artist-accounts", status_code=status.HTTP_201_CREATED)
 async def create_artist_account(
     payload: ArtistAccountCreate,
-    admin: AdminUser,
+    admin: RootAdminUser,
     session: DbSession,
 ) -> dict:
     username = payload.username.lower()
@@ -692,7 +858,7 @@ def artist_account_data(user: User) -> dict:
 
 
 @router.get("/artist-accounts")
-async def list_artist_accounts(_: AdminUser, session: DbSession) -> dict:
+async def list_artist_accounts(_: RootAdminUser, session: DbSession) -> dict:
     users = await session.scalars(
         select(User).where(User.role == Role.ARTIST).order_by(User.username)
     )
@@ -705,7 +871,7 @@ async def list_artist_accounts(_: AdminUser, session: DbSession) -> dict:
 @router.post("/artist-accounts/{user_id}/reset-password")
 async def reset_artist_account_password(
     user_id: str,
-    admin: AdminUser,
+    admin: RootAdminUser,
     session: DbSession,
 ) -> dict:
     user = await session.get(User, user_id)
@@ -746,7 +912,7 @@ async def reset_artist_account_password(
 @router.post("/admin-accounts", status_code=status.HTTP_201_CREATED)
 async def create_admin_account(
     payload: AdminAccountCreate,
-    admin: AdminUser,
+    admin: RootAdminUser,
     session: DbSession,
 ) -> dict:
     email = str(payload.email).lower()
@@ -765,6 +931,17 @@ async def create_admin_account(
         must_change_password=True,
     )
     session.add(user)
+    await session.flush()
+    session.add(
+        AdminMembership(
+            user_id=user.id,
+            organization_id=None,
+            access_level="root",
+            status="active",
+            display_name=payload.display_name,
+            created_by_user_id=admin.id,
+        )
+    )
     await record_audit(
         session,
         actor_user_id=admin.id,
@@ -799,7 +976,7 @@ def artist_profile_data(user: User, profile: ArtistProfile | None, artist: Artis
 
 
 @router.get("/artist-profiles")
-async def list_artist_profiles(_: AdminUser, session: DbSession) -> dict:
+async def list_artist_profiles(_: RootAdminUser, session: DbSession) -> dict:
     rows = (
         await session.execute(
             select(User, ArtistProfile, Artist)
@@ -821,7 +998,7 @@ async def list_artist_profiles(_: AdminUser, session: DbSession) -> dict:
 async def review_artist_profile(
     user_id: str,
     payload: AdminArtistProfileUpdate,
-    admin: AdminUser,
+    admin: RootAdminUser,
     session: DbSession,
 ) -> dict:
     user = await session.get(User, user_id)
@@ -861,7 +1038,7 @@ async def review_artist_profile(
 
 
 @router.post("/redeem-code-batches", status_code=status.HTTP_201_CREATED)
-async def code_batch(payload: CodeBatchRequest, _: AdminUser, session: DbSession) -> dict:
+async def code_batch(payload: CodeBatchRequest, _: RootAdminUser, session: DbSession) -> dict:
     drop = await session.get(Drop, payload.drop_id)
     card = await session.get(Card, payload.card_id)
     if not drop:
@@ -927,7 +1104,7 @@ def redeem_code_status(code: RedeemCode) -> str:
 
 
 @router.get("/redeem-code-batches")
-async def list_code_batches(_: AdminUser, session: DbSession) -> dict:
+async def list_code_batches(_: RootAdminUser, session: DbSession) -> dict:
     batches = await session.scalars(select(RedeemCodeBatch).order_by(RedeemCodeBatch.id.desc()))
     usage_rows = (
         await session.execute(
@@ -968,7 +1145,9 @@ async def list_code_batches(_: AdminUser, session: DbSession) -> dict:
 
 
 @router.get("/redeem-code-batches/{batch_id}/export")
-async def export_code_batch(batch_id: str, _: AdminUser, session: DbSession) -> StreamingResponse:
+async def export_code_batch(
+    batch_id: str, _: RootAdminUser, session: DbSession
+) -> StreamingResponse:
     batch = await session.get(RedeemCodeBatch, batch_id)
     if not batch:
         raise AppError(404, "BATCH_NOT_FOUND", "코드 배치를 찾을 수 없습니다.")
@@ -1003,7 +1182,7 @@ async def export_code_batch(batch_id: str, _: AdminUser, session: DbSession) -> 
 @router.get("/redeem-code-batches/{batch_id}/codes")
 async def list_redeem_codes(
     batch_id: str,
-    _: AdminUser,
+    _: RootAdminUser,
     session: DbSession,
     code_status: str | None = Query(default=None, alias="status"),
     limit: int = Query(default=100, ge=1, le=500),
@@ -1056,7 +1235,7 @@ async def list_redeem_codes(
 
 
 @router.get("/redeem-codes/{code_id}/qr")
-async def redeem_code_qr(code_id: str, _: AdminUser, session: DbSession) -> Response:
+async def redeem_code_qr(code_id: str, _: RootAdminUser, session: DbSession) -> Response:
     """Render a printable QR whose payload is the redeem code itself."""
     code = await session.get(RedeemCode, code_id)
     if not code:
@@ -1069,7 +1248,7 @@ async def redeem_code_qr(code_id: str, _: AdminUser, session: DbSession) -> Resp
 
 
 @router.get("/redeem-code-batches/{batch_id}/qr.zip")
-async def redeem_code_batch_qr_zip(batch_id: str, _: AdminUser, session: DbSession) -> Response:
+async def redeem_code_batch_qr_zip(batch_id: str, _: RootAdminUser, session: DbSession) -> Response:
     """Package a batch's printable QR PNGs for production fulfillment."""
     batch = await session.get(RedeemCodeBatch, batch_id)
     if not batch:
@@ -1093,7 +1272,7 @@ async def redeem_code_batch_qr_zip(batch_id: str, _: AdminUser, session: DbSessi
 async def update_redeem_code(
     code_id: str,
     payload: RedeemCodeStatusUpdate,
-    admin: AdminUser,
+    admin: RootAdminUser,
     session: DbSession,
 ) -> dict:
     code = await session.get(RedeemCode, code_id)
@@ -1120,7 +1299,7 @@ async def update_redeem_code(
 
 @router.get("/audit-logs")
 async def audit_logs(
-    _: AdminUser,
+    context: CurrentAdmin,
     session: DbSession,
     action: str | None = None,
     q: str | None = None,
@@ -1128,6 +1307,16 @@ async def audit_logs(
     page_size: int = Query(default=50, alias="pageSize", ge=1, le=100),
 ) -> dict:
     filters = [AuditLog.action == action] if action else []
+    if not context.is_root:
+        filters.extend(
+            [
+                AuditLog.organization_id == context.membership.organization_id,
+                or_(
+                    AuditLog.artist_id.is_(None),
+                    AuditLog.artist_id.in_(context.assigned_artist_ids),
+                ),
+            ]
+        )
     if q:
         pattern = f"%{q}%"
         filters.append(
@@ -1156,6 +1345,8 @@ async def audit_logs(
                     "action": log.action,
                     "entityType": log.entity_type,
                     "entityId": log.entity_id,
+                    "organizationId": log.organization_id,
+                    "artistId": log.artist_id,
                     "metadata": log.details,
                     "createdAt": log.created_at.isoformat(),
                 }
@@ -1173,7 +1364,7 @@ async def audit_logs(
 
 
 @router.post("/cards/{card_id}/publish")
-async def publish(card_id: str, admin: AdminUser, session: DbSession) -> dict:
+async def publish(card_id: str, admin: RootAdminUser, session: DbSession) -> dict:
     card = await session.get(Card, card_id)
     if not card:
         raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")

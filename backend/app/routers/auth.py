@@ -2,6 +2,7 @@ from fastapi import APIRouter, Cookie, Header, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy import delete, select
 
+from app.admin_access import load_admin_context
 from app.auth_tokens import (
     AuthTokenError,
     decode_refresh_token,
@@ -11,8 +12,8 @@ from app.auth_tokens import (
 )
 from app.core.config import get_settings
 from app.dependencies import (
-    AdminUser,
     ArtistUser,
+    CurrentAdmin,
     CurrentUser,
     DbSession,
     refresh_cookie_name,
@@ -256,6 +257,7 @@ async def admin_password_login(
     user = await session.scalar(select(User).where(User.email == email, User.role == Role.ADMIN))
     if user is None or not verify_password(payload.password, user.password_hash):
         raise AppError(401, "INVALID_CREDENTIALS", "이메일 또는 비밀번호가 올바르지 않습니다.")
+    await load_admin_context(session, user)
     access_token, refresh_token, _ = await issue_token_pair(session, user, "admin")
     await session.commit()
     settings = get_settings()
@@ -281,9 +283,10 @@ async def admin_password_login(
 @router.post("/admin/change-password")
 async def change_admin_password(
     payload: ArtistPasswordChange,
-    user: AdminUser,
+    context: CurrentAdmin,
     session: DbSession,
 ) -> dict:
+    user = context.user
     if not verify_password(payload.current_password, user.password_hash):
         raise AppError(401, "INVALID_CREDENTIALS", "현재 비밀번호가 올바르지 않습니다.")
     if payload.current_password == payload.new_password:
@@ -365,7 +368,14 @@ async def refresh_access_token(
     }.get(client_name) or fanfolio_refresh
     if not raw_token:
         raise AppError(401, "AUTH_REQUIRED", "로그인이 필요합니다.")
-    access_token, refresh_token, _ = await rotate_refresh_token(session, raw_token, client_name)
+    access_token, refresh_token, refresh_row = await rotate_refresh_token(
+        session, raw_token, client_name
+    )
+    if client_name == "admin":
+        user = await session.get(User, refresh_row.user_id)
+        if user is None:
+            raise AppError(401, "AUTH_REQUIRED", "로그인이 필요합니다.")
+        await load_admin_context(session, user)
     await session.commit()
     response.set_cookie(
         refresh_cookie_name(client_name),

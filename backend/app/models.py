@@ -1,7 +1,17 @@
 import enum
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -42,6 +52,118 @@ class User(Base):
     favorite_member_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     notification_email_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class Organization(Base):
+    """A partner company whose staff operate only assigned artists."""
+
+    __tablename__ = "organizations"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('active', 'suspended')",
+            name="ck_organization_status",
+        ),
+        Index("ix_organizations_status_name", "status", "name"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    slug: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="active")
+    contact_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    contact_email: Mapped[str | None] = mapped_column(String, nullable=True)
+    contract_starts_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    contract_ends_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    logo_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class AdminMembership(Base):
+    """Operational admin scope, intentionally separate from login client role."""
+
+    __tablename__ = "admin_memberships"
+    __table_args__ = (
+        CheckConstraint(
+            "access_level IN ('root', 'manager', 'editor', 'viewer')",
+            name="ck_admin_membership_access_level",
+        ),
+        CheckConstraint(
+            "status IN ('active', 'suspended')",
+            name="ck_admin_membership_status",
+        ),
+        CheckConstraint(
+            "(access_level = 'root' AND organization_id IS NULL) OR "
+            "(access_level != 'root' AND organization_id IS NOT NULL)",
+            name="ck_admin_membership_scope",
+        ),
+        Index("ix_admin_memberships_organization_status", "organization_id", "status"),
+    )
+
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    organization_id: Mapped[str | None] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True
+    )
+    access_level: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="active")
+    display_name: Mapped[str] = mapped_column(String, nullable=False)
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class OrganizationArtist(Base):
+    """Artists that one partner company is contractually allowed to manage."""
+
+    __tablename__ = "organization_artists"
+
+    organization_id: Mapped[str] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), primary_key=True
+    )
+    artist_id: Mapped[str] = mapped_column(
+        ForeignKey("artists.id", ondelete="CASCADE"), primary_key=True
+    )
+
+
+class AdminArtistAssignment(Base):
+    """The subset of a partner company's artists assigned to one staff admin."""
+
+    __tablename__ = "admin_artist_assignments"
+    __table_args__ = (Index("ix_admin_artist_assignments_artist", "artist_id"),)
+
+    admin_user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    artist_id: Mapped[str] = mapped_column(
+        ForeignKey("artists.id", ondelete="CASCADE"), primary_key=True
+    )
+    assigned_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
 
 
 class Session(Base):
@@ -288,6 +410,12 @@ class AuditLog(Base):
     action: Mapped[str] = mapped_column(String)
     entity_type: Mapped[str] = mapped_column(String)
     entity_id: Mapped[str] = mapped_column(String)
+    organization_id: Mapped[str | None] = mapped_column(
+        ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True
+    )
+    artist_id: Mapped[str | None] = mapped_column(
+        ForeignKey("artists.id", ondelete="SET NULL"), nullable=True
+    )
     details: Mapped[dict] = mapped_column("metadata", JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)

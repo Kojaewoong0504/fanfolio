@@ -54,6 +54,65 @@ def test_alembic_upgrade_creates_the_current_schema(tmp_path: Path) -> None:
         assert connection.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='audit_logs'"
         ).fetchone()
+        audit_log_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(audit_logs)").fetchall()
+        }
+        assert {"organization_id", "artist_id"} <= audit_log_columns
+        partner_tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        assert {
+            "organizations",
+            "admin_memberships",
+            "organization_artists",
+            "admin_artist_assignments",
+        } <= partner_tables
+        membership_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(admin_memberships)").fetchall()
+        }
+        assert {
+            "user_id",
+            "organization_id",
+            "access_level",
+            "status",
+            "display_name",
+            "created_by_user_id",
+            "last_login_at",
+            "created_at",
+            "updated_at",
+        } <= membership_columns
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                INSERT INTO admin_memberships (
+                    user_id, organization_id, access_level, status,
+                    display_name, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                ("invalid_access", "org_test", "unexpected", "active", "잘못된 권한"),
+            )
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                INSERT INTO admin_memberships (
+                    user_id, organization_id, access_level, status,
+                    display_name, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                ("invalid_status", "org_test", "viewer", "unknown", "잘못된 상태"),
+            )
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                INSERT INTO organizations (
+                    id, name, slug, status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                ("org_invalid", "잘못된 조직", "invalid-org", "unknown"),
+            )
         user_card_indexes = {
             row[1] for row in connection.execute("PRAGMA index_list(user_cards)").fetchall()
         }
