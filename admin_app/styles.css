@@ -1264,7 +1264,6 @@ button:disabled {
 .access-role.gray { color: #66708a; background: #f4f5f9; border-color: #e7e9f0; }
 .access-role.current { color: #8b5d10; background: #fff6e5; border-color: #ffe8be; }
 
-.role-edit-trigger,
 .row-actions .row-action {
   width: 30px;
   min-width: 30px;
@@ -1276,21 +1275,47 @@ button:disabled {
   background: #fff;
 }
 
-.role-edit-trigger:hover,
 .row-actions .row-action:hover {
   color: var(--purple-dark);
   border-color: #cfcaff;
   background: var(--purple-soft);
 }
 
-.role-edit-trigger .material-symbols-rounded,
 .row-actions .row-action .material-symbols-rounded {
   font-size: 17px;
 }
 
-.table td .access-role + .role-edit-trigger {
-  margin-left: 7px;
-  vertical-align: middle;
+.role-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.role-edit-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 7px;
+  color: #6257c9;
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.role-edit-action:hover,
+.role-edit-action:focus-visible {
+  color: var(--purple-dark);
+  background: var(--purple-soft);
+}
+
+.role-edit-action .material-symbols-rounded {
+  font-size: 15px;
 }
 
 .security-callout {
