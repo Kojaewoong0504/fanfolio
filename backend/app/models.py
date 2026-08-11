@@ -99,7 +99,7 @@ class AdminMembership(Base):
     __tablename__ = "admin_memberships"
     __table_args__ = (
         CheckConstraint(
-            "access_level IN ('root', 'manager', 'editor', 'viewer')",
+            "access_level IN ('root', 'manager', 'editor', 'viewer', 'platform_operator')",
             name="ck_admin_membership_access_level",
         ),
         CheckConstraint(
@@ -107,8 +107,8 @@ class AdminMembership(Base):
             name="ck_admin_membership_status",
         ),
         CheckConstraint(
-            "(access_level = 'root' AND organization_id IS NULL) OR "
-            "(access_level != 'root' AND organization_id IS NOT NULL)",
+            "(access_level IN ('root', 'platform_operator') AND organization_id IS NULL) OR "
+            "(access_level NOT IN ('root', 'platform_operator') AND organization_id IS NOT NULL)",
             name="ck_admin_membership_scope",
         ),
         Index("ix_admin_memberships_organization_status", "organization_id", "status"),
@@ -290,6 +290,9 @@ class Card(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     name: Mapped[str] = mapped_column(String)
     status: Mapped[str] = mapped_column(String, default="draft")
+    release_policy: Mapped[str] = mapped_column(String, nullable=False, default="partner_only")
+    release_status: Mapped[str] = mapped_column(String, nullable=False, default="draft")
+    review_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_official: Mapped[bool] = mapped_column(Boolean, default=True)
     image_url: Mapped[str] = mapped_column(String, default="https://example.test/card.png")
     artist_id: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -309,6 +312,40 @@ class Card(Base):
     has_voice: Mapped[bool] = mapped_column(Boolean, default=False)
     issue_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     preview_storage_path: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class CardReviewRequest(Base):
+    __tablename__ = "card_review_requests"
+    __table_args__ = (
+        UniqueConstraint(
+            "card_id",
+            "version",
+            "stage",
+            name="uq_card_review_request_version_stage",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    card_id: Mapped[str] = mapped_column(ForeignKey("cards.id", ondelete="CASCADE"))
+    version: Mapped[int] = mapped_column(Integer)
+    stage: Mapped[str] = mapped_column(String)
+    status: Mapped[str] = mapped_column(String)
+    snapshot: Mapped[dict] = mapped_column(JSON)
+
+
+class CardReviewDecision(Base):
+    __tablename__ = "card_review_decisions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    request_id: Mapped[str] = mapped_column(
+        ForeignKey("card_review_requests.id", ondelete="CASCADE")
+    )
+    reviewer_user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    decision: Mapped[str] = mapped_column(String)
+    note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    decided_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
 
 
 class Drop(Base):
@@ -395,11 +432,18 @@ class CollectionBenefitClaim(Base):
 
 class Notification(Base):
     __tablename__ = "notifications"
+    __table_args__ = (
+        Index("uq_notifications_user_event_key", "user_id", "event_key", unique=True),
+    )
+
     id: Mapped[str] = mapped_column(String, primary_key=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     kind: Mapped[str] = mapped_column(String, default="system")
     title: Mapped[str] = mapped_column(String, default="Fanfolio 알림")
     body: Mapped[str | None] = mapped_column(String, nullable=True)
+    entity_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    entity_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    event_key: Mapped[str | None] = mapped_column(String, nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

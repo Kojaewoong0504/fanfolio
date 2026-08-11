@@ -170,6 +170,71 @@ def test_alembic_upgrade_creates_the_current_schema(tmp_path: Path) -> None:
         assert {"user_id", "artist_id", "verification_status"} <= artist_profile_columns
 
 
+def test_card_release_migration_creates_review_workflow_storage(tmp_path: Path) -> None:
+    database_path = tmp_path / "card-release-workflow.db"
+    backend_dir = Path(__file__).parents[2]
+
+    upgraded = run_alembic(backend_dir, database_path, "upgrade", "head")
+    assert upgraded.returncode == 0, upgraded.stderr
+
+    with sqlite3.connect(database_path) as connection:
+        table_names = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        assert {"card_review_requests", "card_review_decisions"} <= table_names
+
+        card_columns = {row[1] for row in connection.execute("PRAGMA table_info(cards)").fetchall()}
+        assert {"release_policy", "release_status", "review_version"} <= card_columns
+
+        request_columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(card_review_requests)").fetchall()
+        }
+        assert {"id", "card_id", "version", "stage", "status", "snapshot"} <= request_columns
+        connection.execute(
+            """
+            INSERT INTO card_review_requests (
+                id, card_id, version, stage, status, snapshot
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            ("request_1", "card_published", 1, "partner", "pending", "{}"),
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                INSERT INTO card_review_requests (
+                    id, card_id, version, stage, status, snapshot
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                ("request_2", "card_published", 1, "partner", "pending", "{}"),
+            )
+
+        decision_columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(card_review_decisions)").fetchall()
+        }
+        assert {
+            "id",
+            "request_id",
+            "reviewer_user_id",
+            "decision",
+            "note",
+            "decided_at",
+        } <= decision_columns
+
+        notification_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(notifications)").fetchall()
+        }
+        assert {"entity_type", "entity_id", "event_key"} <= notification_columns
+        notification_indexes = {
+            row[1] for row in connection.execute("PRAGMA index_list(notifications)").fetchall()
+        }
+        assert "uq_notifications_user_event_key" in notification_indexes
+
+
 def test_organization_logo_asset_migration_creates_fk_index_and_downgrades_cleanly(
     tmp_path: Path,
 ) -> None:

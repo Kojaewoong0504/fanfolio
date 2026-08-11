@@ -31,6 +31,8 @@ ROOT_ACTIONS = frozenset(
     }
 )
 
+PLATFORM_ACTIONS = frozenset({"cards:read", "cards:review_platform", "notifications:read"})
+
 PARTNER_ACTIONS = {
     "manager": frozenset(
         {
@@ -54,7 +56,7 @@ PARTNER_ACTIONS = {
     ),
     "viewer": frozenset({"artists:read", "cards:read", "audit:read"}),
 }
-PARTNER_SCOPED_ACTIONS = frozenset().union(*PARTNER_ACTIONS.values())
+PARTNER_SCOPED_ACTIONS = frozenset().union(*PARTNER_ACTIONS.values(), PLATFORM_ACTIONS)
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +70,10 @@ class AdminContext:
     @property
     def is_root(self) -> bool:
         return self.membership.access_level == "root"
+
+    @property
+    def is_platform_operator(self) -> bool:
+        return self.membership.access_level == "platform_operator"
 
     def require_root(self) -> None:
         if not self.is_root:
@@ -117,7 +123,10 @@ async def load_admin_context(session: AsyncSession, user: User) -> AdminContext:
 
     organization = None
     assigned_artist_ids: frozenset[str] = frozenset()
-    if membership.access_level != "root":
+    if membership.access_level == "platform_operator":
+        if membership.organization_id is not None:
+            raise AppError(403, "ADMIN_MEMBERSHIP_INVALID", "관리자 권한 구성이 올바르지 않습니다.")
+    elif membership.access_level != "root":
         if membership.organization_id is None:
             raise AppError(403, "ADMIN_MEMBERSHIP_INVALID", "관리자 권한 구성이 올바르지 않습니다.")
         organization = await session.get(Organization, membership.organization_id)
@@ -133,6 +142,8 @@ async def load_admin_context(session: AsyncSession, user: User) -> AdminContext:
     allowed_actions = (
         ROOT_ACTIONS
         if membership.access_level == "root"
+        else PLATFORM_ACTIONS
+        if membership.access_level == "platform_operator"
         else PARTNER_ACTIONS.get(membership.access_level, frozenset())
     )
     return AdminContext(
