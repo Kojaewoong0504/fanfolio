@@ -263,6 +263,7 @@ const state = {
   deviceMotionEnabled: false,
   jobStatus: '',
   reviewError: '',
+  submissionMessage: '',
 }
 
 function icon(name, className = '') {
@@ -400,7 +401,8 @@ function notify(message, tone = 'default') {
   notify.timer = window.setTimeout(() => toast.classList.remove('show'), 3400)
 }
 
-function statusLabel(status) {
+function statusLabel(status, releaseStatus = '') {
+  if (releaseStatus) return releaseStatusLabel(releaseStatus)
   return (
     {
       draft: '초안',
@@ -409,6 +411,42 @@ function statusLabel(status) {
       published: '공개됨',
     }[status] || status
   )
+}
+
+function releaseStatusLabel(releaseStatus) {
+  return (
+    {
+      draft: '초안',
+      pending_partner_review: '소속사 검수 대기',
+      pending_platform_review: 'Fanfolio 운영 검수 대기',
+      changes_requested: '수정 요청',
+      approved: '승인 완료 · 드롭 연결 대기',
+      drop_ready: '드롭 공개 대기',
+      published: '팬앱 공개 중',
+    }[releaseStatus] || releaseStatus
+  )
+}
+
+function releaseStatusCopy(card = {}) {
+  const status = card.releaseStatus || card.status || 'draft'
+  const copy = {
+    draft: ['edit_note', '초안 작업 중', '디자인과 카드 정보를 저장한 뒤 검수를 요청해 주세요.'],
+    pending_partner_review: ['schedule', '소속사 담당자 검수 중', '담당 관리자에게 검수 요청이 전달됐어요.'],
+    pending_platform_review: ['verified_user', 'Fanfolio 운영 검수 중', '특별 카드 공개를 위한 운영 검수가 진행 중이에요.'],
+    changes_requested: ['edit_note', '수정 요청이 도착했어요', card.reviewNote || '관리자 피드백을 반영한 뒤 다시 검수를 요청해 주세요.'],
+    approved: ['task_alt', '승인 완료', '담당 관리자가 드롭에 연결하면 공개 일정을 준비할 수 있어요.'],
+    drop_ready: ['rocket_launch', '드롭 공개 대기', '드롭이 라이브되는 순간 팬앱 카탈로그에 자동으로 표시돼요.'],
+    published: ['public', '팬앱 공개 중', '팬이 탐색하고 코드로 컬렉션에 등록할 수 있어요.'],
+  }[status] || ['info', '상태 확인 중', '카드 상태를 불러오고 있어요.']
+  return { status, iconName: copy[0], title: copy[1], description: copy[2] }
+}
+
+function releaseStatusBanner(card, { compact = false } = {}) {
+  const release = releaseStatusCopy(card)
+  return `<div class="release-status-banner ${esc(release.status)} ${compact ? 'compact' : ''}">
+    ${icon(release.iconName)}
+    <span><strong>${esc(release.title)}</strong><small>${esc(release.description)}</small></span>
+  </div>`
 }
 
 function saveLabel() {
@@ -942,6 +980,18 @@ function currentReadiness() {
 }
 
 function reviewStage() {
+  const currentCard = state.cards.find((item) => item.id === state.cardId) || {
+    status: state.form.status,
+    releaseStatus: state.form.releaseStatus,
+    reviewNote: state.form.reviewNote,
+  }
+  const releaseStatus = currentCard.releaseStatus || currentCard.status || 'draft'
+  if (!['draft', 'changes_requested'].includes(releaseStatus)) {
+    return `<section class="review-stage review-status-stage">
+      <div class="review-card-preview"><span class="page-kicker">RELEASE STATUS</span><h2>${esc(state.form.name)}</h2><p>제작한 특별 카드의 공개 진행 상황을 확인하세요.</p>${cardVisual()}<div class="review-summary"><strong>${esc(state.form.seasonName)} · ${esc(state.form.rarity)}</strong><span>검수와 드롭 공개는 담당 운영자가 순서대로 진행합니다.</span></div></div>
+      <div class="review-panel release-panel">${releaseStatusBanner(currentCard)}${state.submissionMessage ? `<p class="submission-message">${icon('check_circle')} ${esc(state.submissionMessage)}</p>` : ''}<div class="review-actions"><button type="button" class="secondary-button" data-editor-stage="preview">팬 화면 미리보기</button><button type="button" class="primary-button" data-action="exit-editor">내 카드로 돌아가기</button></div></div>
+    </section>`
+  }
   const readiness = currentReadiness()
   const readinessItems = Object.values(readiness.items)
   const completedReadinessCount = readinessItems.filter((item) => item.status !== 'missing').length
@@ -950,6 +1000,7 @@ function reviewStage() {
     <div class="review-card-preview"><span class="page-kicker">FINAL CHECK</span><h2>운영팀에 보내기 전 마지막 확인</h2><p>필수 항목이 모두 준비되면 검수 요청을 보낼 수 있어요.</p>${cardVisual()}<div class="review-summary"><strong>${esc(state.form.name)}</strong><span>${esc(state.form.seasonName)} · ${esc(state.form.rarity)} · ${Number(state.form.issueLimit).toLocaleString('ko-KR')}장</span></div></div>
     <div class="review-panel"><div class="review-panel-heading"><div><span>REVIEW READINESS</span><h3>${readiness.ready ? '검수 준비가 완료됐어요.' : '추가로 준비할 항목이 있어요.'}</h3></div><span class="readiness-score ${readiness.ready ? 'ready' : ''}">${completedReadinessCount}/${totalReadinessCount}</span></div>
       <div class="readiness-list">${Object.entries(readiness.items).map(([key, item]) => `<div class="readiness-row ${item.status}"><span>${icon(item.status === 'missing' ? 'error' : item.status === 'optional' ? 'remove_circle' : 'check_circle')}<strong>${readinessLabels[key]}</strong></span><small>${item.label}</small></div>`).join('')}</div>
+      ${releaseStatus === 'changes_requested' ? releaseStatusBanner(currentCard) : ''}
       <label class="review-note">운영팀에 전달할 메모<textarea data-review-note maxlength="500" rows="4" placeholder="공개 희망일, 미디어 확인 포인트 등을 적어 주세요.">${esc(state.reviewNote)}</textarea><small>${state.reviewNote.length}/500</small></label>
       ${state.reviewError ? `<p class="review-error" role="alert">${esc(state.reviewError)}</p>` : ''}
       <div class="review-actions"><button type="button" class="secondary-button" data-editor-stage="preview">팬 화면 다시 보기</button><button type="button" class="primary-button" data-action="submit-review" ${!readiness.ready || state.busy ? 'disabled' : ''}>${state.busy ? '요청 중...' : `검수 요청 보내기 ${icon('send')}`}</button></div>
@@ -964,12 +1015,14 @@ function editorView() {
     preview: fanPreviewStage,
     review: reviewStage,
   }[state.stage]?.() || designStage()
-  return `<section class="editor-view"><div class="editor-title-row"><div><button type="button" class="back-link" data-action="exit-editor">${icon('arrow_back')} 내 카드</button><h2>${esc(state.form.name || '새 특별 카드')}</h2></div><div><button type="button" class="secondary-button" data-action="save-draft" ${state.busy ? 'disabled' : ''}>${icon('save')} ${state.busy ? '저장 중' : '초안 저장'}</button>${state.stage === 'design' ? `<button type="button" class="primary-button" data-action="go-details">카드 정보 입력 ${icon('arrow_forward')}</button>` : ''}</div></div>${editorProgress()}${stageContent}</section>`
+  const activeCard = state.cards.find((item) => item.id === state.cardId)
+  const cardIsUnderReview = activeCard?.releaseStatus && !['draft', 'changes_requested'].includes(activeCard.releaseStatus)
+  return `<section class="editor-view"><div class="editor-title-row"><div><button type="button" class="back-link" data-action="exit-editor">${icon('arrow_back')} 내 카드</button><h2>${esc(state.form.name || '새 특별 카드')}</h2>${activeCard ? releaseStatusBanner(activeCard, { compact: true }) : ''}</div><div>${!cardIsUnderReview ? `<button type="button" class="secondary-button" data-action="save-draft" ${state.busy ? 'disabled' : ''}>${icon('save')} ${state.busy ? '저장 중' : '초안 저장'}</button>` : ''}${state.stage === 'design' ? `<button type="button" class="primary-button" data-action="go-details">카드 정보 입력 ${icon('arrow_forward')}</button>` : ''}</div></div>${editorProgress()}${stageContent}</section>`
 }
 
 function cardsView() {
-  return `<section class="cards-view"><div class="section-heading page"><div><span>MY CARDS</span><h2>내 카드</h2><p>초안부터 공개 카드까지 제작 상태를 한눈에 확인하세요.</p></div><button type="button" class="primary-button" data-nav="create">${icon('add')} 새 카드 만들기</button></div>
-    ${state.cards.length ? `<div class="card-library">${state.cards.map((card, index) => `<article class="library-card"><button type="button" class="library-image" data-action="edit-card" data-card-id="${esc(card.id)}"><img src="${[sampleAssets.aurora, sampleAssets.motion, sampleAssets.stardust][index % 3]}" data-card-image="${esc(card.id)}" alt="${esc(card.name)}" /><span class="status-badge ${esc(card.status)}">${statusLabel(card.status)}</span></button><div><span>${esc(card.seasonName || '시즌 미정')}</span><h3>${esc(card.name)}</h3><p>${esc(card.rarity || '등급 미정')} · ${Number(card.issueLimit || 0).toLocaleString('ko-KR')}장</p><button type="button" class="secondary-button full" data-action="edit-card" data-card-id="${esc(card.id)}">${card.status === 'published' ? '카드 보기' : '편집 이어서 하기'}</button></div></article>`).join('')}</div>` : `<div class="large-empty">${icon('style')}<h3>아직 만든 카드가 없어요.</h3><p>특별 기능 레시피를 골라 첫 번째 디지털 포토카드를 만들어 보세요.</p><button type="button" class="primary-button" data-nav="create">첫 카드 만들기</button></div>`}
+  return `<section class="cards-view"><div class="section-heading page"><div><span>MY CARDS</span><h2>내 카드</h2><p>초안부터 팬앱 공개까지 제작 상태를 한눈에 확인하세요.</p></div><button type="button" class="primary-button" data-nav="create">${icon('add')} 새 카드 만들기</button></div>
+    ${state.cards.length ? `<div class="card-library">${state.cards.map((card, index) => `<article class="library-card"><button type="button" class="library-image" data-action="edit-card" data-card-id="${esc(card.id)}"><img src="${[sampleAssets.aurora, sampleAssets.motion, sampleAssets.stardust][index % 3]}" data-card-image="${esc(card.id)}" alt="${esc(card.name)}" /><span class="status-badge ${esc(card.status)}">${statusLabel(card.status, card.releaseStatus)}</span></button><div><span>${esc(card.seasonName || '시즌 미정')}</span><h3>${esc(card.name)}</h3><p>${esc(card.rarity || '등급 미정')} · ${Number(card.issueLimit || 0).toLocaleString('ko-KR')}장</p>${releaseStatusBanner(card, { compact: true })}<button type="button" class="secondary-button full" data-action="edit-card" data-card-id="${esc(card.id)}">${card.releaseStatus === 'published' ? '공개 카드 보기' : ['pending_partner_review', 'pending_platform_review', 'approved', 'drop_ready'].includes(card.releaseStatus) ? '공개 진행 상황 보기' : '편집 이어서 하기'}</button></div></article>`).join('')}</div>` : `<div class="large-empty">${icon('style')}<h3>아직 만든 카드가 없어요.</h3><p>특별 기능 레시피를 골라 첫 번째 디지털 포토카드를 만들어 보세요.</p><button type="button" class="primary-button" data-nav="create">첫 카드 만들기</button></div>`}
   </section>`
 }
 
@@ -1893,14 +1946,12 @@ async function submitReview() {
       body: JSON.stringify({ reviewNote: state.reviewNote || null }),
     })
     state.cards = state.cards.map((item) =>
-      item.id === state.cardId ? { ...item, status: result.data.status } : item,
+      item.id === state.cardId ? { ...item, ...result.data } : item,
     )
+    state.form = { ...state.form, ...result.data }
+    state.submissionMessage = '검수 요청을 보냈습니다. 담당 운영자에게 알림이 전달됐어요.'
     clearDraft()
-    state.view = 'home'
-    state.stage = 'design'
-    state.cardId = null
-    state.editingCardId = null
-    notify('검수 요청을 보냈습니다. 결과가 나오면 상태가 업데이트됩니다.', 'success')
+    notify('검수 요청을 보냈습니다. 결과가 나오면 이 카드에서 바로 확인할 수 있어요.', 'success')
   } catch (error) {
     state.reviewError = error.message
   } finally {

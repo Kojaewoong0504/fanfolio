@@ -47,6 +47,48 @@ async def _organization_or_404(session: DbSession, organization_id: str) -> Orga
     return organization
 
 
+async def _require_root_or_same_organization_read(
+    session: DbSession,
+    context: CurrentAdmin,
+    organization_id: str,
+) -> Organization:
+    if context.is_root:
+        return await _organization_or_404(session, organization_id)
+    if context.organization is None or context.organization.id != organization_id:
+        raise AppError(404, "RESOURCE_NOT_FOUND", "파트너를 찾을 수 없습니다.")
+    context.require_action("organization:read")
+    return context.organization
+
+
+async def _require_organization_member_management(
+    session: DbSession,
+    context: CurrentAdmin,
+    organization_id: str,
+) -> Organization:
+    """Allow root everywhere and company admins only inside their own organization."""
+    organization = await _require_root_or_same_organization_read(session, context, organization_id)
+    if not context.is_root:
+        context.require_action("members:manage_scoped")
+    return organization
+
+
+def _require_company_admin_subordinate_role(
+    context: CurrentAdmin,
+    access_level: str | None,
+    *,
+    target_access_level: str | None = None,
+) -> None:
+    """Company admins cannot create, promote, or modify peer super-admin accounts."""
+    if context.is_root:
+        return
+    if access_level == "company_admin" or target_access_level == "company_admin":
+        raise AppError(
+            403,
+            "ADMIN_WRITE_REQUIRED",
+            "기업 슈퍼 관리자는 매니저, 에디터, 뷰어 계정만 관리할 수 있습니다.",
+        )
+
+
 async def _validated_logo_asset(
     session: DbSession,
     *,
@@ -294,8 +336,7 @@ async def get_organization(
     context: CurrentAdmin,
     session: DbSession,
 ) -> dict:
-    context.require_root()
-    organization = await _organization_or_404(session, organization_id)
+    organization = await _require_root_or_same_organization_read(session, context, organization_id)
     data = await _organization_data(session, organization)
     artist_ids = await _organization_artist_ids(session, organization.id)
     if artist_ids:
@@ -419,8 +460,7 @@ async def list_organization_members(
     context: CurrentAdmin,
     session: DbSession,
 ) -> dict:
-    context.require_root()
-    await _organization_or_404(session, organization_id)
+    await _require_root_or_same_organization_read(session, context, organization_id)
     rows = (
         await session.execute(
             select(User, AdminMembership)
@@ -444,8 +484,8 @@ async def create_organization_member(
     context: CurrentAdmin,
     session: DbSession,
 ) -> dict:
-    context.require_root()
-    await _organization_or_404(session, organization_id)
+    await _require_organization_member_management(session, context, organization_id)
+    _require_company_admin_subordinate_role(context, payload.access_level)
     email = str(payload.email).lower()
     existing = await session.scalar(
         select(User).where(User.email == email, User.role == Role.ADMIN)
@@ -516,10 +556,14 @@ async def update_organization_member(
     context: CurrentAdmin,
     session: DbSession,
 ) -> dict:
-    context.require_root()
-    await _organization_or_404(session, organization_id)
+    await _require_organization_member_management(session, context, organization_id)
     user, membership = await _member_or_404(session, organization_id, user_id)
     values = payload.model_dump(exclude_unset=True, by_alias=False)
+    _require_company_admin_subordinate_role(
+        context,
+        values.get("access_level"),
+        target_access_level=membership.access_level,
+    )
     security_changed = any(
         field in values and values[field] != getattr(membership, field)
         for field in ("access_level", "status")
@@ -544,6 +588,41 @@ async def update_organization_member(
     return {"ok": True, "data": await _member_data(session, user, membership)}
 
 
+@router.post("/{organization_id}/members/{user_id}/reset-password")
+async def reset_organization_member_password(
+    organization_id: str,
+    user_id: str,
+    context: CurrentAdmin,
+    session: DbSession,
+) -> dict:
+    """Issue a one-time password and invalidate every active admin session."""
+    await _require_organization_member_management(session, context, organization_id)
+    user, membership = await _member_or_404(session, organization_id, user_id)
+    _require_company_admin_subordinate_role(
+        context,
+        None,
+        target_access_level=membership.access_level,
+    )
+    temporary_password = token_urlsafe(18)
+    user.password_hash = hash_password(temporary_password)
+    user.must_change_password = True
+    membership.updated_at = datetime.now(UTC)
+    await _revoke_member_sessions(session, user.id)
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="organization.member_password_reset",
+        entity_type="admin_membership",
+        entity_id=user.id,
+        organization_id=organization_id,
+        details={"accessLevel": membership.access_level},
+    )
+    await session.commit()
+    data = await _member_data(session, user, membership)
+    data["temporaryPassword"] = temporary_password
+    return {"ok": True, "data": data}
+
+
 @router.put("/{organization_id}/members/{user_id}/artists")
 async def set_member_artists(
     organization_id: str,
@@ -552,9 +631,13 @@ async def set_member_artists(
     context: CurrentAdmin,
     session: DbSession,
 ) -> dict:
-    context.require_root()
-    await _organization_or_404(session, organization_id)
+    await _require_organization_member_management(session, context, organization_id)
     user, membership = await _member_or_404(session, organization_id, user_id)
+    _require_company_admin_subordinate_role(
+        context,
+        None,
+        target_access_level=membership.access_level,
+    )
     artist_ids = await _validate_artist_subset(session, organization_id, payload.artist_ids)
     await session.execute(
         delete(AdminArtistAssignment).where(AdminArtistAssignment.admin_user_id == user.id)

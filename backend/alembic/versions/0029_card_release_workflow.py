@@ -8,7 +8,7 @@ from sqlalchemy import inspect
 from alembic import op
 
 revision: str = "0029_card_release_workflow"
-down_revision: str | None = "0026_organization_logo_asset"
+down_revision: str | None = "0028_company_admin_access_level"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -16,7 +16,9 @@ ADMIN_MEMBERSHIP_SCOPE = (
     "(access_level IN ('root', 'platform_operator') AND organization_id IS NULL) OR "
     "(access_level NOT IN ('root', 'platform_operator') AND organization_id IS NOT NULL)"
 )
-ADMIN_ACCESS_LEVELS = "access_level IN ('root', 'manager', 'editor', 'viewer', 'platform_operator')"
+ADMIN_ACCESS_LEVELS = (
+    "access_level IN ('root', 'platform_operator', 'company_admin', 'manager', 'editor', 'viewer')"
+)
 
 
 def _columns(table_name: str) -> set[str]:
@@ -176,7 +178,7 @@ def downgrade() -> None:
             batch.drop_constraint("ck_admin_membership_scope", type_="check")
             batch.create_check_constraint(
                 "ck_admin_membership_access_level",
-                "access_level IN ('root', 'manager', 'editor', 'viewer')",
+                "access_level IN ('root', 'company_admin', 'manager', 'editor', 'viewer')",
             )
             batch.create_check_constraint(
                 "ck_admin_membership_scope",

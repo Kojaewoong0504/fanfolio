@@ -114,12 +114,16 @@ class CodeBatchRequest(BaseModel):
 
 class DropCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
+    organization_id: str | None = Field(default=None, alias="organizationId")
+    artist_id: str | None = Field(default=None, alias="artistId")
     starts_at: datetime | None = Field(default=None, alias="startsAt")
     ends_at: datetime | None = Field(default=None, alias="endsAt")
     model_config = ConfigDict(populate_by_name=True)
 
 
 class DropStatusUpdate(BaseModel):
+    # 발행 요청은 /submit 전용 흐름으로만 전환한다. 일반 상태 변경 API에서
+    # pending_review를 허용하면 초안 검증과 제출 감사 로그가 우회될 수 있다.
     status: Literal["draft", "scheduled", "live", "ended"]
 
 
@@ -246,7 +250,9 @@ class OrganizationArtistsUpdate(BaseModel):
 class OrganizationMemberCreate(BaseModel):
     email: EmailStr
     display_name: str = Field(alias="displayName", min_length=1, max_length=120)
-    access_level: Literal["manager", "editor", "viewer"] = Field(alias="accessLevel")
+    access_level: Literal["company_admin", "manager", "editor", "viewer"] = Field(
+        alias="accessLevel"
+    )
     artist_ids: list[str] = Field(default_factory=list, alias="artistIds", max_length=500)
     model_config = ConfigDict(populate_by_name=True)
 
@@ -255,7 +261,7 @@ class OrganizationMemberUpdate(BaseModel):
     display_name: str | None = Field(
         default=None, alias="displayName", min_length=1, max_length=120
     )
-    access_level: Literal["manager", "editor", "viewer"] | None = Field(
+    access_level: Literal["company_admin", "manager", "editor", "viewer"] | None = Field(
         default=None, alias="accessLevel"
     )
     status: Literal["active", "suspended"] | None = None
@@ -309,9 +315,19 @@ class AdminCardReviewRequest(BaseModel):
 
 
 class AdminCardReleaseDecisionRequest(BaseModel):
-    stage: ReviewStage
+    # The route fixes the stage; keeping it optional avoids a conflicting client input.
+    stage: ReviewStage | None = None
     decision: ReviewDecision
     note: str | None = Field(default=None, max_length=500)
+
+
+class DropCardLinkRequest(BaseModel):
+    card_id: str = Field(alias="cardId", min_length=1)
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class AdminNotificationReadRequest(BaseModel):
+    read: bool
 
 
 class CardReleaseState(BaseModel):

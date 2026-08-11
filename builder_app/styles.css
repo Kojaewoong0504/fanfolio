@@ -897,6 +897,75 @@ video {
 .status-badge.changes_requested { color: #c9426f; background: var(--pink-soft); }
 .status-badge.published { color: #2166ce; background: var(--blue-soft); }
 
+.release-status-banner {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 11px;
+  align-items: center;
+  margin: 18px 0;
+  padding: 14px;
+  border: 1px solid #e4e1ff;
+  border-radius: 14px;
+  color: #403c75;
+  background: #faf9ff;
+}
+
+.release-status-banner > .material-symbols-rounded {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 12px;
+  color: #5b49e8;
+  background: #eeebff;
+}
+
+.release-status-banner span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.release-status-banner strong { font-size: 13px; }
+.release-status-banner small { color: #77738d; font-size: 11px; line-height: 1.45; }
+.release-status-banner.changes_requested { border-color: #ffd7e4; background: #fff8fb; }
+.release-status-banner.changes_requested > .material-symbols-rounded { color: #c9426f; background: #ffe8f0; }
+.release-status-banner.approved,
+.release-status-banner.drop_ready,
+.release-status-banner.published { border-color: #cfedf5; background: #f5fdff; }
+.release-status-banner.approved > .material-symbols-rounded,
+.release-status-banner.drop_ready > .material-symbols-rounded,
+.release-status-banner.published > .material-symbols-rounded { color: #157ca1; background: #def5fb; }
+
+.release-status-banner.compact {
+  display: inline-grid;
+  grid-template-columns: 21px minmax(0, 1fr);
+  width: min(100%, 420px);
+  margin: 8px 0 0;
+  padding: 7px 9px;
+  border-radius: 10px;
+}
+
+.release-status-banner.compact > .material-symbols-rounded {
+  width: 21px;
+  height: 21px;
+  border-radius: 7px;
+  font-size: 14px;
+}
+
+.release-status-banner.compact strong { font-size: 11px; }
+.release-status-banner.compact small { display: none; }
+
+.submission-message {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0 0 18px;
+  color: #187451;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .task-row > .material-symbols-rounded {
   color: #a4a8ba;
   font-size: 18px;
@@ -2661,6 +2730,12 @@ input[type='range'] {
 
 .review-panel {
   padding: 30px;
+}
+
+.release-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .review-panel-heading {

@@ -8,7 +8,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from app.admin_access import PLATFORM_ACTIONS, AdminContext, load_admin_context
+from app.admin_access import (
+    PARTNER_ACTIONS,
+    PLATFORM_ACTIONS,
+    AdminContext,
+    load_admin_context,
+)
 from app.db.session import SessionLocal
 from app.errors import AppError
 from app.models import (
@@ -17,6 +22,7 @@ from app.models import (
     Artist,
     Asset,
     Card,
+    Drop,
     OrganizationArtist,
     RefreshToken,
     Session,
@@ -28,6 +34,8 @@ from app.schemas import (
     CardReviewDecisionItem,
     CardReviewRequestItem,
     NotificationItem,
+    OrganizationMemberCreate,
+    OrganizationMemberUpdate,
     ReleasePolicy,
     ReleaseStatus,
     ReviewDecision,
@@ -186,6 +194,64 @@ def test_admin_me_exposes_the_root_scope(
     assert "organizations:manage" in context["allowedActions"]
 
 
+def test_partner_action_map_includes_company_admin_and_drop_code_scope() -> None:
+    assert PARTNER_ACTIONS["company_admin"] == frozenset(
+        {
+            "organization:read",
+            "organization:manage_scoped",
+            "members:manage_scoped",
+            "artists:read",
+            "artists:write",
+            "cards:read",
+            "cards:write",
+            "cards:submit_review",
+            "drops:read",
+            "drops:write",
+            "drops:submit",
+            "codes:read",
+            "codes:write",
+            "audit:read",
+        }
+    )
+    assert {"drops:read", "drops:write", "drops:submit"} <= PARTNER_ACTIONS["manager"]
+    assert {"codes:read", "codes:write"} <= PARTNER_ACTIONS["manager"]
+    assert {"drops:read", "drops:write", "codes:read"} <= PARTNER_ACTIONS["editor"]
+    assert "drops:submit" not in PARTNER_ACTIONS["editor"]
+    assert "codes:write" not in PARTNER_ACTIONS["editor"]
+    assert "codes:read" in PARTNER_ACTIONS["viewer"]
+    assert "codes:write" not in PARTNER_ACTIONS["viewer"]
+    assert "drops:write" not in PARTNER_ACTIONS["viewer"]
+
+
+def test_organization_member_schemas_accept_company_admin_access_level() -> None:
+    create_payload = OrganizationMemberCreate.model_validate(
+        {
+            "email": "company-admin@starwave.com",
+            "displayName": "Company Admin",
+            "accessLevel": "company_admin",
+            "artistIds": [],
+        }
+    )
+    update_payload = OrganizationMemberUpdate.model_validate({"accessLevel": "company_admin"})
+
+    assert create_payload.access_level == "company_admin"
+    assert update_payload.access_level == "company_admin"
+
+
+def test_root_can_create_company_admin_partner_member(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    organization, member = create_partner(
+        actors["admin"],
+        email="company-admin@starwave.com",
+        access_level="company_admin",
+    )
+
+    assert organization["status"] == "active"
+    assert member["accessLevel"] == "company_admin"
+    assert len(member["temporaryPassword"]) >= 16
+
+
 def test_platform_operator_can_review_platform_stage_but_not_manage_partners() -> None:
     assert "cards:read" in PLATFORM_ACTIONS
     assert "cards:review_platform" in PLATFORM_ACTIONS
@@ -336,6 +402,191 @@ def test_partner_context_is_scoped_and_cannot_use_root_routes(
         partner.get("/api/admin/organizations"),
         403,
         "ADMIN_ROOT_REQUIRED",
+    )
+
+
+def test_company_admin_can_read_only_own_organization_and_members(
+    actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
+) -> None:
+    first_org, company_admin = create_partner(
+        actors["admin"],
+        email="company-admin@starwave.com",
+        access_level="company_admin",
+    )
+    second_org, _ = create_partner(
+        actors["admin"],
+        slug="moonlight",
+        email="manager@moonlight.com",
+    )
+    partner = login_partner(app, company_admin)
+
+    detail = assert_success(partner.get(f"/api/admin/organizations/{first_org['id']}"))
+    assert detail["id"] == first_org["id"]
+    members = assert_success(partner.get(f"/api/admin/organizations/{first_org['id']}/members"))
+    assert [item["id"] for item in members["items"]] == [company_admin["id"]]
+
+    assert_error(partner.get("/api/admin/organizations"), 403, "ADMIN_ROOT_REQUIRED")
+    assert_error(
+        partner.get(f"/api/admin/organizations/{second_org['id']}"),
+        404,
+        "RESOURCE_NOT_FOUND",
+    )
+    assert_error(
+        partner.get(f"/api/admin/organizations/{second_org['id']}/members"),
+        404,
+        "RESOURCE_NOT_FOUND",
+    )
+
+
+def test_company_admin_catalog_includes_every_artist_linked_to_own_organization(
+    actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
+) -> None:
+    async def add_second_artist() -> None:
+        async with SessionLocal() as session:
+            session.add(Artist(id="artist_company_second", name="세컨드 웨이브"))
+            await session.commit()
+
+    asyncio.run(add_second_artist())
+    organization, company_admin = create_partner(
+        actors["admin"],
+        email="company-catalog@starwave.com",
+        access_level="company_admin",
+        artist_ids=["artist_nova3"],
+    )
+    assert_success(
+        actors["admin"].put(
+            f"/api/admin/organizations/{organization['id']}/artists",
+            json={"artistIds": ["artist_nova3", "artist_company_second"]},
+        )
+    )
+
+    catalog = assert_success(login_partner(app, company_admin).get("/api/admin/catalog"))
+
+    assert {item["id"] for item in catalog["artists"]} == {
+        "artist_nova3",
+        "artist_company_second",
+    }
+
+
+def test_company_admin_can_manage_only_subordinate_members_in_own_organization(
+    actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
+) -> None:
+    organization, company_admin = create_partner(
+        actors["admin"],
+        email="company-admin@starwave.com",
+        access_level="company_admin",
+    )
+    other_organization, _ = create_partner(
+        actors["admin"],
+        slug="moonlight",
+        email="manager@moonlight.com",
+    )
+    partner = login_partner(app, company_admin)
+
+    created = assert_success(
+        partner.post(
+            f"/api/admin/organizations/{organization['id']}/members",
+            json={
+                "email": "editor@starwave.com",
+                "displayName": "콘텐츠 에디터",
+                "accessLevel": "editor",
+                "artistIds": ["artist_nova3"],
+            },
+        ),
+        201,
+    )
+    assert created["accessLevel"] == "editor"
+    updated = assert_success(
+        partner.patch(
+            f"/api/admin/organizations/{organization['id']}/members/{created['id']}",
+            json={"displayName": "콘텐츠 매니저", "accessLevel": "manager"},
+        )
+    )
+    assert updated["displayName"] == "콘텐츠 매니저"
+    assert updated["accessLevel"] == "manager"
+
+    reset = assert_success(
+        partner.post(
+            f"/api/admin/organizations/{organization['id']}/members/{created['id']}/reset-password",
+            json={},
+        )
+    )
+    assert reset["id"] == created["id"]
+    assert len(reset["temporaryPassword"]) >= 16
+
+    reset_login = TestClient(app)
+    assert_success(
+        reset_login.post(
+            "/api/auth/admin/login",
+            headers={"X-Fanfolio-Client": "admin"},
+            json={"email": reset["email"], "password": reset["temporaryPassword"]},
+        )
+    )
+    reassigned = assert_success(
+        partner.put(
+            f"/api/admin/organizations/{organization['id']}/members/{created['id']}/artists",
+            json={"artistIds": []},
+        )
+    )
+    assert reassigned["assignedArtists"] == []
+
+    assert_error(
+        partner.post(
+            f"/api/admin/organizations/{organization['id']}/members",
+            json={
+                "email": "elevated@starwave.com",
+                "displayName": "권한 상승",
+                "accessLevel": "company_admin",
+                "artistIds": [],
+            },
+        ),
+        403,
+        "ADMIN_WRITE_REQUIRED",
+    )
+    assert_error(
+        partner.patch(
+            f"/api/admin/organizations/{organization['id']}/members/{created['id']}",
+            json={"accessLevel": "company_admin"},
+        ),
+        403,
+        "ADMIN_WRITE_REQUIRED",
+    )
+    assert_error(
+        partner.put(
+            f"/api/admin/organizations/{organization['id']}/members/{company_admin['id']}/artists",
+            json={"artistIds": []},
+        ),
+        403,
+        "ADMIN_WRITE_REQUIRED",
+    )
+    assert_error(
+        partner.post(
+            f"/api/admin/organizations/{other_organization['id']}/members",
+            json={
+                "email": "outside@moonlight.com",
+                "displayName": "범위 밖",
+                "accessLevel": "editor",
+                "artistIds": [],
+            },
+        ),
+        404,
+        "RESOURCE_NOT_FOUND",
+    )
+    assert_error(
+        partner.patch(
+            f"/api/admin/organizations/{other_organization['id']}/members/{created['id']}",
+            json={"status": "suspended"},
+        ),
+        404,
+        "RESOURCE_NOT_FOUND",
+    )
+    assert_error(
+        partner.put(
+            f"/api/admin/organizations/{other_organization['id']}/members/{created['id']}/artists",
+            json={"artistIds": []},
+        ),
+        404,
+        "RESOURCE_NOT_FOUND",
     )
 
 
@@ -965,6 +1216,119 @@ def test_manager_can_create_assigned_drafts_but_cannot_publish_or_review(
     )
 
 
+def test_partner_manager_can_only_create_and_list_own_assigned_artist_drops(
+    actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
+) -> None:
+    async def add_unassigned_artist() -> None:
+        async with SessionLocal() as session:
+            session.add(Artist(id="artist_other", name="문라이트"))
+            await session.commit()
+
+    asyncio.run(add_unassigned_artist())
+    organization, member = create_partner(actors["admin"])
+    partner = login_partner(app, member)
+
+    created = assert_success(
+        partner.post(
+            "/api/admin/drops",
+            json={"name": "회사 컴백 드롭", "artistId": "artist_nova3"},
+        ),
+        201,
+    )
+    assert created["organizationId"] == organization["id"]
+    assert created["artistId"] == "artist_nova3"
+    listed = assert_success(partner.get("/api/admin/drops"))["items"]
+    assert [item["id"] for item in listed] == [created["id"]]
+    submitted = assert_success(partner.post(f"/api/admin/drops/{created['id']}/submit"))
+    assert submitted["status"] == "pending_review"
+
+    assert_error(
+        partner.post(
+            "/api/admin/drops",
+            json={"name": "범위 밖 드롭", "artistId": "artist_other"},
+        ),
+        404,
+        "RESOURCE_NOT_FOUND",
+    )
+
+
+def test_partner_editor_can_save_drop_draft_but_cannot_submit_or_mutate_codes(
+    actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
+) -> None:
+    _, editor_member = create_partner(
+        actors["admin"],
+        email="editor@starwave.com",
+        access_level="editor",
+    )
+    editor = login_partner(app, editor_member)
+    draft = assert_success(
+        editor.post(
+            "/api/admin/drops",
+            json={"name": "에디터 초안", "artistId": "artist_nova3"},
+        ),
+        201,
+    )
+    assert_error(
+        editor.post(f"/api/admin/drops/{draft['id']}/submit"),
+        403,
+        "ADMIN_WRITE_REQUIRED",
+    )
+    assert_error(
+        editor.post(
+            "/api/admin/redeem-code-batches",
+            json={
+                "dropId": draft["id"],
+                "cardId": "card_published",
+                "quantity": 1,
+                "maxUsesPerCode": 1,
+                "expiresAt": "2030-01-01T00:00:00+00:00",
+                "prefix": "EDITOR",
+            },
+        ),
+        403,
+        "ADMIN_WRITE_REQUIRED",
+    )
+
+
+def test_partner_manager_can_operate_codes_only_for_own_scoped_drop(
+    actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
+) -> None:
+    organization, member = create_partner(actors["admin"])
+
+    async def scope_live_drop() -> None:
+        async with SessionLocal() as session:
+            drop = await session.get(Drop, "drop_live")
+            assert drop is not None
+            drop.organization_id = organization["id"]
+            drop.artist_id = "artist_nova3"
+            await session.commit()
+
+    asyncio.run(scope_live_drop())
+    partner = login_partner(app, member)
+    batch = assert_success(
+        partner.post(
+            "/api/admin/redeem-code-batches",
+            json={
+                "dropId": "drop_live",
+                "cardId": "card_published",
+                "quantity": 1,
+                "maxUsesPerCode": 1,
+                "expiresAt": "2030-01-01T00:00:00+00:00",
+                "prefix": "STARWAVE",
+            },
+        ),
+        201,
+    )
+    batches = assert_success(partner.get("/api/admin/redeem-code-batches"))["items"]
+    assert [item["id"] for item in batches] == [batch["id"]]
+    assert partner.get(batch["csvExportUrl"]).status_code == 200
+    assert_error(
+        partner.get("/api/admin/redeem-code-batches/missing/export"),
+        404,
+        "BATCH_NOT_FOUND",
+    )
+
+
 def test_partner_cannot_attach_another_users_asset_to_a_card(
     actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
 ) -> None:
@@ -1069,17 +1433,10 @@ def test_partner_root_only_route_matrix_is_denied(
 
     requests = [
         partner.get("/api/admin/organizations"),
-        partner.get("/api/admin/drops"),
         partner.get("/api/admin/users"),
         partner.get("/api/admin/artist-accounts"),
         partner.get("/api/admin/artist-profiles"),
         partner.get("/api/admin/collection-campaigns"),
-        partner.get("/api/admin/redeem-code-batches"),
-        partner.get("/api/admin/redeem-code-batches/missing/export"),
-        partner.get("/api/admin/redeem-code-batches/missing/codes"),
-        partner.get("/api/admin/redeem-code-batches/missing/qr.zip"),
-        partner.get("/api/admin/redeem-codes/NOVA-VALID-01/qr"),
-        partner.patch("/api/admin/redeem-codes/NOVA-VALID-01", json={"status": "disabled"}),
         partner.patch("/api/admin/users/fan/role", json={"role": "artist"}),
         partner.post(
             "/api/admin/artist-accounts",

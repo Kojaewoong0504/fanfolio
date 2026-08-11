@@ -10,6 +10,7 @@ from app.models import (
     AdminArtistAssignment,
     AdminMembership,
     Organization,
+    OrganizationArtist,
     User,
 )
 
@@ -34,6 +35,24 @@ ROOT_ACTIONS = frozenset(
 PLATFORM_ACTIONS = frozenset({"cards:read", "cards:review_platform", "notifications:read"})
 
 PARTNER_ACTIONS = {
+    "company_admin": frozenset(
+        {
+            "organization:read",
+            "organization:manage_scoped",
+            "members:manage_scoped",
+            "artists:read",
+            "artists:write",
+            "cards:read",
+            "cards:write",
+            "cards:submit_review",
+            "drops:read",
+            "drops:write",
+            "drops:submit",
+            "codes:read",
+            "codes:write",
+            "audit:read",
+        }
+    ),
     "manager": frozenset(
         {
             "artists:read",
@@ -41,6 +60,11 @@ PARTNER_ACTIONS = {
             "cards:read",
             "cards:write",
             "cards:submit_review",
+            "drops:read",
+            "drops:write",
+            "drops:submit",
+            "codes:read",
+            "codes:write",
             "audit:read",
         }
     ),
@@ -51,10 +75,13 @@ PARTNER_ACTIONS = {
             "cards:read",
             "cards:write",
             "cards:submit_review",
+            "drops:read",
+            "drops:write",
+            "codes:read",
             "audit:read",
         }
     ),
-    "viewer": frozenset({"artists:read", "cards:read", "audit:read"}),
+    "viewer": frozenset({"artists:read", "cards:read", "drops:read", "codes:read", "audit:read"}),
 }
 PARTNER_SCOPED_ACTIONS = frozenset().union(*PARTNER_ACTIONS.values(), PLATFORM_ACTIONS)
 
@@ -132,11 +159,16 @@ async def load_admin_context(session: AsyncSession, user: User) -> AdminContext:
         organization = await session.get(Organization, membership.organization_id)
         if organization is None or organization.status != "active":
             raise AppError(403, "ADMIN_ACCESS_SUSPENDED", "중지된 파트너 조직입니다.")
-        assignments = await session.scalars(
-            select(AdminArtistAssignment.artist_id).where(
+        artist_scope = (
+            select(OrganizationArtist.artist_id).where(
+                OrganizationArtist.organization_id == membership.organization_id
+            )
+            if membership.access_level == "company_admin"
+            else select(AdminArtistAssignment.artist_id).where(
                 AdminArtistAssignment.admin_user_id == user.id
             )
         )
+        assignments = await session.scalars(artist_scope)
         assigned_artist_ids = frozenset(assignments.all())
 
     allowed_actions = (

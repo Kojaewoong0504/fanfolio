@@ -43,6 +43,43 @@ test('partner member role menu can escape the table row without being clipped', 
   )
 })
 
+test('table roles use compact badges and open a dedicated role editor instead of inline selects', () => {
+  assert.match(source, /function accessRoleBadge/)
+  assert.match(source, /data-edit-member-role/)
+  assert.match(source, /data-edit-user-role/)
+  assert.match(source, /function saveRoleChange/)
+  assert.doesNotMatch(source, /className: "member-role"/)
+  assert.doesNotMatch(source, /className: "role-change"/)
+})
+
+test('form custom selects preserve a hidden form value and do not collapse labels with descriptions', () => {
+  assert.match(source, /name = ""/)
+  assert.match(source, /admin-select-value/)
+  assert.match(source, /option\.dataset\.label/)
+  assert.match(source, /hiddenValue\.value = option\.dataset\.value/)
+})
+
+test('drop and code forms use the reusable form select with client-side empty-state feedback', () => {
+  assert.match(source, /id: "drop-artist", name: "artistId"/)
+  assert.match(source, /id: "batch-card", name: "cardId"/)
+  assert.match(source, /공개 카드와 라이브 드롭을 각각 선택해 주세요/)
+})
+
+test('operational list filters use the same accessible custom control as role changes', () => {
+  assert.match(source, /className: "filter-select card-artist-filter"/)
+  assert.match(source, /className: "filter-select card-status-filter"/)
+  assert.match(source, /className: "filter-select user-role-filter"/)
+  assert.match(source, /className: "filter-select audit-action-filter"/)
+  assert.match(source, /control\.classList\.contains\("card-artist-filter"\)/)
+})
+
+test('company administrators can inspect but cannot alter their organization artist scope', () => {
+  assert.match(source, /const canManageScope = isRoot\(\)/)
+  assert.match(source, /연결된 아티스트 범위 안에서 카드와 드롭을 운영할 수 있습니다/)
+  assert.doesNotMatch(source, /루트 관리자 관리 범위/)
+  assert.match(source, /canManageScope \? '<button class="primary" id="save-organization-artists"/)
+})
+
 test('card creation opens a right drawer and is not rendered as the old inline toolbar', () => {
   assert.match(source, /card-create-drawer/)
   assert.match(source, /open-card-drawer/)

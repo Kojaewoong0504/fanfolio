@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import case, desc, func, or_, select, update
+from sqlalchemy import and_, case, desc, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, FanUser, OptionalCurrentUser
@@ -34,6 +34,34 @@ from app.services import record_audit, redeem
 from app.storage import configured_asset_storage, storage_response
 
 router = APIRouter(prefix="/api", tags=["fan"])
+
+
+def catalog_release_visible() -> object:
+    """Keep new studio cards private until their selected drop is live.
+
+    Cards made before the release workflow have no review version/drop link and
+    remain visible for backward compatibility. Operational cards without an
+    artist-studio owner keep the existing direct-publication behavior.
+    """
+    return or_(
+        Card.owner_artist_id.is_(None),
+        and_(Card.review_version == 0, Card.drop_id.is_(None)),
+        and_(Card.release_status == "published", Drop.status == "live"),
+    )
+
+
+async def card_is_visible_to_fans(card: Card, session: DbSession) -> bool:
+    """Apply the catalog visibility rule to direct card asset requests too."""
+    if card.owner_artist_id is None:
+        return True
+    if card.review_version == 0 and card.drop_id is None:
+        return True
+    if card.release_status != "published" or card.drop_id is None:
+        return False
+    drop = await session.get(Drop, card.drop_id)
+    return bool(drop and drop.status == "live")
+
+
 LENTICULAR_IMAGE_CONTENT_TYPES = {"image/png", "image/jpeg", "image/webp"}
 
 
@@ -215,7 +243,10 @@ async def collection_benefits(user: FanUser, session: DbSession) -> dict:
             select(Card, Artist)
             .select_from(Card)
             .outerjoin(Artist, Card.artist_id == Artist.id)
-            .where(Card.status == "published", Card.is_official.is_(True))
+            .outerjoin(Drop, Card.drop_id == Drop.id)
+            .where(
+                Card.status == "published", Card.is_official.is_(True), catalog_release_visible()
+            )
             .order_by(Card.artist_id, Card.season_name, Card.id)
         )
     ).all()
@@ -624,7 +655,12 @@ async def card_lenticular(user_card_id: str, user: FanUser, session: DbSession) 
 @router.get("/cards/{card_id}/image")
 async def card_image(card_id: str, _: FanUser, session: DbSession) -> Response:
     card = await session.get(Card, card_id)
-    if not card or card.status != "published" or not card.image_asset_id:
+    if (
+        not card
+        or card.status != "published"
+        or not card.image_asset_id
+        or not await card_is_visible_to_fans(card, session)
+    ):
         raise AppError(404, "CARD_IMAGE_NOT_FOUND", "카드 이미지를 찾을 수 없습니다.")
     asset = await session.get(Asset, card.image_asset_id)
     if not asset or not asset.storage_path:
@@ -639,7 +675,8 @@ async def catalog_artists(_: FanUser, session: DbSession) -> dict:
     artists = await session.scalars(
         select(Artist)
         .join(Card, Card.artist_id == Artist.id)
-        .where(Card.status == "published", Card.is_official.is_(True))
+        .outerjoin(Drop, Card.drop_id == Drop.id)
+        .where(Card.status == "published", Card.is_official.is_(True), catalog_release_visible())
         .distinct()
         .order_by(Artist.name)
     )
@@ -656,8 +693,10 @@ async def catalog_artists(_: FanUser, session: DbSession) -> dict:
 
 @router.get("/catalog/members")
 async def catalog_members(_: FanUser, session: DbSession, artistId: str | None = None) -> dict:
-    available_artist_ids = select(Card.artist_id).where(
-        Card.status == "published", Card.is_official.is_(True)
+    available_artist_ids = (
+        select(Card.artist_id)
+        .outerjoin(Drop, Card.drop_id == Drop.id)
+        .where(Card.status == "published", Card.is_official.is_(True), catalog_release_visible())
     )
     filters = [Member.artist_id.in_(available_artist_ids)]
     if artistId:
@@ -685,7 +724,7 @@ async def catalog(
     pageSize: int = Query(default=20, ge=1, le=100),
     sort: Literal["recommended", "name", "rarity"] = "recommended",
 ) -> dict:
-    filters = [Card.status == "published", Card.is_official.is_(True)]
+    filters = [Card.status == "published", Card.is_official.is_(True), catalog_release_visible()]
     if artistId:
         filters.append(Card.artist_id == artistId)
     if memberId:
@@ -700,6 +739,7 @@ async def catalog(
         .select_from(Card)
         .outerjoin(Artist, Card.artist_id == Artist.id)
         .outerjoin(Member, Card.member_id == Member.id)
+        .outerjoin(Drop, Card.drop_id == Drop.id)
     )
     total = await session.scalar(
         select(func.count()).select_from(catalog_from.where(*filters).subquery())
@@ -726,6 +766,7 @@ async def catalog(
         select(Card, Artist, Member)
         .outerjoin(Artist, Card.artist_id == Artist.id)
         .outerjoin(Member, Card.member_id == Member.id)
+        .outerjoin(Drop, Card.drop_id == Drop.id)
         .where(*filters)
         .order_by(*ordering)
         .offset((page - 1) * pageSize)

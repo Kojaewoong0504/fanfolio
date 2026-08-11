@@ -23,6 +23,8 @@ from app.models import (
     AuditLog,
     BackgroundRemovalJob,
     Card,
+    CardReviewDecision,
+    CardReviewRequest,
     CollectionBenefitClaim,
     CollectionCampaign,
     DeploymentIdentity,
@@ -82,6 +84,8 @@ async def ensure_demo_catalog(session: AsyncSession) -> None:
                 id="card_demo_published",
                 name="컴백 기념 사인 카드",
                 status="published",
+                release_policy="partner_and_platform",
+                release_status="published",
                 artist_id=artist_id,
                 member_id="member_yuna",
                 season_name="2026 SPRING",
@@ -169,6 +173,8 @@ async def reset_database(session: AsyncSession) -> None:
         BackgroundRemovalJob,
         CollectionBenefitClaim,
         AuditLog,
+        CardReviewDecision,
+        CardReviewRequest,
         AdminArtistAssignment,
         OrganizationArtist,
         AdminMembership,
@@ -268,6 +274,8 @@ async def seed_core(session: AsyncSession) -> dict:
                 id="card_published",
                 name="컴백 기념 사인 카드",
                 status="published",
+                release_policy="partner_and_platform",
+                release_status="published",
                 artist_id="artist_nova3",
                 member_id="member_yuna",
                 season_name="2026 SPRING",
@@ -462,6 +470,169 @@ async def notify_fans(session: AsyncSession, *, kind: str, title: str, body: str
                 logger.warning(
                     "Could not deliver notification email to %s", fan.email, exc_info=True
                 )
+
+
+def review_snapshot(card: Card) -> dict:
+    return {
+        "name": card.name,
+        "rarity": card.rarity,
+        "artistId": card.artist_id,
+        "memberId": card.member_id,
+        "imageAssetId": card.image_asset_id,
+        "voiceAssetId": card.voice_asset_id,
+        "videoAssetId": card.video_asset_id,
+        "handwritingAssetId": card.handwriting_asset_id,
+        "designConfig": card.design_config or {},
+        "issueLimit": card.issue_limit,
+    }
+
+
+def required_release_policy(card: Card) -> str:
+    return "partner_and_platform" if card.rarity == "Special" else "partner_only"
+
+
+def release_card_data(card: Card) -> dict:
+    return {
+        "releasePolicy": card.release_policy,
+        "releaseStatus": card.release_status,
+        "reviewVersion": card.review_version,
+    }
+
+
+async def create_review_request(session: AsyncSession, *, card: Card, stage: str) -> None:
+    session.add(
+        CardReviewRequest(
+            id=f"review_request_{uuid4().hex[:12]}",
+            card_id=card.id,
+            version=card.review_version,
+            stage=stage,
+            status="pending",
+            snapshot=review_snapshot(card),
+        )
+    )
+
+
+async def active_review_request(
+    session: AsyncSession, *, card: Card, stage: str
+) -> CardReviewRequest | None:
+    return await session.scalar(
+        select(CardReviewRequest).where(
+            CardReviewRequest.card_id == card.id,
+            CardReviewRequest.version == card.review_version,
+            CardReviewRequest.stage == stage,
+            CardReviewRequest.status == "pending",
+        )
+    )
+
+
+async def notify_admin_once(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    kind: str,
+    title: str,
+    body: str,
+    entity_type: str,
+    entity_id: str,
+    event_key: str,
+) -> None:
+    if await session.scalar(
+        select(Notification.id).where(
+            Notification.user_id == user_id,
+            Notification.event_key == event_key,
+        )
+    ):
+        return
+    session.add(
+        Notification(
+            id=f"notification_{uuid4().hex[:12]}",
+            user_id=user_id,
+            kind=kind,
+            title=title,
+            body=body,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            event_key=event_key,
+        )
+    )
+
+
+async def notify_partner_reviewers(session: AsyncSession, *, card: Card) -> None:
+    if not card.artist_id:
+        return
+    reviewers = await session.scalars(
+        select(AdminMembership)
+        .join(
+            OrganizationArtist,
+            OrganizationArtist.organization_id == AdminMembership.organization_id,
+        )
+        .where(
+            OrganizationArtist.artist_id == card.artist_id,
+            AdminMembership.status == "active",
+            AdminMembership.access_level.in_(("company_admin", "manager")),
+        )
+    )
+    for membership in reviewers:
+        await notify_admin_once(
+            session,
+            user_id=membership.user_id,
+            kind="card_partner_review_requested",
+            title="카드 회사 검수가 필요합니다",
+            body=f"{card.name} 카드가 회사 검수를 기다리고 있습니다.",
+            entity_type="card",
+            entity_id=card.id,
+            event_key=f"card:{card.id}:partner:{card.review_version}",
+        )
+
+
+async def notify_platform_reviewers(session: AsyncSession, *, card: Card) -> None:
+    reviewers = await session.scalars(
+        select(AdminMembership).where(
+            AdminMembership.status == "active",
+            AdminMembership.access_level == "platform_operator",
+        )
+    )
+    for membership in reviewers:
+        await notify_admin_once(
+            session,
+            user_id=membership.user_id,
+            kind="card_platform_review_requested",
+            title="카드 플랫폼 검수가 필요합니다",
+            body=f"{card.name} 카드가 플랫폼 검수를 기다리고 있습니다.",
+            entity_type="card",
+            entity_id=card.id,
+            event_key=f"card:{card.id}:platform:{card.review_version}",
+        )
+
+
+async def submit_card_for_release_review(session: AsyncSession, *, card: Card) -> None:
+    card.review_version += 1
+    card.release_policy = required_release_policy(card)
+    card.release_status = "pending_partner_review"
+    card.status = "pending_review"
+    await create_review_request(session, card=card, stage="partner")
+    await notify_partner_reviewers(session, card=card)
+
+
+async def record_review_decision(
+    session: AsyncSession,
+    *,
+    request: CardReviewRequest,
+    reviewer_user_id: str,
+    decision: str,
+    note: str | None,
+) -> None:
+    request.status = decision
+    session.add(
+        CardReviewDecision(
+            id=f"review_decision_{uuid4().hex[:12]}",
+            request_id=request.id,
+            reviewer_user_id=reviewer_user_id,
+            decision=decision,
+            note=note,
+            decided_at=now(),
+        )
+    )
 
 
 async def request_magic_link(session: AsyncSession, *, email: str, purpose: str) -> str:
