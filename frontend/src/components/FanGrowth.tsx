@@ -66,7 +66,7 @@ export function FanGrowth({ progression, loading, error, mode, onRetry, onClaim,
 
   const claimableRewards = progression?.claimableRewards ?? []
   const claimedRewards = useMemo(
-    () => (progression?.claimedRewards ?? []).filter(reward => reward.claimedAt),
+    () => progression?.claimedRewards.filter(reward => reward.claimedAt) ?? [],
     [progression?.claimedRewards],
   )
   const currentSeason = progression?.pass.seasons[0] ?? null
@@ -106,6 +106,18 @@ export function FanGrowth({ progression, loading, error, mode, onRetry, onClaim,
 
   const updateDraft = (patch: Partial<ProfileEquipment>) => {
     setDraftEquipment(current => current ? { ...current, ...patch } : null)
+  }
+
+  const toggleBadge = (rewardId: string) => {
+    setDraftEquipment(current => {
+      if (!current) return current
+      const badgeRewardIds = current.badgeRewardIds.includes(rewardId)
+        ? current.badgeRewardIds.filter(id => id !== rewardId)
+        : current.badgeRewardIds.length < 3
+          ? [...current.badgeRewardIds, rewardId]
+          : current.badgeRewardIds
+      return { ...current, badgeRewardIds }
+    })
   }
 
   const saveEquipment = async () => {
@@ -176,7 +188,7 @@ export function FanGrowth({ progression, loading, error, mode, onRetry, onClaim,
         {activeSheet === 'pass' && <div className="fan-growth-sheet-list">{progression.pass.seasons.length > 0 ? progression.pass.seasons.map(season => <article key={season.id} className="pass-season"><div><b>{season.title}</b><p>{season.progress.currentXp} XP 진행 중</p></div>{season.tiers.map(tier => <button type="button" key={tier.id} disabled={!tier.claimable || claimingTierId === tier.id} onClick={() => void claimTier(tier.id)}>{tier.claimed ? '수령 완료' : claimingTierId === tier.id ? '수령 중...' : tier.claimable ? `${tier.tier}단계 받기` : `${tier.requiredXp} XP 필요`}</button>)}</article>) : <p className="fan-growth-empty">진행 중인 무료 팬 패스가 없어요.</p>}</div>}
         {activeSheet === 'equipment' && draftEquipment && <div className="fan-growth-equipment">
           <RewardSelect label="칭호" value={draftEquipment.titleRewardId} rewards={availableTitles} onChange={value => updateDraft({ titleRewardId: value })} />
-          <RewardSelect label="배지" value={draftEquipment.badgeRewardIds[0] ?? null} rewards={availableBadges} onChange={value => updateDraft({ badgeRewardIds: value ? [value] : [] })} />
+          <div className="fan-growth-badge-picker"><b>배지</b><span>배지 3개까지 장착할 수 있어요.</span>{availableBadges.map(reward => <label key={reward.id}><input type="checkbox" checked={draftEquipment.badgeRewardIds.includes(reward.id)} disabled={!draftEquipment.badgeRewardIds.includes(reward.id) && draftEquipment.badgeRewardIds.length >= 3} onChange={() => toggleBadge(reward.id)} />{reward.name}</label>)}</div>
           <RewardSelect label="프로필 프레임" value={draftEquipment.frameRewardId} rewards={availableFrames} onChange={value => updateDraft({ frameRewardId: value })} />
           <RewardSelect label="컬렉션 테마" value={draftEquipment.themeRewardId} rewards={availableThemes} onChange={value => updateDraft({ themeRewardId: value })} />
           {claimedRewards.length === 0 && <p className="fan-growth-empty">수령 완료한 보상만 장착할 수 있어요.</p>}

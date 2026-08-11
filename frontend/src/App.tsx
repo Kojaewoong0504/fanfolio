@@ -138,7 +138,6 @@ function App() {
   const [fanProgression, setFanProgression] = useState<FanProgression | null>(null)
   const [growthLoading, setGrowthLoading] = useState(false)
   const [growthError, setGrowthError] = useState('')
-  const [claimedGrowthRewards, setClaimedGrowthRewards] = useState<RewardGrant[]>([])
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [notificationError, setNotificationError] = useState('')
@@ -264,7 +263,6 @@ function App() {
     setCollectionError('')
     setFanProgression(null)
     setGrowthError('')
-    setClaimedGrowthRewards([])
     setNotifications([])
     setUnreadCount(0)
     setNotificationError('')
@@ -299,18 +297,17 @@ function App() {
         getProgression(),
         getFanPass(),
       ])
-      setFanProgression(current => ({
+      setFanProgression({
         ...progression.data,
         pass: pass.data,
-        claimedRewards: current?.claimedRewards ?? claimedGrowthRewards,
-      }))
+      })
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) clearLocalSession()
       else setGrowthError('성장 정보를 불러오지 못했어요.')
     } finally {
       setGrowthLoading(false)
     }
-  }, [claimedGrowthRewards, clearLocalSession])
+  }, [clearLocalSession])
 
   const refreshUser = async () => {
     const result = await apiFetch<{ ok: true, data: CurrentUser }>('/me')
@@ -450,21 +447,12 @@ function App() {
 
   const claimGrowthReward = async (grantId: string): Promise<RewardGrant> => {
     const result = await claimReward(grantId)
-    setClaimedGrowthRewards(rewards => rewards.some(reward => reward.id === result.data.id) ? rewards : [...rewards, result.data])
-    setFanProgression(current => current ? {
-      ...current,
-      claimableRewards: current.claimableRewards.filter(reward => reward.id !== grantId),
-      claimedRewards: [...(current.claimedRewards ?? []).filter(reward => reward.id !== result.data.id), result.data],
-    } : current)
-    void refreshGrowth()
+    await refreshGrowth()
     return result.data
   }
 
   const claimGrowthPassTier = async (tierId: string) => {
     const result = await claimPassTier(tierId)
-    if (result.data.rewardGrant) {
-      setClaimedGrowthRewards(rewards => rewards.some(reward => reward.id === result.data.rewardGrant?.id) ? rewards : [...rewards, result.data.rewardGrant as RewardGrant])
-    }
     await refreshGrowth()
     return result.data
   }

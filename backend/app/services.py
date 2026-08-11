@@ -600,7 +600,7 @@ async def fan_progression_data(session: AsyncSession, user_id: str) -> dict:
             }
         )
 
-    reward_rows = (
+    claimable_reward_rows = (
         await session.execute(
             select(RewardGrant, RewardCatalog)
             .join(RewardCatalog, RewardCatalog.id == RewardGrant.reward_id)
@@ -610,6 +610,18 @@ async def fan_progression_data(session: AsyncSession, user_id: str) -> dict:
                 RewardCatalog.status == "published",
             )
             .order_by(RewardGrant.granted_at, RewardGrant.id)
+        )
+    ).all()
+    claimed_reward_rows = (
+        await session.execute(
+            select(RewardGrant, RewardCatalog)
+            .join(RewardCatalog, RewardCatalog.id == RewardGrant.reward_id)
+            .where(
+                RewardGrant.user_id == user_id,
+                RewardGrant.claimed_at.is_not(None),
+                RewardCatalog.status == "published",
+            )
+            .order_by(RewardGrant.claimed_at, RewardGrant.granted_at, RewardGrant.id)
         )
     ).all()
     events = list(
@@ -625,7 +637,12 @@ async def fan_progression_data(session: AsyncSession, user_id: str) -> dict:
             "totalXp": level.total_xp if level else 0,
         },
         "achievements": achievements,
-        "claimableRewards": [_reward_grant_data(grant, reward) for grant, reward in reward_rows],
+        "claimableRewards": [
+            _reward_grant_data(grant, reward) for grant, reward in claimable_reward_rows
+        ],
+        "claimedRewards": [
+            _reward_grant_data(grant, reward) for grant, reward in claimed_reward_rows
+        ],
         "pass": await fan_pass_data(session, user_id=user_id),
         "equipment": await _equipment_data(session, user_id=user_id),
         "debugEvents": [

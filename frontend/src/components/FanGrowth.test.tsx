@@ -3,4 +3,6 @@ export const fanGrowthComponentContract = {
   rewardClaimButton: '칭호 받기',
   forbiddenBottomTabLabel: '팬 패스',
   equipmentEntry: '장착 패널',
+  claimedInventorySource: 'server-owned claimedRewards',
+  badgeLimit: 3,
 } as const

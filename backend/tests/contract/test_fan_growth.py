@@ -520,6 +520,34 @@ def test_fan_can_read_progression_with_only_their_reward_grants(
     }
 
 
+def test_progression_returns_server_owned_claimed_reward_inventory(
+    actors: dict[str, TestClient],
+) -> None:
+    title_grant_id = seed_reward_grants("fan", ["title"])[0]
+    badge_grant_ids = seed_reward_grants("fan", ["badge", "badge", "badge"])
+    other_grant_id = seed_reward_grants("otherFan", ["badge"])[0]
+
+    assert_success(actors["fan"].post(f"/api/me/rewards/{title_grant_id}/claim"))
+    for grant_id in badge_grant_ids:
+        assert_success(actors["fan"].post(f"/api/me/rewards/{grant_id}/claim"))
+
+    progression = assert_success(actors["fan"].get("/api/me/progression"))
+
+    claimed = progression["claimedRewards"]
+    claimed_ids = {item["id"] for item in claimed}
+    assert claimed_ids == {title_grant_id, *badge_grant_ids}
+    assert other_grant_id not in claimed_ids
+    assert progression["claimableRewards"] == []
+    assert [item["type"] for item in claimed].count("badge") == 3
+    assert all(item["claimedAt"] is not None for item in claimed)
+    assert {item["rewardId"] for item in claimed} == {
+        "reward_fan_title_1",
+        "reward_fan_badge_1",
+        "reward_fan_badge_2",
+        "reward_fan_badge_3",
+    }
+
+
 def test_fan_cannot_claim_another_fans_reward(actors: dict[str, TestClient]) -> None:
     other_grant_id = seed_reward_grants("otherFan", ["title"])[0]
 

@@ -216,7 +216,7 @@ export type FanProgression = {
   level: FanLevel
   achievements: AchievementProgress[]
   claimableRewards: RewardGrant[]
-  claimedRewards?: RewardGrant[]
+  claimedRewards: RewardGrant[]
   pass: FanPass
   equipment: ProfileEquipment
   debugEvents?: Array<{ kind: string; sourceUserCardId?: string; status: string }>

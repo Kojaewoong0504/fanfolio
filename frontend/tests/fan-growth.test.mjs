@@ -33,6 +33,16 @@ test('fan growth API client exposes typed progression reward equipment and pass 
   assert.match(apiSource, /export function claimPassTier\(tierId: string\)/)
 })
 
+test('progression claimed rewards are server-owned inventory, not local invented state', () => {
+  assert.match(apiSource, /claimedRewards: RewardGrant\[\]/)
+  assert.doesNotMatch(apiSource, /claimedRewards\?: RewardGrant\[\]/)
+  assert.doesNotMatch(appSource, /claimedGrowthRewards/)
+  assert.doesNotMatch(appSource, /setClaimedGrowthRewards/)
+  assert.doesNotMatch(appSource, /claimedRewards: current\?\.claimedRewards/)
+  assert.match(appSource, /\.\.\.progression\.data/)
+  assert.match(appSource, /pass: pass\.data/)
+})
+
 test('progression refresh is parallel with collection and non-blocking on failure', () => {
   assert.match(appSource, /refreshGrowth/)
   assert.match(appSource, /Promise\.allSettled\(\[\s*refreshCollection\(\),\s*refreshGrowth\(\)/s)
@@ -51,6 +61,9 @@ test('fan growth UI has Korean reward pass equipment states and bottom sheet beh
   assert.match(componentSource, /equipmentSaving/)
   assert.match(componentSource, /claimedRewards/)
   assert.match(componentSource, /claimableRewards/)
+  assert.match(componentSource, /availableBadges/)
+  assert.match(componentSource, /badgeRewardIds\.includes/)
+  assert.match(componentSource, /배지 3개까지 장착할 수 있어요/)
   assert.match(componentSource, /role="dialog"/)
   assert.match(componentSource, /aria-modal="true"/)
 })
