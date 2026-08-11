@@ -15,6 +15,9 @@ const state = {
   mustChangePassword: false,
   adminContext: null,
   mobileNavOpen: false,
+  navCollapsed:
+    window.localStorage.getItem("fanfolio.admin.navCollapsed") === "true",
+  accountMenuOpen: false,
   metrics: null,
   recentActivity: [],
   cards: [],
@@ -245,17 +248,20 @@ function loginView() {
 function navigationView() {
   const person = state.adminContext?.user || {};
   const role = isRoot() ? "루트 관리자" : `${state.adminContext?.accessLevel || "viewer"} · ${scopeLabel()}`;
-  return `<aside class="app-nav ${state.mobileNavOpen ? "open" : ""}" aria-label="관리자 주요 메뉴"><div class="nav-brand"><span class="nav-brand-mark">${icon("auto_awesome_motion")}</span><span class="nav-brand-copy"><strong>FANFOLIO</strong><small>OPERATIONS</small></span></div><nav>${navItems()
+  const navToggleLabel = state.navCollapsed ? "내비게이션 펼치기" : "내비게이션 접기";
+  return `<aside class="app-nav ${state.mobileNavOpen ? "open" : ""}" aria-label="관리자 주요 메뉴"><div class="nav-brand"><span class="nav-brand-mark">${icon("auto_awesome_motion")}</span><span class="nav-brand-copy"><strong>FANFOLIO</strong><small>OPERATIONS</small></span><button class="icon-button nav-toggle" id="desktop-nav-toggle" type="button" aria-label="${navToggleLabel}" title="${navToggleLabel}">${icon(state.navCollapsed ? "keyboard_double_arrow_right" : "keyboard_double_arrow_left")}</button></div><nav>${navItems()
     .map(
       (item) =>
-        `<button type="button" data-view="${item.id}" class="nav-item ${state.view === item.id ? "active" : ""}" aria-current="${state.view === item.id ? "page" : "false"}">${icon(item.icon)}<span>${item.label}</span></button>`,
+        `<button type="button" data-view="${item.id}" class="nav-item ${state.view === item.id ? "active" : ""}" aria-current="${state.view === item.id ? "page" : "false"}" aria-label="${escapeHtml(item.label)}" title="${escapeHtml(item.label)}">${icon(item.icon)}<span>${item.label}</span></button>`,
     )
-    .join("")}</nav><div class="nav-account"><span class="account-avatar">${escapeHtml((person.displayName || person.email || "관").slice(0, 1))}</span><div><strong>${escapeHtml(person.displayName || "관리자")}</strong><small>${escapeHtml(role)}</small></div><button class="icon-button" id="logout" type="button" aria-label="로그아웃">${icon("logout")}</button></div></aside>`;
+    .join("")}</nav><div class="nav-account"><span class="account-avatar">${escapeHtml((person.displayName || person.email || "관").slice(0, 1))}</span><div class="nav-account-copy"><strong>${escapeHtml(person.displayName || "관리자")}</strong><small>${escapeHtml(role)}</small></div><button class="icon-button" id="logout" type="button" aria-label="로그아웃" title="로그아웃">${icon("logout")}</button></div></aside>`;
 }
 
 function topbarView() {
   const person = state.adminContext?.user || {};
-  return `<header class="topbar"><div class="topbar-title"><button class="icon-button mobile-nav-toggle" id="mobile-nav-toggle" type="button" aria-label="메뉴 열기">${icon("menu")}</button><div><p class="eyebrow">FANFOLIO OPERATIONS</p><h1 class="title">${title()}</h1></div></div><div class="top-actions"><span class="scope-chip">${icon(isRoot() ? "shield_person" : "domain")} ${escapeHtml(scopeLabel())}</span><button class="icon-button" type="button" aria-label="알림">${icon("notifications")}</button><span class="top-avatar" title="${escapeHtml(person.email || "")}">${escapeHtml((person.displayName || person.email || "관").slice(0, 1))}</span></div></header>`;
+  const personName = person.displayName || "관리자";
+  const personInitial = escapeHtml((person.displayName || person.email || "관").slice(0, 1));
+  return `<header class="topbar"><div class="topbar-title"><button class="icon-button mobile-nav-toggle" id="mobile-nav-toggle" type="button" aria-label="메뉴 열기">${icon("menu")}</button><div><p class="eyebrow">FANFOLIO OPERATIONS</p><h1 class="title">${title()}</h1></div></div><div class="top-actions"><button class="icon-button" type="button" aria-label="알림">${icon("notifications")}</button><div class="account-menu ${state.accountMenuOpen ? "open" : ""}"><button class="top-avatar" id="account-menu-toggle" type="button" aria-haspopup="menu" aria-expanded="${state.accountMenuOpen}" aria-label="${escapeHtml(personName)} 계정 메뉴" title="${escapeHtml(person.email || personName)}">${personInitial}</button><div class="account-popover" role="menu" aria-label="계정 메뉴"><button type="button" id="account-settings" role="menuitem">${icon("manage_accounts")}<span>계정 설정</span></button><button type="button" id="account-password-change" role="menuitem">${icon("password")}<span>비밀번호 변경</span></button><button type="button" id="account-logout" role="menuitem">${icon("logout")}<span>로그아웃</span></button></div></div></div></header>`;
 }
 
 function currentView() {
@@ -291,7 +297,7 @@ function layout() {
     return;
   }
   const partnerMode = state.view === "partners" && isRoot();
-  app.innerHTML = `<div class="admin-shell ${partnerMode ? "partner-layout partner-directory" : ""}">${navigationView()}${partnerMode ? partnerListColumn() : ""}<main class="workspace ${partnerMode ? "partner-detail" : ""}">${topbarView()}${state.error ? `<div class="notice error" role="alert">${escapeHtml(state.error)}</div>` : ""}<section class="page-content">${currentView()}</section></main></div>${drawerView()}<div class="nav-scrim ${state.mobileNavOpen ? "show" : ""}" id="nav-scrim"></div><div class="toast" id="toast" role="status" aria-live="polite"></div>`;
+  app.innerHTML = `<div class="admin-shell ${state.navCollapsed ? "nav-collapsed" : ""} ${partnerMode ? "partner-layout partner-directory" : ""}">${navigationView()}${partnerMode ? partnerListColumn() : ""}<main class="workspace ${partnerMode ? "partner-detail" : ""}">${topbarView()}${state.error ? `<div class="notice error" role="alert">${escapeHtml(state.error)}</div>` : ""}<section class="page-content">${currentView()}</section></main></div>${drawerView()}<div class="nav-scrim ${state.mobileNavOpen ? "show" : ""}" id="nav-scrim"></div><div class="toast" id="toast" role="status" aria-live="polite"></div>`;
   bind();
   document
     .querySelector("#artist-account-form")
@@ -1492,6 +1498,52 @@ async function publishCard(cardId) {
     toast("카드 공개에 실패했습니다.");
   }
 }
+function toggleDesktopNavigation() {
+  state.navCollapsed = !state.navCollapsed;
+  window.localStorage.setItem(
+    "fanfolio.admin.navCollapsed",
+    String(state.navCollapsed),
+  );
+  layout();
+}
+function closeAccountMenu() {
+  if (!state.accountMenuOpen) return;
+  state.accountMenuOpen = false;
+  layout();
+}
+async function logoutAdmin() {
+  try {
+    await api("/auth/logout", { method: "POST", body: "{}" });
+  } catch {
+    /* The local credential is still cleared below. */
+  }
+  ACCESS_TOKEN = "";
+  state.authenticated = false;
+  state.adminContext = null;
+  state.metrics = null;
+  state.recentActivity = [];
+  state.cards = [];
+  state.drops = [];
+  state.batches = [];
+  state.users = [];
+  state.artistAccounts = [];
+  state.auditLogs = [];
+  state.campaigns = [];
+  state.userQuery = "";
+  state.userRole = "all";
+  state.userPage = 1;
+  state.userPagination = { page: 1, pageSize: 20, total: 0 };
+  state.auditQuery = "";
+  state.auditAction = "all";
+  state.auditPage = 1;
+  state.auditPagination = { page: 1, pageSize: 50, total: 0 };
+  state.codeBatch = null;
+  state.reviewCard = null;
+  state.reviewImageSrc = "";
+  state.accountMenuOpen = false;
+  state.loginError = "";
+  layout();
+}
 async function createAdminCard(event) {
   event.preventDefault();
   const form = new FormData(event.target);
@@ -1798,17 +1850,39 @@ function bind() {
     button.addEventListener("click", () => {
       state.view = button.dataset.view;
       state.mobileNavOpen = false;
+      state.accountMenuOpen = false;
       layout();
     });
   });
+  document
+    .querySelector("#desktop-nav-toggle")
+    ?.addEventListener("click", toggleDesktopNavigation);
   document.querySelector("#mobile-nav-toggle")?.addEventListener("click", () => {
     state.mobileNavOpen = !state.mobileNavOpen;
+    state.accountMenuOpen = false;
     layout();
   });
   document.querySelector("#nav-scrim")?.addEventListener("click", () => {
     state.mobileNavOpen = false;
     layout();
   });
+  document.querySelector("#account-menu-toggle")?.addEventListener("click", () => {
+    state.accountMenuOpen = !state.accountMenuOpen;
+    layout();
+  });
+  document.querySelector("#account-settings")?.addEventListener("click", () => {
+    toast("계정 설정은 관리자 API 연결 후 제공됩니다.");
+    closeAccountMenu();
+  });
+  document.querySelector("#account-password-change")?.addEventListener("click", () => {
+    state.mustChangePassword = true;
+    state.accountMenuOpen = false;
+    state.loginError = "";
+    layout();
+  });
+  document
+    .querySelector("#account-logout")
+    ?.addEventListener("click", () => void logoutAdmin());
 
   document.querySelector("#partner-search")?.addEventListener("input", (event) => {
     state.partnerQuery = event.currentTarget.value;
@@ -1980,38 +2054,7 @@ function bind() {
         updateCampaignStatus(button.dataset.id, button.dataset.status),
       ),
     );
-  document.querySelector("#logout")?.addEventListener("click", async () => {
-    try {
-      await api("/auth/logout", { method: "POST", body: "{}" });
-    } catch {
-      /* The local credential is still cleared below. */
-    }
-    ACCESS_TOKEN = "";
-    state.authenticated = false;
-    state.adminContext = null;
-    state.metrics = null;
-    state.recentActivity = [];
-    state.cards = [];
-    state.drops = [];
-    state.batches = [];
-    state.users = [];
-    state.artistAccounts = [];
-    state.auditLogs = [];
-    state.campaigns = [];
-    state.userQuery = "";
-    state.userRole = "all";
-    state.userPage = 1;
-    state.userPagination = { page: 1, pageSize: 20, total: 0 };
-    state.auditQuery = "";
-    state.auditAction = "all";
-    state.auditPage = 1;
-    state.auditPagination = { page: 1, pageSize: 50, total: 0 };
-    state.codeBatch = null;
-    state.reviewCard = null;
-    state.reviewImageSrc = "";
-    state.loginError = "";
-    layout();
-  });
+  document.querySelector("#logout")?.addEventListener("click", () => void logoutAdmin());
   document
     .querySelector("#admin-card-form")
     ?.addEventListener("submit", createAdminCard);
@@ -2146,6 +2189,15 @@ function bind() {
     }),
   );
   document.addEventListener("click", (event) => {
+    if (
+      state.accountMenuOpen &&
+      !event.target.closest(".account-menu") &&
+      !event.target.closest("#account-menu-toggle")
+    ) {
+      state.accountMenuOpen = false;
+      layout();
+      return;
+    }
     if (!event.target.closest(".admin-select")) {
       document.querySelectorAll(".admin-select.open").forEach((control) => control.classList.remove("open"));
     }
@@ -2174,6 +2226,10 @@ function bind() {
       ),
     );
   document.onkeydown = (event) => {
+    if (event.key === "Escape" && state.accountMenuOpen) {
+      closeAccountMenu();
+      return;
+    }
     if (event.key === "Escape" && state.drawer) closeDrawer();
   };
 }
