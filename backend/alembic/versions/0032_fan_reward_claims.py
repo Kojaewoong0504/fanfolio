@@ -5,7 +5,7 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from sqlalchemy import inspect
 
-from alembic import op
+from alembic import context, op
 
 revision: str = "0032_fan_reward_claims"
 down_revision: str | None = "0031_fan_growth_foundation"
@@ -14,6 +14,10 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    if context.is_offline_mode():
+        op.add_column("reward_grants", sa.Column("claimed_at", sa.DateTime(timezone=True)))
+        return
+
     inspector = inspect(op.get_bind())
     if not inspector.has_table("reward_grants"):
         return
@@ -24,6 +28,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if context.is_offline_mode():
+        op.drop_column("reward_grants", "claimed_at")
+        return
+
     inspector = inspect(op.get_bind())
     if not inspector.has_table("reward_grants"):
         return

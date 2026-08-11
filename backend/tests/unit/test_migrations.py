@@ -407,6 +407,24 @@ def test_reward_claim_migration_adds_nullable_claimed_at(tmp_path: Path) -> None
         assert reward_grant_columns["claimed_at"][3] == 0
 
 
+def test_reward_claim_migration_emits_offline_sql_without_database_inspection(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "offline-fan-reward-claims.db"
+    backend_dir = Path(__file__).parents[2]
+
+    generated = run_alembic(
+        backend_dir,
+        database_path,
+        "upgrade",
+        "0031_fan_growth_foundation:0032_fan_reward_claims",
+        "--sql",
+    )
+
+    assert generated.returncode == 0, generated.stderr
+    assert "ALTER TABLE reward_grants ADD COLUMN claimed_at" in generated.stdout
+
+
 def test_card_release_migration_creates_review_workflow_storage(tmp_path: Path) -> None:
     database_path = tmp_path / "card-release-workflow.db"
     backend_dir = Path(__file__).parents[2]
