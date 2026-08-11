@@ -32,6 +32,24 @@ ROOT_ACTIONS = frozenset(
 )
 
 PARTNER_ACTIONS = {
+    "company_admin": frozenset(
+        {
+            "organization:read",
+            "organization:manage_scoped",
+            "members:manage_scoped",
+            "artists:read",
+            "artists:write",
+            "cards:read",
+            "cards:write",
+            "cards:submit_review",
+            "drops:read",
+            "drops:write",
+            "drops:submit",
+            "codes:read",
+            "codes:write",
+            "audit:read",
+        }
+    ),
     "manager": frozenset(
         {
             "artists:read",
@@ -39,6 +57,11 @@ PARTNER_ACTIONS = {
             "cards:read",
             "cards:write",
             "cards:submit_review",
+            "drops:read",
+            "drops:write",
+            "drops:submit",
+            "codes:read",
+            "codes:write",
             "audit:read",
         }
     ),
@@ -49,10 +72,14 @@ PARTNER_ACTIONS = {
             "cards:read",
             "cards:write",
             "cards:submit_review",
+            "drops:read",
+            "drops:write",
+            "codes:read",
+            "codes:write",
             "audit:read",
         }
     ),
-    "viewer": frozenset({"artists:read", "cards:read", "audit:read"}),
+    "viewer": frozenset({"artists:read", "cards:read", "drops:read", "codes:read", "audit:read"}),
 }
 PARTNER_SCOPED_ACTIONS = frozenset().union(*PARTNER_ACTIONS.values())
 

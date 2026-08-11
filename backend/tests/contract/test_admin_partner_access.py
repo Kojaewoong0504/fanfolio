@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app.admin_access import AdminContext
+from app.admin_access import PARTNER_ACTIONS, AdminContext
 from app.db.session import SessionLocal
 from app.errors import AppError
 from app.models import (
@@ -22,6 +22,7 @@ from app.models import (
     User,
 )
 from app.routers import assets as assets_router
+from app.schemas import OrganizationMemberCreate, OrganizationMemberUpdate
 from app.services import ensure_admin_bootstrap
 from app.storage import StorageObjectNotFound, configured_asset_storage
 from tests.conftest import assert_error, assert_success
@@ -173,6 +174,49 @@ def test_admin_me_exposes_the_root_scope(
     assert context["organization"] is None
     assert context["assignedArtists"] == []
     assert "organizations:manage" in context["allowedActions"]
+
+
+def test_partner_action_map_includes_company_admin_and_drop_code_scope() -> None:
+    assert PARTNER_ACTIONS["company_admin"] == frozenset(
+        {
+            "organization:read",
+            "organization:manage_scoped",
+            "members:manage_scoped",
+            "artists:read",
+            "artists:write",
+            "cards:read",
+            "cards:write",
+            "cards:submit_review",
+            "drops:read",
+            "drops:write",
+            "drops:submit",
+            "codes:read",
+            "codes:write",
+            "audit:read",
+        }
+    )
+    assert {"drops:read", "drops:write", "drops:submit"} <= PARTNER_ACTIONS["manager"]
+    assert {"codes:read", "codes:write"} <= PARTNER_ACTIONS["manager"]
+    assert {"drops:read", "drops:write", "codes:read", "codes:write"} <= PARTNER_ACTIONS["editor"]
+    assert "drops:submit" not in PARTNER_ACTIONS["editor"]
+    assert "codes:read" in PARTNER_ACTIONS["viewer"]
+    assert "codes:write" not in PARTNER_ACTIONS["viewer"]
+    assert "drops:write" not in PARTNER_ACTIONS["viewer"]
+
+
+def test_organization_member_schemas_accept_company_admin_access_level() -> None:
+    create_payload = OrganizationMemberCreate.model_validate(
+        {
+            "email": "company-admin@starwave.com",
+            "displayName": "Company Admin",
+            "accessLevel": "company_admin",
+            "artistIds": [],
+        }
+    )
+    update_payload = OrganizationMemberUpdate.model_validate({"accessLevel": "company_admin"})
+
+    assert create_payload.access_level == "company_admin"
+    assert update_payload.access_level == "company_admin"
 
 
 def test_root_can_manage_partner_organization_and_member(

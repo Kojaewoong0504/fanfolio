@@ -99,7 +99,7 @@ class AdminMembership(Base):
     __tablename__ = "admin_memberships"
     __table_args__ = (
         CheckConstraint(
-            "access_level IN ('root', 'manager', 'editor', 'viewer')",
+            "access_level IN ('root', 'company_admin', 'manager', 'editor', 'viewer')",
             name="ck_admin_membership_access_level",
         ),
         CheckConstraint(

@@ -233,7 +233,9 @@ class OrganizationArtistsUpdate(BaseModel):
 class OrganizationMemberCreate(BaseModel):
     email: EmailStr
     display_name: str = Field(alias="displayName", min_length=1, max_length=120)
-    access_level: Literal["manager", "editor", "viewer"] = Field(alias="accessLevel")
+    access_level: Literal["company_admin", "manager", "editor", "viewer"] = Field(
+        alias="accessLevel"
+    )
     artist_ids: list[str] = Field(default_factory=list, alias="artistIds", max_length=500)
     model_config = ConfigDict(populate_by_name=True)
 
@@ -242,7 +244,7 @@ class OrganizationMemberUpdate(BaseModel):
     display_name: str | None = Field(
         default=None, alias="displayName", min_length=1, max_length=120
     )
-    access_level: Literal["manager", "editor", "viewer"] | None = Field(
+    access_level: Literal["company_admin", "manager", "editor", "viewer"] | None = Field(
         default=None, alias="accessLevel"
     )
     status: Literal["active", "suspended"] | None = None

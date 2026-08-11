@@ -138,6 +138,39 @@ def test_alembic_upgrade_creates_the_current_schema(tmp_path: Path) -> None:
                 """,
                 ("invalid_access", "org_test", "unexpected", "active", "잘못된 권한"),
             )
+        connection.execute(
+            """
+            INSERT INTO organizations (
+                id, name, slug, status, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            """,
+            ("org_company_admin", "회사 관리자 조직", "company-admin-org", "active"),
+        )
+        connection.execute(
+            """
+            INSERT INTO admin_memberships (
+                user_id, organization_id, access_level, status,
+                display_name, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            """,
+            (
+                "valid_company_admin",
+                "org_company_admin",
+                "company_admin",
+                "active",
+                "회사 관리자",
+            ),
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                INSERT INTO admin_memberships (
+                    user_id, organization_id, access_level, status,
+                    display_name, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                ("invalid_company_admin_scope", None, "company_admin", "active", "범위 없음"),
+            )
         with pytest.raises(sqlite3.IntegrityError):
             connection.execute(
                 """
