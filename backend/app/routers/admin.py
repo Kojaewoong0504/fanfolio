@@ -315,18 +315,27 @@ def ensure_engagement_approver_scope(
 
 async def validate_reward_scope(
     session: DbSession,
-    context: AdminContext,
     reward_ids: list[str],
+    organization_id: str | None,
+    artist_id: str | None,
 ) -> None:
     if not reward_ids:
         return
     normalized = set(reward_ids)
+    scope_filters = [
+        RewardCatalog.organization_id.is_(None)
+        if organization_id is None
+        else RewardCatalog.organization_id == organization_id,
+        RewardCatalog.artist_id.is_(None)
+        if artist_id is None
+        else RewardCatalog.artist_id == artist_id,
+    ]
     visible_ids = set(
         (
             await session.scalars(
                 select(RewardCatalog.id).where(
                     RewardCatalog.id.in_(normalized),
-                    *engagement_scope_filters(context, RewardCatalog),
+                    *scope_filters,
                 )
             )
         ).all()
@@ -386,7 +395,7 @@ async def create_achievement(
     organization_id, artist_id = await require_engagement_scope(
         session, context, payload.organization_id, payload.artist_id
     )
-    await validate_reward_scope(session, context, payload.reward_ids)
+    await validate_reward_scope(session, payload.reward_ids, organization_id, artist_id)
     achievement = AchievementDefinition(
         id=f"achievement_{uuid4().hex[:12]}",
         organization_id=organization_id,

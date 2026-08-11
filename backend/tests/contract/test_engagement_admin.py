@@ -379,3 +379,159 @@ def test_achievement_create_validates_reward_ids_against_partner_scope(
             404,
             "RESOURCE_NOT_FOUND",
         )
+
+
+def test_root_scoped_artist_achievement_rejects_other_organization_reward(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    source_org, _ = create_partner(
+        actors["admin"],
+        slug="root-source-rewards",
+        email="root-source@starwave.com",
+        access_level="company_admin",
+    )
+    other_org, _ = create_partner(
+        actors["admin"],
+        slug="root-other-rewards",
+        email="root-other@starwave.com",
+        access_level="company_admin",
+    )
+
+    async def seed_rewards() -> None:
+        async with SessionLocal() as session:
+            session.add_all(
+                [
+                    RewardCatalog(
+                        id="reward_root_scoped_nova",
+                        organization_id=source_org["id"],
+                        artist_id="artist_nova3",
+                        reward_type="badge",
+                        name="Root Scoped NOVA",
+                        status="published",
+                    ),
+                    RewardCatalog(
+                        id="reward_root_other_org",
+                        organization_id=other_org["id"],
+                        artist_id="artist_nova3",
+                        reward_type="badge",
+                        name="Root Other Org",
+                        status="published",
+                    ),
+                    RewardCatalog(
+                        id="reward_global_title",
+                        organization_id=None,
+                        artist_id=None,
+                        reward_type="title",
+                        name="Global Title",
+                        status="published",
+                    ),
+                ]
+            )
+            await session.commit()
+
+    asyncio.run(seed_rewards())
+
+    scoped = assert_success(
+        actors["admin"].post(
+            "/api/admin/engagement/achievements",
+            json=achievement_payload(
+                organizationId=source_org["id"],
+                rewardIds=["reward_root_scoped_nova"],
+            ),
+        ),
+        201,
+    )
+    assert scoped["rewardIds"] == ["reward_root_scoped_nova"]
+
+    assert_error(
+        actors["admin"].post(
+            "/api/admin/engagement/achievements",
+            json=achievement_payload(
+                title="타 조직 보상 차단",
+                organizationId=source_org["id"],
+                rewardIds=["reward_root_other_org"],
+            ),
+        ),
+        404,
+        "RESOURCE_NOT_FOUND",
+    )
+    global_draft = assert_success(
+        actors["admin"].post(
+            "/api/admin/engagement/achievements",
+            json=achievement_payload(
+                title="전역 업적",
+                artistId=None,
+                rewardIds=["reward_global_title"],
+            ),
+        ),
+        201,
+    )
+    assert global_draft["organizationId"] is None
+    assert global_draft["rewardIds"] == ["reward_global_title"]
+
+
+def test_company_admin_artist_achievement_rejects_other_artist_reward(
+    actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
+) -> None:
+    async def add_other_artist() -> None:
+        async with SessionLocal() as session:
+            session.add(Artist(id="artist_other", name="문라이트"))
+            await session.commit()
+
+    asyncio.run(add_other_artist())
+    organization, company_admin_member = create_partner(
+        actors["admin"],
+        slug="company-artist-rewards",
+        email="company-admin-artist-rewards@starwave.com",
+        access_level="company_admin",
+        artist_ids=["artist_nova3", "artist_other"],
+    )
+
+    async def seed_rewards() -> None:
+        async with SessionLocal() as session:
+            session.add_all(
+                [
+                    RewardCatalog(
+                        id="reward_company_nova_artist",
+                        organization_id=organization["id"],
+                        artist_id="artist_nova3",
+                        reward_type="badge",
+                        name="Company NOVA Artist",
+                        status="published",
+                    ),
+                    RewardCatalog(
+                        id="reward_company_other_artist",
+                        organization_id=organization["id"],
+                        artist_id="artist_other",
+                        reward_type="badge",
+                        name="Company Other Artist",
+                        status="published",
+                    ),
+                ]
+            )
+            await session.commit()
+
+    asyncio.run(seed_rewards())
+    company_admin = login_partner(app, company_admin_member)
+
+    draft = assert_success(
+        company_admin.post(
+            "/api/admin/engagement/achievements",
+            json=achievement_payload(rewardIds=["reward_company_nova_artist"]),
+        ),
+        201,
+    )
+    assert draft["artistId"] == "artist_nova3"
+    assert draft["rewardIds"] == ["reward_company_nova_artist"]
+
+    assert_error(
+        company_admin.post(
+            "/api/admin/engagement/achievements",
+            json=achievement_payload(
+                title="타 아티스트 보상 차단",
+                rewardIds=["reward_company_other_artist"],
+            ),
+        ),
+        404,
+        "RESOURCE_NOT_FOUND",
+    )
