@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
+import vm from 'node:vm'
 
 const source = await readFile(new URL('../app.js', import.meta.url), 'utf8')
 
@@ -19,6 +20,94 @@ function functionBody(name) {
 
 function assertMatches(input, pattern, contract) {
   assert.ok(pattern.test(input), contract)
+}
+
+async function loadAdminHarness() {
+  const appElement = { innerHTML: '' }
+  const context = {
+    console,
+    setTimeout,
+    URL: {
+      created: [],
+      revoked: [],
+      createObjectURL(file) {
+        const value = `blob:${file.name}`
+        this.created.push(value)
+        return value
+      },
+      revokeObjectURL(value) {
+        this.revoked.push(value)
+      },
+    },
+    window: {
+      location: { hostname: 'localhost' },
+      localStorage: { getItem: () => null },
+    },
+    document: {
+      onkeydown: null,
+      addEventListener() {},
+      querySelector(selector) {
+        return selector === '#app' ? appElement : null
+      },
+      querySelectorAll() {
+        return []
+      },
+    },
+    fetch: async () => {
+      throw new Error('offline')
+    },
+    requestAnimationFrame(callback) {
+      callback()
+    },
+  }
+  context.window.document = context.document
+  vm.createContext(context)
+  vm.runInContext(`${source}\nglobalThis.__adminTest = { state, organizationDrawer, partnerLogoMarkup, setOrganizationLogoFile, removeOrganizationLogo, resetOrganizationLogoState };`, context)
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  return context
+}
+
+function fakeOrganizationForm() {
+  const nameInput = { value: 'Unsaved Company Name' }
+  const slugInput = { value: 'unsaved-company' }
+  const picker = { innerHTML: '' }
+  const errorBox = { textContent: '', hidden: true }
+  const listeners = []
+  const fileInput = {
+    addEventListener(type, handler) {
+      listeners.push({ target: 'file', type, handler })
+    },
+  }
+  const removeButton = {
+    addEventListener(type, handler) {
+      listeners.push({ target: 'remove', type, handler })
+    },
+  }
+  const logoImage = {
+    dataset: {},
+    hidden: false,
+    nextElementSibling: { hidden: true },
+    addEventListener(type, handler) {
+      listeners.push({ target: 'image', type, handler })
+    },
+  }
+  const form = {
+    querySelector(selector) {
+      return {
+        'input[name="name"]': nameInput,
+        'input[name="slug"]': slugInput,
+        '.organization-logo-picker': picker,
+        '#organization-form-error': errorBox,
+        '#organization-logo-input': fileInput,
+        '#remove-organization-logo': removeButton,
+        '[data-partner-logo-image]': logoImage,
+      }[selector] || null
+    },
+    querySelectorAll(selector) {
+      return selector === '[data-partner-logo-image]' ? [logoImage] : []
+    },
+  }
+  return { form, nameInput, slugInput, picker, listeners, logoImage }
 }
 
 test('admin restores the live administrator scope before rendering navigation', () => {
@@ -123,11 +212,13 @@ test('admin gives a useful card preview fallback when stored media is unavailabl
 
 test('partner logo picker is optional and exposes preview replacement and removal controls', () => {
   const drawer = functionBody('organizationDrawer')
-  assertMatches(drawer, /organization-logo-preview/, 'renders a partner logo preview frame')
-  assertMatches(drawer, /remove-organization-logo/, 'renders a partner logo removal action')
-  assertMatches(drawer, /optional-label/, 'marks partner logo selection as optional')
+  const picker = functionBody('organizationLogoPickerContents')
+  assertMatches(drawer, /organizationLogoPickerContents/, 'renders the shared partner logo picker')
+  assertMatches(picker, /organization-logo-preview/, 'renders a partner logo preview frame')
+  assertMatches(picker, /remove-organization-logo/, 'renders a partner logo removal action')
+  assertMatches(picker, /optional-label/, 'marks partner logo selection as optional')
   assertMatches(
-    drawer,
+    picker,
     /<input\b(?=[^>]*\bid=["']organization-logo-input["'])(?=[^>]*\btype=["']file["'])(?=[^>]*\baccept=["']image\/png,image\/jpeg,image\/webp["'])[^>]*>/s,
     'limits picker choices to PNG JPEG and WebP images',
   )
@@ -169,14 +260,51 @@ test('partner logo upload rejects unsupported file types and files over two mega
   assertMatches(setter, /URL\.revokeObjectURL\(state\.organizationLogoPreviewUrl\)/, 'revokes the replaced logo preview object URL')
   assertMatches(setter, /URL\.createObjectURL\(file\)/, 'creates a local logo preview object URL')
   assertMatches(setter, /organizationLogoRemoved\s*=\s*false/, 'clears explicit removal state when a replacement logo is selected')
+  assertMatches(setter, /renderOrganizationLogoPicker\(\s*form\s*\)/, 'updates only the logo picker after selecting a logo')
+  assert.doesNotMatch(setter, /layout\(\)/, 'does not rerender the full admin layout after selecting a logo')
+})
+
+test('partner logo remove updates only the picker instead of discarding organization form edits', () => {
+  const remover = functionBody('removeOrganizationLogo')
+  assertMatches(remover, /renderOrganizationLogoPicker\(\s*form\s*\)/, 'updates only the logo picker after removing a logo')
+  assert.doesNotMatch(remover, /layout\(\)/, 'does not rerender the full admin layout after removing a logo')
 })
 
 test('partner logos use a shared renderer with image error fallback', () => {
   const renderer = functionBody('partnerLogoMarkup')
   assertMatches(renderer, /company-avatar-fallback/, 'renders an initial fallback for partners without usable logos')
-  assertMatches(
-    renderer,
-    /onerror=["'][^"']*hidden\s*=\s*true[^"']*nextElementSibling[^"']*hidden\s*=\s*false/s,
-    'falls back to initials when partner logo images fail to load',
-  )
+  assertMatches(renderer, /data-partner-logo-image/, 'marks logo images for CSP-safe fallback binding')
+  assert.doesNotMatch(renderer, /onerror\s*=/, 'does not use inline onerror handlers')
+
+  const binder = functionBody('bindPartnerLogoFallbacks')
+  assertMatches(binder, /addEventListener\(\s*["']error["']/, 'binds partner logo error fallback with addEventListener')
+  assertMatches(binder, /nextElementSibling/, 'reveals the rendered initial fallback when a logo image fails')
+})
+
+test('partner logo select and remove preserve unsaved organization form input values', async () => {
+  const context = await loadAdminHarness()
+  const harness = context.__adminTest
+  const { form, nameInput, slugInput, picker, listeners, logoImage } = fakeOrganizationForm()
+  harness.state.drawerData = {
+    organization: { name: 'Persisted Name', slug: 'persisted', logoUrl: '/api/logo.png' },
+  }
+
+  harness.setOrganizationLogoFile({ name: 'replacement.png', type: 'image/png', size: 42 }, form)
+  assert.equal(nameInput.value, 'Unsaved Company Name')
+  assert.equal(slugInput.value, 'unsaved-company')
+  assert.equal(harness.state.organizationLogoPreviewUrl, 'blob:replacement.png')
+  assert.match(picker.innerHTML, /blob:replacement\.png/)
+  const imageError = listeners.find((listener) => listener.target === 'image' && listener.type === 'error')
+  assert.ok(imageError, 'binds a CSP-safe image error listener during picker updates')
+  imageError.handler()
+  assert.equal(logoImage.hidden, true)
+  assert.equal(logoImage.nextElementSibling.hidden, false)
+
+  harness.removeOrganizationLogo(form)
+  assert.equal(nameInput.value, 'Unsaved Company Name')
+  assert.equal(slugInput.value, 'unsaved-company')
+  assert.equal(harness.state.organizationLogoRemoved, true)
+  assert.equal(harness.state.organizationLogoPreviewUrl, '')
+  assert.ok(context.URL.revoked.includes('blob:replacement.png'))
+  assert.doesNotMatch(picker.innerHTML, /blob:replacement\.png/)
 })
