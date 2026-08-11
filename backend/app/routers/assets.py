@@ -9,7 +9,7 @@ from app.dependencies import CurrentUser, DbSession
 from app.errors import AppError
 from app.models import Asset, Organization, Role
 from app.schemas import AssetTransformUpdate, UploadPresignRequest
-from app.storage import configured_asset_storage, storage_response
+from app.storage import StorageObjectNotFound, configured_asset_storage, storage_response
 from app.upload_safety import scan_uploaded_content
 
 router = APIRouter(prefix="/api", tags=["assets"])
@@ -196,7 +196,7 @@ async def get_organization_logo(organization_id: str, session: DbSession) -> Res
         if not storage.exists(asset.storage_path):
             raise AppError(404, "ASSET_NOT_FOUND", "파트너 로고를 찾을 수 없습니다.")
         content = storage.read_bytes(asset.storage_path)
-    except (FileNotFoundError, KeyError, OSError):
+    except StorageObjectNotFound:
         raise AppError(404, "ASSET_NOT_FOUND", "파트너 로고를 찾을 수 없습니다.")
     return Response(content=content, media_type=asset.content_type)
 

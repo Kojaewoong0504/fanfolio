@@ -23,7 +23,7 @@ from app.models import (
 )
 from app.routers import assets as assets_router
 from app.services import ensure_admin_bootstrap
-from app.storage import configured_asset_storage
+from app.storage import StorageObjectNotFound, configured_asset_storage
 from tests.conftest import assert_error, assert_success
 
 PNG_1X1 = base64.b64decode(
@@ -695,7 +695,7 @@ def test_public_partner_logo_returns_not_found_when_storage_read_disappears(
             return True
 
         def read_bytes(self, storage_path: str) -> bytes:
-            raise FileNotFoundError(storage_path)
+            raise StorageObjectNotFound(storage_path)
 
     asset_id = upload_organization_logo(actors["admin"])
     organization = assert_success(
@@ -721,6 +721,39 @@ def test_public_partner_logo_returns_not_found_when_storage_read_disappears(
         404,
         "ASSET_NOT_FOUND",
     )
+
+
+def test_public_partner_logo_does_not_mask_unrelated_storage_errors(
+    actors: dict[str, TestClient], monkeypatch: Any, seeded: dict[str, Any]
+) -> None:
+    class BrokenStorage:
+        def exists(self, storage_path: str) -> bool:
+            return True
+
+        def read_bytes(self, storage_path: str) -> bytes:
+            raise RuntimeError("storage unavailable")
+
+    asset_id = upload_organization_logo(actors["admin"])
+    organization = assert_success(
+        actors["admin"].post(
+            "/api/admin/organizations",
+            json={"name": "스토리지 장애", "slug": "logo-storage-error", "logoAssetId": asset_id},
+        ),
+        201,
+    )
+
+    async def move_to_remote_path() -> None:
+        async with SessionLocal() as session:
+            asset = await session.get(Asset, asset_id)
+            assert asset is not None
+            asset.storage_path = "s3://test-bucket/fanfolio/assets/error-logo.bin"
+            await session.commit()
+
+    asyncio.run(move_to_remote_path())
+    monkeypatch.setattr(assets_router, "configured_asset_storage", lambda: BrokenStorage())
+
+    with pytest.raises(RuntimeError, match="storage unavailable"):
+        actors["admin"].get(organization["logoUrl"])
 
 
 def test_partner_manager_can_update_only_an_assigned_artist(

@@ -11,6 +11,17 @@ from typing import Protocol
 from fastapi.responses import FileResponse, Response
 
 
+class StorageObjectNotFound(FileNotFoundError):
+    """Stable signal for a missing object across storage providers."""
+
+
+def _is_provider_not_found(error: Exception) -> bool:
+    response = getattr(error, "response", {})
+    error_code = str(response.get("Error", {}).get("Code", ""))
+    http_status = response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+    return http_status == 404 or error_code in {"404", "NoSuchKey", "NotFound"}
+
+
 class AssetStorage(Protocol):
     def check_ready(self) -> None: ...
 
@@ -55,7 +66,10 @@ class LocalAssetStorage:
         return Path(storage_path).is_file()
 
     def read_bytes(self, storage_path: str) -> bytes:
-        return Path(storage_path).read_bytes()
+        try:
+            return Path(storage_path).read_bytes()
+        except FileNotFoundError as error:
+            raise StorageObjectNotFound(storage_path) from error
 
     def save_derived_bytes(self, asset_id: str, suffix: str, content: bytes) -> str:
         path = Path(self.asset_path(asset_id, suffix))
@@ -148,16 +162,20 @@ class S3AssetStorage:
         try:
             self.client.head_object(Bucket=self.bucket, Key=self._key_from_uri(storage_path))
         except Exception as error:  # boto3's ClientError is optional in local mode.
-            if (
-                getattr(error, "response", {}).get("ResponseMetadata", {}).get("HTTPStatusCode")
-                == 404
-            ):
+            if _is_provider_not_found(error):
                 return False
             raise
         return True
 
     def read_bytes(self, storage_path: str) -> bytes:
-        response = self.client.get_object(Bucket=self.bucket, Key=self._key_from_uri(storage_path))
+        try:
+            response = self.client.get_object(
+                Bucket=self.bucket, Key=self._key_from_uri(storage_path)
+            )
+        except Exception as error:
+            if _is_provider_not_found(error):
+                raise StorageObjectNotFound(storage_path) from error
+            raise
         return response["Body"].read()
 
     def save_derived_bytes(self, asset_id: str, suffix: str, content: bytes) -> str:
