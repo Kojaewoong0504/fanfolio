@@ -140,6 +140,21 @@ test('partner logo save uploads the selected file as an organization logo asset 
     /payload\.logoAssetId\s*=\s*await\s+uploadAsset\(\s*state\.organizationLogoFile\s*,\s*["']organization_logo["']\s*\)/,
     'sets logoAssetId from uploadAsset(state.organizationLogoFile, organization_logo)',
   )
+  assertMatches(save, /else\s+if\s*\(\s*state\.organizationLogoRemoved\s*\)[\s\S]*payload\.logoAssetId\s*=\s*null/, 'sends explicit null only when a partner logo is removed')
+  assertMatches(save, /로고 업로드에 실패했습니다/, 'reports upload failures before saving the organization')
+  assertMatches(save, /resetOrganizationLogoState\(\)/, 'resets temporary logo state after a successful organization save')
+  assert.doesNotMatch(save, /logoAssetId\s*:\s*editing\?\.logoAssetId/, 'does not preserve existing logos by resubmitting logoAssetId during ordinary edits')
+})
+
+test('partner logo temporary state is reset and object URLs are revoked without leaks', () => {
+  const resetter = functionBody('resetOrganizationLogoState')
+  assertMatches(resetter, /URL\.revokeObjectURL\(state\.organizationLogoPreviewUrl\)/, 'revokes existing object URL previews before reset')
+  assertMatches(resetter, /organizationLogoFile\s*=\s*null/, 'clears selected logo files on reset')
+  assertMatches(resetter, /organizationLogoPreviewUrl\s*=\s*["']["']/, 'clears selected logo previews on reset')
+  assertMatches(resetter, /organizationLogoRemoved\s*=\s*false/, 'clears explicit logo removal state on reset')
+
+  const closer = functionBody('closeDrawer')
+  assertMatches(closer, /resetOrganizationLogoState\(\)/, 'closing the drawer clears temporary logo state')
 })
 
 test('partner logo upload rejects unsupported file types and files over two megabytes', () => {
@@ -151,6 +166,9 @@ test('partner logo upload rejects unsupported file types and files over two mega
   )
   assertMatches(setter, /file\.size\s*>\s*2\s*\*\s*1024\s*\*\s*1024/, 'validates partner logos against a 2MB limit')
   assertMatches(setter, /PNG.*JPG.*WebP/s, 'explains supported logo formats in validation errors')
+  assertMatches(setter, /URL\.revokeObjectURL\(state\.organizationLogoPreviewUrl\)/, 'revokes the replaced logo preview object URL')
+  assertMatches(setter, /URL\.createObjectURL\(file\)/, 'creates a local logo preview object URL')
+  assertMatches(setter, /organizationLogoRemoved\s*=\s*false/, 'clears explicit removal state when a replacement logo is selected')
 })
 
 test('partner logos use a shared renderer with image error fallback', () => {

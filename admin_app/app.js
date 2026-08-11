@@ -62,6 +62,9 @@ const state = {
   drawer: null,
   drawerData: null,
   temporaryCredential: null,
+  organizationLogoFile: null,
+  organizationLogoPreviewUrl: "",
+  organizationLogoRemoved: false,
 };
 const escapeHtml = (value) =>
   String(value ?? "").replace(
@@ -80,6 +83,54 @@ const icon = (name, extraClass = "") =>
   `<span class="material-symbols-rounded ${extraClass}" aria-hidden="true">${name}</span>`;
 const isRoot = () => state.adminContext?.accessLevel === "root";
 const can = (action) => state.adminContext?.allowedActions?.includes(action);
+
+function partnerLogoMarkup(organization, size = "default") {
+  const name = String(organization?.name || "파트너");
+  const fallback = escapeHtml(name.trim().slice(0, 1) || "파");
+  const logoUrl = organization?.logoUrl;
+  const sizeClass = size === "large" ? " large" : "";
+  return `<span class="company-avatar${sizeClass}">${
+    logoUrl
+      ? `<img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(name)} 로고" onerror="this.hidden=true;this.nextElementSibling.hidden=false" /><span class="company-avatar-fallback" hidden>${fallback}</span>`
+      : `<span class="company-avatar-fallback">${fallback}</span>`
+  }</span>`;
+}
+
+function resetOrganizationLogoState() {
+  if (state.organizationLogoPreviewUrl.startsWith("blob:")) {
+    URL.revokeObjectURL(state.organizationLogoPreviewUrl);
+  }
+  state.organizationLogoFile = null;
+  state.organizationLogoPreviewUrl = "";
+  state.organizationLogoRemoved = false;
+}
+
+function setOrganizationLogoFile(file, form) {
+  const allowedTypes = ["image/png", "image/jpeg", "image/webp"];
+  if (!allowedTypes.includes(file.type)) {
+    throw new Error("PNG, JPG 또는 WebP 로고만 등록할 수 있습니다.");
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    throw new Error("회사 로고는 2MB 이하로 등록해 주세요.");
+  }
+  if (state.organizationLogoPreviewUrl.startsWith("blob:")) {
+    URL.revokeObjectURL(state.organizationLogoPreviewUrl);
+  }
+  state.organizationLogoFile = file;
+  state.organizationLogoPreviewUrl = URL.createObjectURL(file);
+  state.organizationLogoRemoved = false;
+  layout();
+}
+
+function removeOrganizationLogo() {
+  if (state.organizationLogoPreviewUrl.startsWith("blob:")) {
+    URL.revokeObjectURL(state.organizationLogoPreviewUrl);
+  }
+  state.organizationLogoFile = null;
+  state.organizationLogoPreviewUrl = "";
+  state.organizationLogoRemoved = true;
+  layout();
+}
 
 function title() {
   return {
@@ -282,7 +333,7 @@ function partnerListColumn() {
       ? organizations
           .map(
             (organization) =>
-              `<button class="partner-list-item ${state.selectedOrganizationId === organization.id ? "active" : ""}" type="button" data-partner-id="${escapeHtml(organization.id)}"><span class="company-avatar">${escapeHtml(organization.name.slice(0, 1))}</span><span class="partner-list-copy"><strong>${escapeHtml(organization.name)}</strong><small>${organization.artistCount} 아티스트 · ${organization.memberCount} 관리자</small></span><span class="status-dot ${organization.status}" aria-label="${organization.status === "active" ? "활성" : "중지"}"></span></button>`,
+              `<button class="partner-list-item ${state.selectedOrganizationId === organization.id ? "active" : ""}" type="button" data-partner-id="${escapeHtml(organization.id)}">${partnerLogoMarkup(organization)}<span class="partner-list-copy"><strong>${escapeHtml(organization.name)}</strong><small>${organization.artistCount} 아티스트 · ${organization.memberCount} 관리자</small></span><span class="status-dot ${organization.status}" aria-label="${organization.status === "active" ? "활성" : "중지"}"></span></button>`,
           )
           .join("")
       : `<div class="compact-empty">${icon("domain_disabled")}<strong>표시할 파트너가 없습니다.</strong><span>검색 조건을 바꾸거나 새 파트너를 등록하세요.</span></div>`
@@ -294,7 +345,7 @@ function partnersView() {
   if (!organization) {
     return `<div class="partner-empty-state">${icon("domain_add")}<h2>첫 파트너를 등록해 보세요</h2><p>계약 기업을 등록한 뒤 담당 관리자와 아티스트를 연결할 수 있습니다.</p><button class="primary" id="empty-add-organization" type="button">파트너 등록</button></div>`;
   }
-  return `<section class="partner-detail-view"><div class="partner-mobile-selector"><label>파트너 선택<select id="partner-mobile-select">${state.organizations.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === organization.id ? "selected" : ""}>${escapeHtml(item.name)}</option>`).join("")}</select></label></div><header class="partner-hero"><div class="company-avatar large">${escapeHtml(organization.name.slice(0, 1))}</div><div class="partner-identity"><div class="partner-name-row"><h2>${escapeHtml(organization.name)}</h2><span class="badge ${organization.status === "active" ? "success-badge" : "danger-badge"}">${organization.status === "active" ? "운영 중" : "운영 중지"}</span></div><p>${escapeHtml(organization.contactEmail || "대표 담당자 이메일 미등록")}</p><div class="partner-meta"><span>${icon("calendar_month")} ${formatContractDate(organization.contractStartsAt)} – ${formatContractDate(organization.contractEndsAt)}</span><span>${icon("update")} ${formatDate(organization.updatedAt)} 업데이트</span></div></div><div class="partner-hero-actions"><button class="secondary" id="edit-organization" type="button">${icon("edit")} 정보 수정</button><button class="secondary danger-button" id="toggle-organization-status" type="button" data-next-status="${organization.status === "active" ? "suspended" : "active"}">${icon(organization.status === "active" ? "pause_circle" : "play_circle")} ${organization.status === "active" ? "운영 중지" : "다시 활성화"}</button></div></header><nav class="detail-tabs" aria-label="파트너 상세 메뉴">${[
+  return `<section class="partner-detail-view"><div class="partner-mobile-selector"><label>파트너 선택<select id="partner-mobile-select">${state.organizations.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === organization.id ? "selected" : ""}>${escapeHtml(item.name)}</option>`).join("")}</select></label></div><header class="partner-hero">${partnerLogoMarkup(organization, "large")}<div class="partner-identity"><div class="partner-name-row"><h2>${escapeHtml(organization.name)}</h2><span class="badge ${organization.status === "active" ? "success-badge" : "danger-badge"}">${organization.status === "active" ? "운영 중" : "운영 중지"}</span></div><p>${escapeHtml(organization.contactEmail || "대표 담당자 이메일 미등록")}</p><div class="partner-meta"><span>${icon("calendar_month")} ${formatContractDate(organization.contractStartsAt)} – ${formatContractDate(organization.contractEndsAt)}</span><span>${icon("update")} ${formatDate(organization.updatedAt)} 업데이트</span></div></div><div class="partner-hero-actions"><button class="secondary" id="edit-organization" type="button">${icon("edit")} 정보 수정</button><button class="secondary danger-button" id="toggle-organization-status" type="button" data-next-status="${organization.status === "active" ? "suspended" : "active"}">${icon(organization.status === "active" ? "pause_circle" : "play_circle")} ${organization.status === "active" ? "운영 중지" : "다시 활성화"}</button></div></header><nav class="detail-tabs" aria-label="파트너 상세 메뉴">${[
     ["overview", "개요"],
     ["members", "관리자"],
     ["artists", "아티스트"],
@@ -387,7 +438,11 @@ function drawerHeader(eyebrow, title, description) {
 
 function organizationDrawer() {
   const editing = state.drawerData?.organization;
-  return `${drawerHeader("PARTNER", editing ? "파트너 정보 수정" : "새 파트너 등록", "계약 기업의 기본 정보와 운영 기간을 설정합니다.")}<form class="drawer-body form" id="organization-form"><label class="field"><span>기업명</span><input name="name" value="${escapeHtml(editing?.name || "")}" placeholder="예: 스타웨이브 엔터테인먼트" required /></label><label class="field"><span>파트너 코드</span><input name="slug" value="${escapeHtml(editing?.slug || "")}" placeholder="starwave-ent" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" required /><small class="field-help">영문 소문자·숫자·하이픈만 사용합니다. 이미 사용 중인 코드는 등록할 수 없습니다.</small></label><div class="form-grid"><label class="field"><span>대표 담당자</span><input name="contactName" value="${escapeHtml(editing?.contactName || "")}" placeholder="홍길동" /></label><label class="field"><span>담당자 이메일</span><input name="contactEmail" type="email" value="${escapeHtml(editing?.contactEmail || "")}" placeholder="manager@company.com" /></label></div><div class="form-grid"><label class="field date-field"><span>계약 시작일</span><div class="date-input">${icon("calendar_month")}<input name="contractStartsAt" type="date" value="${editing?.contractStartsAt?.slice(0, 10) || ""}" /></div><small class="field-help">계약이 시작되는 날짜</small></label><label class="field date-field"><span>계약 종료일</span><div class="date-input">${icon("event_available")}<input name="contractEndsAt" type="date" value="${editing?.contractEndsAt?.slice(0, 10) || ""}" /></div><small class="field-help">시작일 이후로 선택하세요</small></label></div><div id="organization-form-error" class="form-error" role="alert" hidden></div><footer class="drawer-footer"><button class="secondary close-drawer" type="button">취소</button><button class="primary" type="submit">${editing ? "변경 저장" : "파트너 등록"}</button></footer></form>`;
+  const previewLogoUrl = state.organizationLogoRemoved
+    ? ""
+    : state.organizationLogoPreviewUrl || editing?.logoUrl || "";
+  const hasLogo = Boolean(previewLogoUrl);
+  return `${drawerHeader("PARTNER", editing ? "파트너 정보 수정" : "새 파트너 등록", "계약 기업의 기본 정보와 운영 기간을 설정합니다.")}<form class="drawer-body form" id="organization-form"><section class="organization-logo-picker"><div class="organization-logo-preview" id="organization-logo-preview">${partnerLogoMarkup({ name: editing?.name || "파트너", logoUrl: previewLogoUrl }, "large")}</div><div class="organization-logo-copy"><strong>회사 로고 <span class="optional-label">선택</span></strong><p>PNG, JPG, WebP · 최대 2MB · 원본 비율 유지</p><div class="inline-actions"><label class="secondary upload-button" for="organization-logo-input">${hasLogo ? "로고 교체" : "로고 선택"}</label><input id="organization-logo-input" name="logo" type="file" accept="image/png,image/jpeg,image/webp" hidden />${hasLogo ? `<button class="text-button danger-text" id="remove-organization-logo" type="button">로고 제거</button>` : ""}</div></div></section><label class="field"><span>기업명</span><input name="name" value="${escapeHtml(editing?.name || "")}" placeholder="예: 스타웨이브 엔터테인먼트" required /></label><label class="field"><span>파트너 코드</span><input name="slug" value="${escapeHtml(editing?.slug || "")}" placeholder="starwave-ent" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" required /><small class="field-help">영문 소문자·숫자·하이픈만 사용합니다. 이미 사용 중인 코드는 등록할 수 없습니다.</small></label><div class="form-grid"><label class="field"><span>대표 담당자</span><input name="contactName" value="${escapeHtml(editing?.contactName || "")}" placeholder="홍길동" /></label><label class="field"><span>담당자 이메일</span><input name="contactEmail" type="email" value="${escapeHtml(editing?.contactEmail || "")}" placeholder="manager@company.com" /></label></div><div class="form-grid"><label class="field date-field"><span>계약 시작일</span><div class="date-input">${icon("calendar_month")}<input name="contractStartsAt" type="date" value="${editing?.contractStartsAt?.slice(0, 10) || ""}" /></div><small class="field-help">계약이 시작되는 날짜</small></label><label class="field date-field"><span>계약 종료일</span><div class="date-input">${icon("event_available")}<input name="contractEndsAt" type="date" value="${editing?.contractEndsAt?.slice(0, 10) || ""}" /></div><small class="field-help">시작일 이후로 선택하세요</small></label></div><div id="organization-form-error" class="form-error" role="alert" hidden></div><footer class="drawer-footer"><button class="secondary close-drawer" type="button">취소</button><button class="primary" type="submit">${editing ? "변경 저장" : "파트너 등록"}</button></footer></form>`;
 }
 
 function artistEditDrawer() {
@@ -993,6 +1048,7 @@ async function createAdminAccount(event) {
 }
 
 function openDrawer(name, data = null) {
+  if (name === "organization") resetOrganizationLogoState();
   state.drawer = name;
   state.drawerData = data;
   if (name !== "member") state.temporaryCredential = null;
@@ -1003,6 +1059,7 @@ function openDrawer(name, data = null) {
 }
 
 function closeDrawer() {
+  resetOrganizationLogoState();
   state.drawer = null;
   state.drawerData = null;
   state.temporaryCredential = null;
@@ -1036,6 +1093,22 @@ async function saveOrganization(event) {
   }
   const submit = event.currentTarget.querySelector('[type="submit"]');
   submit.disabled = true;
+  errorBox.hidden = true;
+  if (state.organizationLogoFile) {
+    try {
+      payload.logoAssetId = await uploadAsset(
+        state.organizationLogoFile,
+        "organization_logo"
+      );
+    } catch (error) {
+      submit.disabled = false;
+      errorBox.textContent = `로고 업로드에 실패했습니다: ${String(error?.message || error)}`;
+      errorBox.hidden = false;
+      return;
+    }
+  } else if (state.organizationLogoRemoved) {
+    payload.logoAssetId = null;
+  }
   let writeResult;
   try {
     writeResult = await api(
@@ -1070,6 +1143,7 @@ async function saveOrganization(event) {
     state.drawer = null;
     state.drawerData = null;
     state.selectedOrganizationId = result.data.id;
+    resetOrganizationLogoState();
     try {
       await loadOrganizations(false);
     } catch {
@@ -1751,6 +1825,26 @@ function bind() {
   document
     .querySelector("#organization-form")
     ?.addEventListener("submit", saveOrganization);
+  document
+    .querySelector("#organization-logo-input")
+    ?.addEventListener("change", (event) => {
+      const file = event.currentTarget.files?.[0];
+      if (!file) return;
+      const form = event.currentTarget.form;
+      const errorBox = form?.querySelector("#organization-form-error");
+      try {
+        setOrganizationLogoFile(file, form);
+      } catch (error) {
+        event.currentTarget.value = "";
+        if (errorBox) {
+          errorBox.textContent = String(error?.message || error);
+          errorBox.hidden = false;
+        }
+      }
+    });
+  document
+    .querySelector("#remove-organization-logo")
+    ?.addEventListener("click", removeOrganizationLogo);
   document
     .querySelector("#artist-edit-form")
     ?.addEventListener("submit", saveArtist);
