@@ -1,4 +1,5 @@
 import asyncio
+import base64
 from types import SimpleNamespace
 from typing import Any
 
@@ -21,6 +22,13 @@ from app.models import (
 )
 from app.services import ensure_admin_bootstrap
 from tests.conftest import assert_error, assert_success
+
+PNG_1X1 = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+)
+ORGANIZATION_LOGO_BYTES = PNG_1X1 + b"organization-logo"
+FIRST_LOGO_BYTES = PNG_1X1 + b"first-logo"
+SECOND_LOGO_BYTES = PNG_1X1 + b"second-logo"
 
 
 def create_partner(
@@ -82,7 +90,12 @@ def login_partner(app: Any, member: dict[str, Any]) -> TestClient:
     return partner
 
 
-def upload_organization_logo(admin: TestClient, *, purpose: str = "organization_logo") -> str:
+def upload_organization_logo(
+    admin: TestClient,
+    *,
+    purpose: str = "organization_logo",
+    content: bytes = ORGANIZATION_LOGO_BYTES,
+) -> str:
     presigned = assert_success(
         admin.post(
             "/api/uploads/presign",
@@ -97,7 +110,7 @@ def upload_organization_logo(admin: TestClient, *, purpose: str = "organization_
     asset_id = presigned["assetId"]
     response = admin.put(
         f"/api/uploads/{asset_id}/content",
-        content=b"\x89PNG\r\n\x1a\n" + b"logo-bytes",
+        content=content,
         headers={"Content-Type": "image/png"},
     )
     assert response.status_code == 204
@@ -449,7 +462,7 @@ def test_partner_logo_is_optional_and_ready_logo_asset_is_exposed(
     assert without_logo["logoAssetId"] is None
     assert without_logo["logoUrl"] is None
 
-    asset_id = upload_organization_logo(actors["admin"])
+    asset_id = upload_organization_logo(actors["admin"], content=ORGANIZATION_LOGO_BYTES)
     with_logo = assert_success(
         actors["admin"].post(
             "/api/admin/organizations",
@@ -467,12 +480,13 @@ def test_partner_logo_is_optional_and_ready_logo_asset_is_exposed(
     logo = actors["admin"].get(with_logo["logoUrl"])
     assert logo.status_code == 200
     assert logo.headers["content-type"] == "image/png"
+    assert logo.content == ORGANIZATION_LOGO_BYTES
 
 
 def test_partner_logo_can_be_replaced_and_removed(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:
-    first_asset_id = upload_organization_logo(actors["admin"])
+    first_asset_id = upload_organization_logo(actors["admin"], content=FIRST_LOGO_BYTES)
     organization = assert_success(
         actors["admin"].post(
             "/api/admin/organizations",
@@ -480,7 +494,12 @@ def test_partner_logo_can_be_replaced_and_removed(
         ),
         201,
     )
-    second_asset_id = upload_organization_logo(actors["admin"])
+    logo_url = organization["logoUrl"]
+    first_logo = actors["admin"].get(logo_url)
+    assert first_logo.status_code == 200
+    assert first_logo.content == FIRST_LOGO_BYTES
+
+    second_asset_id = upload_organization_logo(actors["admin"], content=SECOND_LOGO_BYTES)
     replaced = assert_success(
         actors["admin"].patch(
             f"/api/admin/organizations/{organization['id']}",
@@ -488,6 +507,10 @@ def test_partner_logo_can_be_replaced_and_removed(
         )
     )
     assert replaced["logoAssetId"] == second_asset_id
+    assert replaced["logoUrl"] == logo_url
+    second_logo = actors["admin"].get(logo_url)
+    assert second_logo.status_code == 200
+    assert second_logo.content == SECOND_LOGO_BYTES
 
     removed = assert_success(
         actors["admin"].patch(
@@ -497,6 +520,7 @@ def test_partner_logo_can_be_replaced_and_removed(
     )
     assert removed["logoAssetId"] is None
     assert removed["logoUrl"] is None
+    assert actors["admin"].get(logo_url).status_code == 404
 
 
 def test_partner_logo_rejects_unready_or_wrong_purpose_assets(

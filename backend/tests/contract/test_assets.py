@@ -199,9 +199,23 @@ def test_upload_rejects_obvious_executable_content(
     )
 
 
-def test_organization_logo_upload_accepts_only_images(
+def test_organization_logo_upload_accepts_images_and_rejects_non_images(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:
+    image = assert_success(
+        actors["admin"].post(
+            "/api/uploads/presign",
+            json={
+                "fileName": "logo.png",
+                "contentType": "image/png",
+                "purpose": "organization_logo",
+            },
+        ),
+        201,
+    )
+    assert image["assetId"].startswith("asset_")
+    assert image["maxUploadBytes"] == 2 * 1024 * 1024
+
     assert_error(
         actors["admin"].post(
             "/api/uploads/presign",
@@ -230,9 +244,10 @@ def test_organization_logo_upload_is_limited_to_two_megabytes(
         ),
         201,
     )
+    oversized_logo = PNG_1X1 + b"x" * (2 * 1024 * 1024 + 1 - len(PNG_1X1))
     response = actors["admin"].put(
         f"/api/uploads/{presigned['assetId']}/content",
-        content=b"x" * (2 * 1024 * 1024 + 1),
+        content=oversized_logo,
         headers={"Content-Type": "image/png"},
     )
     assert_error(response, 413, "UPLOAD_TOO_LARGE")
