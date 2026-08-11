@@ -4,7 +4,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from app.db.session import SessionLocal
-from app.models import Artist
+from app.models import Artist, Organization, RewardCatalog
 from tests.conftest import assert_error, assert_success
 from tests.contract.test_admin_partner_access import create_partner, login_partner
 
@@ -142,3 +142,240 @@ def test_editor_cannot_publish_achievement(
         403,
         "ADMIN_WRITE_REQUIRED",
     )
+
+
+def test_direct_achievement_transitions_hide_company_level_scope_from_manager(
+    actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
+) -> None:
+    organization, company_admin_member = create_partner(
+        actors["admin"],
+        email="company-admin-direct@starwave.com",
+        access_level="company_admin",
+    )
+    manager_member = assert_success(
+        actors["admin"].post(
+            f"/api/admin/organizations/{organization['id']}/members",
+            json={
+                "email": "manager-direct@starwave.com",
+                "displayName": "직접 접근 매니저",
+                "accessLevel": "manager",
+                "artistIds": ["artist_nova3"],
+            },
+        ),
+        201,
+    )
+    company_admin = login_partner(app, company_admin_member)
+    manager = login_partner(app, manager_member)
+
+    org_draft = assert_success(
+        company_admin.post(
+            "/api/admin/engagement/achievements",
+            json=achievement_payload(artistId=None, title="회사 초안 업적"),
+        ),
+        201,
+    )
+    org_pending = assert_success(
+        company_admin.post(
+            "/api/admin/engagement/achievements",
+            json=achievement_payload(artistId=None, title="회사 대기 업적"),
+        ),
+        201,
+    )
+    org_published = assert_success(
+        company_admin.post(
+            "/api/admin/engagement/achievements",
+            json=achievement_payload(artistId=None, title="회사 공개 업적"),
+        ),
+        201,
+    )
+    assert_success(
+        company_admin.post(f"/api/admin/engagement/achievements/{org_pending['id']}/submit")
+    )
+    assert_success(
+        company_admin.post(f"/api/admin/engagement/achievements/{org_published['id']}/submit")
+    )
+    assert_success(
+        company_admin.post(f"/api/admin/engagement/achievements/{org_published['id']}/approve")
+    )
+
+    listed = assert_success(manager.get("/api/admin/engagement/achievements"))["items"]
+    assert all(item["artistId"] is not None for item in listed)
+    assert_error(
+        manager.post(f"/api/admin/engagement/achievements/{org_draft['id']}/submit"),
+        404,
+        "RESOURCE_NOT_FOUND",
+    )
+    assert_error(
+        manager.post(f"/api/admin/engagement/achievements/{org_pending['id']}/approve"),
+        404,
+        "RESOURCE_NOT_FOUND",
+    )
+    assert_error(
+        manager.post(f"/api/admin/engagement/achievements/{org_published['id']}/disable"),
+        404,
+        "RESOURCE_NOT_FOUND",
+    )
+
+
+def test_direct_achievement_transitions_hide_company_level_scope_from_editor(
+    actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
+) -> None:
+    organization, company_admin_member = create_partner(
+        actors["admin"],
+        email="company-admin-editor-direct@starwave.com",
+        access_level="company_admin",
+    )
+    editor_member = assert_success(
+        actors["admin"].post(
+            f"/api/admin/organizations/{organization['id']}/members",
+            json={
+                "email": "editor-direct@starwave.com",
+                "displayName": "직접 접근 에디터",
+                "accessLevel": "editor",
+                "artistIds": ["artist_nova3"],
+            },
+        ),
+        201,
+    )
+    company_admin = login_partner(app, company_admin_member)
+    editor = login_partner(app, editor_member)
+
+    org_pending = assert_success(
+        company_admin.post(
+            "/api/admin/engagement/achievements",
+            json=achievement_payload(artistId=None, title="에디터 차단 업적"),
+        ),
+        201,
+    )
+    assert_success(
+        company_admin.post(f"/api/admin/engagement/achievements/{org_pending['id']}/submit")
+    )
+
+    assert_error(
+        editor.post(f"/api/admin/engagement/achievements/{org_pending['id']}/submit"),
+        404,
+        "RESOURCE_NOT_FOUND",
+    )
+    assert_error(
+        editor.post(f"/api/admin/engagement/achievements/{org_pending['id']}/approve"),
+        404,
+        "RESOURCE_NOT_FOUND",
+    )
+    assert_error(
+        editor.post(f"/api/admin/engagement/achievements/{org_pending['id']}/disable"),
+        404,
+        "RESOURCE_NOT_FOUND",
+    )
+
+
+def test_achievement_create_validates_reward_ids_against_partner_scope(
+    actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
+) -> None:
+    async def seed_rewards() -> None:
+        async with SessionLocal() as session:
+            session.add(Artist(id="artist_other", name="문라이트"))
+            session.add(
+                Organization(
+                    id="org_other_rewards",
+                    name="문라이트 엔터테인먼트",
+                    slug="moonlight-rewards",
+                    status="active",
+                )
+            )
+            session.add_all(
+                [
+                    RewardCatalog(
+                        id="reward_nova_badge",
+                        organization_id="org_starwave",
+                        artist_id="artist_nova3",
+                        reward_type="badge",
+                        name="NOVA Badge",
+                        status="published",
+                    ),
+                    RewardCatalog(
+                        id="reward_company_title",
+                        organization_id="org_starwave",
+                        artist_id=None,
+                        reward_type="title",
+                        name="Company Title",
+                        status="published",
+                    ),
+                    RewardCatalog(
+                        id="reward_other_artist",
+                        organization_id="org_starwave",
+                        artist_id="artist_other",
+                        reward_type="badge",
+                        name="Other Artist Badge",
+                        status="published",
+                    ),
+                    RewardCatalog(
+                        id="reward_other_org",
+                        organization_id="org_other_rewards",
+                        artist_id=None,
+                        reward_type="title",
+                        name="Other Org Title",
+                        status="published",
+                    ),
+                ]
+            )
+            await session.commit()
+
+    organization, company_admin_member = create_partner(
+        actors["admin"],
+        slug="starwave-rewards",
+        email="company-admin-rewards@starwave.com",
+        access_level="company_admin",
+    )
+
+    async def align_reward_scope() -> None:
+        async with SessionLocal() as session:
+            for reward_id in ("reward_nova_badge", "reward_company_title", "reward_other_artist"):
+                reward = await session.get(RewardCatalog, reward_id)
+                if reward is not None:
+                    reward.organization_id = organization["id"]
+            await session.commit()
+
+    asyncio.run(seed_rewards())
+    asyncio.run(align_reward_scope())
+    manager_member = assert_success(
+        actors["admin"].post(
+            f"/api/admin/organizations/{organization['id']}/members",
+            json={
+                "email": "manager-rewards@starwave.com",
+                "displayName": "보상 매니저",
+                "accessLevel": "manager",
+                "artistIds": ["artist_nova3"],
+            },
+        ),
+        201,
+    )
+    company_admin = login_partner(app, company_admin_member)
+    manager = login_partner(app, manager_member)
+
+    company_draft = assert_success(
+        company_admin.post(
+            "/api/admin/engagement/achievements",
+            json=achievement_payload(artistId=None, rewardIds=["reward_company_title"]),
+        ),
+        201,
+    )
+    assert company_draft["rewardIds"] == ["reward_company_title"]
+
+    manager_draft = assert_success(
+        manager.post(
+            "/api/admin/engagement/achievements",
+            json=achievement_payload(rewardIds=["reward_nova_badge"]),
+        ),
+        201,
+    )
+    assert manager_draft["rewardIds"] == ["reward_nova_badge"]
+
+    for reward_id in ("reward_company_title", "reward_other_artist", "reward_other_org"):
+        assert_error(
+            manager.post(
+                "/api/admin/engagement/achievements",
+                json=achievement_payload(title=f"차단 {reward_id}", rewardIds=[reward_id]),
+            ),
+            404,
+            "RESOURCE_NOT_FOUND",
+        )

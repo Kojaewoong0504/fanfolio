@@ -287,15 +287,19 @@ async def scoped_achievement_or_404(
     achievement = await session.get(AchievementDefinition, achievement_id)
     if achievement is None:
         raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
+    ensure_achievement_visible(context, achievement)
+    return achievement
+
+
+def ensure_achievement_visible(context: AdminContext, achievement: AchievementDefinition) -> None:
     if context.is_root or context.is_platform_operator:
-        return achievement
+        return
     if context.organization is None or achievement.organization_id != context.organization.id:
         raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
-    if achievement.artist_id is not None:
-        await _organization_artist_or_404(
-            session, context, achievement.organization_id, achievement.artist_id
-        )
-    return achievement
+    if context.membership.access_level == "company_admin":
+        return
+    if achievement.artist_id is None or achievement.artist_id not in context.assigned_artist_ids:
+        raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
 
 
 def ensure_engagement_approver_scope(
@@ -307,6 +311,28 @@ def ensure_engagement_approver_scope(
         return
     if context.membership.access_level != "company_admin":
         raise AppError(403, "ADMIN_WRITE_REQUIRED", "이 작업을 수행할 권한이 없습니다.")
+
+
+async def validate_reward_scope(
+    session: DbSession,
+    context: AdminContext,
+    reward_ids: list[str],
+) -> None:
+    if not reward_ids:
+        return
+    normalized = set(reward_ids)
+    visible_ids = set(
+        (
+            await session.scalars(
+                select(RewardCatalog.id).where(
+                    RewardCatalog.id.in_(normalized),
+                    *engagement_scope_filters(context, RewardCatalog),
+                )
+            )
+        ).all()
+    )
+    if visible_ids != normalized:
+        raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
 
 
 async def scoped_drop_or_404(
@@ -360,6 +386,7 @@ async def create_achievement(
     organization_id, artist_id = await require_engagement_scope(
         session, context, payload.organization_id, payload.artist_id
     )
+    await validate_reward_scope(session, context, payload.reward_ids)
     achievement = AchievementDefinition(
         id=f"achievement_{uuid4().hex[:12]}",
         organization_id=organization_id,
@@ -436,8 +463,12 @@ async def submit_achievement_review(
 async def approve_achievement(
     achievement_id: str, context: CurrentAdmin, session: DbSession
 ) -> dict:
+    achievement = await session.get(AchievementDefinition, achievement_id)
+    if achievement is not None:
+        ensure_achievement_visible(context, achievement)
     _require_engagement_approve(context)
-    achievement = await scoped_achievement_or_404(achievement_id, context, session)
+    if achievement is None:
+        raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
     ensure_engagement_approver_scope(context, achievement)
     if achievement.status != "pending_review":
         raise AppError(
@@ -464,8 +495,12 @@ async def approve_achievement(
 async def disable_achievement(
     achievement_id: str, context: CurrentAdmin, session: DbSession
 ) -> dict:
+    achievement = await session.get(AchievementDefinition, achievement_id)
+    if achievement is not None:
+        ensure_achievement_visible(context, achievement)
     _require_engagement_approve(context)
-    achievement = await scoped_achievement_or_404(achievement_id, context, session)
+    if achievement is None:
+        raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
     ensure_engagement_approver_scope(context, achievement)
     if achievement.status != "published":
         raise AppError(
