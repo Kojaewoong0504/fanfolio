@@ -23,6 +23,7 @@ from app.schemas import (
     ArtistProfileUpdate,
     ArtistReviewSubmitRequest,
 )
+from app.services import release_card_data, submit_card_for_release_review
 from app.storage import configured_asset_storage, storage_response
 from app.tasks import enqueue_background_removal
 
@@ -238,6 +239,7 @@ def card_data(card: Card) -> dict:
         "handwritingTransform": card.handwriting_transform,
         "hasVoice": card.has_voice,
         "issueLimit": card.issue_limit,
+        **release_card_data(card),
     }
 
 
@@ -427,6 +429,9 @@ async def update_card(
         )
     for field, value in values.items():
         setattr(card, field, value)
+    if card.release_status == "changes_requested":
+        card.release_status = "draft"
+        card.status = "draft"
     await session.commit()
     return {"ok": True, "data": card_data(card)}
 
@@ -562,7 +567,7 @@ async def submit_review(
     card = await session.get(Card, card_id)
     if not card or card.owner_artist_id != user.id:
         raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
-    if card.status != "draft":
+    if card.status != "draft" or card.release_status not in {"draft", "changes_requested"}:
         raise AppError(409, "INVALID_CARD_STATUS", "검수 요청할 수 없는 상태입니다.")
     if card.has_voice:
         if not card.voice_asset_id:
@@ -587,7 +592,7 @@ async def submit_review(
             )
     await ensure_ready_lenticular_asset(card, user, session)
     card.review_note = payload.review_note if payload else None
-    card.status = "pending_review"
+    await submit_card_for_release_review(session, card=card)
     await session.commit()
     return {
         "ok": True,
@@ -595,6 +600,7 @@ async def submit_review(
             "id": card.id,
             "status": card.status,
             "reviewNote": card.review_note,
+            **release_card_data(card),
         },
     }
 

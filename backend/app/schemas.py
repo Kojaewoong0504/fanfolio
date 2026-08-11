@@ -315,9 +315,19 @@ class AdminCardReviewRequest(BaseModel):
 
 
 class AdminCardReleaseDecisionRequest(BaseModel):
-    stage: ReviewStage
+    # The route fixes the stage; keeping it optional avoids a conflicting client input.
+    stage: ReviewStage | None = None
     decision: ReviewDecision
     note: str | None = Field(default=None, max_length=500)
+
+
+class DropCardLinkRequest(BaseModel):
+    card_id: str = Field(alias="cardId", min_length=1)
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class AdminNotificationReadRequest(BaseModel):
+    read: bool
 
 
 class CardReleaseState(BaseModel):

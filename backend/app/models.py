@@ -312,6 +312,8 @@ class Card(Base):
     has_voice: Mapped[bool] = mapped_column(Boolean, default=False)
     issue_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     preview_storage_path: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Never infer a release from artist scope: a card belongs to one concrete drop.
+    drop_id: Mapped[str | None] = mapped_column(ForeignKey("drops.id"), nullable=True)
 
 
 class CardReviewRequest(Base):
