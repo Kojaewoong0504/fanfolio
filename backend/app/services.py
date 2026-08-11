@@ -193,6 +193,16 @@ async def published_definitions_for_event(
     ]
 
 
+def eligible_source_card_conditions(*, user_id: str) -> list[object]:
+    return [
+        UserCard.user_id == user_id,
+        Card.status == "published",
+        Card.is_official.is_(True),
+        Card.release_status == "published",
+        Drop.status == "live",
+    ]
+
+
 async def owned_card_query_value(
     session: AsyncSession,
     *,
@@ -200,7 +210,7 @@ async def owned_card_query_value(
     achievement: AchievementDefinition,
     value: str,
 ) -> int:
-    conditions = [UserCard.user_id == user_id]
+    conditions = eligible_source_card_conditions(user_id=user_id)
     if achievement.artist_id is not None:
         conditions.append(Card.artist_id == achievement.artist_id)
     member_id = achievement.condition_payload.get("memberId")
@@ -211,6 +221,7 @@ async def owned_card_query_value(
             select(func.count(func.distinct(value)))
             .select_from(UserCard)
             .join(Card, Card.id == UserCard.card_id)
+            .join(Drop, Drop.id == UserCard.drop_id)
             .where(*conditions)
         )
         or 0
@@ -246,8 +257,11 @@ async def achievement_current_value(
         return int(
             bool(
                 await session.scalar(
-                    select(UserCard.id).where(
-                        UserCard.user_id == event.user_id,
+                    select(UserCard.id)
+                    .join(Card, Card.id == UserCard.card_id)
+                    .join(Drop, Drop.id == UserCard.drop_id)
+                    .where(
+                        *eligible_source_card_conditions(user_id=event.user_id),
                         UserCard.card_id == card_id,
                     )
                 )
@@ -263,8 +277,11 @@ async def achievement_current_value(
             return 0
         owned_card_ids = set(
             await session.scalars(
-                select(UserCard.card_id).where(
-                    UserCard.user_id == event.user_id,
+                select(UserCard.card_id)
+                .join(Card, Card.id == UserCard.card_id)
+                .join(Drop, Drop.id == UserCard.drop_id)
+                .where(
+                    *eligible_source_card_conditions(user_id=event.user_id),
                     UserCard.card_id.in_(required_card_ids),
                 )
             )
@@ -277,8 +294,11 @@ async def achievement_current_value(
         return int(
             bool(
                 await session.scalar(
-                    select(UserCard.id).where(
-                        UserCard.user_id == event.user_id,
+                    select(UserCard.id)
+                    .join(Card, Card.id == UserCard.card_id)
+                    .join(Drop, Drop.id == UserCard.drop_id)
+                    .where(
+                        *eligible_source_card_conditions(user_id=event.user_id),
                         UserCard.drop_id == drop_id,
                     )
                 )

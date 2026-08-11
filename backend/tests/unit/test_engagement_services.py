@@ -27,6 +27,7 @@ async def seed_growth_catalog(session):
     session.add(models.User(id="fan", email="fan@example.com", role=models.Role.FAN))
     session.add(models.Artist(id="artist_nova3", name="NOVA-3"))
     session.add(models.Drop(id="drop_live", name="Live Drop", status="live"))
+    session.add(models.Drop(id="drop_ended", name="Ended Drop", status="ended"))
     await session.flush()
     session.add_all(
         [
@@ -49,6 +50,41 @@ async def seed_growth_catalog(session):
                 drop_id="drop_live",
             )
         )
+    session.add_all(
+        [
+            models.Card(
+                id="card_non_live",
+                name="Non-live Card",
+                status="published",
+                release_status="published",
+                release_policy="partner_and_platform",
+                artist_id="artist_nova3",
+                member_id="member_1",
+                drop_id="drop_ended",
+            ),
+            models.Card(
+                id="card_unpublished",
+                name="Unpublished Card",
+                status="draft",
+                release_status="draft",
+                release_policy="partner_and_platform",
+                artist_id="artist_nova3",
+                member_id="member_2",
+                drop_id="drop_live",
+            ),
+            models.Card(
+                id="card_unofficial",
+                name="Unofficial Card",
+                status="published",
+                release_status="published",
+                release_policy="partner_and_platform",
+                is_official=False,
+                artist_id="artist_nova3",
+                member_id="member_3",
+                drop_id="drop_live",
+            ),
+        ]
+    )
     await session.commit()
 
 
@@ -377,6 +413,65 @@ def test_drop_participation_achievement_completes_for_matching_drop() -> None:
             assert progress is not None
             assert progress.current_value == 1
             assert progress.completed_at is not None
+
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    ("condition_type", "condition_payload"),
+    [
+        ("first_card", {}),
+        ("card_count", {}),
+        ("member_count", {}),
+        ("specific_card", {"cardId": "card_non_live"}),
+        ("set_complete", {"cardIds": ["card_non_live"]}),
+        ("drop_participation", {"dropId": "drop_ended"}),
+    ],
+)
+@pytest.mark.parametrize(
+    ("card_id", "drop_id"),
+    [
+        ("card_non_live", "drop_ended"),
+        ("card_unpublished", "drop_live"),
+        ("card_unofficial", "drop_live"),
+    ],
+)
+def test_ineligible_source_cards_do_not_advance_achievements(
+    condition_type: str,
+    condition_payload: dict,
+    card_id: str,
+    drop_id: str,
+) -> None:
+    async def scenario() -> None:
+        engine, session_factory = await create_growth_test_session()
+        async with session_factory() as session:
+            await seed_growth_catalog(session)
+            payload = dict(condition_payload)
+            if condition_type in {"specific_card", "set_complete"}:
+                payload = (
+                    {"cardId": card_id}
+                    if condition_type == "specific_card"
+                    else {"cardIds": [card_id]}
+                )
+            if condition_type == "drop_participation":
+                payload = {"dropId": drop_id}
+            achievement = await make_published_achievement(
+                session,
+                condition_type=condition_type,
+                target=1,
+                condition_payload=payload,
+            )
+
+            await process_test_card_collected(
+                session, session_factory, card_id=card_id, drop_id=drop_id
+            )
+
+            progress = await get_progress(session, user_id="fan", achievement_id=achievement.id)
+            assert progress is not None
+            assert progress.current_value == 0
+            assert progress.completed_at is None
 
         await engine.dispose()
 

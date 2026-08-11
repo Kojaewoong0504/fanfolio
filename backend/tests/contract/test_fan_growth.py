@@ -10,14 +10,18 @@ from app.db.session import SessionLocal
 from app.models import (
     AchievementDefinition,
     AchievementProgress,
+    Card,
+    Drop,
     EngagementEvent,
     FanLevel,
     Notification,
     RewardCatalog,
     RewardGrant,
+    UserCard,
     XpLedger,
 )
 from app.routers import fan as fan_router
+from app.services import now, process_engagement_event, record_engagement_event
 from tests.conftest import assert_success
 
 
@@ -137,6 +141,79 @@ def test_redeeming_a_live_card_processes_xp_achievement_reward_and_notification(
     assert growth["notification"].kind == "achievement_unlocked"
     assert [row.amount for row in growth["xpRows"]] == [30]
     assert growth["level"].total_xp == 30
+
+
+def test_non_live_source_card_does_not_advance_achievement(seeded: dict[str, Any]) -> None:
+    achievement_id = seed_first_card_achievement()
+
+    async def create_and_process_non_live_event() -> None:
+        async with SessionLocal() as session:
+            card = await session.get(Card, seeded["ids"]["publishedCardId"])
+            drop = await session.get(Drop, "drop_ended")
+            assert card is not None
+            assert drop is not None
+            user_card = UserCard(
+                id="uc_growth_ended_drop",
+                user_id="fan",
+                card_id=card.id,
+                drop_id=drop.id,
+                serial_number=991,
+                acquisition_source="test",
+                acquired_at=now(),
+            )
+            session.add(user_card)
+            await session.flush()
+            event = await record_engagement_event(
+                session,
+                user_id="fan",
+                kind="card_collected",
+                source_type="user_card",
+                source_id=user_card.id,
+                payload={
+                    "cardId": card.id,
+                    "artistId": card.artist_id,
+                    "memberId": card.member_id,
+                    "dropId": drop.id,
+                },
+            )
+            await session.commit()
+
+        await process_engagement_event(event.id)
+
+    asyncio.run(create_and_process_non_live_event())
+
+    async def load() -> dict[str, Any]:
+        async with SessionLocal() as session:
+            progress = await session.scalar(
+                select(AchievementProgress).where(
+                    AchievementProgress.user_id == "fan",
+                    AchievementProgress.achievement_id == achievement_id,
+                )
+            )
+            grant = await session.scalar(select(RewardGrant).where(RewardGrant.user_id == "fan"))
+            notification = await session.scalar(
+                select(Notification).where(
+                    Notification.user_id == "fan",
+                    Notification.event_key == f"achievement:{achievement_id}:fan",
+                )
+            )
+            event = await session.scalar(
+                select(EngagementEvent).where(EngagementEvent.source_id == "uc_growth_ended_drop")
+            )
+            return {
+                "progress": progress,
+                "grant": grant,
+                "notification": notification,
+                "event": event,
+            }
+
+    growth = asyncio.run(load())
+
+    assert growth["event"].status == "processed"
+    assert growth["progress"].current_value == 0
+    assert growth["progress"].completed_at is None
+    assert growth["grant"] is None
+    assert growth["notification"] is None
 
 
 def test_successful_redemption_enqueues_committed_growth_event(
