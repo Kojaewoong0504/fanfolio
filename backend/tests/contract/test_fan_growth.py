@@ -199,6 +199,7 @@ def test_fan_can_read_progression_with_only_their_reward_grants(
     assert progression["level"] == {"level": 1, "totalXp": 30}
     assert progression["achievements"][0]["completedAt"] is not None
     assert progression["claimableRewards"][0]["type"] == "title"
+    assert progression["claimableRewards"][0]["claimedAt"] is None
     assert progression["claimableRewards"][0]["id"] != other_grant_id
     assert all(item["id"] != other_grant_id for item in progression["claimableRewards"])
     assert progression["equipment"] == {
@@ -206,7 +207,7 @@ def test_fan_can_read_progression_with_only_their_reward_grants(
         "badgeRewardIds": [],
         "frameRewardId": None,
         "themeRewardId": None,
-        "publicProfileEnabled": True,
+        "publicProfileEnabled": False,
     }
 
 
@@ -229,6 +230,8 @@ def test_claiming_a_reward_is_idempotent_for_the_owner(actors: dict[str, TestCli
     assert first == second
     assert first["id"] == grant_id
     assert first["type"] == "title"
+    assert first["claimedAt"] is not None
+    assert assert_success(actors["fan"].get("/api/me/progression"))["claimableRewards"] == []
 
 
 def test_fan_can_equip_claimed_rewards_by_type(actors: dict[str, TestClient]) -> None:
@@ -296,10 +299,19 @@ def test_profile_equipment_requires_owner_grant_and_matching_reward_type(
     actors: dict[str, TestClient],
 ) -> None:
     title_grant_id = seed_reward_grants("fan", ["title"])[0]
+    badge_grant_id = seed_reward_grants("fan", ["badge"])[0]
     other_badge_grant_id = seed_reward_grants("otherFan", ["badge"])[0]
 
     assert_success(actors["fan"].post(f"/api/me/rewards/{title_grant_id}/claim"))
 
+    assert_error(
+        actors["fan"].put(
+            "/api/me/profile/equipment",
+            json={"badgeRewardIds": [badge_grant_id]},
+        ),
+        409,
+        "REWARD_GRANT_UNCLAIMED",
+    )
     assert_error(
         actors["fan"].put(
             "/api/me/profile/equipment",

@@ -417,7 +417,11 @@ async def grant_reward(
 
 
 def _datetime_data(value: datetime | None) -> str | None:
-    return value.isoformat() if value else None
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.isoformat()
 
 
 def _reward_grant_data(grant: RewardGrant, reward: RewardCatalog) -> dict:
@@ -427,23 +431,25 @@ def _reward_grant_data(grant: RewardGrant, reward: RewardCatalog) -> dict:
         "type": reward.reward_type,
         "name": reward.name,
         "grantedAt": _datetime_data(grant.granted_at),
+        "claimedAt": _datetime_data(grant.claimed_at),
     }
 
 
 async def _reward_grant_with_catalog(
-    session: AsyncSession, *, user_id: str, grant_id: str
+    session: AsyncSession, *, user_id: str, grant_id: str, lock: bool = False
 ) -> tuple[RewardGrant, RewardCatalog] | None:
-    row = (
-        await session.execute(
-            select(RewardGrant, RewardCatalog)
-            .join(RewardCatalog, RewardCatalog.id == RewardGrant.reward_id)
-            .where(
-                RewardGrant.id == grant_id,
-                RewardGrant.user_id == user_id,
-                RewardCatalog.status == "published",
-            )
+    statement = (
+        select(RewardGrant, RewardCatalog)
+        .join(RewardCatalog, RewardCatalog.id == RewardGrant.reward_id)
+        .where(
+            RewardGrant.id == grant_id,
+            RewardGrant.user_id == user_id,
+            RewardCatalog.status == "published",
         )
-    ).one_or_none()
+    )
+    if lock:
+        statement = statement.with_for_update()
+    row = (await session.execute(statement)).one_or_none()
     return row if row else None
 
 
@@ -455,7 +461,7 @@ async def _equipment_data(session: AsyncSession, *, user_id: str) -> dict:
         "badgeRewardIds": [],
         "frameRewardId": None,
         "themeRewardId": None,
-        "publicProfileEnabled": equipment.is_public if equipment else True,
+        "publicProfileEnabled": equipment.is_public if equipment else False,
     }
     if not equipped_reward_ids:
         return result
@@ -515,7 +521,11 @@ async def fan_progression_data(session: AsyncSession, user_id: str) -> dict:
         await session.execute(
             select(RewardGrant, RewardCatalog)
             .join(RewardCatalog, RewardCatalog.id == RewardGrant.reward_id)
-            .where(RewardGrant.user_id == user_id, RewardCatalog.status == "published")
+            .where(
+                RewardGrant.user_id == user_id,
+                RewardGrant.claimed_at.is_(None),
+                RewardCatalog.status == "published",
+            )
             .order_by(RewardGrant.granted_at, RewardGrant.id)
         )
     ).all()
@@ -546,10 +556,13 @@ async def fan_progression_data(session: AsyncSession, user_id: str) -> dict:
 
 
 async def claim_reward_grant(session: AsyncSession, *, user_id: str, grant_id: str) -> dict:
-    row = await _reward_grant_with_catalog(session, user_id=user_id, grant_id=grant_id)
+    row = await _reward_grant_with_catalog(session, user_id=user_id, grant_id=grant_id, lock=True)
     if row is None:
         raise AppError(404, "REWARD_GRANT_NOT_FOUND", "수령할 보상을 찾을 수 없습니다.")
     grant, reward = row
+    if grant.claimed_at is None:
+        grant.claimed_at = now()
+        await session.commit()
     return _reward_grant_data(grant, reward)
 
 
@@ -563,7 +576,9 @@ async def _validate_equipment_reward(
     row = await _reward_grant_with_catalog(session, user_id=user_id, grant_id=grant_id)
     if row is None:
         raise AppError(404, "REWARD_GRANT_NOT_FOUND", "장착할 보상을 찾을 수 없습니다.")
-    _, reward = row
+    grant, reward = row
+    if grant.claimed_at is None:
+        raise AppError(409, "REWARD_GRANT_UNCLAIMED", "보상을 수령한 뒤 장착할 수 있습니다.")
     if reward.reward_type != expected_type:
         raise AppError(
             422,

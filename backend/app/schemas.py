@@ -91,7 +91,7 @@ class ProfileEquipmentUpdate(BaseModel):
     )
     frame_reward_id: str | None = Field(default=None, alias="frameRewardId")
     theme_reward_id: str | None = Field(default=None, alias="themeRewardId")
-    public_profile_enabled: bool = Field(default=True, alias="publicProfileEnabled")
+    public_profile_enabled: bool = Field(default=False, alias="publicProfileEnabled")
     model_config = ConfigDict(populate_by_name=True)
 
 

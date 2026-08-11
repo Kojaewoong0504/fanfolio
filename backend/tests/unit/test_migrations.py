@@ -220,6 +220,10 @@ def test_alembic_upgrade_creates_the_current_schema(tmp_path: Path) -> None:
             "pass_progress",
             "profile_equipment",
         } <= growth_tables
+        reward_grant_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(reward_grants)").fetchall()
+        }
+        assert "claimed_at" in reward_grant_columns
 
 
 def test_growth_migration_enforces_idempotency_constraints(tmp_path: Path) -> None:
@@ -311,8 +315,8 @@ def test_growth_migration_enforces_idempotency_constraints(tmp_path: Path) -> No
         connection.execute(
             """
             INSERT INTO reward_grants (
-                id, user_id, reward_id, source_event_id, rule_key, granted_at
-            ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                id, user_id, reward_id, source_event_id, rule_key, granted_at, claimed_at
+            ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, NULL)
             """,
             ("reward_grant_1", "fan", "reward_1", "evt_1", "first_card"),
         )
@@ -320,8 +324,8 @@ def test_growth_migration_enforces_idempotency_constraints(tmp_path: Path) -> No
             connection.execute(
                 """
                 INSERT INTO reward_grants (
-                    id, user_id, reward_id, source_event_id, rule_key, granted_at
-                ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    id, user_id, reward_id, source_event_id, rule_key, granted_at, claimed_at
+                ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """,
                 ("reward_grant_2", "fan", "reward_1", "evt_1", "first_card"),
             )
@@ -386,6 +390,21 @@ def test_growth_migration_emits_offline_sql_without_database_inspection(tmp_path
     assert "CREATE TABLE engagement_events" in generated.stdout
     assert "CREATE TABLE xp_ledger" in generated.stdout
     assert "uq_reward_grant_event_rule" in generated.stdout
+
+
+def test_reward_claim_migration_adds_nullable_claimed_at(tmp_path: Path) -> None:
+    database_path = tmp_path / "fan-reward-claims.db"
+    backend_dir = Path(__file__).parents[2]
+
+    upgraded = run_alembic(backend_dir, database_path, "upgrade", "head")
+    assert upgraded.returncode == 0, upgraded.stderr
+
+    with sqlite3.connect(database_path) as connection:
+        reward_grant_columns = {
+            row[1]: row for row in connection.execute("PRAGMA table_info(reward_grants)").fetchall()
+        }
+        assert "claimed_at" in reward_grant_columns
+        assert reward_grant_columns["claimed_at"][3] == 0
 
 
 def test_card_release_migration_creates_review_workflow_storage(tmp_path: Path) -> None:
