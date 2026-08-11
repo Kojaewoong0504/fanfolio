@@ -21,6 +21,7 @@ from app.models import (
     Session,
     User,
 )
+from app.routers import assets as assets_router
 from app.services import ensure_admin_bootstrap
 from app.storage import configured_asset_storage
 from tests.conftest import assert_error, assert_success
@@ -630,6 +631,95 @@ def test_partner_logo_rejects_wrong_owner_non_image_or_missing_storage_assets(
         ),
         409,
         "ASSET_NOT_READY",
+    )
+
+
+def test_public_partner_logo_revalidates_linked_asset_invariants(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    wrong_purpose_asset_id = upload_organization_logo(actors["admin"])
+    wrong_purpose_organization = assert_success(
+        actors["admin"].post(
+            "/api/admin/organizations",
+            json={
+                "name": "목적 변경",
+                "slug": "logo-mutated-purpose",
+                "logoAssetId": wrong_purpose_asset_id,
+            },
+        ),
+        201,
+    )
+    non_image_asset_id = upload_organization_logo(actors["admin"])
+    non_image_organization = assert_success(
+        actors["admin"].post(
+            "/api/admin/organizations",
+            json={
+                "name": "타입 변경",
+                "slug": "logo-mutated-type",
+                "logoAssetId": non_image_asset_id,
+            },
+        ),
+        201,
+    )
+
+    async def mutate_linked_assets() -> None:
+        async with SessionLocal() as session:
+            wrong_purpose = await session.get(Asset, wrong_purpose_asset_id)
+            assert wrong_purpose is not None
+            wrong_purpose.purpose = "card"
+
+            non_image = await session.get(Asset, non_image_asset_id)
+            assert non_image is not None
+            non_image.content_type = "application/pdf"
+            await session.commit()
+
+    asyncio.run(mutate_linked_assets())
+
+    assert_error(
+        actors["admin"].get(wrong_purpose_organization["logoUrl"]),
+        404,
+        "ASSET_NOT_FOUND",
+    )
+    assert_error(
+        actors["admin"].get(non_image_organization["logoUrl"]),
+        404,
+        "ASSET_NOT_FOUND",
+    )
+
+
+def test_public_partner_logo_returns_not_found_when_storage_read_disappears(
+    actors: dict[str, TestClient], monkeypatch: Any, seeded: dict[str, Any]
+) -> None:
+    class RaceStorage:
+        def exists(self, storage_path: str) -> bool:
+            return True
+
+        def read_bytes(self, storage_path: str) -> bytes:
+            raise FileNotFoundError(storage_path)
+
+    asset_id = upload_organization_logo(actors["admin"])
+    organization = assert_success(
+        actors["admin"].post(
+            "/api/admin/organizations",
+            json={"name": "스토리지 레이스", "slug": "logo-storage-race", "logoAssetId": asset_id},
+        ),
+        201,
+    )
+
+    async def move_to_remote_path() -> None:
+        async with SessionLocal() as session:
+            asset = await session.get(Asset, asset_id)
+            assert asset is not None
+            asset.storage_path = "s3://test-bucket/fanfolio/assets/raced-logo.bin"
+            await session.commit()
+
+    asyncio.run(move_to_remote_path())
+    monkeypatch.setattr(assets_router, "configured_asset_storage", lambda: RaceStorage())
+
+    assert_error(
+        actors["admin"].get(organization["logoUrl"]),
+        404,
+        "ASSET_NOT_FOUND",
     )
 
 

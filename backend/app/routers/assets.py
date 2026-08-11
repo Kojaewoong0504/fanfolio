@@ -183,16 +183,22 @@ async def get_organization_logo(organization_id: str, session: DbSession) -> Res
     if organization is None or organization.logo_asset_id is None:
         raise AppError(404, "ASSET_NOT_FOUND", "파트너 로고를 찾을 수 없습니다.")
     asset = await session.get(Asset, organization.logo_asset_id)
-    if asset is None or asset.storage_path is None or asset.upload_completed_at is None:
+    if (
+        asset is None
+        or asset.purpose != "organization_logo"
+        or asset.content_type not in {"image/png", "image/jpeg", "image/webp"}
+        or asset.storage_path is None
+        or asset.upload_completed_at is None
+    ):
         raise AppError(404, "ASSET_NOT_FOUND", "파트너 로고를 찾을 수 없습니다.")
     storage = configured_asset_storage()
-    if not storage.exists(asset.storage_path):
+    try:
+        if not storage.exists(asset.storage_path):
+            raise AppError(404, "ASSET_NOT_FOUND", "파트너 로고를 찾을 수 없습니다.")
+        content = storage.read_bytes(asset.storage_path)
+    except (FileNotFoundError, KeyError, OSError):
         raise AppError(404, "ASSET_NOT_FOUND", "파트너 로고를 찾을 수 없습니다.")
-    return storage_response(
-        storage,
-        asset.storage_path,
-        media_type=asset.content_type or "image/png",
-    )
+    return Response(content=content, media_type=asset.content_type)
 
 
 @router.patch("/assets/{asset_id}/transform")
