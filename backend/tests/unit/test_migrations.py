@@ -201,6 +201,78 @@ def test_alembic_upgrade_creates_the_current_schema(tmp_path: Path) -> None:
             row[1] for row in connection.execute("PRAGMA table_info(artist_profiles)").fetchall()
         }
         assert {"user_id", "artist_id", "verification_status"} <= artist_profile_columns
+        growth_tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        assert {
+            "engagement_events",
+            "achievement_definitions",
+            "achievement_progress",
+            "reward_catalog",
+            "reward_grants",
+            "xp_ledger",
+            "fan_levels",
+            "pass_seasons",
+            "pass_tiers",
+            "pass_progress",
+            "profile_equipment",
+        } <= growth_tables
+
+
+def test_growth_migration_enforces_idempotency_constraints(tmp_path: Path) -> None:
+    database_path = tmp_path / "fan-growth.db"
+    backend_dir = Path(__file__).parents[2]
+
+    upgraded = run_alembic(backend_dir, database_path, "upgrade", "head")
+    assert upgraded.returncode == 0, upgraded.stderr
+
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.execute(
+            """
+            INSERT INTO users (
+                id, role, must_change_password, favorite_artist_ids,
+                favorite_member_ids, onboarding_completed, notification_email_enabled
+            ) VALUES (?, ?, ?, json('[]'), json('[]'), ?, ?)
+            """,
+            ("fan", "FAN", False, False, False),
+        )
+        connection.execute(
+            """
+            INSERT INTO engagement_events (
+                id, user_id, kind, source_type, source_id, payload, status
+            ) VALUES (?, ?, ?, ?, ?, json('{}'), ?)
+            """,
+            ("evt_1", "fan", "card_collected", "user_card", "uc_1", "pending"),
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                INSERT INTO engagement_events (
+                    id, user_id, kind, source_type, source_id, payload, status
+                ) VALUES (?, ?, ?, ?, ?, json('{}'), ?)
+                """,
+                ("evt_2", "fan", "card_collected", "user_card", "uc_1", "pending"),
+            )
+
+        connection.execute(
+            """
+            INSERT INTO xp_ledger (id, user_id, event_id, rule_key, amount, created_at)
+            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """,
+            ("xp_1", "fan", "evt_1", "card_collected", 30),
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                INSERT INTO xp_ledger (id, user_id, event_id, rule_key, amount, created_at)
+                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                ("xp_2", "fan", "evt_1", "card_collected", 30),
+            )
 
 
 def test_card_release_migration_creates_review_workflow_storage(tmp_path: Path) -> None:

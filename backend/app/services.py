@@ -7,6 +7,7 @@ from secrets import token_urlsafe
 from uuid import uuid4
 
 from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -29,6 +30,8 @@ from app.models import (
     CollectionCampaign,
     DeploymentIdentity,
     Drop,
+    EngagementEvent,
+    FanLevel,
     MagicLink,
     Member,
     Notification,
@@ -41,6 +44,7 @@ from app.models import (
     Session,
     User,
     UserCard,
+    XpLedger,
 )
 from app.passwords import hash_password
 from app.storage import configured_asset_storage
@@ -55,6 +59,106 @@ def now() -> datetime:
 def magic_link_token_hash(token: str) -> str:
     """Persist a digest so a database leak cannot be used as a login link."""
     return sha256(token.encode()).hexdigest()
+
+
+async def record_engagement_event(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    kind: str,
+    source_type: str,
+    source_id: str,
+    payload: dict | None = None,
+) -> EngagementEvent:
+    existing = await session.scalar(
+        select(EngagementEvent).where(
+            EngagementEvent.user_id == user_id,
+            EngagementEvent.kind == kind,
+            EngagementEvent.source_type == source_type,
+            EngagementEvent.source_id == source_id,
+        )
+    )
+    if existing:
+        return existing
+
+    event = EngagementEvent(
+        id=f"evt_{uuid4().hex[:12]}",
+        user_id=user_id,
+        kind=kind,
+        source_type=source_type,
+        source_id=source_id,
+        payload=payload or {},
+    )
+    try:
+        async with session.begin_nested():
+            session.add(event)
+            await session.flush()
+    except IntegrityError:
+        existing = await session.scalar(
+            select(EngagementEvent).where(
+                EngagementEvent.user_id == user_id,
+                EngagementEvent.kind == kind,
+                EngagementEvent.source_type == source_type,
+                EngagementEvent.source_id == source_id,
+            )
+        )
+        if existing:
+            return existing
+        raise
+    return event
+
+
+async def grant_xp(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    event_id: str,
+    rule_key: str,
+    amount: int,
+) -> XpLedger:
+    existing = await session.scalar(
+        select(XpLedger).where(
+            XpLedger.user_id == user_id,
+            XpLedger.event_id == event_id,
+            XpLedger.rule_key == rule_key,
+        )
+    )
+    if existing:
+        return existing
+
+    row = XpLedger(
+        id=f"xp_{uuid4().hex[:12]}",
+        user_id=user_id,
+        event_id=event_id,
+        rule_key=rule_key,
+        amount=amount,
+    )
+    try:
+        async with session.begin_nested():
+            session.add(row)
+            await session.flush()
+    except IntegrityError:
+        existing = await session.scalar(
+            select(XpLedger).where(
+                XpLedger.user_id == user_id,
+                XpLedger.event_id == event_id,
+                XpLedger.rule_key == rule_key,
+            )
+        )
+        if existing:
+            return existing
+        raise
+
+    total_xp = await session.scalar(
+        select(func.coalesce(func.sum(XpLedger.amount), 0)).where(XpLedger.user_id == user_id)
+    )
+    level = await session.get(FanLevel, user_id)
+    if level is None:
+        level = FanLevel(user_id=user_id)
+        session.add(level)
+    level.total_xp = int(total_xp or 0)
+    level.level = max(1, level.total_xp // 100 + 1)
+    return row
 
 
 async def ensure_demo_catalog(session: AsyncSession) -> None:

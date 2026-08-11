@@ -410,6 +410,182 @@ class UserCard(Base):
     acquired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class EngagementEvent(Base):
+    __tablename__ = "engagement_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "kind",
+            "source_type",
+            "source_id",
+            name="uq_engagement_event_source",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    kind: Mapped[str] = mapped_column(String, nullable=False)
+    source_type: Mapped[str] = mapped_column(String, nullable=False)
+    source_id: Mapped[str] = mapped_column(String, nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AchievementDefinition(Base):
+    __tablename__ = "achievement_definitions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    organization_id: Mapped[str | None] = mapped_column(
+        ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True
+    )
+    artist_id: Mapped[str | None] = mapped_column(ForeignKey("artists.id"), nullable=True)
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
+    condition_type: Mapped[str] = mapped_column(String, nullable=False)
+    target_value: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    condition_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    reward_rule_key: Mapped[str | None] = mapped_column(String, nullable=True)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="draft")
+
+
+class AchievementProgress(Base):
+    __tablename__ = "achievement_progress"
+    __table_args__ = (
+        UniqueConstraint("user_id", "achievement_id", name="uq_achievement_progress_user"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    achievement_id: Mapped[str] = mapped_column(
+        ForeignKey("achievement_definitions.id"), nullable=False
+    )
+    current_value: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class RewardCatalog(Base):
+    __tablename__ = "reward_catalog"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    organization_id: Mapped[str | None] = mapped_column(
+        ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True
+    )
+    artist_id: Mapped[str | None] = mapped_column(ForeignKey("artists.id"), nullable=True)
+    reward_type: Mapped[str] = mapped_column(String, nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    metadata_: Mapped[dict] = mapped_column("metadata", JSON, default=dict)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="draft")
+
+
+class RewardGrant(Base):
+    __tablename__ = "reward_grants"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "source_event_id",
+            "rule_key",
+            name="uq_reward_grant_event_rule",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    reward_id: Mapped[str] = mapped_column(ForeignKey("reward_catalog.id"), nullable=False)
+    source_event_id: Mapped[str] = mapped_column(ForeignKey("engagement_events.id"), nullable=False)
+    rule_key: Mapped[str] = mapped_column(String, nullable=False)
+    granted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class XpLedger(Base):
+    __tablename__ = "xp_ledger"
+    __table_args__ = (
+        UniqueConstraint("user_id", "event_id", "rule_key", name="uq_xp_ledger_event_rule"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    event_id: Mapped[str] = mapped_column(ForeignKey("engagement_events.id"), nullable=False)
+    rule_key: Mapped[str] = mapped_column(String, nullable=False)
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class FanLevel(Base):
+    __tablename__ = "fan_levels"
+
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    total_xp: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    level: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class PassSeason(Base):
+    __tablename__ = "pass_seasons"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    organization_id: Mapped[str | None] = mapped_column(
+        ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True
+    )
+    artist_id: Mapped[str | None] = mapped_column(ForeignKey("artists.id"), nullable=True)
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="draft")
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PassTier(Base):
+    __tablename__ = "pass_tiers"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    season_id: Mapped[str] = mapped_column(ForeignKey("pass_seasons.id"), nullable=False)
+    tier: Mapped[int] = mapped_column(Integer, nullable=False)
+    required_xp: Mapped[int] = mapped_column(Integer, nullable=False)
+    reward_id: Mapped[str | None] = mapped_column(ForeignKey("reward_catalog.id"), nullable=True)
+
+
+class PassProgress(Base):
+    __tablename__ = "pass_progress"
+    __table_args__ = (UniqueConstraint("user_id", "season_id", name="uq_pass_progress_user"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    season_id: Mapped[str] = mapped_column(ForeignKey("pass_seasons.id"), nullable=False)
+    current_xp: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    claimed_tier_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class ProfileEquipment(Base):
+    __tablename__ = "profile_equipment"
+
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    equipped_reward_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
 class CollectionCampaign(Base):
     """Operator-defined card set and the digital benefit it unlocks."""
 
