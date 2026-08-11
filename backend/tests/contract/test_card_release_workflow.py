@@ -274,6 +274,7 @@ def test_changes_requested_requires_note_and_resubmission_creates_new_review_ver
         )
     )
     assert changes["releaseStatus"] == "changes_requested"
+    assert changes["reviewNote"] == "이미지를 수정해 주세요."
 
     updated = assert_success(
         actors["artist"].patch(

@@ -824,6 +824,8 @@ async def decide_partner_review(
     if decision == "changes_requested":
         card.release_status = "changes_requested"
         card.status = "changes_requested"
+        # The artist studio reads this field as the actionable reviewer feedback.
+        card.review_note = note
     elif card.release_policy == "partner_and_platform":
         card.release_status = "pending_platform_review"
         card.status = "pending_review"
@@ -874,6 +876,8 @@ async def decide_platform_review(
     if decision == "changes_requested":
         card.release_status = "changes_requested"
         card.status = "changes_requested"
+        # Keep the latest requested change visible when the artist reopens the card.
+        card.review_note = note
     else:
         card.release_status = "approved"
         card.status = "approved"
@@ -954,7 +958,6 @@ async def link_card_to_drop(
         )
     card.release_status = "published" if drop.status == "live" else "drop_ready"
     card.status = "published" if drop.status == "live" else "approved"
-    card.drop_id = drop.id
     card.drop_id = drop.id
     await record_audit(
         session,
@@ -1409,7 +1412,12 @@ async def code_batch(payload: CodeBatchRequest, context: CurrentAdmin, session: 
         raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
     if drop.status != "live":
         raise AppError(409, "DROP_NOT_LIVE", "진행 중인 드롭에만 코드를 발급할 수 있습니다.")
-    if card.release_status not in {"drop_ready", "published"}:
+    # Operational cards created in the admin console predate the studio
+    # workflow. Keep their existing code-batch path intact; artist-studio
+    # cards must have completed review and be linked to this exact drop.
+    if card.owner_artist_id is not None and (
+        card.release_status not in {"drop_ready", "published"} or card.drop_id != drop.id
+    ):
         raise AppError(
             409,
             "CARD_NOT_LINKED_TO_DROP",

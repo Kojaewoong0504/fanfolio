@@ -124,6 +124,25 @@ test('collapsed navigation hides only labels and keeps every menu icon visible',
   assert.doesNotMatch(css, /\.sidebar-collapsed \.studio-sidebar nav button span,/)
 })
 
+test('review progress stays visible from partner review through fan release', async () => {
+  const source = await readFile(appUrl, 'utf8')
+  const css = await readFile(cssUrl, 'utf8')
+
+  for (const releaseStatus of [
+    'pending_partner_review',
+    'pending_platform_review',
+    'changes_requested',
+    'approved',
+    'drop_ready',
+    'published',
+  ]) {
+    assert.match(source, new RegExp(releaseStatus))
+  }
+  assert.match(source, /function releaseStatusBanner\(/)
+  assert.match(source, /담당 운영자에게 알림이 전달됐어요/)
+  assert.match(css, /\.release-status-banner/)
+})
+
 test('layer color changes update the selected layer without replacing the open color input', async () => {
   const source = await readFile(appUrl, 'utf8')
 

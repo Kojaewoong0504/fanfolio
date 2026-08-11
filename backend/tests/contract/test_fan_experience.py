@@ -2,12 +2,14 @@ import asyncio
 from typing import Any
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.db.session import SessionLocal
-from app.models import Asset, Card
+from app.models import Asset, Card, Drop
 from app.storage import configured_asset_storage
 from tests.conftest import assert_error, assert_success
+from tests.contract.test_card_release_workflow import create_partner_client, create_platform_client
 
 
 def _redeem_card_via_batch(
@@ -542,6 +544,51 @@ def test_catalog_returns_only_published_cards_to_fans(actors: dict[str, TestClie
     assert catalog["items"][0]["imageUrl"] == "/src/assets/hero.png"
 
 
+def test_catalog_hides_new_studio_cards_until_their_linked_drop_is_live(
+    actors: dict[str, TestClient],
+) -> None:
+    async def seed_release_states() -> None:
+        async with SessionLocal() as session:
+            session.add_all(
+                [
+                    Drop(id="drop_release_draft", name="대기 드롭", status="draft"),
+                    Drop(id="drop_release_live", name="공개 드롭", status="live"),
+                    Card(
+                        id="card_release_hidden",
+                        name="비공개 스튜디오 카드",
+                        status="published",
+                        release_status="published",
+                        review_version=1,
+                        owner_artist_id="artist",
+                        drop_id="drop_release_draft",
+                    ),
+                    Card(
+                        id="card_release_live",
+                        name="공개 스튜디오 카드",
+                        status="published",
+                        release_status="published",
+                        review_version=1,
+                        owner_artist_id="artist",
+                        drop_id="drop_release_live",
+                    ),
+                    Card(
+                        id="card_release_legacy",
+                        name="기존 공개 카드",
+                        status="published",
+                        review_version=0,
+                        owner_artist_id="artist",
+                    ),
+                ]
+            )
+            await session.commit()
+
+    asyncio.run(seed_release_states())
+    items = assert_success(actors["fan"].get("/api/catalog/cards"))["items"]
+    ids = {item["id"] for item in items}
+    assert "card_release_hidden" not in ids
+    assert {"card_release_live", "card_release_legacy"} <= ids
+
+
 @pytest.mark.parametrize("query", ["드림스케이프", "유나"])
 def test_catalog_search_matches_artist_and_member_names(
     actors: dict[str, TestClient], query: str
@@ -587,7 +634,7 @@ def test_collection_returns_live_summary_and_card_metadata(
 
 
 def test_fan_can_load_an_artist_uploaded_image_for_a_published_card(
-    actors: dict[str, TestClient], seeded: dict[str, Any]
+    app: FastAPI, actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:
     artist = actors["artist"]
     uploaded_bytes = b"test-card-image"
@@ -610,19 +657,38 @@ def test_fan_can_load_an_artist_uploaded_image_for_a_published_card(
                 "seasonName": "2026 SPRING",
                 "rarity": "Special",
                 "imageAssetId": upload["assetId"],
+                "artistId": "artist_nova3",
+                "memberId": "member_yuna",
                 "issueLimit": 100,
             },
         ),
         201,
     )
     assert_success(artist.post(f"/api/artist/cards/{draft['id']}/submit-review"))
+    partner = create_partner_client(app)
+    platform = create_platform_client(app)
     assert_success(
-        actors["admin"].post(
-            f"/api/admin/cards/{draft['id']}/review",
-            json={"decision": "approve", "note": "이미지 확인"},
+        partner.post(
+            f"/api/admin/cards/{draft['id']}/review/partner", json={"decision": "approved"}
         )
     )
-    assert_success(actors["admin"].post(f"/api/admin/cards/{draft['id']}/publish"))
+    assert_success(
+        platform.post(
+            f"/api/admin/cards/{draft['id']}/review/platform", json={"decision": "approved"}
+        )
+    )
+    drop = assert_success(
+        partner.post(
+            "/api/admin/drops", json={"name": "이미지 공개 드롭", "artistId": "artist_nova3"}
+        ),
+        201,
+    )
+    assert_success(
+        partner.post(f"/api/admin/drops/{drop['id']}/cards", json={"cardId": draft["id"]})
+    )
+    assert_success(
+        actors["admin"].patch(f"/api/admin/drops/{drop['id']}/status", json={"status": "live"})
+    )
 
     image = actors["fan"].get(f"/api/cards/{draft['id']}/image")
     assert image.status_code == 200, image.text
