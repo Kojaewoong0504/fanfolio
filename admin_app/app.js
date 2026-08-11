@@ -84,10 +84,18 @@ const icon = (name, extraClass = "") =>
 const isRoot = () => state.adminContext?.accessLevel === "root";
 const can = (action) => state.adminContext?.allowedActions?.includes(action);
 
+function resolvePartnerLogoUrl(logoUrl) {
+  if (!logoUrl) return "";
+  if (isLocalHost && logoUrl.startsWith("/api/")) {
+    return `${API_BASE}${logoUrl.replace(/^\/api/, "")}`;
+  }
+  return logoUrl;
+}
+
 function partnerLogoMarkup(organization, size = "default") {
   const name = String(organization?.name || "파트너");
   const fallback = escapeHtml(name.trim().slice(0, 1) || "파");
-  const logoUrl = organization?.logoUrl;
+  const logoUrl = resolvePartnerLogoUrl(organization?.logoUrl);
   const sizeClass = size === "large" ? " large" : "";
   return `<span class="company-avatar${sizeClass}">${
     logoUrl

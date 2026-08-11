@@ -67,6 +67,44 @@ async function loadAdminHarness() {
   return context
 }
 
+async function loadLogoHarness({ hostname = 'localhost', apiBase = null } = {}) {
+  const appElement = { innerHTML: '' }
+  const context = {
+    console,
+    setTimeout,
+    URL,
+    window: {
+      location: { hostname },
+      localStorage: { getItem: () => apiBase },
+    },
+    document: {
+      onkeydown: null,
+      addEventListener() {},
+      querySelector(selector) {
+        return selector === '#app' ? appElement : null
+      },
+      querySelectorAll() {
+        return []
+      },
+    },
+    fetch: async () => {
+      throw new Error('offline')
+    },
+    requestAnimationFrame(callback) {
+      callback()
+    },
+  }
+  context.window.document = context.document
+  vm.createContext(context)
+  vm.runInContext(`${source}
+globalThis.__logoTest = {
+  resolvePartnerLogoUrl: typeof resolvePartnerLogoUrl === 'function' ? resolvePartnerLogoUrl : undefined,
+  partnerLogoMarkup,
+};`, context)
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  return context.__logoTest
+}
+
 function fakeOrganizationForm() {
   const nameInput = { value: 'Unsaved Company Name' }
   const slugInput = { value: 'unsaved-company' }
@@ -279,6 +317,41 @@ test('partner logos use a shared renderer with image error fallback', () => {
   const binder = functionBody('bindPartnerLogoFallbacks')
   assertMatches(binder, /addEventListener\(\s*["']error["']/, 'binds partner logo error fallback with addEventListener')
   assertMatches(binder, /nextElementSibling/, 'reveals the rendered initial fallback when a logo image fails')
+})
+
+test('partner logo API paths resolve to the configured API origin during local development', async () => {
+  const harness = await loadLogoHarness({
+    hostname: '127.0.0.1',
+    apiBase: 'http://localhost:8000/api',
+  })
+
+  assert.equal(
+    harness.resolvePartnerLogoUrl('/api/organizations/org_123/logo'),
+    'http://localhost:8000/api/organizations/org_123/logo',
+  )
+  assert.match(
+    harness.partnerLogoMarkup({
+      name: 'Acme',
+      logoUrl: '/api/organizations/org_123/logo',
+    }),
+    /src="http:\/\/localhost:8000\/api\/organizations\/org_123\/logo"/,
+  )
+})
+
+test('partner logo API paths remain same-origin outside local development', async () => {
+  const harness = await loadLogoHarness({ hostname: 'admin.fanfolio.kr' })
+
+  assert.equal(
+    harness.resolvePartnerLogoUrl('/api/organizations/org_123/logo'),
+    '/api/organizations/org_123/logo',
+  )
+  assert.match(
+    harness.partnerLogoMarkup({
+      name: 'Acme',
+      logoUrl: '/api/organizations/org_123/logo',
+    }),
+    /src="\/api\/organizations\/org_123\/logo"/,
+  )
 })
 
 test('partner logo select and remove preserve unsaved organization form input values', async () => {
