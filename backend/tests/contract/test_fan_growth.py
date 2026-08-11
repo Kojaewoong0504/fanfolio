@@ -200,11 +200,15 @@ def test_non_live_source_card_does_not_advance_achievement(seeded: dict[str, Any
             event = await session.scalar(
                 select(EngagementEvent).where(EngagementEvent.source_id == "uc_growth_ended_drop")
             )
+            xp_rows = list(await session.scalars(select(XpLedger).where(XpLedger.user_id == "fan")))
+            level = await session.get(FanLevel, "fan")
             return {
                 "progress": progress,
                 "grant": grant,
                 "notification": notification,
                 "event": event,
+                "xpRows": xp_rows,
+                "level": level,
             }
 
     growth = asyncio.run(load())
@@ -214,6 +218,8 @@ def test_non_live_source_card_does_not_advance_achievement(seeded: dict[str, Any
     assert growth["progress"].completed_at is None
     assert growth["grant"] is None
     assert growth["notification"] is None
+    assert growth["xpRows"] == []
+    assert growth["level"] is None
 
 
 def test_successful_redemption_enqueues_committed_growth_event(

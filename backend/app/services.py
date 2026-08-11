@@ -6,7 +6,7 @@ from hashlib import sha256
 from secrets import token_urlsafe
 from uuid import uuid4
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -177,20 +177,50 @@ def base_xp_for(event: EngagementEvent) -> int:
     return 0
 
 
+async def card_collected_source_is_eligible(session: AsyncSession, event: EngagementEvent) -> bool:
+    if event.kind != "card_collected":
+        return True
+    if event.source_type != "user_card":
+        return False
+
+    conditions = [
+        *eligible_source_card_conditions(user_id=event.user_id),
+        UserCard.id == event.source_id,
+    ]
+    card_id = event.payload.get("cardId")
+    if card_id:
+        conditions.append(UserCard.card_id == card_id)
+    drop_id = event.payload.get("dropId")
+    if drop_id:
+        conditions.append(UserCard.drop_id == drop_id)
+
+    return bool(
+        await session.scalar(
+            select(UserCard.id)
+            .join(Card, Card.id == UserCard.card_id)
+            .join(Drop, Drop.id == Card.drop_id)
+            .where(*conditions)
+        )
+    )
+
+
 async def published_definitions_for_event(
     session: AsyncSession, event: EngagementEvent
 ) -> list[AchievementDefinition]:
     if event.kind != "card_collected":
         return []
     artist_id = event.payload.get("artistId")
-    definitions = await session.scalars(
-        select(AchievementDefinition).where(AchievementDefinition.status == "published")
+    return list(
+        await session.scalars(
+            select(AchievementDefinition).where(
+                AchievementDefinition.status == "published",
+                or_(
+                    AchievementDefinition.artist_id.is_(None),
+                    AchievementDefinition.artist_id == artist_id,
+                ),
+            )
+        )
     )
-    return [
-        definition
-        for definition in definitions
-        if definition.artist_id is None or definition.artist_id == artist_id
-    ]
 
 
 def eligible_source_card_conditions(*, user_id: str) -> list[object]:
@@ -199,6 +229,7 @@ def eligible_source_card_conditions(*, user_id: str) -> list[object]:
         Card.status == "published",
         Card.is_official.is_(True),
         Card.release_status == "published",
+        UserCard.drop_id == Card.drop_id,
         Drop.status == "live",
     ]
 
@@ -221,7 +252,7 @@ async def owned_card_query_value(
             select(func.count(func.distinct(value)))
             .select_from(UserCard)
             .join(Card, Card.id == UserCard.card_id)
-            .join(Drop, Drop.id == UserCard.drop_id)
+            .join(Drop, Drop.id == Card.drop_id)
             .where(*conditions)
         )
         or 0
@@ -259,7 +290,7 @@ async def achievement_current_value(
                 await session.scalar(
                     select(UserCard.id)
                     .join(Card, Card.id == UserCard.card_id)
-                    .join(Drop, Drop.id == UserCard.drop_id)
+                    .join(Drop, Drop.id == Card.drop_id)
                     .where(
                         *eligible_source_card_conditions(user_id=event.user_id),
                         UserCard.card_id == card_id,
@@ -279,7 +310,7 @@ async def achievement_current_value(
             await session.scalars(
                 select(UserCard.card_id)
                 .join(Card, Card.id == UserCard.card_id)
-                .join(Drop, Drop.id == UserCard.drop_id)
+                .join(Drop, Drop.id == Card.drop_id)
                 .where(
                     *eligible_source_card_conditions(user_id=event.user_id),
                     UserCard.card_id.in_(required_card_ids),
@@ -296,10 +327,10 @@ async def achievement_current_value(
                 await session.scalar(
                     select(UserCard.id)
                     .join(Card, Card.id == UserCard.card_id)
-                    .join(Drop, Drop.id == UserCard.drop_id)
+                    .join(Drop, Drop.id == Card.drop_id)
                     .where(
                         *eligible_source_card_conditions(user_id=event.user_id),
-                        UserCard.drop_id == drop_id,
+                        Card.drop_id == drop_id,
                     )
                 )
             )
@@ -462,7 +493,8 @@ async def process_engagement_event(event_id: str) -> None:
             )
         if event.status == "processed":
             return
-        amount = base_xp_for(event)
+        source_is_eligible = await card_collected_source_is_eligible(session, event)
+        amount = base_xp_for(event) if source_is_eligible else 0
         if amount:
             await grant_xp(
                 session,
@@ -729,6 +761,7 @@ async def seed_core(session: AsyncSession) -> dict:
                 signature_text="오늘 와줘서 고마워",
                 issue_limit=500,
                 image_url="/src/assets/hero.png",
+                drop_id="drop_live",
             ),
             Card(
                 id="card_draft",
@@ -736,6 +769,7 @@ async def seed_core(session: AsyncSession) -> dict:
                 status="draft",
                 artist_id="artist_nova3",
                 image_url="/src/assets/hero.png",
+                drop_id="drop_live",
             ),
             Drop(id="drop_live", name="NOVA-3 Comeback Live Drop", status="live"),
             Drop(id="drop_ended", status="ended"),
@@ -1174,14 +1208,20 @@ async def redeem(
         )
         if expires_at and expires_at < now():
             raise AppError(409, "REDEEM_CODE_EXPIRED", "만료된 코드입니다.")
-        drop = await session.get(Drop, code.drop_id)
         # The card lock also serializes serial-number allocation when two different
         # redeem codes issue copies of the same card at the same time.
         card = await session.scalar(select(Card).where(Card.id == code.card_id).with_for_update())
-        if drop.status != "live":
-            raise AppError(409, "DROP_NOT_LIVE", "현재 진행 중인 드롭이 아닙니다.")
-        if card.status != "published":
+        if card is None or card.status != "published":
             raise AppError(409, "CARD_NOT_PUBLISHED", "공개되지 않은 카드입니다.")
+        if card.drop_id is None or code.drop_id != card.drop_id:
+            raise AppError(
+                409,
+                "CARD_DROP_MISMATCH",
+                "카드 발행 드롭과 코드 드롭이 일치하지 않습니다.",
+            )
+        drop = await session.get(Drop, card.drop_id)
+        if drop is None or drop.status != "live":
+            raise AppError(409, "DROP_NOT_LIVE", "현재 진행 중인 드롭이 아닙니다.")
         code.used_count += 1
         serial = (
             await session.scalar(
@@ -1193,7 +1233,7 @@ async def redeem(
             user_id=user_id,
             card_id=card.id,
             redeem_code_id=code.code,
-            drop_id=code.drop_id,
+            drop_id=card.drop_id,
             serial_number=serial,
             acquisition_source=acquisition_source,
             acquired_at=now(),

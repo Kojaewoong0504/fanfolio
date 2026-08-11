@@ -434,8 +434,10 @@ def test_drop_participation_achievement_completes_for_matching_drop() -> None:
     ("card_id", "drop_id"),
     [
         ("card_non_live", "drop_ended"),
+        ("card_non_live", "drop_live"),
         ("card_unpublished", "drop_live"),
         ("card_unofficial", "drop_live"),
+        ("card_1", "drop_ended"),
     ],
 )
 def test_ineligible_source_cards_do_not_advance_achievements(
@@ -469,9 +471,13 @@ def test_ineligible_source_cards_do_not_advance_achievements(
             )
 
             progress = await get_progress(session, user_id="fan", achievement_id=achievement.id)
+            xp_rows = list(await session.scalars(select(models.XpLedger)))
+            level = await session.get(models.FanLevel, "fan")
             assert progress is not None
             assert progress.current_value == 0
             assert progress.completed_at is None
+            assert xp_rows == []
+            assert level is None
 
         await engine.dispose()
 
