@@ -60,6 +60,35 @@ async def _require_root_or_same_organization_read(
     return context.organization
 
 
+async def _require_organization_member_management(
+    session: DbSession,
+    context: CurrentAdmin,
+    organization_id: str,
+) -> Organization:
+    """Allow root everywhere and company admins only inside their own organization."""
+    organization = await _require_root_or_same_organization_read(session, context, organization_id)
+    if not context.is_root:
+        context.require_action("members:manage_scoped")
+    return organization
+
+
+def _require_company_admin_subordinate_role(
+    context: CurrentAdmin,
+    access_level: str | None,
+    *,
+    target_access_level: str | None = None,
+) -> None:
+    """Company admins cannot create, promote, or modify peer super-admin accounts."""
+    if context.is_root:
+        return
+    if access_level == "company_admin" or target_access_level == "company_admin":
+        raise AppError(
+            403,
+            "ADMIN_WRITE_REQUIRED",
+            "기업 슈퍼 관리자는 매니저, 에디터, 뷰어 계정만 관리할 수 있습니다.",
+        )
+
+
 async def _validated_logo_asset(
     session: DbSession,
     *,
@@ -455,8 +484,8 @@ async def create_organization_member(
     context: CurrentAdmin,
     session: DbSession,
 ) -> dict:
-    context.require_root()
-    await _organization_or_404(session, organization_id)
+    await _require_organization_member_management(session, context, organization_id)
+    _require_company_admin_subordinate_role(context, payload.access_level)
     email = str(payload.email).lower()
     existing = await session.scalar(
         select(User).where(User.email == email, User.role == Role.ADMIN)
@@ -527,10 +556,14 @@ async def update_organization_member(
     context: CurrentAdmin,
     session: DbSession,
 ) -> dict:
-    context.require_root()
-    await _organization_or_404(session, organization_id)
+    await _require_organization_member_management(session, context, organization_id)
     user, membership = await _member_or_404(session, organization_id, user_id)
     values = payload.model_dump(exclude_unset=True, by_alias=False)
+    _require_company_admin_subordinate_role(
+        context,
+        values.get("access_level"),
+        target_access_level=membership.access_level,
+    )
     security_changed = any(
         field in values and values[field] != getattr(membership, field)
         for field in ("access_level", "status")
@@ -563,9 +596,13 @@ async def set_member_artists(
     context: CurrentAdmin,
     session: DbSession,
 ) -> dict:
-    context.require_root()
-    await _organization_or_404(session, organization_id)
+    await _require_organization_member_management(session, context, organization_id)
     user, membership = await _member_or_404(session, organization_id, user_id)
+    _require_company_admin_subordinate_role(
+        context,
+        None,
+        target_access_level=membership.access_level,
+    )
     artist_ids = await _validate_artist_subset(session, organization_id, payload.artist_ids)
     await session.execute(
         delete(AdminArtistAssignment).where(AdminArtistAssignment.admin_user_id == user.id)

@@ -319,6 +319,110 @@ def test_company_admin_can_read_only_own_organization_and_members(
     )
 
 
+def test_company_admin_can_manage_only_subordinate_members_in_own_organization(
+    actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
+) -> None:
+    organization, company_admin = create_partner(
+        actors["admin"],
+        email="company-admin@starwave.com",
+        access_level="company_admin",
+    )
+    other_organization, _ = create_partner(
+        actors["admin"],
+        slug="moonlight",
+        email="manager@moonlight.com",
+    )
+    partner = login_partner(app, company_admin)
+
+    created = assert_success(
+        partner.post(
+            f"/api/admin/organizations/{organization['id']}/members",
+            json={
+                "email": "editor@starwave.com",
+                "displayName": "콘텐츠 에디터",
+                "accessLevel": "editor",
+                "artistIds": ["artist_nova3"],
+            },
+        ),
+        201,
+    )
+    assert created["accessLevel"] == "editor"
+    updated = assert_success(
+        partner.patch(
+            f"/api/admin/organizations/{organization['id']}/members/{created['id']}",
+            json={"displayName": "콘텐츠 매니저", "accessLevel": "manager"},
+        )
+    )
+    assert updated["displayName"] == "콘텐츠 매니저"
+    assert updated["accessLevel"] == "manager"
+    reassigned = assert_success(
+        partner.put(
+            f"/api/admin/organizations/{organization['id']}/members/{created['id']}/artists",
+            json={"artistIds": []},
+        )
+    )
+    assert reassigned["assignedArtists"] == []
+
+    assert_error(
+        partner.post(
+            f"/api/admin/organizations/{organization['id']}/members",
+            json={
+                "email": "elevated@starwave.com",
+                "displayName": "권한 상승",
+                "accessLevel": "company_admin",
+                "artistIds": [],
+            },
+        ),
+        403,
+        "ADMIN_WRITE_REQUIRED",
+    )
+    assert_error(
+        partner.patch(
+            f"/api/admin/organizations/{organization['id']}/members/{created['id']}",
+            json={"accessLevel": "company_admin"},
+        ),
+        403,
+        "ADMIN_WRITE_REQUIRED",
+    )
+    assert_error(
+        partner.put(
+            f"/api/admin/organizations/{organization['id']}/members/{company_admin['id']}/artists",
+            json={"artistIds": []},
+        ),
+        403,
+        "ADMIN_WRITE_REQUIRED",
+    )
+    assert_error(
+        partner.post(
+            f"/api/admin/organizations/{other_organization['id']}/members",
+            json={
+                "email": "outside@moonlight.com",
+                "displayName": "범위 밖",
+                "accessLevel": "editor",
+                "artistIds": [],
+            },
+        ),
+        404,
+        "RESOURCE_NOT_FOUND",
+    )
+    assert_error(
+        partner.patch(
+            f"/api/admin/organizations/{other_organization['id']}/members/{created['id']}",
+            json={"status": "suspended"},
+        ),
+        404,
+        "RESOURCE_NOT_FOUND",
+    )
+    assert_error(
+        partner.put(
+            f"/api/admin/organizations/{other_organization['id']}/members/{created['id']}/artists",
+            json={"artistIds": []},
+        ),
+        404,
+        "RESOURCE_NOT_FOUND",
+    )
+
+
 def test_member_assignment_must_stay_inside_its_organization(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:
@@ -942,6 +1046,40 @@ def test_manager_can_create_assigned_drafts_but_cannot_publish_or_review(
         ),
         403,
         "ADMIN_ROOT_REQUIRED",
+    )
+
+
+def test_partner_manager_can_only_create_and_list_own_assigned_artist_drops(
+    actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
+) -> None:
+    async def add_unassigned_artist() -> None:
+        async with SessionLocal() as session:
+            session.add(Artist(id="artist_other", name="문라이트"))
+            await session.commit()
+
+    asyncio.run(add_unassigned_artist())
+    organization, member = create_partner(actors["admin"])
+    partner = login_partner(app, member)
+
+    created = assert_success(
+        partner.post(
+            "/api/admin/drops",
+            json={"name": "회사 컴백 드롭", "artistId": "artist_nova3"},
+        ),
+        201,
+    )
+    assert created["organizationId"] == organization["id"]
+    assert created["artistId"] == "artist_nova3"
+    listed = assert_success(partner.get("/api/admin/drops"))["items"]
+    assert [item["id"] for item in listed] == [created["id"]]
+
+    assert_error(
+        partner.post(
+            "/api/admin/drops",
+            json={"name": "범위 밖 드롭", "artistId": "artist_other"},
+        ),
+        404,
+        "RESOURCE_NOT_FOUND",
     )
 
 
