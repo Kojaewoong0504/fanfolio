@@ -6,8 +6,14 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
-from app.admin_access import PARTNER_ACTIONS, AdminContext
+from app.admin_access import (
+    PARTNER_ACTIONS,
+    PLATFORM_ACTIONS,
+    AdminContext,
+    load_admin_context,
+)
 from app.db.session import SessionLocal
 from app.errors import AppError
 from app.models import (
@@ -23,7 +29,18 @@ from app.models import (
     User,
 )
 from app.routers import assets as assets_router
-from app.schemas import OrganizationMemberCreate, OrganizationMemberUpdate
+from app.schemas import (
+    AdminCardReleaseDecisionRequest,
+    CardReviewDecisionItem,
+    CardReviewRequestItem,
+    NotificationItem,
+    OrganizationMemberCreate,
+    OrganizationMemberUpdate,
+    ReleasePolicy,
+    ReleaseStatus,
+    ReviewDecision,
+    ReviewStage,
+)
 from app.services import ensure_admin_bootstrap
 from app.storage import StorageObjectNotFound, configured_asset_storage
 from tests.conftest import assert_error, assert_success
@@ -233,6 +250,106 @@ def test_root_can_create_company_admin_partner_member(
     assert organization["status"] == "active"
     assert member["accessLevel"] == "company_admin"
     assert len(member["temporaryPassword"]) >= 16
+
+
+def test_platform_operator_can_review_platform_stage_but_not_manage_partners() -> None:
+    assert "cards:read" in PLATFORM_ACTIONS
+    assert "cards:review_platform" in PLATFORM_ACTIONS
+    assert "notifications:read" in PLATFORM_ACTIONS
+    assert "cards:review" not in PLATFORM_ACTIONS
+    assert "cards:write" not in PLATFORM_ACTIONS
+    assert "organizations:manage" not in PLATFORM_ACTIONS
+    assert "codes:manage" not in PLATFORM_ACTIONS
+    assert "audit:read" not in PLATFORM_ACTIONS
+
+
+def test_platform_operator_membership_must_not_belong_to_an_organization() -> None:
+    async def persist_memberships() -> tuple[str | None, Any]:
+        async with SessionLocal() as session:
+            session.add_all(
+                [
+                    User(id="platform_operator", email="platform@example.test", role="ADMIN"),
+                    User(
+                        id="company_manager_without_org",
+                        email="manager-scope@example.test",
+                        role="ADMIN",
+                    ),
+                    AdminMembership(
+                        user_id="platform_operator",
+                        organization_id=None,
+                        access_level="platform_operator",
+                        status="active",
+                        display_name="플랫폼 운영자",
+                    ),
+                ]
+            )
+            await session.commit()
+
+            scoped_company = AdminMembership(
+                user_id="company_manager_without_org",
+                organization_id=None,
+                access_level="manager",
+                status="active",
+                display_name="회사 운영자",
+            )
+            session.add(scoped_company)
+            with pytest.raises(IntegrityError):
+                await session.commit()
+            await session.rollback()
+
+            membership = await session.get(AdminMembership, "platform_operator")
+            context = await load_admin_context(session, membership_user())
+            return membership.organization_id if membership else "missing", context.organization
+
+    def membership_user() -> User:
+        return User(id="platform_operator", email="platform@example.test", role="ADMIN")
+
+    organization_id, organization = asyncio.run(persist_memberships())
+    assert organization_id is None
+    assert organization is None
+
+
+def test_release_workflow_schemas_expose_storage_contracts() -> None:
+    release_status: ReleaseStatus = "pending_platform_review"
+    release_policy: ReleasePolicy = "partner_and_platform"
+    review_stage: ReviewStage = "platform"
+    review_decision: ReviewDecision = "changes_requested"
+
+    decision = AdminCardReleaseDecisionRequest(stage=review_stage, decision=review_decision)
+    request_item = CardReviewRequestItem(
+        id="review_request_1",
+        cardId="card_special",
+        version=2,
+        stage="partner",
+        status="pending",
+        snapshot={"name": "Special Card"},
+    )
+    decision_item = CardReviewDecisionItem(
+        id="decision_1",
+        requestId=request_item.id,
+        reviewerUserId="platform_operator",
+        decision="approved",
+        note=None,
+        decidedAt="2026-08-11T00:00:00Z",
+    )
+    notification = NotificationItem(
+        id="notification_1",
+        kind="card_platform_review_requested",
+        title="검수 요청",
+        body=None,
+        isRead=False,
+        createdAt="2026-08-11T00:00:00Z",
+        entityType="card",
+        entityId="card_special",
+        eventKey="card:card_special:platform:2",
+    )
+
+    assert release_status == "pending_platform_review"
+    assert release_policy == "partner_and_platform"
+    assert decision.decision == "changes_requested"
+    assert request_item.stage == "partner"
+    assert decision_item.reviewer_user_id == "platform_operator"
+    assert notification.entity_id == "card_special"
 
 
 def test_root_can_manage_partner_organization_and_member(

@@ -5,6 +5,19 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 T = TypeVar("T")
 
+ReleaseStatus = Literal[
+    "draft",
+    "pending_partner_review",
+    "changes_requested",
+    "pending_platform_review",
+    "approved",
+    "drop_ready",
+    "published",
+]
+ReleasePolicy = Literal["partner_only", "partner_and_platform"]
+ReviewStage = Literal["partner", "platform"]
+ReviewDecision = Literal["approved", "changes_requested"]
+
 
 class Success(BaseModel, Generic[T]):
     """Generic Pydantic v2 envelope keeps every public success response uniform."""
@@ -299,6 +312,52 @@ class CollectionCampaignUpdate(BaseModel):
 class AdminCardReviewRequest(BaseModel):
     decision: Literal["approve", "request_changes"]
     note: str | None = Field(default=None, max_length=500)
+
+
+class AdminCardReleaseDecisionRequest(BaseModel):
+    stage: ReviewStage
+    decision: ReviewDecision
+    note: str | None = Field(default=None, max_length=500)
+
+
+class CardReleaseState(BaseModel):
+    release_policy: ReleasePolicy = Field(alias="releasePolicy")
+    release_status: ReleaseStatus = Field(alias="releaseStatus")
+    review_version: int = Field(alias="reviewVersion", ge=0)
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class CardReviewRequestItem(BaseModel):
+    id: str
+    card_id: str = Field(alias="cardId")
+    version: int
+    stage: ReviewStage
+    status: Literal["pending", "approved", "changes_requested"]
+    snapshot: dict
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class CardReviewDecisionItem(BaseModel):
+    id: str
+    request_id: str = Field(alias="requestId")
+    reviewer_user_id: str = Field(alias="reviewerUserId")
+    decision: ReviewDecision
+    note: str | None = Field(default=None, max_length=500)
+    decided_at: datetime = Field(alias="decidedAt")
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class NotificationItem(BaseModel):
+    id: str
+    kind: str
+    title: str
+    body: str | None = None
+    is_read: bool = Field(alias="isRead")
+    created_at: datetime = Field(alias="createdAt")
+    entity_type: str | None = Field(default=None, alias="entityType")
+    entity_id: str | None = Field(default=None, alias="entityId")
+    event_key: str | None = Field(default=None, alias="eventKey")
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class ArtistReviewSubmitRequest(BaseModel):
