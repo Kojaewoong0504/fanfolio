@@ -62,6 +62,14 @@ test('drop and code forms use the reusable form select with client-side empty-st
   assert.match(source, /공개 카드와 라이브 드롭을 각각 선택해 주세요/)
 })
 
+test('operational list filters use the same accessible custom control as role changes', () => {
+  assert.match(source, /className: "filter-select card-artist-filter"/)
+  assert.match(source, /className: "filter-select card-status-filter"/)
+  assert.match(source, /className: "filter-select user-role-filter"/)
+  assert.match(source, /className: "filter-select audit-action-filter"/)
+  assert.match(source, /control\.classList\.contains\("card-artist-filter"\)/)
+})
+
 test('company administrators can inspect but cannot alter their organization artist scope', () => {
   assert.match(source, /const canManageScope = isRoot\(\)/)
   assert.match(source, /루트 관리자 관리 범위/)

@@ -499,7 +499,14 @@ function artistsView() {
 }
 
 function auditView() {
-  return `<section class="panel"><div class="panel-heading"><div><p class="eyebrow">SECURITY LOG</p><h2>감사 로그</h2><p>현재 권한 범위에서 발생한 변경 이력을 확인합니다.</p></div></div><div class="toolbar compact-toolbar"><label class="search-field">${icon("search")}<input id="audit-search" placeholder="행동, 실행자, 대상 검색" value="${escapeHtml(state.auditQuery)}" /></label><select class="filter" id="audit-action-filter" aria-label="감사 로그 행동 필터"><option value="all" ${state.auditAction === "all" ? "selected" : ""}>모든 행동</option><option value="card.published" ${state.auditAction === "card.published" ? "selected" : ""}>카드 공개</option><option value="card.created" ${state.auditAction === "card.created" ? "selected" : ""}>카드 등록</option><option value="organization.updated" ${state.auditAction === "organization.updated" ? "selected" : ""}>파트너 변경</option><option value="organization.member_updated" ${state.auditAction === "organization.member_updated" ? "selected" : ""}>관리자 변경</option></select><button class="secondary" id="audit-search-submit">검색</button></div><div class="table-wrap"><table class="table responsive-table"><thead><tr><th>시각</th><th>행동</th><th>실행자</th><th>대상</th></tr></thead><tbody>${auditRows()}</tbody></table></div>${auditPagination()}</section>`;
+  const actionOptions = [
+    { value: "all", label: "모든 행동" },
+    { value: "card.published", label: "카드 공개" },
+    { value: "card.created", label: "카드 등록" },
+    { value: "organization.updated", label: "파트너 변경" },
+    { value: "organization.member_updated", label: "관리자 변경" },
+  ];
+  return `<section class="panel"><div class="panel-heading"><div><p class="eyebrow">SECURITY LOG</p><h2>감사 로그</h2><p>현재 권한 범위에서 발생한 변경 이력을 확인합니다.</p></div></div><div class="toolbar compact-toolbar"><label class="search-field">${icon("search")}<input id="audit-search" placeholder="행동, 실행자, 대상 검색" value="${escapeHtml(state.auditQuery)}" /></label>${adminSelect({ id: "audit-action-filter", value: state.auditAction, label: "감사 로그 행동 필터", className: "filter-select audit-action-filter", options: actionOptions })}<button class="secondary" id="audit-search-submit">검색</button></div><div class="table-wrap"><table class="table responsive-table"><thead><tr><th>시각</th><th>행동</th><th>실행자</th><th>대상</th></tr></thead><tbody>${auditRows()}</tbody></table></div>${auditPagination()}</section>`;
 }
 
 function drawerView() {
@@ -565,6 +572,18 @@ function cardCreateDrawer() {
 
 function cardsView() {
   const artists = scopedArtists();
+  const artistOptions = [
+    { value: "all", label: "모든 아티스트" },
+    ...artists.map((artist) => ({ value: artist.id, label: artist.name })),
+  ];
+  const statusOptions = [
+    { value: "all", label: "모든 상태" },
+    { value: "published", label: "공개됨" },
+    { value: "draft", label: "초안" },
+    { value: "pending_review", label: "검수 중" },
+    { value: "approved", label: "공개 승인" },
+    { value: "changes_requested", label: "수정 요청" },
+  ];
   const visible = state.cards.filter(
     (card) =>
       `${card.name}${card.ownerArtistId}${card.rarity}`
@@ -575,7 +594,7 @@ function cardsView() {
         card.artistId === state.cardArtist) &&
       (state.status === "all" || card.status === state.status),
   );
-  return `<div class="page-heading with-actions"><div><p class="eyebrow">CARD LIBRARY</p><h2>${isRoot() ? "전체 카드 운영" : "담당 카드 운영"}</h2><p>${isRoot() ? "아티스트 카드의 검수와 공개 상태를 관리합니다." : "배정된 아티스트의 카드 초안을 만들고 검수를 요청합니다."}</p></div>${can("cards:write") ? `<button class="primary" id="open-card-drawer" type="button">${icon("add_card")} 카드 등록</button>` : ""}</div>${reviewPanel()}<section class="panel"><div class="toolbar compact-toolbar"><label class="search-field grow">${icon("search")}<input id="card-search" placeholder="카드명, 아티스트 검색" value="${escapeHtml(state.query)}" /></label><select class="filter" id="card-artist-filter" aria-label="아티스트 필터"><option value="all" ${state.cardArtist === "all" ? "selected" : ""}>모든 아티스트</option>${artists.map((artist) => `<option value="${escapeHtml(artist.id)}" ${state.cardArtist === artist.id ? "selected" : ""}>${escapeHtml(artist.name)}</option>`).join("")}</select><select class="filter" id="card-status"><option value="all" ${state.status === "all" ? "selected" : ""}>모든 상태</option><option value="published" ${state.status === "published" ? "selected" : ""}>공개됨</option><option value="draft" ${state.status === "draft" ? "selected" : ""}>초안</option><option value="pending_review" ${state.status === "pending_review" ? "selected" : ""}>검수 중</option><option value="approved" ${state.status === "approved" ? "selected" : ""}>공개 승인</option><option value="changes_requested" ${state.status === "changes_requested" ? "selected" : ""}>수정 요청</option></select></div><div class="table-wrap"><table class="table responsive-table card-table"><thead><tr><th>카드</th><th>아티스트</th><th>등급</th><th>발행 수량</th><th>상태</th><th><span class="sr-only">관리</span></th></tr></thead><tbody>${cardRows(visible)}</tbody></table></div></section>`;
+  return `<div class="page-heading with-actions"><div><p class="eyebrow">CARD LIBRARY</p><h2>${isRoot() ? "전체 카드 운영" : "담당 카드 운영"}</h2><p>${isRoot() ? "아티스트 카드의 검수와 공개 상태를 관리합니다." : "배정된 아티스트의 카드 초안을 만들고 검수를 요청합니다."}</p></div>${can("cards:write") ? `<button class="primary" id="open-card-drawer" type="button">${icon("add_card")} 카드 등록</button>` : ""}</div>${reviewPanel()}<section class="panel"><div class="toolbar compact-toolbar"><label class="search-field grow">${icon("search")}<input id="card-search" placeholder="카드명, 아티스트 검색" value="${escapeHtml(state.query)}" /></label>${adminSelect({ id: "card-artist-filter", value: state.cardArtist, label: "아티스트 필터", className: "filter-select card-artist-filter", options: artistOptions })}${adminSelect({ id: "card-status", value: state.status, label: "카드 상태 필터", className: "filter-select card-status-filter", options: statusOptions })}</div><div class="table-wrap"><table class="table responsive-table card-table"><thead><tr><th>카드</th><th>아티스트</th><th>등급</th><th>발행 수량</th><th>상태</th><th><span class="sr-only">관리</span></th></tr></thead><tbody>${cardRows(visible)}</tbody></table></div></section>`;
 }
 function statusLabel(status) {
   return (
@@ -702,7 +721,13 @@ function dropRows() {
     .join("");
 }
 function usersView() {
-  return `<div class="page-heading"><div><p class="eyebrow">SERVICE USERS</p><h2>서비스 사용자</h2><p>팬·아티스트 계정 상태와 서비스 역할을 관리합니다.</p></div></div><section class="panel"><div class="toolbar compact-toolbar"><label class="search-field grow">${icon("search")}<input id="user-search" placeholder="이메일 검색" value="${escapeHtml(state.userQuery)}" /></label><select class="filter" id="user-role-filter" aria-label="사용자 역할 필터"><option value="all" ${state.userRole === "all" ? "selected" : ""}>모든 역할</option><option value="fan" ${state.userRole === "fan" ? "selected" : ""}>팬</option><option value="artist" ${state.userRole === "artist" ? "selected" : ""}>아티스트</option><option value="admin" ${state.userRole === "admin" ? "selected" : ""}>관리자</option></select><button class="secondary" id="user-search-submit">검색</button></div><div class="table-wrap"><table class="table responsive-table"><thead><tr><th>사용자</th><th>닉네임</th><th>온보딩</th><th>역할</th></tr></thead><tbody>${userRows()}</tbody></table></div>${userPagination()}</section>`;
+  const roleOptions = [
+    { value: "all", label: "모든 역할" },
+    { value: "fan", label: "팬" },
+    { value: "artist", label: "아티스트" },
+    { value: "admin", label: "관리자" },
+  ];
+  return `<div class="page-heading"><div><p class="eyebrow">SERVICE USERS</p><h2>서비스 사용자</h2><p>팬·아티스트 계정 상태와 서비스 역할을 관리합니다.</p></div></div><section class="panel"><div class="toolbar compact-toolbar"><label class="search-field grow">${icon("search")}<input id="user-search" placeholder="이메일 검색" value="${escapeHtml(state.userQuery)}" /></label>${adminSelect({ id: "user-role-filter", value: state.userRole, label: "사용자 역할 필터", className: "filter-select user-role-filter", options: roleOptions })}<button class="secondary" id="user-search-submit">검색</button></div><div class="table-wrap"><table class="table responsive-table"><thead><tr><th>사용자</th><th>닉네임</th><th>온보딩</th><th>역할</th></tr></thead><tbody>${userRows()}</tbody></table></div>${userPagination()}</section>`;
 }
 function adminAccountPanel() {
   const account = state.adminProvisionedAccount;
@@ -1470,7 +1495,6 @@ async function saveMemberArtists(event) {
 }
 function searchUsers() {
   state.userQuery = document.querySelector("#user-search").value.trim();
-  state.userRole = document.querySelector("#user-role-filter").value;
   state.userPage = 1;
   void loadData();
 }
@@ -1480,7 +1504,6 @@ function changeUserPage(page) {
 }
 function searchAuditLogs() {
   state.auditQuery = document.querySelector("#audit-search").value.trim();
-  state.auditAction = document.querySelector("#audit-action-filter").value;
   state.auditPage = 1;
   void loadData();
 }
@@ -2011,9 +2034,6 @@ function bind() {
       if (event.key === "Enter") searchUsers();
     });
   document
-    .querySelector("#user-role-filter")
-    ?.addEventListener("change", searchUsers);
-  document
     .querySelectorAll(".user-page")
     .forEach((button) =>
       button.addEventListener("click", () =>
@@ -2028,9 +2048,6 @@ function bind() {
     ?.addEventListener("keydown", (event) => {
       if (event.key === "Enter") searchAuditLogs();
     });
-  document
-    .querySelector("#audit-action-filter")
-    ?.addEventListener("change", searchAuditLogs);
   document
     .querySelectorAll(".audit-page")
     .forEach((button) =>
@@ -2105,18 +2122,6 @@ function bind() {
     state.query = event.target.value;
     layout();
   });
-  document
-    .querySelector("#card-artist-filter")
-    ?.addEventListener("change", (event) => {
-      state.cardArtist = event.target.value;
-      layout();
-    });
-  document
-    .querySelector("#card-status")
-    ?.addEventListener("change", (event) => {
-      state.status = event.target.value;
-      layout();
-    });
   document
     .querySelectorAll(".publish")
     .forEach((button) =>
@@ -2227,6 +2232,24 @@ function bind() {
           { accessLevel: option.dataset.value },
           "관리자 권한을 저장했습니다.",
         );
+      }
+      if (control.classList.contains("card-artist-filter") && previous !== option.dataset.value) {
+        state.cardArtist = option.dataset.value;
+        layout();
+      }
+      if (control.classList.contains("card-status-filter") && previous !== option.dataset.value) {
+        state.status = option.dataset.value;
+        layout();
+      }
+      if (control.classList.contains("user-role-filter") && previous !== option.dataset.value) {
+        state.userRole = option.dataset.value;
+        state.userPage = 1;
+        void loadData();
+      }
+      if (control.classList.contains("audit-action-filter") && previous !== option.dataset.value) {
+        state.auditAction = option.dataset.value;
+        state.auditPage = 1;
+        void loadData();
       }
     }),
   );

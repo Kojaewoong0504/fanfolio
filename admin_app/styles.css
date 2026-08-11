@@ -1585,6 +1585,11 @@ button:disabled {
   display: none;
 }
 
+.toolbar > .admin-select.filter-select {
+  flex: 0 1 170px;
+  min-width: 150px;
+}
+
 .admin-select-trigger {
   display: flex;
   width: 100%;
