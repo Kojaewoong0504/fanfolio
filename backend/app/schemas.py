@@ -344,6 +344,45 @@ class AdminNotificationReadRequest(BaseModel):
     read: bool
 
 
+class AchievementDefinitionCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    description: str | None = Field(default=None, max_length=500)
+    organization_id: str | None = Field(default=None, alias="organizationId")
+    artist_id: str | None = Field(default=None, alias="artistId")
+    member_id: str | None = Field(default=None, alias="memberId")
+    condition_type: Literal[
+        "first_card",
+        "card_count",
+        "member_count",
+        "specific_card",
+        "set_complete",
+        "drop_participation",
+    ] = Field(alias="conditionType")
+    target_value: int = Field(default=1, alias="targetValue", ge=1)
+    condition_payload: dict = Field(default_factory=dict, alias="conditionPayload")
+    reward_ids: list[str] = Field(default_factory=list, alias="rewardIds", max_length=20)
+    xp_bonus: int = Field(default=0, alias="xpBonus", ge=0)
+    model_config = ConfigDict(populate_by_name=True)
+
+    @model_validator(mode="after")
+    def include_condition_metadata(self) -> "AchievementDefinitionCreate":
+        if self.member_id is not None:
+            self.condition_payload = {**self.condition_payload, "memberId": self.member_id}
+        if self.reward_ids:
+            self.condition_payload = {
+                **self.condition_payload,
+                "rewardIds": self.reward_ids,
+                "rewardId": self.reward_ids[0],
+            }
+        if self.xp_bonus:
+            self.condition_payload = {**self.condition_payload, "xpBonus": self.xp_bonus}
+        if self.condition_type == "specific_card" and not self.condition_payload.get("cardId"):
+            raise ValueError("specific_card 업적에는 conditionPayload.cardId가 필요합니다.")
+        if self.condition_type == "drop_participation" and not self.condition_payload.get("dropId"):
+            raise ValueError("drop_participation 업적에는 conditionPayload.dropId가 필요합니다.")
+        return self
+
+
 class CardReleaseState(BaseModel):
     release_policy: ReleasePolicy = Field(alias="releasePolicy")
     release_status: ReleaseStatus = Field(alias="releaseStatus")

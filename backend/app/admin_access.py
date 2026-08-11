@@ -29,10 +29,14 @@ ROOT_ACTIONS = frozenset(
         "codes:manage",
         "users:manage",
         "audit:read",
+        "engagement:manage_global",
+        "engagement:approve_global",
     }
 )
 
-PLATFORM_ACTIONS = frozenset({"cards:read", "cards:review_platform", "notifications:read"})
+PLATFORM_ACTIONS = frozenset(
+    {"cards:read", "cards:review_platform", "notifications:read", "engagement:approve_global"}
+)
 
 PARTNER_ACTIONS = {
     "company_admin": frozenset(
@@ -50,6 +54,8 @@ PARTNER_ACTIONS = {
             "drops:submit",
             "codes:read",
             "codes:write",
+            "engagement:write",
+            "engagement:approve",
             "audit:read",
         }
     ),
@@ -65,6 +71,7 @@ PARTNER_ACTIONS = {
             "drops:submit",
             "codes:read",
             "codes:write",
+            "engagement:write",
             "audit:read",
         }
     ),
@@ -78,6 +85,7 @@ PARTNER_ACTIONS = {
             "drops:read",
             "drops:write",
             "codes:read",
+            "engagement:write",
             "audit:read",
         }
     ),

@@ -210,12 +210,18 @@ def test_partner_action_map_includes_company_admin_and_drop_code_scope() -> None
             "drops:submit",
             "codes:read",
             "codes:write",
+            "engagement:write",
+            "engagement:approve",
             "audit:read",
         }
     )
     assert {"drops:read", "drops:write", "drops:submit"} <= PARTNER_ACTIONS["manager"]
+    assert "engagement:write" in PARTNER_ACTIONS["manager"]
+    assert "engagement:approve" not in PARTNER_ACTIONS["manager"]
     assert {"codes:read", "codes:write"} <= PARTNER_ACTIONS["manager"]
     assert {"drops:read", "drops:write", "codes:read"} <= PARTNER_ACTIONS["editor"]
+    assert "engagement:write" in PARTNER_ACTIONS["editor"]
+    assert "engagement:approve" not in PARTNER_ACTIONS["editor"]
     assert "drops:submit" not in PARTNER_ACTIONS["editor"]
     assert "codes:write" not in PARTNER_ACTIONS["editor"]
     assert "codes:read" in PARTNER_ACTIONS["viewer"]

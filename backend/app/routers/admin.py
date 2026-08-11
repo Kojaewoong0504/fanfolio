@@ -15,6 +15,7 @@ from app.admin_access import AdminContext
 from app.dependencies import CurrentAdmin, DbSession, RootAdminUser
 from app.errors import AppError
 from app.models import (
+    AchievementDefinition,
     AdminMembership,
     Artist,
     ArtistProfile,
@@ -29,12 +30,14 @@ from app.models import (
     RedeemCode,
     RedeemCodeBatch,
     RefreshToken,
+    RewardCatalog,
     Role,
     User,
 )
 from app.passwords import hash_password
 from app.routers.admin_partners import router as partner_router
 from app.schemas import (
+    AchievementDefinitionCreate,
     AdminAccountCreate,
     AdminArtistProfileUpdate,
     AdminArtistUpdate,
@@ -169,9 +172,58 @@ def drop_data(drop: Drop) -> dict:
     }
 
 
+def achievement_data(achievement: AchievementDefinition) -> dict:
+    payload = achievement.condition_payload or {}
+    reward_ids = payload.get("rewardIds")
+    if not isinstance(reward_ids, list):
+        reward_ids = [payload["rewardId"]] if payload.get("rewardId") else []
+    return {
+        "id": achievement.id,
+        "title": achievement.title,
+        "description": achievement.description,
+        "organizationId": achievement.organization_id,
+        "artistId": achievement.artist_id,
+        "memberId": payload.get("memberId"),
+        "conditionType": achievement.condition_type,
+        "targetValue": achievement.target_value,
+        "conditionPayload": payload,
+        "rewardIds": reward_ids,
+        "xpBonus": payload.get("xpBonus", 0),
+        "status": achievement.status,
+    }
+
+
+def reward_data(reward: RewardCatalog) -> dict:
+    return {
+        "id": reward.id,
+        "organizationId": reward.organization_id,
+        "artistId": reward.artist_id,
+        "rewardType": reward.reward_type,
+        "name": reward.name,
+        "metadata": reward.metadata_,
+        "status": reward.status,
+    }
+
+
 def _require_scoped_action(context: AdminContext, action: str) -> None:
     if not context.is_root:
         context.require_action(action)
+
+
+def _require_engagement_write(context: AdminContext) -> None:
+    if (
+        "engagement:write" not in context.allowed_actions
+        and "engagement:manage_global" not in context.allowed_actions
+    ):
+        raise AppError(403, "ADMIN_WRITE_REQUIRED", "이 작업을 수행할 권한이 없습니다.")
+
+
+def _require_engagement_approve(context: AdminContext) -> None:
+    if (
+        "engagement:approve" not in context.allowed_actions
+        and "engagement:approve_global" not in context.allowed_actions
+    ):
+        raise AppError(403, "ADMIN_WRITE_REQUIRED", "이 작업을 수행할 권한이 없습니다.")
 
 
 async def _organization_artist_or_404(
@@ -196,6 +248,67 @@ async def _organization_artist_or_404(
         raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
 
 
+async def require_engagement_scope(
+    session: DbSession,
+    context: AdminContext,
+    organization_id: str | None,
+    artist_id: str | None,
+) -> tuple[str | None, str | None]:
+    if context.is_root or context.is_platform_operator:
+        if organization_id is None and artist_id is None:
+            return None, None
+        if organization_id is None or artist_id is None:
+            raise AppError(
+                422,
+                "ENGAGEMENT_SCOPE_REQUIRED",
+                "조직과 아티스트 범위를 함께 선택해 주세요.",
+            )
+        await _organization_artist_or_404(session, context, organization_id, artist_id)
+        return organization_id, artist_id
+
+    if context.organization is None:
+        raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
+    scoped_organization_id = context.organization.id
+    if organization_id is not None and organization_id != scoped_organization_id:
+        raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
+    if artist_id is None:
+        if context.membership.access_level == "company_admin":
+            return scoped_organization_id, None
+        raise AppError(422, "ARTIST_REQUIRED", "아티스트를 선택해 주세요.")
+    await _organization_artist_or_404(session, context, scoped_organization_id, artist_id)
+    return scoped_organization_id, artist_id
+
+
+async def scoped_achievement_or_404(
+    achievement_id: str,
+    context: AdminContext,
+    session: DbSession,
+) -> AchievementDefinition:
+    achievement = await session.get(AchievementDefinition, achievement_id)
+    if achievement is None:
+        raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
+    if context.is_root or context.is_platform_operator:
+        return achievement
+    if context.organization is None or achievement.organization_id != context.organization.id:
+        raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
+    if achievement.artist_id is not None:
+        await _organization_artist_or_404(
+            session, context, achievement.organization_id, achievement.artist_id
+        )
+    return achievement
+
+
+def ensure_engagement_approver_scope(
+    context: AdminContext, achievement: AchievementDefinition
+) -> None:
+    if achievement.organization_id is None:
+        if "engagement:approve_global" not in context.allowed_actions:
+            raise AppError(403, "ADMIN_WRITE_REQUIRED", "이 작업을 수행할 권한이 없습니다.")
+        return
+    if context.membership.access_level != "company_admin":
+        raise AppError(403, "ADMIN_WRITE_REQUIRED", "이 작업을 수행할 권한이 없습니다.")
+
+
 async def scoped_drop_or_404(
     drop_id: str,
     context: AdminContext,
@@ -214,6 +327,175 @@ async def scoped_drop_or_404(
         raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
     await _organization_artist_or_404(session, context, drop.organization_id, drop.artist_id)
     return drop
+
+
+def engagement_scope_filters(context: AdminContext, model: type) -> list[object]:
+    if context.is_root:
+        return []
+    if context.is_platform_operator:
+        return [model.organization_id.is_(None)]
+    if context.organization is None:
+        return [model.id == ""]
+    filters: list[object] = [model.organization_id == context.organization.id]
+    if context.membership.access_level != "company_admin":
+        filters.append(model.artist_id.in_(context.assigned_artist_ids))
+    return filters
+
+
+@router.get("/engagement/achievements")
+async def list_admin_achievements(context: CurrentAdmin, session: DbSession) -> dict:
+    rows = await session.scalars(
+        select(AchievementDefinition)
+        .where(*engagement_scope_filters(context, AchievementDefinition))
+        .order_by(AchievementDefinition.title, AchievementDefinition.id)
+    )
+    return {"ok": True, "data": {"items": [achievement_data(item) for item in rows]}}
+
+
+@router.post("/engagement/achievements", status_code=status.HTTP_201_CREATED)
+async def create_achievement(
+    payload: AchievementDefinitionCreate, context: CurrentAdmin, session: DbSession
+) -> dict:
+    _require_engagement_write(context)
+    organization_id, artist_id = await require_engagement_scope(
+        session, context, payload.organization_id, payload.artist_id
+    )
+    achievement = AchievementDefinition(
+        id=f"achievement_{uuid4().hex[:12]}",
+        organization_id=organization_id,
+        artist_id=artist_id,
+        title=payload.title,
+        description=payload.description,
+        condition_type=payload.condition_type,
+        target_value=payload.target_value,
+        condition_payload=payload.condition_payload,
+        reward_rule_key=payload.reward_ids[0] if payload.reward_ids else None,
+        status="draft",
+    )
+    session.add(achievement)
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="achievement.created",
+        entity_type="achievement",
+        entity_id=achievement.id,
+        organization_id=achievement.organization_id,
+        artist_id=achievement.artist_id,
+    )
+    await session.commit()
+    return {"ok": True, "data": achievement_data(achievement)}
+
+
+async def transition_achievement_status(
+    achievement_id: str,
+    context: AdminContext,
+    session: DbSession,
+    *,
+    required_status: str,
+    next_status: str,
+    action: str,
+) -> dict:
+    achievement = await scoped_achievement_or_404(achievement_id, context, session)
+    if achievement.status != required_status:
+        raise AppError(
+            409,
+            "INVALID_ACHIEVEMENT_STATUS",
+            "현재 상태에서는 업적 검수 상태를 전환할 수 없습니다.",
+        )
+    achievement.status = next_status
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action=action,
+        entity_type="achievement",
+        entity_id=achievement.id,
+        organization_id=achievement.organization_id,
+        artist_id=achievement.artist_id,
+        details={"previousStatus": required_status, "nextStatus": next_status},
+    )
+    await session.commit()
+    return {"ok": True, "data": achievement_data(achievement)}
+
+
+@router.post("/engagement/achievements/{achievement_id}/submit")
+async def submit_achievement_review(
+    achievement_id: str, context: CurrentAdmin, session: DbSession
+) -> dict:
+    _require_engagement_write(context)
+    return await transition_achievement_status(
+        achievement_id,
+        context,
+        session,
+        required_status="draft",
+        next_status="pending_review",
+        action="achievement.submitted",
+    )
+
+
+@router.post("/engagement/achievements/{achievement_id}/approve")
+async def approve_achievement(
+    achievement_id: str, context: CurrentAdmin, session: DbSession
+) -> dict:
+    _require_engagement_approve(context)
+    achievement = await scoped_achievement_or_404(achievement_id, context, session)
+    ensure_engagement_approver_scope(context, achievement)
+    if achievement.status != "pending_review":
+        raise AppError(
+            409,
+            "INVALID_ACHIEVEMENT_STATUS",
+            "검수 대기 중인 업적만 공개 승인할 수 있습니다.",
+        )
+    achievement.status = "published"
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="achievement.published",
+        entity_type="achievement",
+        entity_id=achievement.id,
+        organization_id=achievement.organization_id,
+        artist_id=achievement.artist_id,
+        details={"previousStatus": "pending_review", "nextStatus": "published"},
+    )
+    await session.commit()
+    return {"ok": True, "data": achievement_data(achievement)}
+
+
+@router.post("/engagement/achievements/{achievement_id}/disable")
+async def disable_achievement(
+    achievement_id: str, context: CurrentAdmin, session: DbSession
+) -> dict:
+    _require_engagement_approve(context)
+    achievement = await scoped_achievement_or_404(achievement_id, context, session)
+    ensure_engagement_approver_scope(context, achievement)
+    if achievement.status != "published":
+        raise AppError(
+            409,
+            "INVALID_ACHIEVEMENT_STATUS",
+            "공개 중인 업적만 비활성화할 수 있습니다.",
+        )
+    achievement.status = "disabled"
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="achievement.disabled",
+        entity_type="achievement",
+        entity_id=achievement.id,
+        organization_id=achievement.organization_id,
+        artist_id=achievement.artist_id,
+        details={"previousStatus": "published", "nextStatus": "disabled"},
+    )
+    await session.commit()
+    return {"ok": True, "data": achievement_data(achievement)}
+
+
+@router.get("/engagement/rewards")
+async def list_admin_rewards(context: CurrentAdmin, session: DbSession) -> dict:
+    rows = await session.scalars(
+        select(RewardCatalog)
+        .where(*engagement_scope_filters(context, RewardCatalog))
+        .order_by(RewardCatalog.name, RewardCatalog.id)
+    )
+    return {"ok": True, "data": {"items": [reward_data(item) for item in rows]}}
 
 
 def qr_png_bytes(code: str) -> bytes:
