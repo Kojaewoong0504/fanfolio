@@ -741,6 +741,81 @@ button.top-avatar {
   margin-top: 14px;
 }
 
+.fan-growth-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.fan-growth-list {
+  display: grid;
+  gap: 8px;
+}
+
+.fan-growth-queue-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 58px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.fan-growth-queue-item strong,
+.fan-growth-queue-item small,
+.fan-growth-table strong,
+.fan-growth-table small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.achievement-builder .scope-fields,
+.achievement-builder .condition-template-fields,
+.achievement-builder .reward-preview,
+.fan-pass-drawer section {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.pass-tier-list {
+  display: grid;
+  gap: 8px;
+}
+
+.pass-tier-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  align-items: end;
+}
+
+.pass-tier-row > span {
+  display: grid;
+  width: 28px;
+  height: 34px;
+  place-items: center;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.field-error {
+  margin-top: 5px;
+  color: var(--red);
+  font-size: 10px;
+  font-weight: 700;
+}
+
 .panel {
   padding: 18px;
 }
@@ -3021,8 +3096,15 @@ code {
 
 @media (max-width: 767px) {
   .guide-grid,
-  .guide-compare {
+  .guide-compare,
+  .fan-growth-grid,
+  .fan-growth-queue-item,
+  .pass-tier-row {
     grid-template-columns: 1fr;
+  }
+
+  .fan-growth-queue-item {
+    align-items: stretch;
   }
 
   .guide-grid .guide-hero {
