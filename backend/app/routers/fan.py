@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, Query, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, case, desc, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
@@ -32,6 +32,7 @@ from app.schemas import (
 )
 from app.services import record_audit, redeem
 from app.storage import configured_asset_storage, storage_response
+from app.tasks import enqueue_engagement_event
 
 router = APIRouter(prefix="/api", tags=["fan"])
 
@@ -103,11 +104,17 @@ async def me(user: FanUser) -> dict:
 
 @router.post("/redemptions", status_code=status.HTTP_201_CREATED)
 async def create_redemption(
-    payload: RedemptionRequest, request: Request, user: FanUser, session: DbSession
+    payload: RedemptionRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    user: FanUser,
+    session: DbSession,
 ) -> dict:
     client_host = request.client.host if request.client else "unknown"
     await enforce_rate_limit(f"redemption:{user.id}:{client_host}", limit=10, window_seconds=60)
-    return {"ok": True, "data": await redeem(session, user, payload.code, payload.source)}
+    redeemed, engagement_event_id = await redeem(session, user, payload.code, payload.source)
+    enqueue_engagement_event(engagement_event_id, background_tasks)
+    return {"ok": True, "data": redeemed}
 
 
 @router.get("/me/collection")

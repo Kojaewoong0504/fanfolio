@@ -4,7 +4,11 @@ from celery import Celery
 from starlette.background import BackgroundTasks
 
 from app.core.config import get_settings
-from app.services import cleanup_expired_uploads, process_background_removal
+from app.services import (
+    cleanup_expired_uploads,
+    process_background_removal,
+    process_engagement_event,
+)
 
 settings = get_settings()
 celery_app = Celery("fanfolio", broker=settings.celery_broker_url)
@@ -36,6 +40,20 @@ def enqueue_background_removal(job_id: str, background_tasks: BackgroundTasks) -
         process_background_removal_task.delay(job_id)
         return
     background_tasks.add_task(process_background_removal, job_id)
+
+
+@celery_app.task(name="fanfolio.process_engagement_event")
+def process_engagement_event_task(event_id: str) -> None:
+    """Celery entry point; the async service remains shared with local execution."""
+    asyncio.run(process_engagement_event(event_id))
+
+
+def enqueue_engagement_event(event_id: str, background_tasks: BackgroundTasks) -> None:
+    """Queue growth processing after the redemption transaction has committed."""
+    if settings.task_queue_mode == "celery":
+        process_engagement_event_task.delay(event_id)
+        return
+    background_tasks.add_task(process_engagement_event, event_id)
 
 
 @celery_app.task(name="fanfolio.cleanup_expired_uploads")

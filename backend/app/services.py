@@ -161,6 +161,18 @@ async def grant_xp(
     return row
 
 
+async def process_engagement_event(event_id: str) -> None:
+    """Shared task entry point for growth event consumption.
+
+    Task 1 only guarantees durable post-commit enqueueing. Achievement and XP
+    consumption are added by the follow-up task, so this entry point validates
+    that workers can load the committed event without mutating its pending
+    state.
+    """
+    async with SessionLocal() as session:
+        await session.get(EngagementEvent, event_id)
+
+
 async def ensure_demo_catalog(session: AsyncSession) -> None:
     """Create the small public catalog needed for a fresh MVP deployment.
 
@@ -796,7 +808,7 @@ async def verify_magic_link(session: AsyncSession, *, token: str) -> dict:
 
 async def redeem(
     session: AsyncSession, user: User, code_value: str, acquisition_source: str = "redeem_code"
-) -> dict:
+) -> tuple[dict, str]:
     # Lock the redeem row so concurrent requests cannot both consume the same code.
     # Authentication performed a read first, which starts SQLAlchemy's autobegin
     # transaction. Close that read-only boundary before this service owns its write
@@ -857,6 +869,19 @@ async def redeem(
             acquired_at=now(),
         )
         session.add(user_card)
+        event = await record_engagement_event(
+            session,
+            user_id=user_id,
+            kind="card_collected",
+            source_type="user_card",
+            source_id=user_card.id,
+            payload={
+                "cardId": card.id,
+                "artistId": card.artist_id,
+                "memberId": card.member_id,
+                "dropId": drop.id,
+            },
+        )
         record_details = {"cardId": card.id, "source": acquisition_source}
         await record_audit(
             session,
@@ -864,7 +889,7 @@ async def redeem(
             action="redemption.created",
             entity_type="user_card",
             entity_id=user_card.id,
-            details=record_details,
+            details={**record_details, "engagementEventId": event.id},
         )
         session.add(
             Notification(
@@ -875,9 +900,12 @@ async def redeem(
                 body=f"{card.name} 카드가 내 컬렉션에 추가되었습니다.",
             )
         )
-    return {
-        "userCardId": user_card.id,
-        "cardId": card.id,
-        "serialNumber": serial,
-        "redirectTo": f"/reveal/{user_card.id}",
-    }
+    return (
+        {
+            "userCardId": user_card.id,
+            "cardId": card.id,
+            "serialNumber": serial,
+            "redirectTo": f"/reveal/{user_card.id}",
+        },
+        event.id,
+    )
