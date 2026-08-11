@@ -243,6 +243,44 @@ def test_organization_logo_asset_migration_downgrades_partial_schema_without_fk(
         assert "logo_asset_id" not in organization_columns
 
 
+def test_drop_ownership_migration_adds_nullable_scope_columns_fk_and_index(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "drop-ownership.db"
+    backend_dir = Path(__file__).parents[2]
+
+    upgraded = run_alembic(backend_dir, database_path, "upgrade", "head")
+    assert upgraded.returncode == 0, upgraded.stderr
+    with sqlite3.connect(database_path) as connection:
+        drop_columns = {
+            row[1]: row for row in connection.execute("PRAGMA table_info(drops)").fetchall()
+        }
+        assert "organization_id" in drop_columns
+        assert "artist_id" in drop_columns
+        assert drop_columns["organization_id"][3] == 0
+        assert drop_columns["artist_id"][3] == 0
+
+        drop_foreign_keys = connection.execute("PRAGMA foreign_key_list(drops)").fetchall()
+        assert any(
+            row[3] == "organization_id" and row[2] == "organizations" and row[4] == "id"
+            for row in drop_foreign_keys
+        )
+        assert any(
+            row[3] == "artist_id" and row[2] == "artists" and row[4] == "id"
+            for row in drop_foreign_keys
+        )
+
+        drop_indexes = {row[1] for row in connection.execute("PRAGMA index_list(drops)").fetchall()}
+        assert "ix_drops_organization_artist_status" in drop_indexes
+        index_columns = [
+            row[2]
+            for row in connection.execute(
+                "PRAGMA index_info(ix_drops_organization_artist_status)"
+            ).fetchall()
+        ]
+        assert index_columns == ["organization_id", "artist_id", "status"]
+
+
 def test_alembic_upgrade_adds_drop_metadata_to_a_legacy_database(tmp_path: Path) -> None:
     database_path = tmp_path / "legacy.db"
     with sqlite3.connect(database_path) as connection:

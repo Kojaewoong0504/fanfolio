@@ -313,9 +313,17 @@ class Card(Base):
 
 class Drop(Base):
     __tablename__ = "drops"
+    __table_args__ = (
+        Index("ix_drops_organization_artist_status", "organization_id", "artist_id", "status"),
+    )
+
     id: Mapped[str] = mapped_column(String, primary_key=True)
     name: Mapped[str] = mapped_column(String, default="이름 없는 드롭")
     status: Mapped[str] = mapped_column(String, default="live")
+    organization_id: Mapped[str | None] = mapped_column(
+        ForeignKey("organizations.id"), nullable=True
+    )
+    artist_id: Mapped[str | None] = mapped_column(ForeignKey("artists.id"), nullable=True)
     starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
