@@ -351,13 +351,6 @@ function layout() {
         () => void resetArtistPassword(button.dataset.artistReset),
       ),
     );
-  document.querySelector("#artist-profile-review-form")?.addEventListener("submit", saveArtistProfileReview);
-  document.querySelectorAll("[data-edit-artist-profile]").forEach((button) =>
-    button.addEventListener("click", () => {
-      const profile = state.artistProfiles.find((item) => item.userId === button.dataset.editArtistProfile);
-      if (profile) openDrawer("artist-profile-review", { profile });
-    }),
-  );
 }
 
 function dashboardView() {

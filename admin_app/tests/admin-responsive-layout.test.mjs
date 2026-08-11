@@ -56,6 +56,11 @@ test('artist profile reviews keep dense table cells as summaries and edit in a d
   assert.match(source, /data-edit-artist-profile/)
   assert.match(source, /function artistProfileReviewDrawer/)
   assert.match(source, /id="artist-profile-review-form"/)
+  assert.equal(
+    (source.match(/document\.querySelector\("#artist-profile-review-form"\)/g) || []).length,
+    1,
+    'the review form is bound once so a save creates one API request',
+  )
   assert.doesNotMatch(source, /className: "artist-profile-artist"/)
   assert.doesNotMatch(source, /className: "artist-profile-status"/)
 })
