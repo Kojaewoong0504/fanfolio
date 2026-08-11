@@ -5,7 +5,7 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from sqlalchemy import inspect
 
-from alembic import op
+from alembic import context, op
 
 revision: str = "0031_fan_growth_foundation"
 down_revision: str | None = "0030_card_drop_link"
@@ -14,6 +14,8 @@ depends_on: str | Sequence[str] | None = None
 
 
 def _has_table(table_name: str) -> bool:
+    if context.is_offline_mode():
+        return False
     return inspect(op.get_bind()).has_table(table_name)
 
 

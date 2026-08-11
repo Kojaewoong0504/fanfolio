@@ -370,6 +370,24 @@ def test_growth_migration_enforces_idempotency_constraints(tmp_path: Path) -> No
             )
 
 
+def test_growth_migration_emits_offline_sql_without_database_inspection(tmp_path: Path) -> None:
+    database_path = tmp_path / "offline-fan-growth.db"
+    backend_dir = Path(__file__).parents[2]
+
+    generated = run_alembic(
+        backend_dir,
+        database_path,
+        "upgrade",
+        "0030_card_drop_link:0031_fan_growth_foundation",
+        "--sql",
+    )
+
+    assert generated.returncode == 0, generated.stderr
+    assert "CREATE TABLE engagement_events" in generated.stdout
+    assert "CREATE TABLE xp_ledger" in generated.stdout
+    assert "uq_reward_grant_event_rule" in generated.stdout
+
+
 def test_card_release_migration_creates_review_workflow_storage(tmp_path: Path) -> None:
     database_path = tmp_path / "card-release-workflow.db"
     backend_dir = Path(__file__).parents[2]
