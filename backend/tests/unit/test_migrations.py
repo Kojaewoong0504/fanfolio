@@ -6,6 +6,46 @@ from pathlib import Path
 import pytest
 
 
+def run_alembic(
+    backend_dir: Path,
+    database_path: Path,
+    *args: str,
+) -> subprocess.CompletedProcess[str]:
+    environment = os.environ.copy()
+    environment["DATABASE_URL"] = f"sqlite:///{database_path}"
+    environment["APP_ENV"] = "test"
+    return subprocess.run(
+        [str(backend_dir / ".venv/bin/alembic"), *args],
+        cwd=backend_dir,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def create_partial_0025_logo_schema(database_path: Path) -> None:
+    with sqlite3.connect(database_path) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE assets (
+                id VARCHAR PRIMARY KEY
+            );
+            CREATE TABLE organizations (
+                id VARCHAR PRIMARY KEY,
+                logo_asset_id VARCHAR
+            );
+            CREATE INDEX ix_organizations_logo_asset_id
+                ON organizations (logo_asset_id);
+            CREATE TABLE alembic_version (
+                version_num VARCHAR(32) NOT NULL PRIMARY KEY
+            );
+            INSERT INTO alembic_version (version_num)
+            VALUES ('0025_admin_partner_scope');
+            """
+        )
+
+
 def test_alembic_uses_the_same_render_postgres_normalization_as_the_app() -> None:
     backend_dir = Path(__file__).parents[2]
     source = (backend_dir / "alembic/env.py").read_text(encoding="utf-8")
@@ -128,6 +168,79 @@ def test_alembic_upgrade_creates_the_current_schema(tmp_path: Path) -> None:
             row[1] for row in connection.execute("PRAGMA table_info(artist_profiles)").fetchall()
         }
         assert {"user_id", "artist_id", "verification_status"} <= artist_profile_columns
+
+
+def test_organization_logo_asset_migration_creates_fk_index_and_downgrades_cleanly(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "organization-logo-asset.db"
+    backend_dir = Path(__file__).parents[2]
+
+    upgraded = run_alembic(backend_dir, database_path, "upgrade", "head")
+    assert upgraded.returncode == 0, upgraded.stderr
+    with sqlite3.connect(database_path) as connection:
+        foreign_keys = connection.execute("PRAGMA foreign_key_list(organizations)").fetchall()
+        assert any(
+            row[3] == "logo_asset_id" and row[2] == "assets" and row[4] == "id"
+            for row in foreign_keys
+        )
+        organization_indexes = {
+            row[1] for row in connection.execute("PRAGMA index_list(organizations)").fetchall()
+        }
+        assert "ix_organizations_logo_asset_id" in organization_indexes
+
+    downgraded = run_alembic(backend_dir, database_path, "downgrade", "0025_admin_partner_scope")
+    assert downgraded.returncode == 0, downgraded.stderr
+    with sqlite3.connect(database_path) as connection:
+        organization_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(organizations)").fetchall()
+        }
+        assert "logo_asset_id" not in organization_columns
+        organization_indexes = {
+            row[1] for row in connection.execute("PRAGMA index_list(organizations)").fetchall()
+        }
+        assert "ix_organizations_logo_asset_id" not in organization_indexes
+        foreign_keys = connection.execute("PRAGMA foreign_key_list(organizations)").fetchall()
+        assert not any(row[3] == "logo_asset_id" for row in foreign_keys)
+
+
+def test_organization_logo_asset_migration_repairs_partial_upgrade_missing_fk(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "organization-logo-asset-partial-upgrade.db"
+    backend_dir = Path(__file__).parents[2]
+
+    create_partial_0025_logo_schema(database_path)
+
+    upgraded = run_alembic(backend_dir, database_path, "upgrade", "head")
+    assert upgraded.returncode == 0, upgraded.stderr
+    with sqlite3.connect(database_path) as connection:
+        foreign_keys = connection.execute("PRAGMA foreign_key_list(organizations)").fetchall()
+        assert any(
+            row[3] == "logo_asset_id" and row[2] == "assets" and row[4] == "id"
+            for row in foreign_keys
+        )
+
+
+def test_organization_logo_asset_migration_downgrades_partial_schema_without_fk(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "organization-logo-asset-partial-downgrade.db"
+    backend_dir = Path(__file__).parents[2]
+
+    create_partial_0025_logo_schema(database_path)
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            "UPDATE alembic_version SET version_num = ?", ("0026_organization_logo_asset",)
+        )
+
+    downgraded = run_alembic(backend_dir, database_path, "downgrade", "0025_admin_partner_scope")
+    assert downgraded.returncode == 0, downgraded.stderr
+    with sqlite3.connect(database_path) as connection:
+        organization_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(organizations)").fetchall()
+        }
+        assert "logo_asset_id" not in organization_columns
 
 
 def test_alembic_upgrade_adds_drop_metadata_to_a_legacy_database(tmp_path: Path) -> None:
