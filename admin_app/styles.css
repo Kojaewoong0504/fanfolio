@@ -3039,7 +3039,9 @@ code {
 
 @media (max-width: 1023px) {
   .admin-shell,
-  .admin-shell.partner-layout {
+  .admin-shell.partner-layout,
+  .admin-shell.nav-collapsed,
+  .admin-shell.nav-collapsed.partner-layout {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -3051,9 +3053,32 @@ code {
     transition: transform 180ms ease;
   }
 
-  .admin-shell.nav-collapsed .app-nav {
+  .admin-shell.nav-collapsed .app-nav,
+  .admin-shell.nav-collapsed.partner-layout .app-nav {
+    position: fixed;
     width: 208px;
     padding: 18px 8px 12px;
+    transform: translateX(-100%);
+  }
+
+  .admin-shell.nav-collapsed .app-nav.open,
+  .admin-shell.nav-collapsed.partner-layout .app-nav.open {
+    transform: translateX(0);
+  }
+
+  .workspace {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .topbar-title > div {
+    min-width: 0;
+  }
+
+  .title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .app-nav.open {

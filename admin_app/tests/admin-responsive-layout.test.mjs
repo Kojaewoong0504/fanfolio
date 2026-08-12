@@ -25,6 +25,19 @@ test('compact desktop and tablet breakpoints collapse navigation and partner dir
   assert.match(css, /mobile-nav-toggle/)
 })
 
+test('narrow viewports ignore persisted collapsed desktop grid state', () => {
+  assert.match(
+    css,
+    /@media\s*\(max-width:\s*1023px\)[\s\S]*\.admin-shell\.nav-collapsed,\s*\.admin-shell\.nav-collapsed\.partner-layout\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/,
+    'a persisted collapsed sidebar must not reserve a 72px page column on narrow screens',
+  )
+  assert.match(
+    css,
+    /@media\s*\(max-width:\s*1023px\)[\s\S]*\.admin-shell\.nav-collapsed\s+\.app-nav,[\s\S]*\.admin-shell\.nav-collapsed\.partner-layout\s+\.app-nav\s*\{[^}]*position:\s*fixed/,
+    'the collapsed sidebar must become an off-canvas navigation on narrow screens',
+  )
+})
+
 test('mobile tables become vertical records instead of widening the page', () => {
   assert.match(css, /@media\s*\(max-width:\s*767px\)/)
   assert.match(css, /\.responsive-table/)
