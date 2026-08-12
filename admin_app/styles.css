@@ -2751,6 +2751,155 @@ button.top-avatar {
   border-radius: 10px;
 }
 
+.review-effect-card {
+  --review-light-x: 50%;
+  --review-light-y: 42%;
+  --review-tilt-x: 0deg;
+  --review-tilt-y: 0deg;
+  position: relative;
+  width: min(100%, 220px);
+  aspect-ratio: 2 / 3;
+  margin: 0 auto;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid #ffffffa6;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #f5f2ff, #e5e4ff);
+  box-shadow: 0 16px 32px #4d45a52a;
+  transform: perspective(900px) rotateX(var(--review-tilt-x)) rotateY(var(--review-tilt-y));
+  transition: transform .18s ease, box-shadow .18s ease;
+  touch-action: pan-y;
+}
+
+.review-effect-card .review-effect-image,
+.review-effect-card .review-image {
+  width: 100%;
+  height: 100%;
+}
+
+.review-effect-card .review-image {
+  position: relative;
+  z-index: 0;
+  margin: 0;
+  border: 0;
+  border-radius: inherit;
+}
+
+.review-effect-surface {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: calc(var(--review-effect-intensity) * 0.76);
+  mix-blend-mode: screen;
+  background-position: var(--review-light-x) var(--review-light-y);
+  background-size: 170% 170%;
+  background-image: radial-gradient(circle at var(--review-light-x) var(--review-light-y), #fff9, transparent 18%), conic-gradient(from var(--review-effect-angle) at var(--review-light-x) var(--review-light-y), #fff7, #5ee7ff66, #f472b666, #fde04766, #86efac55, #fff7);
+  transition: opacity .18s ease;
+}
+
+.review-effect-card.material-pearl .review-effect-surface {
+  background-image: radial-gradient(circle at var(--review-light-x) var(--review-light-y), #fff9, transparent 22%), linear-gradient(135deg, #ffd6f755, #aee7ff66 48%, #fff6bd55);
+}
+
+.review-effect-card.material-chrome .review-effect-surface,
+.review-effect-card.side-back.material-chrome .review-effect-surface {
+  background-image: linear-gradient(var(--review-effect-angle), #fff9, #7dd3fc66 22%, #11182744 42%, #fef08a77 62%, #fff9);
+}
+
+.review-effect-card.side-back {
+  background: linear-gradient(145deg, #252744, #15162c);
+}
+
+.review-effect-card.side-back.material-pearl {
+  background: linear-gradient(145deg, #423865, #1e244d);
+}
+
+.review-effect-card.side-back.material-chrome {
+  box-shadow: inset 0 0 0 3px #dce7ffcc, 0 16px 32px #4d45a52a;
+}
+
+.review-effect-badge {
+  position: absolute;
+  z-index: 2;
+  right: 9px;
+  bottom: 9px;
+  padding: 5px 7px;
+  color: #fff;
+  background: #171633cc;
+  border: 1px solid #ffffff66;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 800;
+  pointer-events: none;
+}
+
+.review-effect-card.effects-disabled {
+  transform: none;
+}
+
+.review-effect-card.effects-disabled .review-effect-surface {
+  opacity: 0;
+}
+
+.review-effect-summary {
+  display: grid;
+  gap: 9px;
+  margin: 10px auto 0;
+  padding: 11px;
+  width: min(100%, 220px);
+  border: 1px solid #e0ddf5;
+  border-radius: 12px;
+  background: #faf9ff;
+}
+
+.review-effect-summary > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.review-effect-summary strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.review-effect-summary .eyebrow {
+  color: var(--purple);
+  font-size: 8px;
+}
+
+.review-effect-toggle {
+  width: 100%;
+  min-height: 30px;
+  padding: 0 8px;
+  font-size: 10px;
+}
+
+.review-effect-summary dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.review-effect-summary dl div {
+  min-width: 0;
+}
+
+.review-effect-summary dt {
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.review-effect-summary dd {
+  margin: 3px 0 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .review-meta {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2773,6 +2922,17 @@ button.top-avatar {
   margin: 0;
   overflow-wrap: anywhere;
   font-size: 11px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .review-effect-card {
+    transform: none !important;
+    transition: none;
+  }
+
+  .review-effect-surface {
+    transition: none;
+  }
 }
 
 .review-note {

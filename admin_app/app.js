@@ -60,6 +60,7 @@ const state = {
   reviewBackImageSrc: "",
   reviewBackImageError: false,
   reviewSide: "front",
+  reviewEffectsEnabled: true,
   artistProvisionedAccount: null,
   adminProvisionedAccount: null,
   organizations: [],
@@ -1021,6 +1022,47 @@ function cardCreatorLabel(card) {
   return card?.creatorName || artist?.name || card?.ownerArtistId || (card?.artistId ? "아티스트 운영팀" : "Fanfolio 운영팀");
 }
 
+function reviewEffectConfig(card) {
+  const design = card?.designConfig || {};
+  const side = state.reviewSide === "back" ? design.back || {} : design.front || {};
+  const front = design.front || {};
+  const effect = String(side.effect || (state.reviewSide === "front" ? design.effect : "") || "none").toLowerCase();
+  const material = String(side.material || (state.reviewSide === "front" ? front.material : "matte") || "matte").toLowerCase();
+  const preset = String(side.effectPreset || side.foilPattern || side.foilFinish || material || "일반");
+  const rawIntensity = side.effectIntensity ?? side.intensity ?? 0;
+  const intensity = Math.max(0, Math.min(100, Number(rawIntensity) <= 1 ? Number(rawIntensity) * 100 : Number(rawIntensity)));
+  const angle = Number(side.effectAngle ?? side.angle ?? 135) || 135;
+  const interaction = String(side.interaction || (effect !== "none" ? "tilt" : "static")).toLowerCase();
+  const hasEffect = state.reviewSide === "front"
+    ? effect !== "none" || material !== "matte" || Boolean(side.foilPattern || side.foilCoverage || side.lenticular)
+    : material !== "matte" || Boolean(side.edgeFoil || side.spotUv || side.hiddenMessage);
+  return { effect, material, preset, intensity, angle, interaction, hasEffect };
+}
+
+function reviewEffectLabel(config) {
+  if (!config.hasEffect) return "일반 카드";
+  if (config.effect.includes("hologram")) return "홀로그램 포일";
+  if (config.effect.includes("lenticular") || config.interaction.includes("lenticular")) return "렌티큘러";
+  if (config.effect.includes("foil") || config.material !== "matte") return "포일 표면 효과";
+  return "표면 효과";
+}
+
+function reviewEffectMarkup(card) {
+  const config = reviewEffectConfig(card);
+  const side = state.reviewSide;
+  const imageSrc = side === "back" ? state.reviewBackImageSrc : state.reviewImageSrc;
+  const imageMarkup = reviewMediaMarkup(card);
+  if (!imageSrc) return imageMarkup;
+  const effectClass = config.hasEffect ? " has-review-effect" : "";
+  const enabledClass = state.reviewEffectsEnabled ? " effects-enabled" : " effects-disabled";
+  return `<div class="review-effect-card side-${side} material-${escapeHtml(config.material)}${effectClass}${enabledClass}" data-review-effect-card style="--review-effect-intensity:${(config.intensity / 100).toFixed(2)};--review-effect-angle:${config.angle}deg;--review-light-x:50%;--review-light-y:42%;"><div class="review-effect-image">${imageMarkup}</div>${config.hasEffect ? `<span class="review-effect-surface" aria-hidden="true"></span>` : ""}<span class="review-effect-badge">${escapeHtml(reviewEffectLabel(config))}</span></div>`;
+}
+
+function reviewEffectSummary(card) {
+  const config = reviewEffectConfig(card);
+  return `<section class="review-effect-summary" aria-label="효과 미리보기"><div><span class="eyebrow">EFFECT PREVIEW</span><strong>${escapeHtml(reviewEffectLabel(config))}</strong></div><button class="secondary review-effect-toggle" type="button" data-review-effects aria-pressed="${state.reviewEffectsEnabled ? "true" : "false"}">${state.reviewEffectsEnabled ? "효과 켜짐" : "효과 꺼짐"}</button><dl><div><dt>프리셋</dt><dd>${escapeHtml(config.preset)}</dd></div><div><dt>강도</dt><dd>${config.hasEffect ? `${Math.round(config.intensity)}%` : "-"}</dd></div><div><dt>상호작용</dt><dd>${config.hasEffect && config.interaction !== "static" ? "카드를 움직여 확인" : "고정"}</dd></div></dl></section>`;
+}
+
 function reviewMediaMarkup(card) {
   const back = state.reviewSide === "back";
   const imageSrc = back ? state.reviewBackImageSrc : state.reviewImageSrc;
@@ -1038,7 +1080,7 @@ function reviewMediaMarkup(card) {
 function reviewPanel() {
   const card = state.reviewCard;
   if (!card) return "";
-  const image = reviewMediaMarkup(card);
+  const image = reviewEffectMarkup(card);
   const status = releaseStatus(card);
   const nextAction = cardNextAction(card);
   const policy = card.releasePolicy || (card.rarity === "Special" ? "partner_and_platform" : "partner_only");
@@ -1072,7 +1114,7 @@ function reviewPanel() {
         ? `<div class="notice success">검수가 승인되었습니다. 드롭에 연결하면 코드 배치 작업으로 이어집니다.</div><div class="review-actions"><button class="primary open-drop-link" data-id="${escapeHtml(card.id)}">드롭 준비됨</button></div>`
         : "";
   const sideToggle = `<div class="review-side-toggle" role="group" aria-label="카드 면 선택"><button class="${state.reviewSide === "front" ? "active" : ""}" type="button" data-review-side="front">앞면</button><button class="${state.reviewSide === "back" ? "active" : ""}" type="button" data-review-side="back">뒷면</button></div>`;
-  return `<div class="panel review-panel"><div class="review-heading"><div><p class="eyebrow">카드 검수</p><h2>${escapeHtml(card.name)}</h2><span class="badge ${releaseBadgeClass(status)}">${escapeHtml(releaseStatusLabel(status))}</span></div><button class="secondary" id="close-review">닫기</button></div><div class="review-content"><div>${sideToggle}${image}</div><dl class="review-meta"><div><dt>제작자</dt><dd>${escapeHtml(cardCreatorLabel(card))}</dd></div><div><dt>시즌</dt><dd>${escapeHtml(card.seasonName || "-")}</dd></div><div><dt>등급</dt><dd>${escapeHtml(card.rarity || "-")}</dd></div><div><dt>발행 수량</dt><dd>${card.issueLimit ? Number(card.issueLimit).toLocaleString() : "-"}</dd></div><div><dt>사인 메시지</dt><dd>${escapeHtml(card.signatureText || "없음")}</dd></div><div><dt>특전</dt><dd>${card.hasVoice ? "보이스 포함" : "보이스 없음"}${card.videoAssetId ? " · 영상 포함" : ""}${card.handwritingAssetId ? " · 손글씨 포함" : ""}</dd></div></dl></div><div class="release-status-grid"><div><span>정책</span><strong>${escapeHtml(releasePolicyLabel(policy))}</strong></div><div><span>검수 버전</span><strong>v${Number(card.reviewVersion || 0)}</strong></div><div><span>다음 작업</span><strong>${escapeHtml(nextActionLabel(nextAction))}</strong></div></div>${releaseSnapshot(card)}${releaseHistory(card)}${editForm}${reviewNote}${reviewActions}</div>`;
+  return `<div class="panel review-panel"><div class="review-heading"><div><p class="eyebrow">카드 검수</p><h2>${escapeHtml(card.name)}</h2><span class="badge ${releaseBadgeClass(status)}">${escapeHtml(releaseStatusLabel(status))}</span></div><button class="secondary" id="close-review">닫기</button></div><div class="review-content"><div>${sideToggle}${image}${reviewEffectSummary(card)}</div><dl class="review-meta"><div><dt>제작자</dt><dd>${escapeHtml(cardCreatorLabel(card))}</dd></div><div><dt>시즌</dt><dd>${escapeHtml(card.seasonName || "-")}</dd></div><div><dt>등급</dt><dd>${escapeHtml(card.rarity || "-")}</dd></div><div><dt>발행 수량</dt><dd>${card.issueLimit ? Number(card.issueLimit).toLocaleString() : "-"}</dd></div><div><dt>사인 메시지</dt><dd>${escapeHtml(card.signatureText || "없음")}</dd></div><div><dt>특전</dt><dd>${card.hasVoice ? "보이스 포함" : "보이스 없음"}${card.videoAssetId ? " · 영상 포함" : ""}${card.handwritingAssetId ? " · 손글씨 포함" : ""}</dd></div></dl></div><div class="release-status-grid"><div><span>정책</span><strong>${escapeHtml(releasePolicyLabel(policy))}</strong></div><div><span>검수 버전</span><strong>v${Number(card.reviewVersion || 0)}</strong></div><div><span>다음 작업</span><strong>${escapeHtml(nextActionLabel(nextAction))}</strong></div></div>${releaseSnapshot(card)}${releaseHistory(card)}${editForm}${reviewNote}${reviewActions}</div>`;
 }
 
 function releaseSnapshot(card) {
@@ -2960,6 +3002,32 @@ function bind() {
       layout();
     }),
   );
+  document.querySelectorAll("[data-review-effects]").forEach((button) =>
+    button.addEventListener("click", () => {
+      state.reviewEffectsEnabled = !state.reviewEffectsEnabled;
+      layout();
+    }),
+  );
+  document.querySelectorAll("[data-review-effect-card]").forEach((card) => {
+    const reset = () => {
+      card.style.setProperty("--review-light-x", "50%");
+      card.style.setProperty("--review-light-y", "42%");
+      card.style.setProperty("--review-tilt-x", "0deg");
+      card.style.setProperty("--review-tilt-y", "0deg");
+    };
+    card.addEventListener("pointermove", (event) => {
+      if (!state.reviewEffectsEnabled || event.pointerType === "touch") return;
+      const box = card.getBoundingClientRect();
+      const x = Math.max(0, Math.min(1, (event.clientX - box.left) / box.width));
+      const y = Math.max(0, Math.min(1, (event.clientY - box.top) / box.height));
+      card.style.setProperty("--review-light-x", `${Math.round(x * 100)}%`);
+      card.style.setProperty("--review-light-y", `${Math.round(y * 100)}%`);
+      card.style.setProperty("--review-tilt-x", `${((0.5 - y) * 8).toFixed(2)}deg`);
+      card.style.setProperty("--review-tilt-y", `${((x - 0.5) * 10).toFixed(2)}deg`);
+    });
+    card.addEventListener("pointerleave", reset);
+    card.addEventListener("pointercancel", reset);
+  });
   document.querySelectorAll("[data-review-upload]").forEach((input) =>
     input.addEventListener("change", () => {
       const file = input.files?.[0];

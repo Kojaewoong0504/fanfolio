@@ -271,6 +271,14 @@ test('card review exposes front and back media plus a meaningful creator label',
   assert.match(source, /뒷면 이미지/)
 })
 
+test('card review reproduces stored studio effects as an interactive preview', () => {
+  assert.match(source, /function reviewEffectConfig\(card\)/)
+  assert.match(source, /data-review-effect-card/)
+  assert.match(source, /data-review-effects/)
+  assert.match(source, /--review-light-x/)
+  assert.match(source, /reviewEffectSummary\(card\)/)
+})
+
 test('artist account review is clearly separated from card review', () => {
   assert.match(source, /아티스트 계정·소속 승인/)
   assert.match(source, /카드 검수는 카드 관리 메뉴에서 진행합니다/)
