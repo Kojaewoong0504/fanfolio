@@ -60,13 +60,19 @@ async def health() -> dict:
 @router.get("/api/health/ready")
 async def readiness() -> dict:
     """Verify dependencies needed before routing production traffic here."""
+    stage = "configuration"
     try:
         get_settings().validate_runtime()
+        stage = "database"
         async with engine.connect() as connection:
             await connection.execute(text("SELECT 1"))
+        stage = "object_storage"
         await _check_storage_backend()
+        stage = "upload_scanner"
         await _check_upload_scanner()
+        stage = "task_queue"
         await _check_task_queue()
+        stage = "rate_limit"
         await check_rate_limit_backend()
     except Exception as error:
         # Render needs a useful reason for a 503, but connection strings and
@@ -77,7 +83,8 @@ async def readiness() -> dict:
         error_details = response.get("Error", {}) if isinstance(response, dict) else {}
         metadata = response.get("ResponseMetadata", {}) if isinstance(response, dict) else {}
         logger.warning(
-            "Fanfolio readiness check failed: type=%s code=%s status=%s",
+            "Fanfolio readiness check failed: stage=%s type=%s code=%s status=%s",
+            stage,
             type(error).__name__,
             error_details.get("Code", "unknown"),
             metadata.get("HTTPStatusCode", "unknown"),
