@@ -284,6 +284,8 @@ test('admin uses the shared Fanfolio bitmap favicon', async () => {
 
 test('admin brand mark is the actual Fanfolio app icon and missing media has a recovery upload', () => {
   assert.match(source, /nav-brand-mark[^>]*>.*fanfolio-app-icon-192\.png/s)
+  assert.match(source, /function adminBrandMark\(\)[\s\S]*fanfolio-app-icon-192\.png/)
+  assert.doesNotMatch(source, /brand-lockup">\$\{icon\("auto_awesome_motion"\)\}/)
   assert.match(source, /data-review-upload="front"/)
   assert.match(source, /data-review-upload="back"/)
   assert.match(source, /replaceReviewImage/)
