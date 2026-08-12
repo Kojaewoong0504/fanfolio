@@ -135,8 +135,19 @@ class S3AssetStorage:
         return f"{self.key_prefix}/assets/{storage_id}{suffix}"
 
     def check_ready(self) -> None:
-        """Validate the bucket itself, not a possibly absent healthcheck object."""
-        self.client.head_bucket(Bucket=self.bucket)
+        """Validate authenticated access without relying on bucket-owner ACLs.
+
+        Supabase Storage implements the S3 bucket API, but its S3 gateway can
+        reject ``HeadBucket`` with 403 even when the generated server key can
+        list and read/write objects in the bucket.  Listing one object is a
+        closer check of the capability Fanfolio actually needs and avoids
+        treating that gateway-specific response as an outage.
+        """
+        self.client.list_objects_v2(
+            Bucket=self.bucket,
+            Prefix=f"{self.key_prefix}/",
+            MaxKeys=1,
+        )
 
     def _uri(self, key: str) -> str:
         return f"s3://{self.bucket}/{key}"

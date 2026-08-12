@@ -21,10 +21,15 @@ class FakeS3Client:
     def put_object(self, *, Bucket: str, Key: str, Body: bytes, **_: object) -> None:
         self.objects[(Bucket, Key)] = Body
 
-    def head_bucket(self, *, Bucket: str) -> None:
-        if not any(object_bucket == Bucket for object_bucket, _ in self.objects):
-            # The fake models an existing bucket independently of its objects.
-            return
+    def list_objects_v2(self, *, Bucket: str, Prefix: str, MaxKeys: int) -> dict[str, object]:
+        assert MaxKeys == 1
+        return {
+            "Contents": [
+                {"Key": key}
+                for object_bucket, key in self.objects
+                if object_bucket == Bucket and key.startswith(Prefix)
+            ][:MaxKeys]
+        }
 
     def head_object(self, *, Bucket: str, Key: str) -> None:
         if (Bucket, Key) not in self.objects:
