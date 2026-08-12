@@ -291,6 +291,11 @@ test('admin brand mark is the actual Fanfolio app icon and missing media has a r
   assert.match(source, /replaceReviewImage/)
 })
 
+test('admin entrypoint busts stale app script caches after a deployment', async () => {
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8')
+  assert.match(html, /app\.js\?v=e9a7f82/)
+})
+
 test('partner logo picker is optional and exposes preview replacement and removal controls', () => {
   const drawer = functionBody('organizationDrawer')
   const picker = functionBody('organizationLogoPickerContents')
