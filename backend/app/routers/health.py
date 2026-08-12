@@ -73,7 +73,15 @@ async def readiness() -> dict:
         # provider error messages must never be copied into public responses
         # or logs. The exception type is enough to identify the failing class
         # of dependency (storage, Redis, configuration, or database).
-        logger.warning("Fanfolio readiness check failed: %s", type(error).__name__)
+        response = getattr(error, "response", {})
+        error_details = response.get("Error", {}) if isinstance(response, dict) else {}
+        metadata = response.get("ResponseMetadata", {}) if isinstance(response, dict) else {}
+        logger.warning(
+            "Fanfolio readiness check failed: type=%s code=%s status=%s",
+            type(error).__name__,
+            error_details.get("Code", "unknown"),
+            metadata.get("HTTPStatusCode", "unknown"),
+        )
         raise AppError(
             status.HTTP_503_SERVICE_UNAVAILABLE,
             "SERVICE_NOT_READY",
