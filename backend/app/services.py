@@ -1141,13 +1141,27 @@ async def ensure_demo_card_asset(session: AsyncSession) -> None:
     # These are the two controlled QA/demo identities created by our own
     # onboarding flow. Partner-owned cards are intentionally not discovered
     # or rewritten here.
-    repair_targets = {
-        "card_demo_published": "asset_demo_card_yuna_lavender",
-        "card_82bc4c1d51": "asset_qa_card_yuna_lavender",
-    }
+    repair_targets = (
+        (
+            "card_demo_published",
+            "asset_demo_card_yuna_lavender",
+            "컴백 기념 사인 카드",
+            "2026 SPRING",
+        ),
+        ("card_82bc4c1d51", "asset_qa_card_yuna_lavender", "QA 스타더스트 홀로그램", "2026 SUMMER"),
+        ("card_123c407f49", "asset_qa_card_normal", "QA 노멀 런칭 카드", "2026 QA LAUNCH"),
+    )
     repaired = 0
-    for card_id, asset_id in repair_targets.items():
+    for card_id, asset_id, card_name, season_name in repair_targets:
         card = await session.get(Card, card_id)
+        if card is None:
+            card = await session.scalar(
+                select(Card).where(
+                    Card.name == card_name,
+                    Card.season_name == season_name,
+                    Card.artist_id == "artist_nova3",
+                )
+            )
         if card is None:
             continue
         asset = await session.get(Asset, asset_id)
