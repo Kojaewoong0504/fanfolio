@@ -37,3 +37,10 @@ test('release workflow has queue, notification, and drop-link styles', () => {
   assert.match(css, /notification-badge/)
   assert.match(css, /drop-link-drawer/)
 })
+
+test('card list uses each card source asset for its thumbnail', () => {
+  assert.match(source, /cardThumbnailUrls/)
+  assert.match(source, /sourceImageUrl/)
+  assert.match(source, /URL\.createObjectURL/)
+  assert.match(css, /\.card-thumb img/)
+})

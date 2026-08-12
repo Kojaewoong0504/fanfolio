@@ -1135,13 +1135,23 @@ async def ensure_demo_card_asset(session: AsyncSession) -> None:
     # this module lives at `/app/app/services.py`, `parents[1]` is already
     # the application root; climbing one more level incorrectly produced
     # `/assets/...` and prevented the server from starting on Render.
-    image_path = Path(__file__).resolve().parents[1] / "assets" / "card-yuna-lavender.jpg"
-    image_path = image_path.resolve()
-    if not image_path.is_file():
-        raise FileNotFoundError(f"bundled demo card image is missing: {image_path}")
-
     storage = configured_asset_storage()
-    content = await asyncio.to_thread(image_path.read_bytes)
+    asset_specs = {
+        "yuna": ("card-yuna-lavender.jpg", "image/jpeg"),
+        "minho": ("card-minho-midnight.jpg", "image/jpeg"),
+        "jay": ("card-jay-rosegold.jpg", "image/jpeg"),
+        "back": ("card-back-template.png", "image/png"),
+    }
+    bundled_assets: dict[str, tuple[bytes, str, str]] = {}
+    for key, (file_name, content_type) in asset_specs.items():
+        image_path = (Path(__file__).resolve().parents[1] / "assets" / file_name).resolve()
+        if not image_path.is_file():
+            raise FileNotFoundError(f"bundled demo card image is missing: {image_path}")
+        bundled_assets[key] = (
+            await asyncio.to_thread(image_path.read_bytes),
+            file_name,
+            content_type,
+        )
     # These are the two controlled QA/demo identities created by our own
     # onboarding flow. Partner-owned cards are intentionally not discovered
     # or rewritten here.
@@ -1151,12 +1161,48 @@ async def ensure_demo_card_asset(session: AsyncSession) -> None:
             "asset_demo_card_yuna_lavender",
             "컴백 기념 사인 카드",
             "2026 SPRING",
+            "yuna",
         ),
-        ("card_82bc4c1d51", "asset_qa_card_yuna_lavender", "QA 스타더스트 홀로그램", "2026 SUMMER"),
-        ("card_123c407f49", "asset_qa_card_normal", "QA 노멀 런칭 카드", "2026 QA LAUNCH"),
+        (
+            "card_82bc4c1d51",
+            "asset_qa_card_minho_midnight",
+            "QA 스타더스트 홀로그램",
+            "2026 SUMMER",
+            "minho",
+        ),
+        (
+            "card_123c407f49",
+            "asset_qa_card_jay_rosegold",
+            "QA 노멀 런칭 카드",
+            "2026 QA LAUNCH",
+            "jay",
+        ),
     )
     repaired = 0
-    for card_id, asset_id, card_name, season_name in repair_targets:
+    back_asset_id = "asset_demo_card_back_template"
+    back_content, back_file_name, back_content_type = bundled_assets["back"]
+    back_asset = await session.get(Asset, back_asset_id)
+    if back_asset is None:
+        back_asset = Asset(
+            id=back_asset_id,
+            owner_id=admin_id,
+            file_name=back_file_name,
+            content_type=back_content_type,
+            purpose="card",
+        )
+        session.add(back_asset)
+        await session.flush()
+    if not back_asset.storage_path or not storage.exists(back_asset.storage_path):
+        back_asset.storage_path = await asyncio.to_thread(
+            storage.save_bytes, back_asset.id, back_content
+        )
+    back_asset.owner_id = admin_id
+    back_asset.file_name = back_file_name
+    back_asset.content_type = back_content_type
+    back_asset.purpose = "card"
+    back_asset.upload_completed_at = now()
+
+    for card_id, asset_id, card_name, season_name, image_key in repair_targets:
         card = await session.get(Card, card_id)
         if card is None:
             card = await session.scalar(
@@ -1168,13 +1214,14 @@ async def ensure_demo_card_asset(session: AsyncSession) -> None:
             )
         if card is None:
             continue
+        content, file_name, content_type = bundled_assets[image_key]
         asset = await session.get(Asset, asset_id)
         if asset is None:
             asset = Asset(
                 id=asset_id,
                 owner_id=admin_id,
-                file_name=image_path.name,
-                content_type="image/jpeg",
+                file_name=file_name,
+                content_type=content_type,
                 purpose="card",
             )
             session.add(asset)
@@ -1183,12 +1230,21 @@ async def ensure_demo_card_asset(session: AsyncSession) -> None:
         if not asset.storage_path or not storage.exists(asset.storage_path):
             asset.storage_path = await asyncio.to_thread(storage.save_bytes, asset.id, content)
         asset.owner_id = admin_id
-        asset.file_name = image_path.name
-        asset.content_type = "image/jpeg"
+        asset.file_name = file_name
+        asset.content_type = content_type
         asset.purpose = "card"
         asset.upload_completed_at = now()
         card.image_asset_id = asset.id
         card.image_url = ""
+        design_config = card.design_config if isinstance(card.design_config, dict) else {}
+        back_config = (
+            design_config.get("back") if isinstance(design_config.get("back"), dict) else {}
+        )
+        if not (back_config.get("backImageAssetId") or back_config.get("imageAssetId")):
+            card.design_config = {
+                **design_config,
+                "back": {**back_config, "backImageAssetId": back_asset_id},
+            }
         repaired += 1
 
     await session.commit()

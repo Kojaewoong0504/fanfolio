@@ -1040,6 +1040,7 @@ async def cards(
             "rarity": card.rarity,
             "issueLimit": card.issue_limit,
             "imageAssetId": card.image_asset_id,
+            "sourceImageUrl": f"/api/admin/cards/{card.id}/image" if card.image_asset_id else None,
             "ownerArtistId": card.owner_artist_id,
             "artistId": card.artist_id,
             "memberId": card.member_id,
@@ -1104,7 +1105,9 @@ def admin_card_data(card: Card) -> dict:
         "previewImageUrl": (
             f"/api/admin/cards/{card.id}/preview/image" if card.preview_storage_path else None
         ),
-        "backImageUrl": f"/api/admin/cards/{card.id}/back-image" if back_image_asset_id else None,
+        # Cards without custom artwork still receive the platform-owned,
+        # versioned back template for a complete review preview.
+        "backImageUrl": f"/api/admin/cards/{card.id}/back-image",
         **release_card_data(card),
     }
 
@@ -1371,7 +1374,12 @@ async def card_back_image(card_id: str, context: CurrentAdmin, session: DbSessio
     design_config = card.design_config if isinstance(card.design_config, dict) else {}
     back_config = design_config.get("back") if isinstance(design_config.get("back"), dict) else {}
     asset_id = back_config.get("backImageAssetId") or back_config.get("imageAssetId")
-    asset = await session.get(Asset, asset_id) if asset_id else None
+    # Use the platform template when an artist has not supplied a custom back.
+    asset = (
+        await session.get(Asset, asset_id)
+        if asset_id
+        else await session.get(Asset, "asset_demo_card_back_template")
+    )
     path = asset.processed_storage_path or asset.storage_path if asset else None
     if not asset or not path:
         raise AppError(404, "CARD_BACK_IMAGE_NOT_FOUND", "카드 뒷면 이미지를 찾을 수 없습니다.")

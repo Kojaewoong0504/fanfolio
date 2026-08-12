@@ -297,9 +297,15 @@ button:disabled {
 }
 
 .admin-shell.nav-collapsed .nav-brand-copy,
-.admin-shell.nav-collapsed .nav-item > span,
+.admin-shell.nav-collapsed .nav-item > span:last-child,
 .admin-shell.nav-collapsed .nav-account-copy {
   display: none;
+}
+
+.admin-shell.nav-collapsed .nav-item > .material-symbols-rounded {
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 21px;
 }
 
 .admin-shell.nav-collapsed .nav-item {
@@ -2733,8 +2739,10 @@ button.top-avatar {
 
 .review-image {
   display: grid;
-  width: 100%;
-  height: 240px;
+  width: min(100%, 220px);
+  aspect-ratio: 2 / 3;
+  height: auto;
+  margin: 0 auto;
   place-items: center;
   object-fit: cover;
   color: var(--muted);
@@ -2843,6 +2851,14 @@ button.top-avatar {
   color: var(--purple);
   background: var(--purple-soft);
   border-radius: 7px;
+  overflow: hidden;
+}
+
+.card-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .batch-layout,

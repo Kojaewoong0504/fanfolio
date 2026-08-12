@@ -818,6 +818,14 @@ def test_partner_card_list_includes_catalog_metadata_for_the_admin_table(
     assert published["artistId"] == "artist_nova3"
     assert published["memberId"] == "member_yuna"
     assert published["seasonName"] == "2026 SPRING"
+    # This fixture intentionally has no uploaded front asset, but the list
+    # contract must still expose the field so the UI can load real thumbnails
+    # when an asset exists.
+    assert "sourceImageUrl" in published
+    assert published["sourceImageUrl"] is None
+
+    detail = assert_success(partner.get("/api/admin/cards/card_published"))
+    assert detail["backImageUrl"] == "/api/admin/cards/card_published/back-image"
 
 
 def test_partner_logo_is_optional_and_ready_logo_asset_is_exposed(

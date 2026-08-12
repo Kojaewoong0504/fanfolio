@@ -24,6 +24,7 @@ const state = {
   notifications: [],
   unreadNotificationCount: 0,
   cards: [],
+  cardThumbnailUrls: {},
   drops: [],
   batches: [],
   users: [],
@@ -983,9 +984,32 @@ function cardRows(cards) {
       const catalogArtist = state.catalog.artists.find(
         (artist) => artist.id === card.artistId,
       );
-      return `<tr><td data-label="카드"><div class="card-cell"><span class="card-thumb">${icon("style")}</span><div><strong>${escapeHtml(card.name)}</strong><small>${escapeHtml(card.seasonName || card.id)}</small></div></div></td><td data-label="아티스트">${escapeHtml(catalogArtist?.name || card.ownerArtistId || card.artistId || "미지정")}</td><td data-label="등급"><strong>${escapeHtml(card.rarity || "-")}</strong></td><td data-label="발행 수량">${card.issueLimit ? Number(card.issueLimit).toLocaleString() : "제한 없음"}</td><td data-label="상태"><span class="badge ${releaseBadgeClass(releaseStatus(card))}">${escapeHtml(releaseStatusLabel(releaseStatus(card)))}</span></td><td data-label="관리" class="row-actions">${action}</td></tr>`;
+      const thumbnail = state.cardThumbnailUrls[card.id]
+        ? `<img src="${escapeHtml(state.cardThumbnailUrls[card.id])}" alt="" />`
+        : icon("style");
+      return `<tr><td data-label="카드"><div class="card-cell"><span class="card-thumb">${thumbnail}</span><div><strong>${escapeHtml(card.name)}</strong><small>${escapeHtml(card.seasonName || card.id)}</small></div></div></td><td data-label="아티스트">${escapeHtml(catalogArtist?.name || card.ownerArtistId || card.artistId || "미지정")}</td><td data-label="등급"><strong>${escapeHtml(card.rarity || "-")}</strong></td><td data-label="발행 수량">${card.issueLimit ? Number(card.issueLimit).toLocaleString() : "제한 없음"}</td><td data-label="상태"><span class="badge ${releaseBadgeClass(releaseStatus(card))}">${escapeHtml(releaseStatusLabel(releaseStatus(card)))}</span></td><td data-label="관리" class="row-actions">${action}</td></tr>`;
     })
     .join("");
+}
+
+async function loadCardThumbnails(cards) {
+  await Promise.all(cards.map(async (card) => {
+    if (!card.sourceImageUrl || state.cardThumbnailUrls[card.id]) return;
+    try {
+      const response = await fetch(`${API_BASE}${card.sourceImageUrl.replace(/^\/api/, "")}`, {
+        credentials: "include",
+        headers: {
+          "X-Fanfolio-Client": "admin",
+          ...(ACCESS_TOKEN ? { Authorization: `Bearer ${ACCESS_TOKEN}` } : {}),
+        },
+      });
+      if (!response.ok) return;
+      state.cardThumbnailUrls[card.id] = URL.createObjectURL(await response.blob());
+    } catch {
+      // A missing thumbnail must not prevent the card table from rendering.
+    }
+  }));
+  if (state.authenticated && state.view === "cards") layout();
 }
 function cardBackImageAssetId(card) {
   return card?.backImageAssetId || card?.designConfig?.back?.backImageAssetId || card?.designConfig?.back?.imageAssetId || null;
@@ -1419,6 +1443,7 @@ async function loadData() {
     state.metrics = dashboard.data.metrics;
     state.recentActivity = dashboard.data.recentActivity || [];
     state.cards = cards.data.items;
+    void loadCardThumbnails(state.cards);
     state.auditLogs = auditLogs.data.items;
     state.auditPagination = auditLogs.data.meta.pagination;
     state.catalog = catalog.data;
