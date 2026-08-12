@@ -50,7 +50,11 @@ async def presign_upload(
     upload_url = f"/api/uploads/{asset.id}/content"
     upload_mode = "api"
     complete_url = None
-    if settings.storage_backend == "s3":
+    # Supabase Storage's S3-compatible endpoint uses the same direct upload
+    # contract as a regular S3 backend. Keeping this branch shared ensures
+    # card images are uploaded to durable object storage instead of the
+    # ephemeral Render filesystem.
+    if settings.storage_backend in {"s3", "supabase"}:
         asset.storage_path = storage.asset_path(asset.id, ".bin")
         upload_url = storage.presigned_upload_url(
             asset.id,

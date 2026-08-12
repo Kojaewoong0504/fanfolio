@@ -281,6 +281,25 @@ def test_s3_direct_upload_is_completed_only_after_server_scan(
     assert retried == completed
 
 
+def test_supabase_direct_upload_uses_the_object_storage_flow(
+    actors: dict[str, TestClient], monkeypatch: Any
+) -> None:
+    storage = FakeDirectStorage()
+    monkeypatch.setattr(get_settings(), "storage_backend", "supabase")
+    monkeypatch.setattr(assets_router, "configured_asset_storage", lambda: storage)
+
+    asset = assert_success(
+        actors["artist"].post(
+            "/api/uploads/presign",
+            json={"fileName": "supabase.png", "contentType": "image/png", "purpose": "card"},
+        ),
+        201,
+    )
+
+    assert asset["uploadMode"] == "direct"
+    assert asset["completeUrl"] == f"/api/uploads/{asset['assetId']}/complete"
+
+
 def test_upload_fails_closed_when_clamav_is_unavailable(
     actors: dict[str, TestClient], monkeypatch: Any
 ) -> None:
