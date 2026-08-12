@@ -39,7 +39,7 @@ async def lifespan(_: FastAPI):
     if settings.seed_demo_catalog:
         async with SessionLocal() as session:
             await ensure_demo_catalog(session)
-    if settings.repair_demo_card_assets:
+    if settings.repair_demo_card_assets or settings.app_env == "production":
         async with SessionLocal() as session:
             await ensure_demo_card_asset(session)
 
