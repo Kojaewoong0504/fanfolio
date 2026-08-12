@@ -43,6 +43,46 @@ def test_render_postgres_url_is_normalized_for_the_async_driver() -> None:
     assert settings.database_backend == "postgresql+asyncpg"
 
 
+def test_asyncpg_statement_cache_setting_is_only_applied_to_postgresql() -> None:
+    postgres = Settings(
+        database_url="postgresql+asyncpg://postgres.project-ref:secret@pooler.supabase.com:6543/postgres",
+        database_statement_cache_size=0,
+    )
+    sqlite = Settings(database_statement_cache_size=0)
+
+    assert postgres.database_connect_args == {"statement_cache_size": 0}
+    assert sqlite.database_connect_args == {}
+
+
+def test_supabase_storage_requires_the_server_side_s3_configuration() -> None:
+    settings = Settings(
+        app_env="test",
+        storage_backend="supabase",
+        s3_endpoint_url="https://project-ref.storage.supabase.co/storage/v1/s3",
+        s3_bucket="fanfolio-assets",
+        s3_access_key_id="test-access-key",
+        s3_secret_access_key="test-secret-key",
+    )
+
+    settings.validate_runtime()
+
+
+def test_supabase_storage_rejects_missing_server_side_s3_credentials() -> None:
+    settings = Settings(
+        app_env="test",
+        storage_backend="supabase",
+        s3_endpoint_url="https://project-ref.storage.supabase.co/storage/v1/s3",
+        s3_bucket="fanfolio-assets",
+    )
+
+    try:
+        settings.validate_runtime()
+    except ValueError as error:
+        assert "S3_ACCESS_KEY_ID" in str(error)
+    else:
+        raise AssertionError("Supabase Storage must not start without server-side credentials")
+
+
 def test_staging_uses_hosted_security_without_requiring_deferred_integrations() -> None:
     settings = Settings(
         app_env="staging",

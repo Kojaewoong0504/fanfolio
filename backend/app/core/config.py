@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     app_env: str = "development"
     database_url: str = "sqlite+aiosqlite:///./fanfolio.db"
+    # Supabase's transaction pooler requires asyncpg's prepared-statement
+    # cache to be disabled. Keep this configurable for direct Postgres too.
+    database_statement_cache_size: int = 100
     auto_create_schema: bool = True
     seed_demo_catalog: bool = False
     storage_dir: str = "./storage"
@@ -130,16 +133,32 @@ class Settings(BaseSettings):
         return self.async_database_url.split("://", 1)[0]
 
     @property
+    def database_connect_args(self) -> dict[str, int]:
+        """Return asyncpg-only connection options without exposing credentials."""
+        if self.database_backend != "postgresql+asyncpg":
+            return {}
+        return {"statement_cache_size": self.database_statement_cache_size}
+
+    @property
     def is_hosted(self) -> bool:
         """Use browser-safe auth rules in both staging and production."""
         return self.app_env in {"staging", "production"}
 
     def validate_runtime(self) -> None:
         """Fail fast when a production process would start with unsafe defaults."""
-        if self.storage_backend not in {"local", "s3"}:
-            raise ValueError("STORAGE_BACKEND must be local or s3")
-        if self.storage_backend == "s3" and not self.s3_bucket:
-            raise ValueError("S3_BUCKET is required when STORAGE_BACKEND is s3")
+        if self.storage_backend not in {"local", "s3", "supabase"}:
+            raise ValueError("STORAGE_BACKEND must be local, s3, or supabase")
+        if self.database_statement_cache_size < 0:
+            raise ValueError("DATABASE_STATEMENT_CACHE_SIZE cannot be negative")
+        if self.storage_backend in {"s3", "supabase"} and not self.s3_bucket:
+            raise ValueError("S3_BUCKET is required for remote storage backends")
+        if self.storage_backend == "supabase":
+            if not self.s3_endpoint_url.endswith("/storage/v1/s3"):
+                raise ValueError("S3_ENDPOINT_URL must be the Supabase Storage S3 endpoint")
+            if not self.s3_access_key_id or not self.s3_secret_access_key:
+                raise ValueError(
+                    "S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required for Supabase Storage"
+                )
         if self.upload_cleanup_interval_seconds <= 0:
             raise ValueError("UPLOAD_CLEANUP_INTERVAL_SECONDS must be positive")
         if not self.is_hosted:

@@ -17,7 +17,7 @@ def upgrade() -> None:
     if context.is_offline_mode():
         op.add_column(
             "pass_seasons",
-            sa.Column("is_paid", sa.Boolean(), nullable=False, server_default=sa.text("0")),
+            sa.Column("is_paid", sa.Boolean(), nullable=False, server_default=sa.false()),
         )
         return
 
@@ -28,7 +28,7 @@ def upgrade() -> None:
     if "is_paid" not in columns:
         op.add_column(
             "pass_seasons",
-            sa.Column("is_paid", sa.Boolean(), nullable=False, server_default=sa.text("0")),
+            sa.Column("is_paid", sa.Boolean(), nullable=False, server_default=sa.false()),
         )
 
 

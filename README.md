@@ -165,6 +165,9 @@ Render Free PostgreSQL은 개발·검수용으로만 사용합니다. 생성 후
 제공되지 않으므로, 실제 사용자 데이터를 받기 전에는 유료 Render PostgreSQL이나 별도 관리형
 PostgreSQL로 이전하고 자동 백업 정책을 설정해야 합니다.
 
+Render 대신 Supabase를 영속 저장소로 사용하는 설정은
+[Supabase 운영 저장소 가이드](docs/SUPABASE_SETUP.md)를 참고하세요.
+
 추가로 production은 `DATA_PROTECTION_KEY`로 데이터 저장소의 신원을 고정합니다. 최초로
 새 PostgreSQL을 연결할 때만 `ALLOW_DATA_BOOTSTRAP=true`로 한 번 배포해
 `deployment_identity` 행을 만든 뒤, 반드시 `false`로 되돌려 재배포하세요. 이후 DB가
