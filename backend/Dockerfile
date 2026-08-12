@@ -21,7 +21,6 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED="1" \
     APP_ENV="production" \
     AUTO_CREATE_SCHEMA="false" \
-    REPAIR_DEMO_CARD_ASSETS="true" \
     STORAGE_DIR="/var/lib/fanfolio/storage"
 
 USER fanfolio

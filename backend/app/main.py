@@ -23,6 +23,23 @@ from app.services import (
 logger = logging.getLogger(__name__)
 
 
+async def _repair_demo_card_assets_if_enabled(settings: object) -> None:
+    """Run the optional demo repair without making it a startup dependency.
+
+    Demo assets are convenience data, while the API process is a production
+    dependency. A transient object-storage permission or bucket error must be
+    reported and deferred rather than preventing the health endpoint from
+    coming up.
+    """
+    if not settings.repair_demo_card_assets:
+        return
+    try:
+        async with SessionLocal() as session:
+            await ensure_demo_card_asset(session)
+    except Exception:
+        logger.exception("Demo card asset repair was skipped; the API will continue starting")
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     # `lifespan` replaces the older startup/shutdown event decorators.
@@ -39,9 +56,7 @@ async def lifespan(_: FastAPI):
     if settings.seed_demo_catalog:
         async with SessionLocal() as session:
             await ensure_demo_catalog(session)
-    if settings.repair_demo_card_assets or settings.app_env == "production":
-        async with SessionLocal() as session:
-            await ensure_demo_card_asset(session)
+    await _repair_demo_card_assets_if_enabled(settings)
 
     async with SessionLocal() as session:
         await ensure_data_identity(session)
