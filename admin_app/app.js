@@ -296,7 +296,7 @@ function navigationView() {
   const person = state.adminContext?.user || {};
   const role = isRoot() ? "루트 관리자" : `${state.adminContext?.accessLevel || "viewer"} · ${scopeLabel()}`;
   const navToggleLabel = state.navCollapsed ? "내비게이션 펼치기" : "내비게이션 접기";
-  return `<aside class="app-nav ${state.mobileNavOpen ? "open" : ""}" aria-label="관리자 주요 메뉴"><div class="nav-brand"><span class="nav-brand-mark">${icon("auto_awesome_motion")}</span><span class="nav-brand-copy"><strong>FANFOLIO</strong><small>OPERATIONS</small></span><button class="icon-button nav-toggle" id="desktop-nav-toggle" type="button" aria-label="${navToggleLabel}" title="${navToggleLabel}">${icon(state.navCollapsed ? "keyboard_double_arrow_right" : "keyboard_double_arrow_left")}</button></div><nav>${navItems()
+  return `<aside class="app-nav ${state.mobileNavOpen ? "open" : ""}" aria-label="관리자 주요 메뉴"><div class="nav-brand"><span class="nav-brand-mark"><img src="./assets/fanfolio-app-icon-192.png" alt="Fanfolio 서비스 아이콘" /></span><span class="nav-brand-copy"><strong>FANFOLIO</strong><small>OPERATIONS</small></span><button class="icon-button nav-toggle" id="desktop-nav-toggle" type="button" aria-label="${navToggleLabel}" title="${navToggleLabel}">${icon(state.navCollapsed ? "keyboard_double_arrow_right" : "keyboard_double_arrow_left")}</button></div><nav>${navItems()
     .map(
       (item) =>
         `<button type="button" data-view="${item.id}" class="nav-item ${state.view === item.id ? "active" : ""}" aria-current="${state.view === item.id ? "page" : "false"}" aria-label="${escapeHtml(item.label)}" title="${escapeHtml(item.label)}">${icon(item.icon)}<span>${item.label}</span></button>`,
@@ -989,7 +989,10 @@ function reviewMediaMarkup(card) {
   if (imageSrc) return `<img class="review-image" src="${escapeHtml(imageSrc)}" alt="${escapeHtml(card.name)} ${back ? "뒷면" : "앞면"} 미리보기" />`;
   const title = back ? (hasBack ? "뒷면 이미지를 불러오지 못했습니다." : "뒷면 이미지는 기본 템플릿을 사용합니다.") : (failed ? "원본 이미지가 등록되지 않았거나 저장소에서 찾을 수 없습니다." : "미리보기를 불러오는 중입니다.");
   const detail = back ? (hasBack ? "카드 정보에서 뒷면 이미지를 교체한 뒤 다시 확인해 주세요." : "아티스트 스튜디오 또는 카드 정보에서 뒷면 이미지를 등록할 수 있습니다.") : (failed ? "카드 정보에서 앞면 이미지를 교체한 뒤 다시 확인해 주세요." : "잠시만 기다려 주세요.");
-  return `<div class="review-image empty review-image-fallback">${icon(failed ? "image_not_supported" : "style")}<strong>${title}</strong><small>${detail}</small></div>`;
+  const uploadControl = can("cards:write")
+    ? `<div class="review-image-uploads"><label class="review-image-upload">앞면 이미지 다시 업로드<input type="file" accept="image/png,image/jpeg,image/webp" data-review-upload="front" hidden /></label><label class="review-image-upload">뒷면 이미지 다시 업로드<input type="file" accept="image/png,image/jpeg,image/webp" data-review-upload="back" hidden /></label></div>`
+    : "";
+  return `<div class="review-image empty review-image-fallback">${icon(failed ? "image_not_supported" : "style")}<strong>${title}</strong><small>${detail}</small>${uploadControl}</div>`;
 }
 
 function reviewPanel() {
@@ -2174,6 +2177,32 @@ async function openReview(cardId) {
     toast("카드 상세 정보를 불러오지 못했습니다.");
   }
 }
+async function replaceReviewImage(file, side) {
+  if (!file?.size || !state.reviewCard || !["front", "back"].includes(side)) return;
+  try {
+    const assetId = await uploadAsset(file, "card");
+    const payload = side === "back"
+      ? {
+          designConfig: {
+            ...(state.reviewCard.designConfig || {}),
+            back: {
+              ...(state.reviewCard.designConfig?.back || {}),
+              backImageAssetId: assetId,
+            },
+          },
+        }
+      : { imageAssetId: assetId };
+    await api(`/admin/cards/${state.reviewCard.id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+    await loadData();
+    await openReview(state.reviewCard.id);
+    toast(side === "back" ? "뒷면 이미지를 교체했습니다." : "앞면 이미지를 교체했습니다.");
+  } catch {
+    toast("이미지 교체에 실패했습니다. 파일 형식과 관리자 권한을 확인해 주세요.");
+  }
+}
 async function submitReleaseDecision(cardId, stage, decision) {
   const note = document.querySelector("#review-note")?.value.trim() || null;
   if (decision === "changes_requested" && !note) {
@@ -2855,6 +2884,12 @@ function bind() {
     button.addEventListener("click", () => {
       state.reviewSide = button.dataset.reviewSide === "back" ? "back" : "front";
       layout();
+    }),
+  );
+  document.querySelectorAll("[data-review-upload]").forEach((input) =>
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (file) void replaceReviewImage(file, input.dataset.reviewUpload);
     }),
   );
   document

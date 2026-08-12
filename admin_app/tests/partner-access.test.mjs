@@ -282,6 +282,13 @@ test('admin uses the shared Fanfolio bitmap favicon', async () => {
   assert.doesNotMatch(html, /href="data:,"/)
 })
 
+test('admin brand mark is the actual Fanfolio app icon and missing media has a recovery upload', () => {
+  assert.match(source, /nav-brand-mark[^>]*>.*fanfolio-app-icon-192\.png/s)
+  assert.match(source, /data-review-upload="front"/)
+  assert.match(source, /data-review-upload="back"/)
+  assert.match(source, /replaceReviewImage/)
+})
+
 test('partner logo picker is optional and exposes preview replacement and removal controls', () => {
   const drawer = functionBody('organizationDrawer')
   const picker = functionBody('organizationLogoPickerContents')
