@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     database_statement_cache_size: int = 100
     auto_create_schema: bool = True
     seed_demo_catalog: bool = False
+    repair_demo_card_assets: bool = False
     storage_dir: str = "./storage"
     storage_backend: str = "local"
     s3_endpoint_url: str = ""

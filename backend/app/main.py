@@ -13,7 +13,12 @@ from app.db.session import SessionLocal, engine
 from app.errors import AppError
 from app.models import Base
 from app.routers import admin, artist, assets, auth, fan, fixtures, health
-from app.services import ensure_admin_bootstrap, ensure_data_identity, ensure_demo_catalog
+from app.services import (
+    ensure_admin_bootstrap,
+    ensure_data_identity,
+    ensure_demo_card_asset,
+    ensure_demo_catalog,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +39,9 @@ async def lifespan(_: FastAPI):
     if settings.seed_demo_catalog:
         async with SessionLocal() as session:
             await ensure_demo_catalog(session)
+    if settings.repair_demo_card_assets:
+        async with SessionLocal() as session:
+            await ensure_demo_card_asset(session)
 
     async with SessionLocal() as session:
         await ensure_data_identity(session)

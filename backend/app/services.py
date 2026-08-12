@@ -3,6 +3,7 @@ import hmac
 import logging
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
+from pathlib import Path
 from secrets import token_urlsafe
 from uuid import uuid4
 
@@ -1115,6 +1116,60 @@ async def ensure_demo_catalog(session: AsyncSession) -> None:
             )
         )
     await session.commit()
+
+
+async def ensure_demo_card_asset(session: AsyncSession) -> None:
+    """Link the packaged demo card to a real object-storage asset.
+
+    This repair is deliberately opt-in and limited to the stable demo card ID.
+    It never rewrites partner or artist-created cards.  That keeps production
+    data safe while allowing a deployment to repair the old `/src/assets/...`
+    placeholder that cannot be served by the API.
+    """
+    card = await session.get(Card, "card_demo_published")
+    if card is None:
+        logger.info("Demo card asset repair skipped: demo card is absent")
+        return
+
+    admin_id = await session.scalar(select(User.id).where(User.role == Role.ADMIN))
+    if admin_id is None:
+        logger.warning("Demo card asset repair skipped: no admin owner exists")
+        return
+
+    image_path = Path(__file__).resolve().parents[1] / ".." / "assets" / "card-yuna-lavender.jpg"
+    image_path = image_path.resolve()
+    if not image_path.is_file():
+        raise FileNotFoundError(f"bundled demo card image is missing: {image_path}")
+
+    asset_id = "asset_demo_card_yuna_lavender"
+    asset = await session.get(Asset, asset_id)
+    storage = configured_asset_storage()
+    content = await asyncio.to_thread(image_path.read_bytes)
+    if asset is None:
+        asset = Asset(
+            id=asset_id,
+            owner_id=admin_id,
+            file_name=image_path.name,
+            content_type="image/jpeg",
+            purpose="card",
+        )
+        session.add(asset)
+        await session.flush()
+
+    if not asset.storage_path or not storage.exists(asset.storage_path):
+        asset.storage_path = await asyncio.to_thread(storage.save_bytes, asset.id, content)
+    asset.owner_id = admin_id
+    asset.file_name = image_path.name
+    asset.content_type = "image/jpeg"
+    asset.purpose = "card"
+    asset.upload_completed_at = now()
+    card.image_asset_id = asset.id
+    card.image_url = ""
+    card.status = "published"
+    card.release_status = "published"
+    card.is_official = True
+    await session.commit()
+    logger.info("Demo card asset repaired: card_id=%s asset_id=%s", card.id, asset.id)
 
 
 async def ensure_admin_bootstrap(session: AsyncSession) -> None:

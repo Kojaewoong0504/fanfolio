@@ -13,6 +13,7 @@ COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --locked --no-dev --no-install-project
 
 COPY --chown=fanfolio:fanfolio backend/app ./app
+COPY --chown=fanfolio:fanfolio backend/assets ./assets
 COPY --chown=fanfolio:fanfolio backend/alembic ./alembic
 COPY --chown=fanfolio:fanfolio backend/alembic.ini ./alembic.ini
 
