@@ -31,7 +31,12 @@ async def _repair_demo_card_assets_if_enabled(settings: object) -> None:
     reported and deferred rather than preventing the health endpoint from
     coming up.
     """
-    if not settings.repair_demo_card_assets:
+    # Hosted environments must self-heal the controlled QA cards after a
+    # Render restart.  The repair is intentionally restricted to the stable
+    # demo/QA IDs inside ``ensure_demo_card_asset``; partner-owned cards are
+    # never discovered or rewritten here.  Local development keeps the
+    # opt-in flag so a developer does not get unexpected storage writes.
+    if not settings.repair_demo_card_assets and settings.app_env not in {"staging", "production"}:
         return
     try:
         async with SessionLocal() as session:
