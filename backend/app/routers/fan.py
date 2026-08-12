@@ -713,7 +713,15 @@ async def card_lenticular(user_card_id: str, user: FanUser, session: DbSession) 
 
 
 @router.get("/cards/{card_id}/image")
-async def card_image(card_id: str, _: FanUser, session: DbSession) -> Response:
+async def card_image(card_id: str, session: DbSession) -> Response:
+    """Serve the image of a published card without a bearer header.
+
+    ``<img src=...>`` requests cannot use the short-lived in-memory access
+    token used by the fan SPA.  The catalog already exposes only published,
+    fan-visible cards, and this route repeats that visibility check, so a
+    browser image request can safely load the same public card asset without
+    turning private or unreleased cards into public files.
+    """
     card = await session.get(Card, card_id)
     if (
         not card

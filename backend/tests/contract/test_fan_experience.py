@@ -691,7 +691,10 @@ def test_fan_can_load_an_artist_uploaded_image_for_a_published_card(
     # release on their behalf.
     assert_success(partner.patch(f"/api/admin/drops/{drop['id']}/status", json={"status": "live"}))
 
-    image = actors["fan"].get(f"/api/cards/{draft['id']}/image")
+    # A browser <img> request cannot attach the fan SPA's in-memory bearer
+    # token. Published-card visibility is checked by the route itself, so the
+    # asset must also be loadable as a normal image request.
+    image = TestClient(app).get(f"/api/cards/{draft['id']}/image")
     assert image.status_code == 200, image.text
     assert image.headers["content-type"].startswith("image/png")
     assert image.content == uploaded_bytes
