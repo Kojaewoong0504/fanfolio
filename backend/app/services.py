@@ -1131,7 +1131,11 @@ async def ensure_demo_card_asset(session: AsyncSession) -> None:
         logger.warning("Demo card asset repair skipped: no admin owner exists")
         return
 
-    image_path = Path(__file__).resolve().parents[1] / ".." / "assets" / "card-yuna-lavender.jpg"
+    # The production image copies `backend/assets` to `/app/assets`.  Since
+    # this module lives at `/app/app/services.py`, `parents[1]` is already
+    # the application root; climbing one more level incorrectly produced
+    # `/assets/...` and prevented the server from starting on Render.
+    image_path = Path(__file__).resolve().parents[1] / "assets" / "card-yuna-lavender.jpg"
     image_path = image_path.resolve()
     if not image_path.is_file():
         raise FileNotFoundError(f"bundled demo card image is missing: {image_path}")
