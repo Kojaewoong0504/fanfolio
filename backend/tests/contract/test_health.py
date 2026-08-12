@@ -99,6 +99,24 @@ def test_readiness_fails_when_the_s3_bucket_is_unavailable(
     assert response.json()["error"]["code"] == "SERVICE_NOT_READY"
 
 
+def test_readiness_converts_unexpected_storage_provider_errors_to_503(
+    client: TestClient, monkeypatch: Any
+) -> None:
+    class ProviderError(Exception):
+        pass
+
+    async def failed_check_storage_backend() -> None:
+        # boto3 providers may raise ClientError, which is not an OSError.
+        raise ProviderError("provider rejected the request")
+
+    monkeypatch.setattr(health, "_check_storage_backend", failed_check_storage_backend)
+
+    response = client.get("/api/health/ready")
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "SERVICE_NOT_READY"
+
+
 def test_readiness_returns_service_unavailable_when_rate_limiter_is_down(
     client: TestClient,
     monkeypatch: Any,

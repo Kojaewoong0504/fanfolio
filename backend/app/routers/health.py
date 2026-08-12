@@ -3,7 +3,6 @@ import logging
 
 from fastapi import APIRouter, status
 from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import get_settings
 from app.db.session import engine
@@ -69,7 +68,7 @@ async def readiness() -> dict:
         await _check_upload_scanner()
         await _check_task_queue()
         await check_rate_limit_backend()
-    except (OSError, RuntimeError, ValueError, SQLAlchemyError) as error:
+    except Exception as error:
         # Render needs a useful reason for a 503, but connection strings and
         # provider error messages must never be copied into public responses
         # or logs. The exception type is enough to identify the failing class
