@@ -387,6 +387,19 @@ class AchievementDefinitionCreate(BaseModel):
         return self
 
 
+class RewardCatalogCreate(BaseModel):
+    """A fan-facing reward that can be attached to an achievement or pass tier."""
+
+    name: str = Field(min_length=1, max_length=160)
+    reward_type: Literal["title", "badge", "profile_frame", "digital_bonus"] = Field(
+        alias="rewardType"
+    )
+    organization_id: str | None = Field(default=None, alias="organizationId")
+    artist_id: str | None = Field(default=None, alias="artistId")
+    metadata: dict = Field(default_factory=dict)
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class PassTierCreate(BaseModel):
     tier: int = Field(ge=1)
     required_xp: int = Field(alias="requiredXp", ge=0)

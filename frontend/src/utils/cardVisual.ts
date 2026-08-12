@@ -2,11 +2,13 @@ import type { SyntheticEvent } from 'react'
 import cardYuna from '../assets/card-yuna-lavender.jpg'
 import cardMinho from '../assets/card-minho-midnight.jpg'
 import cardJay from '../assets/card-jay-rosegold.jpg'
+import cardPlaceholder from '../assets/card-example.svg'
 
 export function demoCardImage(imageUrl: string, seed = ''): string {
-  // Catalog responses may omit an image while an asset is still being
-  // prepared. Keep the UI visual instead of rendering an empty/broken img.
+  // A released card must use its stored asset URL. The placeholder is only
+  // used for legacy records that still point at the old hero.png demo asset.
   if (imageUrl && !imageUrl.includes('hero.png')) return imageUrl
+  if (!seed.startsWith('member:') && !seed.startsWith('artist:')) return cardPlaceholder
   const variants = [cardYuna, cardMinho, cardJay]
   const hash = Array.from(seed).reduce((total, character) => total + character.charCodeAt(0), 0)
   return variants[hash % variants.length]
@@ -19,5 +21,8 @@ export function demoMemberImage(memberId: string): string {
 export function keepCardVisual(event: SyntheticEvent<HTMLImageElement>, seed: string): void {
   if (event.currentTarget.dataset.fallbackApplied === 'true') return
   event.currentTarget.dataset.fallbackApplied = 'true'
-  event.currentTarget.src = demoCardImage('hero.png', seed)
+  // Never replace a missing production card with an unrelated stock photo.
+  event.currentTarget.src = seed.startsWith('member:') || seed.startsWith('artist:')
+    ? demoCardImage('hero.png', seed)
+    : cardPlaceholder
 }

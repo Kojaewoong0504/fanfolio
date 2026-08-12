@@ -246,6 +246,38 @@ def test_company_manager_can_draft_only_assigned_artist_achievement(
     )
 
 
+def test_company_manager_can_create_scoped_reward_for_growth_rules(
+    actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
+) -> None:
+    organization, member = create_partner(
+        actors["admin"],
+        email="company-reward-manager@starwave.com",
+        access_level="company_admin",
+    )
+    company_client = login_partner(app, member)
+
+    reward = assert_success(
+        company_client.post(
+            "/api/admin/engagement/rewards",
+            json={
+                "name": "NOVA 첫 수집가 뱃지",
+                "rewardType": "badge",
+                "organizationId": organization["id"],
+                "artistId": "artist_nova3",
+                "metadata": {"label": "FIRST NOVA", "color": "violet"},
+            },
+        ),
+        201,
+    )
+    assert reward["status"] == "draft"
+    assert reward["organizationId"] == organization["id"]
+    assert reward["artistId"] == "artist_nova3"
+    assert reward["metadata"]["label"] == "FIRST NOVA"
+
+    listed = assert_success(company_client.get("/api/admin/engagement/rewards"))["items"]
+    assert any(item["id"] == reward["id"] for item in listed)
+
+
 def test_admin_dashboard_growth_summary_is_scoped_without_fan_rankings(
     actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
 ) -> None:

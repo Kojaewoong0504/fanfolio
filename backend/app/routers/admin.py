@@ -64,6 +64,7 @@ from app.schemas import (
     DropUpdateRequest,
     PassSeasonCreate,
     RedeemCodeStatusUpdate,
+    RewardCatalogCreate,
 )
 from app.services import (
     active_review_request,
@@ -619,6 +620,40 @@ async def list_admin_rewards(context: CurrentAdmin, session: DbSession) -> dict:
         .order_by(RewardCatalog.name, RewardCatalog.id)
     )
     return {"ok": True, "data": {"items": [reward_data(item) for item in rows]}}
+
+
+@router.post("/engagement/rewards", status_code=status.HTTP_201_CREATED)
+async def create_admin_reward(
+    payload: RewardCatalogCreate, context: CurrentAdmin, session: DbSession
+) -> dict:
+    """Create a scoped reward before it is selected by an achievement or pass tier."""
+
+    _require_engagement_write(context)
+    organization_id, artist_id = await require_engagement_scope(
+        session, context, payload.organization_id, payload.artist_id
+    )
+    reward = RewardCatalog(
+        id=f"reward_{uuid4().hex[:12]}",
+        organization_id=organization_id,
+        artist_id=artist_id,
+        reward_type=payload.reward_type,
+        name=payload.name,
+        metadata_=payload.metadata,
+        status="draft",
+    )
+    session.add(reward)
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="reward.created",
+        entity_type="reward",
+        entity_id=reward.id,
+        organization_id=reward.organization_id,
+        artist_id=reward.artist_id,
+        details={"rewardType": reward.reward_type},
+    )
+    await session.commit()
+    return {"ok": True, "data": reward_data(reward)}
 
 
 @router.get("/engagement/pass-seasons")
