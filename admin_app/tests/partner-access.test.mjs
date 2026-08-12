@@ -263,6 +263,25 @@ test('admin gives a useful card preview fallback when stored media is unavailabl
   assert.match(source, /previewImageUrl.*sourceImageUrl/)
 })
 
+test('card review exposes front and back media plus a meaningful creator label', () => {
+  assert.match(source, /data-review-side="front"/)
+  assert.match(source, /data-review-side="back"/)
+  assert.match(source, /backImageUrl/)
+  assert.match(source, /cardCreatorLabel\(card\)/)
+  assert.match(source, /뒷면 이미지/)
+})
+
+test('artist account review is clearly separated from card review', () => {
+  assert.match(source, /아티스트 계정·소속 승인/)
+  assert.match(source, /카드 검수는 카드 관리 메뉴에서 진행합니다/)
+})
+
+test('admin uses the shared Fanfolio bitmap favicon', async () => {
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8')
+  assert.match(html, /fanfolio-app-icon-192\.png/)
+  assert.doesNotMatch(html, /href="data:,"/)
+})
+
 test('partner logo picker is optional and exposes preview replacement and removal controls', () => {
   const drawer = functionBody('organizationDrawer')
   const picker = functionBody('organizationLogoPickerContents')

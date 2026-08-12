@@ -1041,6 +1041,9 @@ async def get_drop(drop_id: str, context: CurrentAdmin, session: DbSession) -> d
 
 
 def admin_card_data(card: Card) -> dict:
+    design_config = card.design_config if isinstance(card.design_config, dict) else {}
+    back_config = design_config.get("back") if isinstance(design_config.get("back"), dict) else {}
+    back_image_asset_id = back_config.get("backImageAssetId") or back_config.get("imageAssetId")
     return {
         "id": card.id,
         "name": card.name,
@@ -1058,6 +1061,7 @@ def admin_card_data(card: Card) -> dict:
         "voiceAssetId": card.voice_asset_id,
         "videoAssetId": card.video_asset_id,
         "designConfig": card.design_config,
+        "backImageAssetId": back_image_asset_id,
         "reviewNote": card.review_note,
         "handwritingTransform": card.handwriting_transform,
         "hasVoice": card.has_voice,
@@ -1065,6 +1069,7 @@ def admin_card_data(card: Card) -> dict:
         "previewImageUrl": (
             f"/api/admin/cards/{card.id}/preview/image" if card.preview_storage_path else None
         ),
+        "backImageUrl": f"/api/admin/cards/{card.id}/back-image" if back_image_asset_id else None,
         **release_card_data(card),
     }
 
@@ -1102,6 +1107,22 @@ async def validate_admin_assets(
         return
     front = design_config.get("front") if isinstance(design_config, dict) else None
     if not isinstance(front, dict) or "lenticularAssetId" not in front:
+        back = design_config.get("back") if isinstance(design_config.get("back"), dict) else {}
+        back_image_asset_id = back.get("backImageAssetId") or back.get("imageAssetId")
+        if not back_image_asset_id:
+            return
+        asset = await session.get(Asset, back_image_asset_id)
+        if not asset or asset.purpose != "card":
+            raise AppError(404, "ASSET_NOT_FOUND", "뒷면 카드 자산을 찾을 수 없습니다.")
+        if context is not None and not context.is_root and asset.owner_id != context.user.id:
+            raise AppError(404, "ASSET_NOT_FOUND", "뒷면 카드 자산을 찾을 수 없습니다.")
+        path = asset.processed_storage_path or asset.storage_path
+        if not path:
+            raise AppError(409, "ASSET_NOT_READY", "뒷면 카드 자산이 아직 준비되지 않았습니다.")
+        if storage is None:
+            storage = configured_asset_storage()
+        if not storage.exists(path):
+            raise AppError(409, "ASSET_NOT_READY", "뒷면 카드 자산이 아직 준비되지 않았습니다.")
         return
     lenticular_asset_id = front["lenticularAssetId"]
     if lenticular_asset_id is None:
@@ -1302,6 +1323,25 @@ async def card_source_image(card_id: str, context: CurrentAdmin, session: DbSess
         raise AppError(404, "CARD_IMAGE_NOT_READY", "카드 원본 이미지가 아직 준비되지 않았습니다.")
     return storage_response(
         configured_asset_storage(), asset.storage_path, media_type=asset.content_type or "image/png"
+    )
+
+
+@router.get("/cards/{card_id}/back-image")
+async def card_back_image(card_id: str, context: CurrentAdmin, session: DbSession) -> Response:
+    """Serve the optional back-side card artwork during operator review."""
+    card = await session.get(Card, card_id)
+    if not card:
+        raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
+    context.require_artist(card.artist_id)
+    design_config = card.design_config if isinstance(card.design_config, dict) else {}
+    back_config = design_config.get("back") if isinstance(design_config.get("back"), dict) else {}
+    asset_id = back_config.get("backImageAssetId") or back_config.get("imageAssetId")
+    asset = await session.get(Asset, asset_id) if asset_id else None
+    path = asset.processed_storage_path or asset.storage_path if asset else None
+    if not asset or not path:
+        raise AppError(404, "CARD_BACK_IMAGE_NOT_FOUND", "카드 뒷면 이미지를 찾을 수 없습니다.")
+    return storage_response(
+        configured_asset_storage(), path, media_type=asset.content_type or "image/png"
     )
 
 

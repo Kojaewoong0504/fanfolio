@@ -56,6 +56,9 @@ const state = {
   reviewCard: null,
   reviewImageSrc: "",
   reviewImageError: false,
+  reviewBackImageSrc: "",
+  reviewBackImageError: false,
+  reviewSide: "front",
   artistProvisionedAccount: null,
   adminProvisionedAccount: null,
   organizations: [],
@@ -671,7 +674,7 @@ function artistProfileReviewDrawer() {
     { value: "verified", label: "승인" },
     { value: "rejected", label: "반려" },
   ];
-  return `${drawerHeader("ROOT REVIEW", "아티스트 소속 검수", "아티스트 계정이 연결할 수 있는 그룹과 공개 전 검수 상태를 설정합니다.")}<form class="drawer-body form" id="artist-profile-review-form" data-profile-id="${escapeHtml(profile.userId)}"><div class="assignment-member"><span class="person-avatar">${escapeHtml((profile.nickname || profile.email || "아").slice(0, 1))}</span><div><strong>${escapeHtml(profile.nickname || "닉네임 미설정")}</strong><small>${escapeHtml(profile.email)}</small></div></div><label class="field"><span>소속 그룹</span>${adminSelect({ id: "artist-profile-review-artist", name: "artistId", value: profile.artistId, label: "소속 그룹", className: "form-select", options: artistOptions })}</label><label class="field"><span>검수 상태</span>${adminSelect({ id: "artist-profile-review-status", name: "verificationStatus", value: profile.verificationStatus, label: "검수 상태", className: "form-select", options: statusOptions })}</label><p class="hint">승인된 계정만 해당 그룹의 스튜디오 카탈로그와 카드 작업을 사용할 수 있습니다.</p><footer class="drawer-footer"><button class="secondary close-drawer" type="button">취소</button><button class="primary" type="submit">검수 상태 저장</button></footer></form>`;
+  return `${drawerHeader("ROOT ACCESS REVIEW", "아티스트 계정·소속 승인", "아티스트 스튜디오 계정의 소속과 접근 상태를 설정합니다.")}<form class="drawer-body form" id="artist-profile-review-form" data-profile-id="${escapeHtml(profile.userId)}"><div class="assignment-member"><span class="person-avatar">${escapeHtml((profile.nickname || profile.email || "아").slice(0, 1))}</span><div><strong>${escapeHtml(profile.nickname || "닉네임 미설정")}</strong><small>${escapeHtml(profile.email)}</small></div></div><label class="field"><span>소속 그룹</span>${adminSelect({ id: "artist-profile-review-artist", name: "artistId", value: profile.artistId, label: "소속 그룹", className: "form-select", options: artistOptions })}</label><label class="field"><span>계정 승인 상태</span>${adminSelect({ id: "artist-profile-review-status", name: "verificationStatus", value: profile.verificationStatus, label: "계정 승인 상태", className: "form-select", options: statusOptions })}</label><p class="hint">승인된 계정만 해당 그룹의 스튜디오 카탈로그와 카드 작업을 사용할 수 있습니다. 카드 검수는 카드 관리 메뉴에서 진행합니다.</p><footer class="drawer-footer"><button class="secondary close-drawer" type="button">취소</button><button class="primary" type="submit">접근 권한 저장</button></footer></form>`;
 }
 
 function dropLinkDrawer() {
@@ -968,12 +971,31 @@ function cardRows(cards) {
     })
     .join("");
 }
+function cardBackImageAssetId(card) {
+  return card?.backImageAssetId || card?.designConfig?.back?.backImageAssetId || card?.designConfig?.back?.imageAssetId || null;
+}
+
+function cardCreatorLabel(card) {
+  const creatorId = card?.ownerArtistId || card?.artistId;
+  const artist = state.catalog.artists.find((item) => item.id === creatorId);
+  return card?.creatorName || artist?.name || card?.ownerArtistId || (card?.artistId ? "아티스트 운영팀" : "Fanfolio 운영팀");
+}
+
+function reviewMediaMarkup(card) {
+  const back = state.reviewSide === "back";
+  const imageSrc = back ? state.reviewBackImageSrc : state.reviewImageSrc;
+  const failed = back ? state.reviewBackImageError : state.reviewImageError;
+  const hasBack = Boolean(cardBackImageAssetId(card));
+  if (imageSrc) return `<img class="review-image" src="${escapeHtml(imageSrc)}" alt="${escapeHtml(card.name)} ${back ? "뒷면" : "앞면"} 미리보기" />`;
+  const title = back ? (hasBack ? "뒷면 이미지를 불러오지 못했습니다." : "뒷면 이미지는 기본 템플릿을 사용합니다.") : (failed ? "원본 이미지가 등록되지 않았거나 저장소에서 찾을 수 없습니다." : "미리보기를 불러오는 중입니다.");
+  const detail = back ? (hasBack ? "카드 정보에서 뒷면 이미지를 교체한 뒤 다시 확인해 주세요." : "아티스트 스튜디오 또는 카드 정보에서 뒷면 이미지를 등록할 수 있습니다.") : (failed ? "카드 정보에서 앞면 이미지를 교체한 뒤 다시 확인해 주세요." : "잠시만 기다려 주세요.");
+  return `<div class="review-image empty review-image-fallback">${icon(failed ? "image_not_supported" : "style")}<strong>${title}</strong><small>${detail}</small></div>`;
+}
+
 function reviewPanel() {
   const card = state.reviewCard;
   if (!card) return "";
-  const image = state.reviewImageSrc
-    ? `<img class="review-image" src="${escapeHtml(state.reviewImageSrc)}" alt="${escapeHtml(card.name)} 미리보기" />`
-    : `<div class="review-image empty review-image-fallback">${icon(state.reviewImageError ? "image_not_supported" : "hourglass_top")}<strong>${state.reviewImageError ? "원본 이미지가 등록되지 않았거나 저장소에서 찾을 수 없습니다." : "미리보기를 불러오는 중입니다."}</strong><small>${state.reviewImageError ? "카드 정보에서 이미지를 교체한 뒤 다시 확인해 주세요." : "잠시만 기다려 주세요."}</small></div>`;
+  const image = reviewMediaMarkup(card);
   const status = releaseStatus(card);
   const nextAction = cardNextAction(card);
   const policy = card.releasePolicy || (card.rarity === "Special" ? "partner_and_platform" : "partner_only");
@@ -985,7 +1007,7 @@ function reviewPanel() {
   const canPrepareDrop = status === "approved" && can("drops:write");
   const canEdit = can("cards:write") && !["pending_partner_review", "pending_platform_review", "drop_ready", "published"].includes(status);
   const editForm = canEdit
-    ? `<form class="form edit-card-form" id="admin-card-edit-form" data-id="${escapeHtml(card.id)}"><label class="field">카드명<input name="name" value="${escapeHtml(card.name)}" required /></label><label class="field">시즌<input name="seasonName" value="${escapeHtml(card.seasonName || "")}" placeholder="예: 2026 SUMMER" /></label><label class="field">등급<select name="rarity"><option value="N" ${card.rarity === "N" ? "selected" : ""}>N (노멀)</option><option value="R" ${card.rarity === "R" ? "selected" : ""}>R (레어)</option><option value="SR" ${card.rarity === "SR" ? "selected" : ""}>SR (슈퍼 레어)</option><option value="Special" ${card.rarity === "Special" ? "selected" : ""}>Special</option></select></label><label class="field">발행 수량<input name="issueLimit" type="number" min="1" value="${card.issueLimit || ""}" placeholder="제한 없음" /></label><label class="field">카드 이미지 교체<input name="cardImage" type="file" accept="image/png,image/jpeg,image/webp" /><span class="hint">선택하지 않으면 기존 이미지를 유지합니다.</span></label><button class="primary" type="submit">변경 저장</button></form>`
+    ? `<form class="form edit-card-form" id="admin-card-edit-form" data-id="${escapeHtml(card.id)}"><label class="field">카드명<input name="name" value="${escapeHtml(card.name)}" required /></label><label class="field">시즌<input name="seasonName" value="${escapeHtml(card.seasonName || "")}" placeholder="예: 2026 SUMMER" /></label><label class="field">등급<select name="rarity"><option value="N" ${card.rarity === "N" ? "selected" : ""}>N (노멀)</option><option value="R" ${card.rarity === "R" ? "selected" : ""}>R (레어)</option><option value="SR" ${card.rarity === "SR" ? "selected" : ""}>SR (슈퍼 레어)</option><option value="Special" ${card.rarity === "Special" ? "selected" : ""}>Special</option></select></label><label class="field">발행 수량<input name="issueLimit" type="number" min="1" value="${card.issueLimit || ""}" placeholder="제한 없음" /></label><label class="field">앞면 이미지 교체<input name="cardImage" type="file" accept="image/png,image/jpeg,image/webp" /><span class="hint">선택하지 않으면 기존 이미지를 유지합니다.</span></label><label class="field">뒷면 이미지 교체<input name="backCardImage" type="file" accept="image/png,image/jpeg,image/webp" /><span class="hint">선택하지 않으면 기본 템플릿 또는 기존 이미지를 유지합니다.</span></label><button class="primary" type="submit">변경 저장</button></form>`
     : "";
   const reviewNote =
     canReviewPartner || canReviewPlatform || canSubmitReview
@@ -1006,7 +1028,8 @@ function reviewPanel() {
       : canPrepareDrop
         ? `<div class="notice success">검수가 승인되었습니다. 드롭에 연결하면 코드 배치 작업으로 이어집니다.</div><div class="review-actions"><button class="primary open-drop-link" data-id="${escapeHtml(card.id)}">드롭 준비됨</button></div>`
         : "";
-  return `<div class="panel review-panel"><div class="review-heading"><div><p class="eyebrow">카드 검수</p><h2>${escapeHtml(card.name)}</h2><span class="badge ${releaseBadgeClass(status)}">${escapeHtml(releaseStatusLabel(status))}</span></div><button class="secondary" id="close-review">닫기</button></div><div class="review-content"><div>${image}</div><dl class="review-meta"><div><dt>제작자</dt><dd>${escapeHtml(card.ownerArtistId || "-")}</dd></div><div><dt>시즌</dt><dd>${escapeHtml(card.seasonName || "-")}</dd></div><div><dt>등급</dt><dd>${escapeHtml(card.rarity || "-")}</dd></div><div><dt>발행 수량</dt><dd>${card.issueLimit ? Number(card.issueLimit).toLocaleString() : "-"}</dd></div><div><dt>사인 메시지</dt><dd>${escapeHtml(card.signatureText || "없음")}</dd></div><div><dt>특전</dt><dd>${card.hasVoice ? "보이스 포함" : "보이스 없음"}${card.videoAssetId ? " · 영상 포함" : ""}${card.handwritingAssetId ? " · 손글씨 포함" : ""}</dd></div></dl></div><div class="release-status-grid"><div><span>정책</span><strong>${escapeHtml(releasePolicyLabel(policy))}</strong></div><div><span>검수 버전</span><strong>v${Number(card.reviewVersion || 0)}</strong></div><div><span>다음 작업</span><strong>${escapeHtml(nextActionLabel(nextAction))}</strong></div></div>${releaseSnapshot(card)}${releaseHistory(card)}${editForm}${reviewNote}${reviewActions}</div>`;
+  const sideToggle = `<div class="review-side-toggle" role="group" aria-label="카드 면 선택"><button class="${state.reviewSide === "front" ? "active" : ""}" type="button" data-review-side="front">앞면</button><button class="${state.reviewSide === "back" ? "active" : ""}" type="button" data-review-side="back">뒷면</button></div>`;
+  return `<div class="panel review-panel"><div class="review-heading"><div><p class="eyebrow">카드 검수</p><h2>${escapeHtml(card.name)}</h2><span class="badge ${releaseBadgeClass(status)}">${escapeHtml(releaseStatusLabel(status))}</span></div><button class="secondary" id="close-review">닫기</button></div><div class="review-content"><div>${sideToggle}${image}</div><dl class="review-meta"><div><dt>제작자</dt><dd>${escapeHtml(cardCreatorLabel(card))}</dd></div><div><dt>시즌</dt><dd>${escapeHtml(card.seasonName || "-")}</dd></div><div><dt>등급</dt><dd>${escapeHtml(card.rarity || "-")}</dd></div><div><dt>발행 수량</dt><dd>${card.issueLimit ? Number(card.issueLimit).toLocaleString() : "-"}</dd></div><div><dt>사인 메시지</dt><dd>${escapeHtml(card.signatureText || "없음")}</dd></div><div><dt>특전</dt><dd>${card.hasVoice ? "보이스 포함" : "보이스 없음"}${card.videoAssetId ? " · 영상 포함" : ""}${card.handwritingAssetId ? " · 손글씨 포함" : ""}</dd></div></dl></div><div class="release-status-grid"><div><span>정책</span><strong>${escapeHtml(releasePolicyLabel(policy))}</strong></div><div><span>검수 버전</span><strong>v${Number(card.reviewVersion || 0)}</strong></div><div><span>다음 작업</span><strong>${escapeHtml(nextActionLabel(nextAction))}</strong></div></div>${releaseSnapshot(card)}${releaseHistory(card)}${editForm}${reviewNote}${reviewActions}</div>`;
 }
 
 function releaseSnapshot(card) {
@@ -1014,7 +1037,7 @@ function releaseSnapshot(card) {
   const design = snapshot.designConfig || card.designConfig || {};
   const rows = [
     ["앞면", snapshot.previewImageUrl || snapshot.sourceImageUrl || card.previewImageUrl || card.sourceImageUrl || "미등록"],
-    ["뒷면", design.backImageAssetId || card.backImageAssetId || "기본 템플릿"],
+    ["뒷면 이미지", design.backImageAssetId || design.imageAssetId || card.backImageAssetId || "기본 템플릿"],
     ["미디어", [snapshot.voiceAssetId || card.voiceAssetId ? "보이스" : "", snapshot.videoAssetId || card.videoAssetId ? "영상" : "", snapshot.handwritingAssetId || card.handwritingAssetId ? "손글씨" : "", design.lenticular || design.motion ? "렌티큘러" : ""].filter(Boolean).join(" · ") || "없음"],
     ["제출 메모", card.reviewNote || snapshot.reviewNote || "없음"],
   ];
@@ -1140,7 +1163,7 @@ function artistProfileRows() {
     .join("");
 }
 function artistProfilesPanel() {
-  return `<div class="panel"><div class="panel-heading"><div><p class="eyebrow">ROOT ONLY</p><h2>아티스트 소속 검수</h2><p class="hint">루트 관리자만 아티스트가 카드에 연결할 그룹과 검수 상태를 변경할 수 있습니다.</p></div>${scopeContextChip()}</div><div class="table-wrap"><table class="table"><thead><tr><th>계정</th><th>닉네임</th><th>소속 그룹</th><th>현재 상태</th><th>검수 처리</th></tr></thead><tbody>${artistProfileRows()}</tbody></table></div></div>`;
+  return `<div class="panel"><div class="panel-heading"><div><p class="eyebrow">ROOT ONLY · ACCOUNT ACCESS</p><h2>아티스트 계정·소속 승인</h2><p class="hint">아티스트 스튜디오 계정의 소속 그룹과 접근 승인 상태를 관리합니다. 카드 검수는 카드 관리 메뉴에서 진행합니다.</p></div>${scopeContextChip()}</div><div class="table-wrap"><table class="table"><thead><tr><th>계정</th><th>닉네임</th><th>소속 그룹</th><th>현재 상태</th><th>접근 권한</th></tr></thead><tbody>${artistProfileRows()}</tbody></table></div></div>`;
 }
 function userRows() {
   if (!state.users.length)
@@ -2073,6 +2096,7 @@ async function updateAdminCard(event) {
   const form = new FormData(event.target);
   const cardId = event.target.dataset.id;
   const image = form.get("cardImage");
+  const backImage = form.get("backCardImage");
   try {
     const payload = {
       name: form.get("name"),
@@ -2084,6 +2108,16 @@ async function updateAdminCard(event) {
     };
     if (image instanceof File && image.size)
       payload.imageAssetId = await uploadAsset(image, "card");
+    if (backImage instanceof File && backImage.size) {
+      const backImageAssetId = await uploadAsset(backImage, "card");
+      payload.designConfig = {
+        ...(state.reviewCard?.designConfig || {}),
+        back: {
+          ...(state.reviewCard?.designConfig?.back || {}),
+          backImageAssetId,
+        },
+      };
+    }
     await api(`/admin/cards/${cardId}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
@@ -2100,8 +2134,12 @@ async function openReview(cardId) {
     const result = await api(`/admin/cards/${cardId}`);
     state.reviewCard = result.data;
     if (state.reviewImageSrc) URL.revokeObjectURL(state.reviewImageSrc);
+    if (state.reviewBackImageSrc) URL.revokeObjectURL(state.reviewBackImageSrc);
     state.reviewImageSrc = "";
     state.reviewImageError = false;
+    state.reviewBackImageSrc = "";
+    state.reviewBackImageError = false;
+    state.reviewSide = "front";
     const imageUrls = [result.data.previewImageUrl, result.data.sourceImageUrl].filter(Boolean);
     for (const imageUrl of imageUrls) {
       const response = await fetch(`${API_BASE}${imageUrl.replace(/^\/api/, "")}`, {
@@ -2119,6 +2157,17 @@ async function openReview(cardId) {
       }
     }
     state.reviewImageError = !state.reviewImageSrc;
+    if (result.data.backImageUrl) {
+      const response = await fetch(`${API_BASE}${result.data.backImageUrl.replace(/^\/api/, "")}`, {
+        credentials: "include",
+        headers: {
+          "X-Fanfolio-Client": "admin",
+          ...(ACCESS_TOKEN ? { Authorization: `Bearer ${ACCESS_TOKEN}` } : {}),
+        },
+      });
+      if (response.ok) state.reviewBackImageSrc = URL.createObjectURL(await response.blob());
+    }
+    state.reviewBackImageError = Boolean(result.data.backImageUrl) && !state.reviewBackImageSrc;
     state.view = "cards";
     layout();
   } catch {
@@ -2802,6 +2851,12 @@ function bind() {
     .forEach((button) =>
       button.addEventListener("click", () => openReview(button.dataset.id)),
     );
+  document.querySelectorAll("[data-review-side]").forEach((button) =>
+    button.addEventListener("click", () => {
+      state.reviewSide = button.dataset.reviewSide === "back" ? "back" : "front";
+      layout();
+    }),
+  );
   document
     .querySelectorAll(".review-decision")
     .forEach((button) =>
@@ -2831,7 +2886,9 @@ function bind() {
   document.querySelector("#close-review")?.addEventListener("click", () => {
     state.reviewCard = null;
     if (state.reviewImageSrc) URL.revokeObjectURL(state.reviewImageSrc);
+    if (state.reviewBackImageSrc) URL.revokeObjectURL(state.reviewBackImageSrc);
     state.reviewImageSrc = "";
+    state.reviewBackImageSrc = "";
     layout();
   });
   document

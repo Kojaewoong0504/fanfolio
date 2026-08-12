@@ -41,7 +41,7 @@ test("fan app declares its generated bitmap icon set", async () => {
   );
 
   assert.match(html, /href="\/manifest\.webmanifest"/);
-  assert.match(html, /href="\/favicon\.png"/);
+  assert.match(html, /href="\/fanfolio-app-icon-192\.png"/);
   assert.doesNotMatch(html, /favicon\.svg/);
   assert.deepEqual(
     manifest.icons.map(({ src, sizes }) => ({ src, sizes })),

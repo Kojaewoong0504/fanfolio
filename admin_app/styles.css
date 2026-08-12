@@ -2671,6 +2671,31 @@ button.top-avatar {
   margin-top: 16px;
 }
 
+.review-side-toggle {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  margin-bottom: 8px;
+  background: #f2f1fb;
+  border-radius: 999px;
+}
+
+.review-side-toggle button {
+  min-width: 58px;
+  padding: 6px 10px;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.review-side-toggle button.active {
+  color: var(--purple);
+  background: #fff;
+  box-shadow: 0 2px 8px #4036a51a;
+}
+
 .review-image {
   display: grid;
   width: 100%;
