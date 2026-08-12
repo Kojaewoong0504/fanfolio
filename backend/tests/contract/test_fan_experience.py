@@ -13,13 +13,18 @@ from tests.contract.test_card_release_workflow import create_partner_client, cre
 
 
 def _redeem_card_via_batch(
-    admin: TestClient, fan: TestClient, *, card_id: str, prefix: str
+    admin: TestClient,
+    fan: TestClient,
+    *,
+    card_id: str,
+    prefix: str,
+    drop_id: str = "drop_live",
 ) -> dict[str, Any]:
     batch = assert_success(
         admin.post(
             "/api/admin/redeem-code-batches",
             json={
-                "dropId": "drop_live",
+                "dropId": drop_id,
                 "cardId": card_id,
                 "quantity": 1,
                 "maxUsesPerCode": 1,
@@ -698,6 +703,21 @@ def test_fan_can_load_an_artist_uploaded_image_for_a_published_card(
     assert image.status_code == 200, image.text
     assert image.headers["content-type"].startswith("image/png")
     assert image.content == uploaded_bytes
+
+    # Complete the same release path a fan uses: the partner creates a code
+    # for the live drop, the fan redeems it, and the collection points at the
+    # published card image route rather than a frontend placeholder.
+    redeemed = _redeem_card_via_batch(
+        partner,
+        actors["fan"],
+        card_id=draft["id"],
+        prefix="IMAGE-FLOW",
+        drop_id=drop["id"],
+    )
+    collection = assert_success(actors["fan"].get("/api/me/collection"))
+    owned = next(item for item in collection["cards"] if item["cardId"] == draft["id"])
+    assert owned["userCardId"] == redeemed["userCardId"]
+    assert owned["imageUrl"] == f"/api/cards/{draft['id']}/image?client=fan"
 
 
 def test_catalog_supports_search_and_pagination(actors: dict[str, TestClient]) -> None:
