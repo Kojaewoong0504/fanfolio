@@ -686,9 +686,10 @@ def test_fan_can_load_an_artist_uploaded_image_for_a_published_card(
     assert_success(
         partner.post(f"/api/admin/drops/{drop['id']}/cards", json={"cardId": draft["id"]})
     )
-    assert_success(
-        actors["admin"].patch(f"/api/admin/drops/{drop['id']}/status", json={"status": "live"})
-    )
+    # Partner-owned drops are published by the partner administrator. The
+    # root administrator reviews the card, but does not publish the partner's
+    # release on their behalf.
+    assert_success(partner.patch(f"/api/admin/drops/{drop['id']}/status", json={"status": "live"}))
 
     image = actors["fan"].get(f"/api/cards/{draft['id']}/image")
     assert image.status_code == 200, image.text
