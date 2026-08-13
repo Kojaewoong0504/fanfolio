@@ -13,6 +13,7 @@ import { EventDetail } from './components/EventDetail'
 import { EventList } from './components/EventList'
 import type { Card } from './types'
 import { demoCardImage, demoMemberImage, keepCardVisual } from './utils/cardVisual'
+import heroImage from './assets/hero.png'
 
 type Tab = 'home' | 'discover' | 'collection' | 'growth' | 'settings' | 'alerts' | 'events'
 
@@ -807,6 +808,22 @@ function Onboarding({ userId, profileImageUrl, onComplete, onBack }: { userId: s
 
 type HomeProps = { nickname: string, cards: Card[], savedCards: Card[], summary: CollectionSummary, loading: boolean, eventHome: FanHomeResponse | null, onSelect: (card: Card) => void, onDiscover: () => void, onCollection: () => void, onRedeem: () => void, onEvents: () => void, onEvent: (event: FanEvent) => void }
 
+const fallbackHomeEvent: FanEvent = {
+  id: 'demo-fan-week',
+  artistId: 'artist_nova3',
+  title: '2026 SUMMER FAN WEEK',
+  summary: '드림스케이프와 함께하는 한정 이벤트',
+  description: '좋아하는 아티스트의 새로운 순간을 만나보세요.',
+  eventType: 'external',
+  status: 'active',
+  startsAt: '2026-08-01T00:00:00Z',
+  endsAt: null,
+  heroUrl: heroImage,
+  artistName: '드림스케이프',
+  ctaLabel: '이벤트 보기',
+  ctaTarget: '/events',
+}
+
 function Home(props: HomeProps) {
   const [recommendations, setRecommendations] = useState<Card[]>([])
 
@@ -831,10 +848,11 @@ function HomeRecommendations({ cards, onSelect, onDiscover }: { cards: Card[], o
 
 function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome, onSelect, onDiscover, onCollection, onRedeem, onEvents, onEvent }: HomeProps) {
   const featured = cards[0]
+  const featuredEvent = eventHome?.featuredEvent ?? fallbackHomeEvent
   const completionRate = Math.min(100, Math.max(0, summary.completionRate))
   return <div className="home-screen collection-home">
     <p className="collection-greeting"><strong>{nickname}</strong>님, 새 카드가 도착했어요</p>
-    {eventHome?.featuredEvent && <section className="home-event-spotlight" aria-labelledby="home-event-title"><button type="button" onClick={() => onEvent(eventHome.featuredEvent!)}><img src={resolveApiUrl(eventHome.featuredEvent.heroUrl)} alt="" /><span><small>NOW · EVENT</small><b id="home-event-title">{eventHome.featuredEvent.title}</b><em>{eventHome.featuredEvent.summary}</em><strong>{eventHome.featuredEvent.ctaLabel ?? '이벤트 보기'} <i aria-hidden="true">›</i></strong></span></button><div className="home-event-meta"><span>새로운 팬 경험을 만나보세요</span><button type="button" onClick={onEvents}>이벤트 전체 보기 <i aria-hidden="true">›</i></button></div></section>}
+    <section className="home-event-spotlight" aria-labelledby="home-event-title"><button type="button" onClick={() => featuredEvent.id === fallbackHomeEvent.id ? onEvents() : onEvent(featuredEvent)}><img src={resolveApiUrl(featuredEvent.heroUrl)} alt="" /><span><small>NOW · EVENT</small><b id="home-event-title">{featuredEvent.title}</b><em>{featuredEvent.summary}</em><strong>{featuredEvent.ctaLabel ?? '이벤트 보기'} <i aria-hidden="true">›</i></strong></span></button><div className="home-event-meta"><span>새로운 팬 경험을 만나보세요</span><button type="button" onClick={onEvents}>이벤트 전체 보기 <i aria-hidden="true">›</i></button></div></section>
     {loading && !featured ? <div className="home-loading" role="status" aria-live="polite"><span className="loading-orbit" aria-hidden="true" /><b>컬렉션을 준비하고 있어요</b></div> : featured ? <button className="collection-spotlight" onClick={() => onSelect(featured)} aria-label={`${featured.title} 카드 상세 보기`}>
       <img src={featured.image} alt={`${featured.title} 카드`} onError={event => keepCardVisual(event, featured.id)} />
       <span className="collection-spotlight-copy"><small>FANFOLIO COLLECTION</small><b>{featured.title}</b><em>{featured.artist} · {featured.member}</em><strong>NEW <i>·</i> MY COLLECTION</strong></span>
