@@ -26,6 +26,11 @@ ROOT_ACTIONS = frozenset(
         "cards:review",
         "cards:publish",
         "drops:manage",
+        "events:read",
+        "events:write",
+        "events:submit",
+        "events:review",
+        "events:publish",
         "codes:manage",
         "users:manage",
         "audit:read",
@@ -35,7 +40,14 @@ ROOT_ACTIONS = frozenset(
 )
 
 PLATFORM_ACTIONS = frozenset(
-    {"cards:read", "cards:review_platform", "notifications:read", "engagement:approve_global"}
+    {
+        "cards:read",
+        "cards:review_platform",
+        "notifications:read",
+        "engagement:approve_global",
+        "events:read",
+        "events:review",
+    }
 )
 
 PARTNER_ACTIONS = {
@@ -52,6 +64,9 @@ PARTNER_ACTIONS = {
             "drops:read",
             "drops:write",
             "drops:submit",
+            "events:read",
+            "events:write",
+            "events:submit",
             "codes:read",
             "codes:write",
             "engagement:write",
@@ -69,6 +84,9 @@ PARTNER_ACTIONS = {
             "drops:read",
             "drops:write",
             "drops:submit",
+            "events:read",
+            "events:write",
+            "events:submit",
             "codes:read",
             "codes:write",
             "engagement:write",
@@ -83,13 +101,17 @@ PARTNER_ACTIONS = {
             "cards:write",
             "cards:submit_review",
             "drops:read",
+            "events:read",
+            "events:write",
             "drops:write",
             "codes:read",
             "engagement:write",
             "audit:read",
         }
     ),
-    "viewer": frozenset({"artists:read", "cards:read", "drops:read", "codes:read", "audit:read"}),
+    "viewer": frozenset(
+        {"artists:read", "cards:read", "drops:read", "events:read", "codes:read", "audit:read"}
+    ),
 }
 PARTNER_SCOPED_ACTIONS = frozenset().union(*PARTNER_ACTIONS.values(), PLATFORM_ACTIONS)
 

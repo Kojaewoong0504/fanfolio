@@ -3,16 +3,18 @@ import './App.css'
 import cardExample from './assets/card-example.svg'
 import cardExampleBlue from './assets/card-example-blue.svg'
 import cardExamplePink from './assets/card-example-pink.svg'
-import { ApiError, apiFetch, claimPassTier, claimReward, clearAccessToken, getFanPass, getProgression, notificationStreamUrl, oauthStartUrl, resolveApiUrl, setAccessToken, updateProfileEquipment, type CatalogArtist, type CatalogCard, type CatalogMember, type CatalogSort, type CollectionBenefit, type CollectionCard, type CollectionSummary, type CurrentUser, type FanProgression, type NotificationItem, type ProfileEquipment, type RewardGrant, type UserCardDetail } from './api/client'
+import { ApiError, apiFetch, claimPassTier, claimReward, clearAccessToken, getFanEvent, getFanEvents, getFanHome, getFanPass, getProgression, notificationStreamUrl, oauthStartUrl, resolveApiUrl, setAccessToken, updateProfileEquipment, type CatalogArtist, type CatalogCard, type CatalogMember, type CatalogSort, type CollectionBenefit, type CollectionCard, type CollectionSummary, type CurrentUser, type FanEvent, type FanEventStatus, type FanHomeResponse, type FanProgression, type NotificationItem, type ProfileEquipment, type RewardGrant, type UserCardDetail } from './api/client'
 import { QrRedeemModal, RedeemIcon } from './components/QrRedeemModal'
 import { CardDetail } from './components/CardDetail'
 import { Settings } from './components/Settings'
 import { ProfileAvatar } from './components/ProfileAvatar'
 import { FanGrowth } from './components/FanGrowth'
+import { EventDetail } from './components/EventDetail'
+import { EventList } from './components/EventList'
 import type { Card } from './types'
 import { demoCardImage, demoMemberImage, keepCardVisual } from './utils/cardVisual'
 
-type Tab = 'home' | 'discover' | 'collection' | 'growth' | 'settings' | 'alerts'
+type Tab = 'home' | 'discover' | 'collection' | 'growth' | 'settings' | 'alerts' | 'events'
 
 const cardRoutePreviewKey = 'fanfolio.card-route-preview'
 
@@ -122,6 +124,7 @@ function readOnboardingDraft(userId: string): OnboardingDraft {
 
 function App() {
   const [tab, setTab] = useState<Tab>(() => tabFromPath(window.location.pathname))
+  const [eventId, setEventId] = useState<string | null>(() => eventIdFromPath(window.location.pathname))
   const [selectedCard, setSelectedCard] = useState<Card | null>(() => readCardRoutePreview(window.location.pathname))
   const [showRedeem, setShowRedeem] = useState(() => window.location.pathname === '/redeem')
   const [signedIn, setSignedIn] = useState(false)
@@ -145,6 +148,13 @@ function App() {
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [revealedCardId, setRevealedCardId] = useState<string | null>(() => revealIdFromPath(window.location.pathname))
   const [savedCards, setSavedCards] = useState<Card[]>([])
+  const [fanHome, setFanHome] = useState<FanHomeResponse | null>(null)
+  const [fanEvents, setFanEvents] = useState<FanEvent[]>([])
+  const [fanEventsLoading, setFanEventsLoading] = useState(false)
+  const [fanEventsError, setFanEventsError] = useState('')
+  const [fanEventStatus, setFanEventStatus] = useState<FanEventStatus>('active')
+  const [selectedEvent, setSelectedEvent] = useState<FanEvent | null>(null)
+  const [eventDetailLoading, setEventDetailLoading] = useState(false)
   const savedCardsOwnerRef = useRef<string | null>(null)
   const savedCardIds = savedCards.map(card => card.userCardId ?? card.id)
 
@@ -188,8 +198,23 @@ function App() {
     setSelectedCard(null)
     setShowRedeem(false)
     setRevealedCardId(null)
+    setEventId(null)
     const nextPath = pathForTab(nextTab)
     if (window.location.pathname !== nextPath) window.history.pushState({}, '', nextPath)
+  }
+
+  const openEvents = () => {
+    setTab('events')
+    setEventId(null)
+    setSelectedEvent(null)
+    window.history.pushState({}, '', '/events')
+  }
+
+  const openEvent = (event: FanEvent) => {
+    setTab('events')
+    setSelectedEvent(event)
+    setEventId(event.id)
+    window.history.pushState({}, '', `/events/${encodeURIComponent(event.id)}`)
   }
 
   const openRedeem = () => {
@@ -233,6 +258,7 @@ function App() {
     const onPopState = () => {
       const path = window.location.pathname
       setTab(tabFromPath(path))
+      setEventId(eventIdFromPath(path))
       setShowRedeem(path === '/redeem')
       setRevealedCardId(revealIdFromPath(path))
       setSelectedCard(path.startsWith('/cards/') ? readCardRoutePreview(path) : null)
@@ -240,6 +266,26 @@ function App() {
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
   }, [])
+
+  useEffect(() => {
+    if (!signedIn || showOnboarding) return
+    let cancelled = false
+    void getFanHome().then(result => { if (!cancelled) setFanHome(result.data) }).catch(() => { if (!cancelled) setFanHome(null) })
+    return () => { cancelled = true }
+  }, [signedIn, showOnboarding])
+
+  useEffect(() => {
+    if (!signedIn || tab !== 'events' || eventId) return
+    setFanEventsLoading(true)
+    setFanEventsError('')
+    void getFanEvents({ status: fanEventStatus }).then(result => setFanEvents(result.data.items)).catch(() => setFanEventsError('이벤트를 불러오지 못했어요.')).finally(() => setFanEventsLoading(false))
+  }, [eventId, fanEventStatus, signedIn, tab])
+
+  useEffect(() => {
+    if (!signedIn || tab !== 'events' || !eventId) return
+    setEventDetailLoading(true)
+    void getFanEvent(eventId).then(result => setSelectedEvent(result.data)).catch(() => setSelectedEvent(null)).finally(() => setEventDetailLoading(false))
+  }, [eventId, signedIn, tab])
 
   useEffect(() => {
     const match = window.location.pathname.match(/^\/cards\/(.+)$/)
@@ -494,7 +540,8 @@ function App() {
 
       <section className="screen">
         {collectionError && <div className="service-notice" role="alert"><span>{collectionError}</span><button onClick={() => void refreshCollection()} disabled={collectionLoading}>{collectionLoading ? '확인 중...' : '다시 시도'}</button></div>}
-        {tab === 'home' && <Home nickname={currentUser?.nickname ?? '팬'} cards={collectionCards} savedCards={savedCards} summary={collectionSummary} loading={collectionLoading} onSelect={openCard} onDiscover={() => navigateTab('discover')} onCollection={() => navigateTab('collection')} onRedeem={openRedeem} />}
+        {tab === 'home' && <Home nickname={currentUser?.nickname ?? '팬'} cards={collectionCards} savedCards={savedCards} summary={collectionSummary} loading={collectionLoading} eventHome={fanHome} onSelect={openCard} onDiscover={() => navigateTab('discover')} onCollection={() => navigateTab('collection')} onRedeem={openRedeem} onEvents={openEvents} onEvent={openEvent} />}
+        {tab === 'events' && (eventId ? <EventDetail event={selectedEvent} loading={eventDetailLoading} onBack={openEvents} onOpenTarget={target => { if (target.startsWith('/events/')) { const id = decodeURIComponent(target.split('/').pop() ?? ''); const item = fanEvents.find(event => event.id === id); if (item) openEvent(item) } else if (target.startsWith('https://')) window.open(target, '_blank', 'noopener,noreferrer') }} /> : <EventList events={fanEvents} status={fanEventStatus} loading={fanEventsLoading} error={fanEventsError} onStatusChange={setFanEventStatus} onOpen={openEvent} />)}
         {tab === 'collection' && <Collection cards={collectionCards} summary={collectionSummary} benefits={collectionBenefits} loading={collectionLoading} onSelect={openCard} onRedeem={openRedeem} onDiscover={() => navigateTab('discover')} onClaim={claimBenefit} />}
         {tab === 'discover' && <Discover onSelect={openCard} />}
         {tab === 'alerts' && <Alerts items={notifications} error={notificationError} actionError={notificationActionError} onDismissActionError={() => setNotificationActionError('')} onRetry={() => window.dispatchEvent(new Event('fanfolio:refresh-notifications'))} onRead={markNotificationRead} onReadAll={markAllNotificationsRead} onNavigate={navigateTab} />}
@@ -522,6 +569,7 @@ function tabFromPath(pathname: string): Tab {
   if (pathname === '/discover') return 'discover'
   if (pathname === '/growth') return 'growth'
   if (pathname === '/notifications') return 'alerts'
+  if (pathname === '/events' || pathname.startsWith('/events/')) return 'events'
   if (pathname === '/settings') return 'settings'
   return 'collection'
 }
@@ -531,7 +579,12 @@ function SessionLoading() {
 }
 
 function pathForTab(tab: Tab): string {
-  return { home: '/home', discover: '/discover', collection: '/collection', growth: '/growth', settings: '/settings', alerts: '/notifications' }[tab]
+  return { home: '/home', discover: '/discover', collection: '/collection', growth: '/growth', settings: '/settings', alerts: '/notifications', events: '/events' }[tab]
+}
+
+function eventIdFromPath(pathname: string): string | null {
+  const match = pathname.match(/^\/events\/(.+)$/)
+  return match ? decodeURIComponent(match[1]) : null
 }
 
 function revealIdFromPath(pathname: string): string | null {
@@ -539,7 +592,7 @@ function revealIdFromPath(pathname: string): string | null {
   return match ? decodeURIComponent(match[1]) : null
 }
 
-function tabTitle(tab: Tab) { return { home: '내 컬렉션', discover: '탐색', collection: '보관함', growth: '팬 레벨', settings: '마이', alerts: '알림' }[tab] }
+function tabTitle(tab: Tab) { return { home: '내 컬렉션', discover: '탐색', collection: '보관함', growth: '팬 레벨', settings: '마이', alerts: '알림', events: '이벤트' }[tab] }
 
 function Login({ onLogin }: { onLogin: () => void | Promise<void> }) {
   const [purpose, setPurpose] = useState<'login' | 'signup'>('login')
@@ -752,7 +805,7 @@ function Onboarding({ userId, profileImageUrl, onComplete, onBack }: { userId: s
   </main>
 }
 
-type HomeProps = { nickname: string, cards: Card[], savedCards: Card[], summary: CollectionSummary, loading: boolean, onSelect: (card: Card) => void, onDiscover: () => void, onCollection: () => void, onRedeem: () => void }
+type HomeProps = { nickname: string, cards: Card[], savedCards: Card[], summary: CollectionSummary, loading: boolean, eventHome: FanHomeResponse | null, onSelect: (card: Card) => void, onDiscover: () => void, onCollection: () => void, onRedeem: () => void, onEvents: () => void, onEvent: (event: FanEvent) => void }
 
 function Home(props: HomeProps) {
   const [recommendations, setRecommendations] = useState<Card[]>([])
@@ -776,11 +829,12 @@ function HomeRecommendations({ cards, onSelect, onDiscover }: { cards: Card[], o
   return <section className="home-recommendations" aria-labelledby="home-recommendations-title"><div className="section-heading"><h2 id="home-recommendations-title">지금 탐색해 볼 카드</h2><button type="button" onClick={onDiscover}>전체 보기</button></div><div className="home-recommendation-row">{cards.map(card => <button type="button" className="home-recommendation-card" key={card.id} onClick={() => onSelect(card)} aria-label={`${card.title} 카드 · ${card.artist} · ${card.member}`}><img src={card.image} alt={`${card.title} 카드`} onError={event => keepCardVisual(event, card.id)} /><span><b>{card.title}</b><small>{card.artist} · {card.member}</small></span></button>)}</div></section>
 }
 
-function HomeContent({ nickname, cards, savedCards, summary, loading, onSelect, onDiscover, onCollection, onRedeem }: HomeProps) {
+function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome, onSelect, onDiscover, onCollection, onRedeem, onEvents, onEvent }: HomeProps) {
   const featured = cards[0]
   const completionRate = Math.min(100, Math.max(0, summary.completionRate))
   return <div className="home-screen collection-home">
     <p className="collection-greeting"><strong>{nickname}</strong>님, 새 카드가 도착했어요</p>
+    {eventHome?.featuredEvent && <section className="home-event-spotlight" aria-labelledby="home-event-title"><button type="button" onClick={() => onEvent(eventHome.featuredEvent!)}><img src={resolveApiUrl(eventHome.featuredEvent.heroUrl)} alt="" /><span><small>NOW · EVENT</small><b id="home-event-title">{eventHome.featuredEvent.title}</b><em>{eventHome.featuredEvent.summary}</em><strong>{eventHome.featuredEvent.ctaLabel ?? '이벤트 보기'} <i aria-hidden="true">›</i></strong></span></button><div className="home-event-meta"><span>새로운 팬 경험을 만나보세요</span><button type="button" onClick={onEvents}>이벤트 전체 보기 <i aria-hidden="true">›</i></button></div></section>}
     {loading && !featured ? <div className="home-loading" role="status" aria-live="polite"><span className="loading-orbit" aria-hidden="true" /><b>컬렉션을 준비하고 있어요</b></div> : featured ? <button className="collection-spotlight" onClick={() => onSelect(featured)} aria-label={`${featured.title} 카드 상세 보기`}>
       <img src={featured.image} alt={`${featured.title} 카드`} onError={event => keepCardVisual(event, featured.id)} />
       <span className="collection-spotlight-copy"><small>FANFOLIO COLLECTION</small><b>{featured.title}</b><em>{featured.artist} · {featured.member}</em><strong>NEW <i>·</i> MY COLLECTION</strong></span>
@@ -1030,7 +1084,7 @@ function RevealCard({ userCardId, onClose }: { userCardId: string, onClose: () =
     {revealed && <button type="button" className="primary" onClick={onClose}>컬렉션으로 이동</button>}
   </main>
 }
-  function NavItem({ active, label, icon = label === '탐색' ? 'discover' : label === '알림' ? 'alerts' : label === '팬 레벨' ? 'growth' : label === '설정' ? 'settings' : 'collection', badge, onClick }: { active: boolean, label: string, icon?: 'home' | 'collection' | 'discover' | 'growth' | 'alerts' | 'settings', badge?: number, onClick: () => void }) { return <button className={active ? 'nav-item active' : 'nav-item'} aria-current={active ? 'page' : undefined} onClick={onClick}><NavIcon name={icon} />{label}{badge ? <b className="nav-badge">{badge > 99 ? '99+' : badge}</b> : null}</button> }
+function NavItem({ active, label, icon = label === '탐색' ? 'discover' : label === '알림' ? 'alerts' : label === '팬 레벨' ? 'growth' : label === '설정' ? 'settings' : 'collection', badge, onClick }: { active: boolean, label: string, icon?: 'home' | 'collection' | 'discover' | 'growth' | 'alerts' | 'settings', badge?: number, onClick: () => void }) { return <button className={active ? 'nav-item active' : 'nav-item'} aria-current={active ? 'page' : undefined} onClick={onClick}><NavIcon name={icon} />{label}{badge ? <b className="nav-badge">{badge > 99 ? '99+' : badge}</b> : null}</button> }
 
 function NavIcon({ name }: { name: 'home' | 'collection' | 'discover' | 'growth' | 'alerts' | 'settings' }) {
   const paths = { home: 'M3 10.5 12 3l9 7.5M5.5 9v11h13V9M9 20v-6h6v6', collection: 'M6 3h12a2 2 0 0 1 2 2v16l-8-4-8 4V5a2 2 0 0 1 2-2Z', discover: 'm21 21-4.35-4.35M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z', growth: 'M4 19V5M4 19h16M8 15l3-3 3 2 5-7M18 7h1v5', alerts: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4', settings: 'M4 6h16M4 12h16M4 18h16M8 4v4M16 10v4M10 16v4' } as const

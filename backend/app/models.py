@@ -368,6 +368,59 @@ class Drop(Base):
     ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class Event(Base):
+    """Editorial fan-facing event, independent from card release mechanics."""
+
+    __tablename__ = "events"
+    __table_args__ = (
+        Index("ix_events_workflow_status_starts_at", "workflow_status", "starts_at"),
+        Index("ix_events_artist_workflow_starts", "artist_id", "workflow_status", "starts_at"),
+        Index("ix_events_featured_priority", "featured", "priority"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    organization_id: Mapped[str | None] = mapped_column(
+        ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True
+    )
+    artist_id: Mapped[str | None] = mapped_column(
+        ForeignKey("artists.id", ondelete="SET NULL"), nullable=True
+    )
+    title: Mapped[str] = mapped_column(String(100), nullable=False)
+    summary: Mapped[str] = mapped_column(String(180), nullable=False)
+    description: Mapped[str] = mapped_column(String(5000), nullable=False, default="")
+    hero_asset_id: Mapped[str] = mapped_column(
+        ForeignKey("assets.id", ondelete="RESTRICT"), nullable=False
+    )
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False, default="announcement")
+    workflow_status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    featured: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cta_label: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    drop_id: Mapped[str | None] = mapped_column(ForeignKey("drops.id"), nullable=True)
+    card_id: Mapped[str | None] = mapped_column(ForeignKey("cards.id"), nullable=True)
+    achievement_id: Mapped[str | None] = mapped_column(
+        ForeignKey("achievement_definitions.id"), nullable=True
+    )
+    external_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    review_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    reviewed_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notification_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
 class RedeemCodeBatch(Base):
     __tablename__ = "redeem_code_batches"
     id: Mapped[str] = mapped_column(String, primary_key=True)

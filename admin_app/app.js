@@ -32,6 +32,14 @@ const state = {
   cardThumbnailUrls: {},
   drops: [],
   batches: [],
+  events: [],
+  eventPagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+  eventQuery: "",
+  eventStatus: "all",
+  eventType: "all",
+  eventArtist: "all",
+  eventPage: 1,
+  selectedEvent: null,
   users: [],
   artistAccounts: [],
   artistProfiles: [],
@@ -130,6 +138,12 @@ function resolvePartnerLogoUrl(logoUrl) {
     return `${API_BASE}${logoUrl.replace(/^\/api/, "")}`;
   }
   return logoUrl;
+}
+
+function resolveAdminAssetUrl(assetUrl) {
+  if (!assetUrl) return "";
+  if (/^https?:\/\//i.test(assetUrl)) return assetUrl;
+  return `${API_BASE}${String(assetUrl).replace(/^\/api/, "")}`;
 }
 
 function partnerLogoMarkup(organization, size = "default") {
@@ -244,6 +258,7 @@ function title() {
     artists: "아티스트 관리",
     cards: "카드 관리",
     batches: "드롭·코드",
+    events: "이벤트",
     "fan-growth": "팬 성장",
     users: "서비스 사용자",
     audit: "감사 로그",
@@ -265,6 +280,9 @@ function navItems() {
     { id: "cards", label: "카드", icon: "style" },
     ...(can("drops:read")
       ? [{ id: "batches", label: "드롭·코드", icon: "qr_code_2" }]
+      : []),
+    ...(can("events:read")
+      ? [{ id: "events", label: "이벤트", icon: "campaign" }]
       : []),
     ...(canViewFanGrowth()
       ? [{ id: "fan-growth", label: "팬 성장", icon: "workspace_premium" }]
@@ -354,6 +372,7 @@ function currentView() {
     artists: artistsView,
     cards: cardsView,
     batches: batchesView,
+    events: eventsView,
     "fan-growth": fanGrowthView,
     users: usersView,
     audit: auditView,
@@ -463,6 +482,22 @@ async function loadFanGrowth(renderAfter = false) {
     passSeasons: passSeasons.data.items || [],
   };
   if (renderAfter) layout();
+}
+
+async function loadEvents(renderAfter = false) {
+  if (!can("events:read")) return;
+  const params = new URLSearchParams({ page: String(state.eventPage), pageSize: "20" });
+  if (state.eventQuery.trim()) params.set("q", state.eventQuery.trim());
+  if (state.eventStatus !== "all") params.set("status", state.eventStatus);
+  if (state.eventType !== "all") params.set("type", state.eventType);
+  if (state.eventArtist !== "all") params.set("artistId", state.eventArtist);
+  try {
+    const result = await api(`/admin/events?${params}`);
+    state.events = result.data.items || [];
+    state.eventPagination = result.data.pagination || { page: state.eventPage, pageSize: 20, total: state.events.length, totalPages: 1 };
+    if (state.selectedEvent) state.selectedEvent = state.events.find((item) => item.id === state.selectedEvent.id) || null;
+    if (renderAfter) layout();
+  } catch { state.events = []; }
 }
 
 function formatDate(value) {
@@ -623,12 +658,20 @@ function drawerView() {
     "role-change": roleChangeDrawer,
     "member-password": memberPasswordDrawer,
     "artist-profile-review": artistProfileReviewDrawer,
+    event: eventDrawer,
   }[state.drawer]?.();
   if (!contents) return "";
   const cardOperationsNote = state.drawer === "card-create"
     ? `<div class="drawer-context-note">${icon("info")}<span><strong>아티스트 스튜디오와 다른 작업입니다.</strong><br />스튜디오는 창작·검수 요청, 이 화면은 메타데이터·발행량·공개 상태를 관리합니다.</span></div>`
     : "";
-  return `<div class="drawer-backdrop" id="drawer-backdrop"><aside class="drawer ${state.drawer === "card-create" ? "card-create-drawer" : state.drawer === "member" ? "member-drawer" : state.drawer === "artist-assignment" ? "artist-assignment-drawer" : state.drawer === "artist-edit" ? "artist-edit-drawer" : state.drawer === "drop-link" ? "drop-link-drawer" : state.drawer === "achievement" ? "achievement-builder" : state.drawer === "reward" ? "reward-builder" : state.drawer === "fan-pass" ? "fan-pass-drawer" : ""}" role="dialog" aria-modal="true" aria-label="작업 패널">${cardOperationsNote}${contents}</aside></div>`;
+  return `<div class="drawer-backdrop" id="drawer-backdrop"><aside class="drawer ${state.drawer === "card-create" ? "card-create-drawer" : state.drawer === "event" ? "event-drawer" : state.drawer === "member" ? "member-drawer" : state.drawer === "artist-assignment" ? "artist-assignment-drawer" : state.drawer === "artist-edit" ? "artist-edit-drawer" : state.drawer === "drop-link" ? "drop-link-drawer" : state.drawer === "achievement" ? "achievement-builder" : state.drawer === "reward" ? "reward-builder" : state.drawer === "fan-pass" ? "fan-pass-drawer" : ""}" role="dialog" aria-modal="true" aria-label="작업 패널">${cardOperationsNote}${contents}</aside></div>`;
+}
+
+function eventDrawer() {
+  const event = state.drawerData?.event || {};
+  const artists = scopedArtists();
+  const type = event.eventType || "announcement";
+  return `${drawerHeader("EDITORIAL EVENT", event.id ? "이벤트 편집" : "새 이벤트 등록", "팬앱 홈과 이벤트 목록에 노출할 콘텐츠를 작성합니다.")}<form class="drawer-body form" id="event-form" data-event-id="${escapeHtml(event.id || "")}"><label class="field"><span>이벤트 이미지 URL</span><input name="heroAssetId" value="${escapeHtml(event.heroAssetId || "")}" placeholder="asset_event_banner" required /></label><label class="field"><span>이벤트명</span><input name="title" value="${escapeHtml(event.title || "")}" maxlength="100" required /></label><label class="field"><span>한 줄 설명</span><input name="summary" value="${escapeHtml(event.summary || "")}" maxlength="180" required /></label><label class="field"><span>상세 설명</span><textarea name="description" rows="4" maxlength="5000">${escapeHtml(event.description || "")}</textarea></label><div class="form-grid"><label class="field"><span>이벤트 유형</span><select name="eventType">${["announcement", "card_drop", "card", "fan_mission", "external"].map((value) => `<option value="${value}" ${type === value ? "selected" : ""}>${eventTypeLabel(value)}</option>`).join("")}</select></label><label class="field"><span>아티스트</span><select name="artistId"><option value="">전체 서비스</option>${artists.map((artist) => `<option value="${escapeHtml(artist.id)}" ${artist.id === event.artistId ? "selected" : ""}>${escapeHtml(artist.name)}</option>`).join("")}</select></label></div><div class="form-grid"><label class="field"><span>시작 일시</span><input name="startsAt" type="datetime-local" value="${event.startsAt ? String(event.startsAt).slice(0,16) : ""}" required /></label><label class="field"><span>종료 일시</span><input name="endsAt" type="datetime-local" value="${event.endsAt ? String(event.endsAt).slice(0,16) : ""}" /></label></div><label class="field"><span>연결 ID 또는 외부 HTTPS URL</span><input name="connection" value="${escapeHtml(event.dropId || event.cardId || event.achievementId || event.externalUrl || "")}" placeholder="drop_... 또는 https://..." /></label><label class="field"><span>버튼 문구</span><input name="ctaLabel" value="${escapeHtml(event.ctaLabel || "이벤트 보기")}" maxlength="80" /></label><label class="check-row"><input name="featured" type="checkbox" ${event.featured ? "checked" : ""} /><span>홈 대표 이벤트로 우선 노출</span></label><footer class="drawer-footer"><button class="secondary close-drawer" type="button">취소</button><button class="primary" type="submit">${event.id ? "변경 저장" : "초안 저장"}</button></footer></form>`;
 }
 
 function drawerHeader(eyebrow, title, description) {
@@ -1191,6 +1234,29 @@ function releaseHistory(card) {
     .join("")}</section>`;
 }
 
+function eventWorkflowLabel(status) {
+  return ({ draft: "초안", pending_review: "검수 대기", changes_requested: "수정 요청", approved: "승인됨", scheduled: "예약됨", published: "공개 중", ended: "종료" })[status] || status || "미설정";
+}
+
+function eventTypeLabel(type) {
+  return ({ announcement: "공지", card_drop: "카드 드롭", card: "카드", fan_mission: "팬 미션", external: "외부 링크" })[type] || type || "공지";
+}
+
+function eventsView() {
+  const artists = [{ value: "all", label: "모든 아티스트" }, ...scopedArtists().map((artist) => ({ value: artist.id, label: artist.name }))];
+  const status = [{ value: "all", label: "모든 상태" }, ...["draft", "pending_review", "changes_requested", "approved", "scheduled", "published", "ended"].map((value) => ({ value, label: eventWorkflowLabel(value) }))];
+  const type = [{ value: "all", label: "모든 유형" }, ...["announcement", "card_drop", "card", "fan_mission", "external"].map((value) => ({ value, label: eventTypeLabel(value) }))];
+  const selected = state.selectedEvent;
+  const rows = state.events.length ? state.events.map((event) => `<tr class="event-row ${selected?.id === event.id ? "selected-row" : ""}" data-event-row-id="${escapeHtml(event.id)}" tabindex="0"><td><div class="event-cell"><span class="event-cell-icon">${icon(eventTypeIcon(event.eventType))}</span><div><strong>${escapeHtml(event.title)}</strong><small>${escapeHtml(event.summary || "")}</small></div></div></td><td>${escapeHtml(eventTypeLabel(event.eventType))}</td><td>${formatDate(event.startsAt)}</td><td><span class="badge ${eventBadgeClass(event.workflowStatus)}">${escapeHtml(eventWorkflowLabel(event.workflowStatus))}</span></td><td><button class="icon-button event-more" type="button" data-event-action="open" data-id="${escapeHtml(event.id)}" aria-label="${escapeHtml(event.title)} 상세 보기">${icon("more_horiz")}</button></td></tr>`).join("") : `<tr><td colspan="5" class="empty">등록된 이벤트가 없습니다.</td></tr>`;
+  const detail = selected ? eventDetailPanel(selected) : `<aside class="panel event-detail-empty"><span>${icon("campaign")}</span><h3>이벤트를 선택하세요</h3><p>목록에서 이벤트를 선택하면 미리보기와 운영 액션이 표시됩니다.</p></aside>`;
+  return `<div class="page-heading"><div><p class="eyebrow">EDITORIAL OPERATIONS</p><h2>이벤트 관리</h2><p>팬앱 홈과 이벤트 페이지에 노출할 콘텐츠를 등록하고 공개 일정을 관리합니다.</p></div>${can("events:write") ? `<button class="primary" id="open-event-drawer">${icon("add")} 이벤트 등록</button>` : ""}</div><div class="event-workspace"><section class="panel event-list-panel"><div class="panel-heading"><div><p class="eyebrow">EVENT QUEUE</p><h3>이벤트 목록</h3></div><span>${state.eventPagination.total || state.events.length}개 항목</span></div><div class="toolbar compact-toolbar"><label class="search-field grow">${icon("search")}<input id="event-search" placeholder="이벤트명, 설명 검색" value="${escapeHtml(state.eventQuery)}" /></label>${adminSelect({ id: "event-status-filter", value: state.eventStatus, label: "이벤트 상태", className: "filter-select event-status-filter", options: status })}${adminSelect({ id: "event-type-filter", value: state.eventType, label: "이벤트 유형", className: "filter-select event-type-filter", options: type })}${adminSelect({ id: "event-artist-filter", value: state.eventArtist, label: "아티스트", className: "filter-select event-artist-filter", options: artists })}</div><div class="table-wrap"><table class="table responsive-table event-table"><thead><tr><th>이벤트</th><th>유형</th><th>시작일</th><th>상태</th><th><span class="sr-only">관리</span></th></tr></thead><tbody>${rows}</tbody></table></div>${eventPagination()}</section>${detail}</div>`;
+}
+
+function eventTypeIcon(type) { return ({ card_drop: "style", card: "style", fan_mission: "workspace_premium", external: "open_in_new" })[type] || "campaign"; }
+function eventBadgeClass(status) { return status === "published" ? "success-badge" : status === "pending_review" ? "warning-badge" : status === "changes_requested" ? "danger-badge" : status === "ended" ? "draft" : "violet-badge"; }
+function eventPagination() { const page = state.eventPagination.page || 1; const totalPages = state.eventPagination.totalPages || 1; return totalPages > 1 ? `<div class="pagination"><button class="secondary" data-event-page="${page - 1}" ${page <= 1 ? "disabled" : ""}>이전</button><span>${page} / ${totalPages}</span><button class="secondary" data-event-page="${page + 1}" ${page >= totalPages ? "disabled" : ""}>다음</button></div>` : ""; }
+function eventDetailPanel(event) { const canReview = can("events:review") && event.workflowStatus === "pending_review"; const canPublish = can("events:publish") && ["approved", "scheduled"].includes(event.workflowStatus); const canSubmit = can("events:submit") && ["draft", "changes_requested"].includes(event.workflowStatus); return `<aside class="panel event-detail-panel"><div class="panel-heading"><div><p class="eyebrow">EVENT DETAIL</p><h3>${escapeHtml(event.title)}</h3><span class="badge ${eventBadgeClass(event.workflowStatus)}">${escapeHtml(eventWorkflowLabel(event.workflowStatus))}</span></div><button class="secondary" id="close-event-detail">닫기</button></div><div class="event-preview"><div class="event-preview-art">${event.heroUrl ? `<img src="${escapeHtml(resolveAdminAssetUrl(event.heroUrl))}" alt="" />` : icon("campaign")}</div><strong>${escapeHtml(event.summary || "설명 없음")}</strong><small>${eventTypeLabel(event.eventType)} · ${formatDate(event.startsAt)}${event.endsAt ? ` – ${formatDate(event.endsAt)}` : ""}</small></div><dl class="review-meta event-meta"><div><dt>노출 우선순위</dt><dd>${event.priority ?? 0}</dd></div><div><dt>CTA</dt><dd>${escapeHtml(event.ctaLabel || "이벤트 보기")}</dd></div><div><dt>연결 대상</dt><dd>${escapeHtml(event.dropId || event.cardId || event.achievementId || event.externalUrl || "없음")}</dd></div></dl><div class="event-actions">${canSubmit ? `<button class="primary event-submit" data-id="${escapeHtml(event.id)}">검수 요청</button>` : ""}${canReview ? `<button class="secondary event-review" data-id="${escapeHtml(event.id)}" data-decision="changes_requested">수정 요청</button><button class="primary event-review" data-id="${escapeHtml(event.id)}" data-decision="approve">승인</button>` : ""}${canPublish ? `<button class="primary event-publish" data-id="${escapeHtml(event.id)}">${event.workflowStatus === "scheduled" ? "공개하기" : "예약 공개"}</button>` : ""}${can("events:write") && ["draft", "changes_requested"].includes(event.workflowStatus) ? `<button class="secondary event-edit" data-id="${escapeHtml(event.id)}">편집</button>` : ""}${can("events:publish") && ["published", "scheduled"].includes(event.workflowStatus) ? `<button class="secondary danger-text event-end" data-id="${escapeHtml(event.id)}">종료</button>` : ""}</div></aside>`; }
+
 function batchesView() {
   const published = state.cards.filter((card) => card.status === "published");
   const availableArtists = scopedArtists();
@@ -1544,6 +1610,7 @@ async function loadData() {
     state.unreadNotificationCount = notifications.data.unreadCount || 0;
     await loadFanGrowth(false);
 
+    if (can("events:read")) await loadEvents(false);
     if (isRoot()) {
       const [
         drops,
@@ -2546,6 +2613,17 @@ async function createDrop(event) {
     toast("드롭 생성에 실패했습니다. 입력값을 확인해 주세요.");
   }
 }
+async function saveEvent(event) {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  const id = event.currentTarget.dataset.eventId;
+  const kind = form.get("eventType");
+  const connection = String(form.get("connection") || "").trim();
+  const payload = { heroAssetId: String(form.get("heroAssetId") || "").trim(), title: String(form.get("title") || "").trim(), summary: String(form.get("summary") || "").trim(), description: String(form.get("description") || ""), eventType: kind, artistId: form.get("artistId") || null, startsAt: new Date(form.get("startsAt")).toISOString(), endsAt: form.get("endsAt") ? new Date(form.get("endsAt")).toISOString() : null, ctaLabel: String(form.get("ctaLabel") || "").trim() || null, featured: form.get("featured") === "on", ...(kind === "card_drop" ? { dropId: connection } : {}), ...(kind === "card" ? { cardId: connection } : {}), ...(kind === "fan_mission" ? { achievementId: connection } : {}), ...(kind === "external" ? { externalUrl: connection } : {}) };
+  try { await api(id ? `/admin/events/${encodeURIComponent(id)}` : "/admin/events", { method: id ? "PATCH" : "POST", body: JSON.stringify(payload) }); closeDrawer(); await loadEvents(true); toast(id ? "이벤트를 저장했습니다." : "이벤트 초안을 저장했습니다."); } catch { toast("이벤트 저장에 실패했습니다. 입력값과 권한을 확인해 주세요."); }
+}
+async function eventTransition(id, action, decision = null) { const endpoint = { submit: "submit", review: "review", publish: "publish", end: "end" }[action]; try { await api(`/admin/events/${encodeURIComponent(id)}/${endpoint}`, { method: "POST", body: decision ? JSON.stringify({ decision }) : "{}" }); await loadEvents(true); toast(action === "submit" ? "검수 요청을 보냈습니다." : action === "review" ? (decision === "approve" ? "이벤트를 승인했습니다." : "수정 요청을 보냈습니다.") : "이벤트 상태를 변경했습니다."); } catch { toast("이벤트 상태 변경에 실패했습니다."); } }
+async function submitEvent(id) { await eventTransition(id, "submit"); }
 async function updateDropStatus(dropId, nextStatus) {
   try {
     await api(`/admin/drops/${dropId}/status`, {
@@ -3015,6 +3093,21 @@ function bind() {
   document
     .querySelector("#admin-card-edit-form")
     ?.addEventListener("submit", updateAdminCard);
+  document.querySelector("#open-event-drawer")?.addEventListener("click", () => openDrawer("event"));
+  document.querySelector("#event-form")?.addEventListener("submit", saveEvent);
+  document.querySelectorAll("[data-event-row-id]").forEach((row) => {
+    const open = () => { state.selectedEvent = state.events.find((item) => item.id === row.dataset.eventRowId) || null; layout(); };
+    row.addEventListener("click", (event) => { if (!event.target.closest("button")) open(); });
+    row.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); } });
+  });
+  document.querySelectorAll("[data-event-page]").forEach((button) => button.addEventListener("click", () => { state.eventPage = Number(button.dataset.eventPage); void loadEvents(true); }));
+  document.querySelector("#close-event-detail")?.addEventListener("click", () => { state.selectedEvent = null; layout(); });
+  document.querySelector("#event-search")?.addEventListener("input", (event) => { state.eventQuery = event.target.value; state.eventPage = 1; void loadEvents(true); });
+  document.querySelectorAll(".event-review").forEach((button) => button.addEventListener("click", () => void eventTransition(button.dataset.id, "review", button.dataset.decision)));
+  document.querySelectorAll(".event-submit").forEach((button) => button.addEventListener("click", () => void submitEvent(button.dataset.id)));
+  document.querySelectorAll(".event-publish").forEach((button) => button.addEventListener("click", () => void eventTransition(button.dataset.id, "publish")));
+  document.querySelectorAll(".event-end").forEach((button) => button.addEventListener("click", () => void eventTransition(button.dataset.id, "end")));
+  document.querySelectorAll(".event-edit").forEach((button) => button.addEventListener("click", () => { const event = state.events.find((item) => item.id === button.dataset.id); if (event) openDrawer("event", { event }); }));
   document
     .querySelector("#drop-link-form")
     ?.addEventListener("submit", linkApprovedCardToDrop);
@@ -3199,6 +3292,15 @@ function bind() {
       if (control.classList.contains("card-status-filter") && previous !== option.dataset.value) {
         state.status = option.dataset.value;
         layout();
+      }
+      if (control.classList.contains("event-status-filter") && previous !== option.dataset.value) {
+        state.eventStatus = option.dataset.value; state.eventPage = 1; void loadEvents(true);
+      }
+      if (control.classList.contains("event-type-filter") && previous !== option.dataset.value) {
+        state.eventType = option.dataset.value; state.eventPage = 1; void loadEvents(true);
+      }
+      if (control.classList.contains("event-artist-filter") && previous !== option.dataset.value) {
+        state.eventArtist = option.dataset.value; state.eventPage = 1; void loadEvents(true);
       }
       if (control.classList.contains("user-role-filter") && previous !== option.dataset.value) {
         state.userRole = option.dataset.value;

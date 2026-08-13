@@ -123,6 +123,32 @@ export type CatalogSort = 'recommended' | 'name' | 'rarity'
 export type CatalogArtist = { id: string; name: string; imageUrl: string | null }
 export type CatalogMember = { id: string; artistId: string; name: string }
 
+export type FanEventStatus = 'upcoming' | 'active' | 'ended'
+export type FanEventType = 'announcement' | 'card_drop' | 'card' | 'fan_mission' | 'external'
+export type FanEvent = {
+  id: string
+  artistId: string | null
+  artistName: string | null
+  title: string
+  summary: string
+  description: string
+  eventType: FanEventType
+  status: FanEventStatus
+  startsAt: string
+  endsAt: string | null
+  heroUrl: string | null
+  ctaLabel: string | null
+  ctaTarget: string | null
+}
+export type EventPagination = { page: number; pageSize: number; total: number; totalPages: number }
+export type EventListResponse = { items: FanEvent[]; pagination: EventPagination }
+export type FanHomeResponse = {
+  featuredEvent: FanEvent | null
+  upcomingEvents: FanEvent[]
+  favoriteArtist: { id: string; name: string; imageUrl: string | null } | null
+  newCards: CatalogCard[]
+}
+
 export type NotificationItem = {
   id: string
   kind: string
@@ -131,6 +157,23 @@ export type NotificationItem = {
   isRead: boolean
   readAt: string | null
   createdAt: string
+}
+
+export function getFanHome(): Promise<{ ok: true; data: FanHomeResponse }> {
+  return apiFetch<{ ok: true; data: FanHomeResponse }>('/home')
+}
+
+export function getFanEvents(params: { status?: FanEventStatus; artistId?: string; page?: number; pageSize?: number } = {}): Promise<{ ok: true; data: EventListResponse }> {
+  const search = new URLSearchParams()
+  search.set('status', params.status ?? 'active')
+  search.set('page', String(params.page ?? 1))
+  search.set('pageSize', String(params.pageSize ?? 12))
+  if (params.artistId) search.set('artistId', params.artistId)
+  return apiFetch<{ ok: true; data: EventListResponse }>(`/events?${search.toString()}`)
+}
+
+export function getFanEvent(eventId: string): Promise<{ ok: true; data: FanEvent }> {
+  return apiFetch<{ ok: true; data: FanEvent }>(`/events/${encodeURIComponent(eventId)}`)
 }
 
 export type CurrentUser = {

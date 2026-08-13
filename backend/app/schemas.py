@@ -148,6 +148,134 @@ class DropUpdateRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+EventType = Literal["announcement", "card_drop", "card", "fan_mission", "external"]
+EventWorkflowStatus = Literal[
+    "draft",
+    "pending_review",
+    "changes_requested",
+    "approved",
+    "scheduled",
+    "published",
+    "ended",
+]
+
+
+class EventCreateRequest(BaseModel):
+    organization_id: str | None = Field(default=None, alias="organizationId")
+    artist_id: str | None = Field(default=None, alias="artistId")
+    title: str = Field(min_length=1, max_length=100)
+    summary: str = Field(min_length=1, max_length=180)
+    description: str = Field(default="", max_length=5000)
+    hero_asset_id: str = Field(alias="heroAssetId", min_length=1)
+    event_type: EventType = Field(default="announcement", alias="eventType")
+    starts_at: datetime = Field(alias="startsAt")
+    ends_at: datetime | None = Field(default=None, alias="endsAt")
+    featured: bool = False
+    priority: int = Field(default=0, ge=0, le=100)
+    cta_label: str | None = Field(default=None, alias="ctaLabel", max_length=80)
+    drop_id: str | None = Field(default=None, alias="dropId")
+    card_id: str | None = Field(default=None, alias="cardId")
+    achievement_id: str | None = Field(default=None, alias="achievementId")
+    external_url: str | None = Field(default=None, alias="externalUrl", max_length=2048)
+    model_config = ConfigDict(populate_by_name=True)
+
+    @model_validator(mode="after")
+    def validate_event_payload(self) -> "EventCreateRequest":
+        _validate_event_fields(self)
+        return self
+
+
+class EventUpdateRequest(EventCreateRequest):
+    """Updates intentionally use the same complete shape to avoid partial drift."""
+
+
+class EventReviewRequest(BaseModel):
+    decision: Literal["approve", "changes_requested"]
+    note: str | None = Field(default=None, max_length=500)
+    model_config = ConfigDict(populate_by_name=True)
+
+
+def _validate_event_fields(payload: EventCreateRequest) -> None:
+    if payload.ends_at is not None and payload.ends_at <= payload.starts_at:
+        raise ValueError("endsAt must be later than startsAt")
+    links = {
+        "card_drop": payload.drop_id,
+        "card": payload.card_id,
+        "fan_mission": payload.achievement_id,
+        "external": payload.external_url,
+    }
+    selected = [
+        value
+        for value in (
+            payload.drop_id,
+            payload.card_id,
+            payload.achievement_id,
+            payload.external_url,
+        )
+        if value
+    ]
+    if payload.event_type == "announcement":
+        if selected:
+            raise ValueError("announcement events cannot have a connection")
+    elif links.get(payload.event_type) is None:
+        raise ValueError(f"{payload.event_type} events require exactly one connection")
+    elif len(selected) != 1:
+        raise ValueError("exactly one connection is allowed")
+    if payload.external_url is not None and not payload.external_url.lower().startswith("https://"):
+        raise ValueError("externalUrl must use HTTPS")
+
+
+class AdminEventItem(BaseModel):
+    id: str
+    organization_id: str | None = Field(alias="organizationId")
+    artist_id: str | None = Field(alias="artistId")
+    title: str
+    summary: str
+    event_type: EventType = Field(alias="eventType")
+    workflow_status: EventWorkflowStatus = Field(alias="workflowStatus")
+    display_status: Literal["upcoming", "active", "ended"] | None = Field(
+        default=None, alias="displayStatus"
+    )
+    starts_at: datetime = Field(alias="startsAt")
+    ends_at: datetime | None = Field(default=None, alias="endsAt")
+    featured: bool
+    priority: int
+    hero_asset_id: str = Field(alias="heroAssetId")
+    review_note: str | None = Field(default=None, alias="reviewNote")
+    published_at: datetime | None = Field(default=None, alias="publishedAt")
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class FanEventItem(BaseModel):
+    id: str
+    artist_id: str | None = Field(alias="artistId")
+    artist_name: str | None = Field(default=None, alias="artistName")
+    title: str
+    summary: str
+    description: str
+    event_type: EventType = Field(alias="eventType")
+    status: Literal["upcoming", "active", "ended"]
+    starts_at: datetime = Field(alias="startsAt")
+    ends_at: datetime | None = Field(default=None, alias="endsAt")
+    hero_url: str | None = Field(default=None, alias="heroUrl")
+    cta_label: str | None = Field(default=None, alias="ctaLabel")
+    cta_target: str | None = Field(default=None, alias="ctaTarget")
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class EventListResponse(BaseModel):
+    items: list[FanEventItem]
+    pagination: dict
+
+
+class HomeResponse(BaseModel):
+    featured_event: FanEventItem | None = Field(default=None, alias="featuredEvent")
+    upcoming_events: list[FanEventItem] = Field(default_factory=list, alias="upcomingEvents")
+    favorite_artist: dict | None = Field(default=None, alias="favoriteArtist")
+    new_cards: list[dict] = Field(default_factory=list, alias="newCards")
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class RedeemCodeStatusUpdate(BaseModel):
     status: Literal["active", "disabled", "expired"]
 
@@ -526,6 +654,7 @@ class UploadPresignRequest(BaseModel):
         "video",
         "collection_benefit",
         "organization_logo",
+        "event_banner",
     ]
     model_config = ConfigDict(populate_by_name=True)
 
