@@ -4,7 +4,7 @@ import cardExample from './assets/card-example.svg'
 import cardExampleBlue from './assets/card-example-blue.svg'
 import cardExamplePink from './assets/card-example-pink.svg'
 import { ApiError, apiFetch, claimPassTier, claimReward, clearAccessToken, getFanPass, getProgression, notificationStreamUrl, oauthStartUrl, resolveApiUrl, setAccessToken, updateProfileEquipment, type CatalogArtist, type CatalogCard, type CatalogMember, type CatalogSort, type CollectionBenefit, type CollectionCard, type CollectionSummary, type CurrentUser, type FanProgression, type NotificationItem, type ProfileEquipment, type RewardGrant, type UserCardDetail } from './api/client'
-import { QrRedeemModal } from './components/QrRedeemModal'
+import { QrRedeemModal, RedeemIcon } from './components/QrRedeemModal'
 import { CardDetail } from './components/CardDetail'
 import { Settings } from './components/Settings'
 import { ProfileAvatar } from './components/ProfileAvatar'
@@ -63,7 +63,7 @@ function toCollectionCard(card: CollectionCard): Card {
     title: card.name,
     artist: card.artistName ?? 'Fanfolio 아티스트',
     member: card.memberName ?? '공식 카드',
-    image: demoCardImage(resolveApiUrl(card.imageUrl), card.userCardId),
+    image: demoCardImage(resolveApiUrl(card.imageUrl), `member:${card.memberName ?? card.memberId ?? card.userCardId}`),
   }
 }
 
@@ -73,7 +73,7 @@ function toCatalogCard(card: CatalogCard): Card {
     title: card.name,
     artist: card.artistName ?? 'Fanfolio 아티스트',
     member: card.memberName ?? '공식 카드',
-    image: demoCardImage(resolveApiUrl(card.imageUrl), card.id),
+    image: demoCardImage(resolveApiUrl(card.imageUrl), `member:${card.memberName ?? card.memberId ?? card.id}`),
   }
 }
 
@@ -494,7 +494,7 @@ function App() {
 
       <section className="screen">
         {collectionError && <div className="service-notice" role="alert"><span>{collectionError}</span><button onClick={() => void refreshCollection()} disabled={collectionLoading}>{collectionLoading ? '확인 중...' : '다시 시도'}</button></div>}
-        {tab === 'home' && <><FanGrowth progression={fanProgression} loading={growthLoading} error={growthError} mode="summary" onRetry={refreshGrowth} onClaim={claimGrowthReward} onClaimPassTier={claimGrowthPassTier} onEquip={saveGrowthEquipment} fanGrowthMode="summary" /> <Home cards={collectionCards} savedCards={savedCards} summary={collectionSummary} loading={collectionLoading} onSelect={openCard} onDiscover={() => navigateTab('discover')} onRedeem={openRedeem} /></>}
+        {tab === 'home' && <Home nickname={currentUser?.nickname ?? '팬'} cards={collectionCards} savedCards={savedCards} summary={collectionSummary} loading={collectionLoading} onSelect={openCard} onDiscover={() => navigateTab('discover')} onCollection={() => navigateTab('collection')} onRedeem={openRedeem} />}
         {tab === 'collection' && <Collection cards={collectionCards} summary={collectionSummary} benefits={collectionBenefits} loading={collectionLoading} onSelect={openCard} onRedeem={openRedeem} onDiscover={() => navigateTab('discover')} onClaim={claimBenefit} />}
         {tab === 'discover' && <Discover onSelect={openCard} />}
         {tab === 'alerts' && <Alerts items={notifications} error={notificationError} actionError={notificationActionError} onDismissActionError={() => setNotificationActionError('')} onRetry={() => window.dispatchEvent(new Event('fanfolio:refresh-notifications'))} onRead={markNotificationRead} onReadAll={markAllNotificationsRead} onNavigate={navigateTab} />}
@@ -502,11 +502,10 @@ function App() {
       </section>
 
       <nav className="bottom-nav" aria-label="주요 메뉴">
-        <NavItem active={tab === 'home'} label="홈" icon="home" onClick={() => navigateTab('home')} />
+        <NavItem active={tab === 'home'} label="컬렉션" icon="home" onClick={() => navigateTab('home')} />
         <NavItem active={tab === 'discover'} label="탐색" onClick={() => navigateTab('discover')} />
-        <NavItem active={tab === 'collection'} label="컬렉션" icon="collection" onClick={() => navigateTab('collection')} />
-        <NavItem active={tab === 'alerts'} label="알림" onClick={() => navigateTab('alerts')} />
-        <NavItem active={tab === 'settings'} label="설정" onClick={() => navigateTab('settings')} />
+        <NavItem active={tab === 'collection'} label="보관함" icon="collection" onClick={() => navigateTab('collection')} />
+        <NavItem active={tab === 'settings'} label="마이" icon="settings" onClick={() => navigateTab('settings')} />
       </nav>
 
       {showRedeem && <QrRedeemModal onClose={closeRedeem} onRedeemed={(id) => { closeRedeem(); openReveal(id); void Promise.allSettled([refreshCollection(), refreshGrowth()]) }} />}
@@ -537,7 +536,7 @@ function revealIdFromPath(pathname: string): string | null {
   return match ? decodeURIComponent(match[1]) : null
 }
 
-function tabTitle(tab: Tab) { return { home: '오늘의 순간', collection: '내 컬렉션', discover: '탐색', alerts: '알림', settings: '설정' }[tab] }
+function tabTitle(tab: Tab) { return { home: '내 컬렉션', collection: '보관함', discover: '탐색', alerts: '알림', settings: '마이' }[tab] }
 
 function Login({ onLogin }: { onLogin: () => void | Promise<void> }) {
   const [purpose, setPurpose] = useState<'login' | 'signup'>('login')
@@ -750,7 +749,7 @@ function Onboarding({ userId, profileImageUrl, onComplete, onBack }: { userId: s
   </main>
 }
 
-type HomeProps = { cards: Card[], savedCards: Card[], summary: CollectionSummary, loading: boolean, onSelect: (card: Card) => void, onDiscover: () => void, onRedeem: () => void }
+type HomeProps = { nickname: string, cards: Card[], savedCards: Card[], summary: CollectionSummary, loading: boolean, onSelect: (card: Card) => void, onDiscover: () => void, onCollection: () => void, onRedeem: () => void }
 
 function Home(props: HomeProps) {
   const [recommendations, setRecommendations] = useState<Card[]>([])
@@ -774,9 +773,30 @@ function HomeRecommendations({ cards, onSelect, onDiscover }: { cards: Card[], o
   return <section className="home-recommendations" aria-labelledby="home-recommendations-title"><div className="section-heading"><h2 id="home-recommendations-title">지금 탐색해 볼 카드</h2><button type="button" onClick={onDiscover}>전체 보기</button></div><div className="home-recommendation-row">{cards.map(card => <button type="button" className="home-recommendation-card" key={card.id} onClick={() => onSelect(card)} aria-label={`${card.title} 카드 · ${card.artist} · ${card.member}`}><img src={card.image} alt={`${card.title} 카드`} onError={event => keepCardVisual(event, card.id)} /><span><b>{card.title}</b><small>{card.artist} · {card.member}</small></span></button>)}</div></section>
 }
 
-function HomeContent({ cards, savedCards, summary, loading, onSelect, onDiscover, onRedeem }: HomeProps) {
+function HomeContent({ nickname, cards, savedCards, summary, loading, onSelect, onDiscover, onCollection, onRedeem }: HomeProps) {
   const featured = cards[0]
-  return <div className="home-screen"><section className="home-hero"><div><span className="eyebrow">오늘의 팬 모먼트</span><h2>오늘의 순간을<br /><em>카드로 간직해요.</em></h2><p>새로운 카드와 아티스트 소식을<br />가장 먼저 만나보세요.</p><button className="hero-button" onClick={onDiscover}>카드 둘러보기 <span aria-hidden="true">→</span></button></div><div className="hero-orbit" aria-hidden="true"><span /><span /><span /></div></section><div className="home-stats"><div><strong>{summary.ownedCount}</strong><span>보유 카드</span></div><div><strong>{summary.completionRate}%</strong><span>컬렉션 완성</span></div><div><strong>{summary.totalSlots}</strong><span>전체 카드</span></div></div><div className="section-heading"><h2>최근 카드</h2><div className="home-heading-actions"><button type="button" className="home-register" onClick={onRedeem}><InlineIcon name="plus" />카드 등록</button><button onClick={onDiscover}>전체 보기</button></div></div>{loading && !featured ? <div className="home-loading" role="status" aria-live="polite"><span className="loading-orbit" aria-hidden="true" /><b>컬렉션을 준비하고 있어요</b></div> : featured ? <button className="featured-card" onClick={() => onSelect(featured)}><img src={featured.image} alt={`${featured.title} 카드`} onError={event => keepCardVisual(event, featured.id)} /><span><small>{featured.artist}</small><b>{featured.title}</b><em>{featured.member} · {featured.id}</em></span><strong aria-hidden="true">↗</strong></button> : <div className="home-empty"><b>첫 카드를 만나보세요</b><span>QR 또는 카드 코드로 등록하거나, 새로운 카드를 먼저 둘러보세요.</span><div className="home-empty-actions"><button type="button" className="primary" onClick={onRedeem}>카드 등록하기</button><button type="button" className="outline" onClick={onDiscover}>카드 탐색하기</button></div></div>}{savedCards.length > 0 && <section className="saved-section"><div className="section-heading"><h2>관심 카드</h2><span className="section-count">{savedCards.length}장</span></div><div className="saved-card-row">{savedCards.slice(0, 4).map(card => <button className="saved-card" key={card.userCardId ?? card.id} onClick={() => onSelect(card)}><img src={card.image} alt={`${card.title} 카드`} onError={event => keepCardVisual(event, card.id)} /><span><b>{card.title}</b><small>{card.artist} · {card.member}</small></span></button>)}</div></section>}</div>
+  const completionRate = Math.min(100, Math.max(0, summary.completionRate))
+  return <div className="home-screen collection-home">
+    <p className="collection-greeting"><strong>{nickname}</strong>님, 새 카드가 도착했어요</p>
+    {loading && !featured ? <div className="home-loading" role="status" aria-live="polite"><span className="loading-orbit" aria-hidden="true" /><b>컬렉션을 준비하고 있어요</b></div> : featured ? <button className="collection-spotlight" onClick={() => onSelect(featured)} aria-label={`${featured.title} 카드 상세 보기`}>
+      <img src={featured.image} alt={`${featured.title} 카드`} onError={event => keepCardVisual(event, featured.id)} />
+      <span className="collection-spotlight-copy"><small>FANFOLIO COLLECTION</small><b>{featured.title}</b><em>{featured.artist} · {featured.member}</em><strong>NEW <i>·</i> MY COLLECTION</strong></span>
+    </button> : <div className="home-empty"><b>첫 카드를 만나보세요</b><span>QR 또는 카드 코드로 등록하거나, 새로운 카드를 먼저 둘러보세요.</span><div className="home-empty-actions"><button type="button" className="primary" onClick={onRedeem}>카드 등록하기</button><button type="button" className="outline" onClick={onDiscover}>카드 탐색하기</button></div></div>}
+
+    <section className="collection-progress" aria-labelledby="collection-progress-title">
+      <div><span id="collection-progress-title">컬렉션 진행도</span><strong><em>{summary.ownedCount}</em> / {summary.totalSlots}</strong></div>
+      <div className="collection-progress-track" role="progressbar" aria-label="컬렉션 완성도" aria-valuemin={0} aria-valuemax={100} aria-valuenow={completionRate}><span style={{ width: `${completionRate}%` }} /></div>
+      <small>완료율 {completionRate}%</small>
+    </section>
+
+    {cards.length > 0 && <section className="recent-collection" aria-labelledby="recent-collection-title">
+      <div className="section-heading"><h2 id="recent-collection-title">최근 수집</h2><button type="button" onClick={onCollection}>전체 보기 <span aria-hidden="true">›</span></button></div>
+      <div className="recent-collection-row">{cards.slice(0, 4).map(card => <button type="button" className="recent-collection-card" key={card.userCardId ?? card.id} onClick={() => onSelect(card)} aria-label={`${card.title} 카드 상세 보기`}><img src={card.image} alt="" onError={event => keepCardVisual(event, card.id)} /><span><b>{card.title}</b><small>보유</small></span></button>)}</div>
+    </section>}
+
+    <button type="button" className="collection-register-cta" onClick={onRedeem}><RedeemIcon name="scan" /><span>카드 등록</span></button>
+    {savedCards.length > 0 && <section className="saved-section"><div className="section-heading"><h2>관심 카드</h2><span className="section-count">{savedCards.length}장</span></div><div className="saved-card-row">{savedCards.slice(0, 4).map(card => <button className="saved-card" key={card.userCardId ?? card.id} onClick={() => onSelect(card)}><img src={card.image} alt={`${card.title} 카드`} onError={event => keepCardVisual(event, card.id)} /><span><b>{card.title}</b><small>{card.artist} · {card.member}</small></span></button>)}</div></section>}
+  </div>
 }
 
 function Collection({ cards: collectionCards, summary, benefits, loading, onSelect, onRedeem, onDiscover, onClaim }: { cards: Card[], summary: CollectionSummary, benefits: CollectionBenefit[], loading: boolean, onSelect: (card: Card) => void, onRedeem: () => void, onDiscover: () => void, onClaim: (campaignId: string) => Promise<void> }) {

@@ -6,16 +6,16 @@ const appSource = await readFile(new URL('../src/App.tsx', import.meta.url), 'ut
 const appCssSource = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
 const apiSource = await readFile(new URL('../src/api/client.ts', import.meta.url), 'utf8')
 
-test('fan growth component is mounted from home and settings without adding a sixth bottom tab', async () => {
+test('fan growth remains available from settings without competing with the collection-first home', async () => {
   await access(new URL('../src/components/FanGrowth.tsx', import.meta.url))
   await access(new URL('../src/components/FanGrowth.css', import.meta.url))
   await access(new URL('../src/components/FanGrowth.test.tsx', import.meta.url))
   assert.match(appSource, /import \{ FanGrowth/)
   assert.match(appSource, /<FanGrowth[\s\S]*progression=\{fanProgression\}/)
-  assert.match(appSource, /fanGrowthMode="summary"/)
   assert.match(appSource, /fanGrowthMode="full"/)
+  assert.doesNotMatch(appSource, /fanGrowthMode="summary"/)
   assert.doesNotMatch(appSource, /label="팬 패스"/)
-  assert.equal([...appSource.matchAll(/<NavItem /g)].length, 5)
+  assert.equal([...appSource.matchAll(/<NavItem /g)].length, 4)
 })
 
 test('fan growth API client exposes typed progression reward equipment and pass calls', () => {

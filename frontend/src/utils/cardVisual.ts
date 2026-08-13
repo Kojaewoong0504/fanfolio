@@ -9,6 +9,9 @@ export function demoCardImage(imageUrl: string, seed = ''): string {
   // used for legacy records that still point at the old hero.png demo asset.
   if (imageUrl && !imageUrl.includes('hero.png')) return imageUrl
   if (!seed.startsWith('member:') && !seed.startsWith('artist:')) return cardPlaceholder
+  if (seed.includes('유나') || seed.toLowerCase().includes('yuna')) return cardYuna
+  if (seed.includes('민호') || seed.toLowerCase().includes('minho')) return cardMinho
+  if (seed.includes('제이') || seed.toLowerCase().includes('jay')) return cardJay
   const variants = [cardYuna, cardMinho, cardJay]
   const hash = Array.from(seed).reduce((total, character) => total + character.charCodeAt(0), 0)
   return variants[hash % variants.length]
