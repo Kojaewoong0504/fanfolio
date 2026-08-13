@@ -2214,8 +2214,10 @@ button.top-avatar {
 
 .review-image-uploads {
   display: flex;
+  flex-direction: column;
   flex-wrap: wrap;
   justify-content: center;
+  width: 100%;
   gap: 8px;
   margin-top: 8px;
 }
@@ -2233,6 +2235,7 @@ button.top-avatar {
   cursor: pointer;
   font-size: 10px;
   font-weight: 800;
+  white-space: nowrap;
 }
 
 .review-image-upload:hover {
@@ -2791,12 +2794,12 @@ button.top-avatar {
 .review-detail-panel .review-effect-card,
 .review-detail-panel .review-image,
 .review-detail-panel .review-effect-summary {
-  width: min(100%, 120px);
+  width: min(100%, 220px);
 }
 
 .review-detail-panel .review-effect-card,
 .review-detail-panel .review-image {
-  aspect-ratio: 3 / 4;
+  aspect-ratio: 2 / 3;
 }
 
 .review-detail-panel .review-meta {

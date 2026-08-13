@@ -1372,7 +1372,7 @@ video {
 
 .media-library-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 7px;
 }
 
@@ -1407,11 +1407,11 @@ video {
   align-items: center;
   gap: 4px;
   padding: 0 5px 7px;
-  overflow: hidden;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .media-library-tile .material-symbols-rounded {
@@ -4386,6 +4386,8 @@ input[type='range'] {
     top: 70px;
     z-index: 15;
     display: flex;
+    flex-direction: row;
+    align-items: center;
     gap: 5px;
     overflow-x: auto;
     padding: 8px;

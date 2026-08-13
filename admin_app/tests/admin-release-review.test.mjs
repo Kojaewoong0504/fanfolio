@@ -65,3 +65,11 @@ test('card review route uses the commercial list and detail 검수 workspace', (
   assert.match(css, /@media \(max-width: 1279px\)[\s\S]*\.review-workbench\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/)
   assert.doesNotMatch(source, /function releaseQueue\(/)
 })
+
+test('review image fallback keeps readable copy and controls at compact desktop widths', () => {
+  assert.match(css, /\.review-detail-panel \.review-effect-card,[\s\S]{0,180}\.review-detail-panel \.review-effect-summary\s*\{[\s\S]{0,100}width:\s*min\(100%,\s*220px\)/)
+  assert.match(css, /\.review-detail-panel \.review-effect-card,[\s\S]{0,160}\.review-detail-panel \.review-image\s*\{[\s\S]{0,100}aspect-ratio:\s*2\s*\/\s*3/)
+  assert.match(css, /\.review-image-uploads\s*\{[\s\S]{0,240}flex-direction:\s*column/)
+  assert.match(css, /\.review-image-upload\s*\{[\s\S]{0,300}white-space:\s*nowrap/)
+  assert.doesNotMatch(css, /\.review-detail-panel \.review-effect-card,[\s\S]{0,180}width:\s*min\(100%,\s*120px\)/)
+})

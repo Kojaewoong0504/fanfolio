@@ -36,6 +36,12 @@ const sampleAssets = {
   stardust: './assets/card-stardust-backstage.jpg',
 }
 
+const sampleAssetLabels = {
+  aurora: '오로라',
+  motion: '무대',
+  stardust: '스타더스트',
+}
+
 const builtInStickers = [
   {
     id: 'opal-heart',
@@ -894,8 +900,8 @@ function designStage() {
     <aside class="tool-rail" aria-label="카드 편집 도구">${editorTools.map(([tool, symbol, label]) => `<button type="button" data-tool="${tool}" class="${state.editor.tool === tool ? 'active' : ''}" aria-pressed="${state.editor.tool === tool}" title="${label}">${icon(symbol)}<span>${label}</span></button>`).join('')}</aside>
     <aside class="editor-media-library" aria-label="미디어 라이브러리">
       <div class="media-library-heading"><span>MEDIA</span><strong>소스 라이브러리</strong></div>
-      <div class="media-library-section"><span class="inspector-label">사진</span><div class="media-library-grid">${Object.entries(sampleAssets).map(([key, source]) => `<button type="button" class="media-library-tile ${state.editor.imageSrc === source ? 'active' : ''}" data-sample="${key}" aria-label="${key} 사진 적용"><img src="${source}" alt="" /><span>${icon('image')} ${key}</span></button>`).join('')}</div></div>
-      <div class="media-library-section"><span class="inspector-label">스티커</span><div class="media-library-grid">${builtInStickers.slice(0, 3).map((sticker) => `<button type="button" class="media-library-tile sticker" data-built-in-sticker="${esc(sticker.id)}" aria-label="${esc(sticker.name)} 스티커 추가"><img src="${esc(sticker.source)}" alt="" /><span>${icon('interests')} ${esc(sticker.name)}</span></button>`).join('')}</div></div>
+      <div class="media-library-section"><span class="inspector-label">사진</span><div class="media-library-grid">${Object.entries(sampleAssets).map(([key, source]) => `<button type="button" class="media-library-tile ${state.editor.imageSrc === source ? 'active' : ''}" data-sample="${key}" aria-label="${sampleAssetLabels[key]} 사진 적용"><img src="${source}" alt="" /><span>${sampleAssetLabels[key]}</span></button>`).join('')}</div></div>
+      <div class="media-library-section"><span class="inspector-label">스티커</span><div class="media-library-grid">${builtInStickers.slice(0, 3).map((sticker) => `<button type="button" class="media-library-tile sticker" data-built-in-sticker="${esc(sticker.id)}" aria-label="${esc(sticker.name)} 스티커 추가"><img src="${esc(sticker.source)}" alt="" /><span>${esc(sticker.name)}</span></button>`).join('')}</div></div>
       <label class="media-library-upload"><input type="file" data-upload="image" accept="image/png,image/jpeg,image/webp" />${icon('upload_file')}<span><strong>사진 업로드</strong><small>실제 카드에 사용할 이미지</small></span></label>
     </aside>
     <div class="editor-canvas-area">
