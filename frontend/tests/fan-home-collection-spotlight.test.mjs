@@ -29,14 +29,25 @@ test('legacy demo cards use a member-matched first-party portrait', () => {
   assert.match(cardVisualSource, /return cardMinho/)
 })
 
-test('fan navigation uses four clear destinations with alerts retained in the header', () => {
-  assert.equal([...appSource.matchAll(/<NavItem /g)].length, 4)
+test('fan navigation uses five persistent destinations with alerts retained in the header', () => {
+  assert.equal([...appSource.matchAll(/<NavItem /g)].length, 5)
   assert.match(appSource, /label="컬렉션"/)
   assert.match(appSource, /label="탐색"/)
   assert.match(appSource, /label="보관함"/)
+  assert.match(appSource, /label="팬 레벨"/)
   assert.match(appSource, /label="마이"/)
   assert.match(appSource, /header-alert-button/)
   assert.match(appSource, /navigateTab\('alerts'\)/)
+})
+
+test('top header and bottom nav share one geometry across all app tabs', () => {
+  assert.match(appCssSource, /\.app-shell\{[\s\S]*padding:18px 22px 118px/)
+  assert.match(appCssSource, /\.app-header\{[\s\S]*min-height:58px/)
+  assert.match(appCssSource, /\.app-header h1\{[\s\S]*font-size:28px/)
+  assert.match(appCssSource, /\.bottom-nav\{[\s\S]*display:grid/)
+  assert.match(appCssSource, /\.bottom-nav\{[\s\S]*grid-template-columns:repeat\(5,1fr\)/)
+  assert.doesNotMatch(appCssSource, /\.home-shell \.app-header/)
+  assert.doesNotMatch(appCssSource, /\.home-shell \.bottom-nav/)
 })
 
 test('collection spotlight styles create the selected editorial hierarchy and mobile rail', () => {

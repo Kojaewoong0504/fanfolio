@@ -16,6 +16,11 @@ type CardDetailProps = {
 
 type CollectibleStyle = CSSProperties & Record<'--tilt-x' | '--tilt-y' | '--light-x' | '--light-y' | '--lenticular-reveal' | '--effect-opacity' | '--effect-angle' | '--effect-spread' | '--effect-grain', string>
 type MotionStatus = 'idle' | 'granted' | 'denied' | 'unsupported'
+type VisibleSide = 'front' | 'back'
+
+function resolveVisibleSideAfterCardIdentityChange(current: VisibleSide, previousCardIdentity: string | null, nextCardIdentity: string): VisibleSide {
+  return previousCardIdentity === null || previousCardIdentity === nextCardIdentity ? current : 'front'
+}
 
 function prefersReducedEffects(): boolean {
   const reducedMotion =
@@ -90,11 +95,13 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
   const [detail, setDetail] = useState<UserCardDetail | null>(null)
   const [detailError, setDetailError] = useState(false)
   const [detailAttempt, setDetailAttempt] = useState(0)
-  const [visibleSide, setVisibleSide] = useState<'front' | 'back'>('front')
+  const [visibleSide, setVisibleSide] = useState<VisibleSide>('front')
   const [motionStatus, setMotionStatus] = useState<MotionStatus>('idle')
   const [deviceMotionEnabled, setDeviceMotionEnabled] = useState(false)
   const collectibleRef = useRef<HTMLDivElement | null>(null)
   const dragStartRef = useRef<{ pointerId: number, x: number, y: number } | null>(null)
+  const cardIdentity = card.userCardId ?? card.id
+  const previousCardIdentityRef = useRef<string | null>(cardIdentity)
   const isOwned = Boolean(card.userCardId)
   const hasRemoteDetail = Boolean(card.userCardId && !card.userCardId.startsWith('user-card-'))
   const [detailLoading, setDetailLoading] = useState(hasRemoteDetail)
@@ -104,7 +111,6 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
     let cancelled = false
     setDetail(null)
     setDetailError(false)
-    setVisibleSide('front')
     setMotionStatus('idle')
     setDeviceMotionEnabled(false)
     const remoteDetail = Boolean(card.userCardId && !card.userCardId.startsWith('user-card-'))
@@ -117,15 +123,12 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
   }, [card.userCardId, detailAttempt])
 
   useEffect(() => {
-    setVisibleSide('front')
+    setVisibleSide(current => resolveVisibleSideAfterCardIdentityChange(current, previousCardIdentityRef.current, cardIdentity))
+    previousCardIdentityRef.current = cardIdentity
     setMotionStatus('idle')
     setDeviceMotionEnabled(false)
     if (collectibleRef.current) resetCollectibleVars(collectibleRef.current)
-  }, [card.id, detail?.userCardId])
-
-  useEffect(() => {
-    if (!detail && visibleSide === 'back') setVisibleSide('front')
-  }, [detail, visibleSide])
+  }, [cardIdentity])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -153,6 +156,15 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
   const imageUrl = detail?.card.imageUrl ?? card.image
   const imageError = (event: SyntheticEvent<HTMLImageElement>) => onImageError(event, card.id)
   const cardImageAlt = `${detail?.card.name ?? card.title} 공식 카드 앞면`
+  const safeBackDetail = {
+    title: detail?.card.name ?? card.title,
+    artist: detail?.card.artistName ?? card.artist,
+    member: detail?.card.memberName ?? card.member,
+    serialLabel: detail ? `#${String(detail.serialNumber).padStart(3, '0')}` : (card.id.startsWith('#') ? card.id : 'PREVIEW'),
+    limitLabel: detail?.card.issueLimit ? `${detail.card.issueLimit.toLocaleString()}장` : 'FANFOLIO',
+    sealLabel: detail?.card.id.slice(-8).toUpperCase() ?? ((card.userCardId ?? card.id).replace(/[^a-zA-Z0-9]/g, '').slice(-8).toUpperCase() || 'OFFICIAL'),
+    hiddenMessage: effects.back.hiddenMessage || (detail ? '공식 컬렉션 인증 카드' : '컬렉션 상세를 불러오면 인증 정보가 업데이트됩니다'),
+  }
   const collectibleStyle = {
     '--tilt-x': '0deg',
     '--tilt-y': '0deg',
@@ -281,9 +293,9 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
       {detailLoading && <p className="detail-loading" role="status" aria-live="polite">카드 상세 정보를 확인하는 중이에요…</p>}
       <div className="card-side-toggle" role="group" aria-label="카드 면 선택">
         <button type="button" aria-pressed={visibleSide === 'front'} onClick={() => setVisibleSide('front')}>앞면</button>
-        <button type="button" aria-pressed={visibleSide === 'back' && Boolean(detail)} aria-disabled={!detail} disabled={!detail} onClick={() => { if (detail) setVisibleSide('back') }}>뒷면</button>
+        <button type="button" aria-pressed={visibleSide === 'back'} onClick={() => setVisibleSide('back')}>뒷면</button>
       </div>
-      {visibleSide === 'front' || !detail ? <div
+      {visibleSide === 'front' ? <div
         ref={collectibleRef}
         className={frontClassName}
         style={collectibleStyle}
@@ -293,23 +305,25 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
         onPointerLeave={handleCollectibleEnd}
         onPointerCancel={handleCollectibleEnd}
       >
-        <img className="fan-card-photo" src={imageFor(resolveApiUrl(imageUrl), card.id)} alt={cardImageAlt} onError={imageError} />
-        {hasLenticular && <img className="fan-card-lenticular" src={resolveApiUrl(lenticularImageUrl)} alt="" aria-hidden="true" />}
+        <div className="fan-card-art-window">
+          <img className="fan-card-photo" src={imageFor(resolveApiUrl(imageUrl), card.id)} alt={cardImageAlt} onError={imageError} />
+          {hasLenticular && <img className="fan-card-lenticular" src={resolveApiUrl(lenticularImageUrl)} alt="" aria-hidden="true" />}
+        </div>
         <span className="fan-card-material" aria-hidden="true" />
         <span className="fan-card-surface" aria-hidden="true" />
         <span className="official-badge">공식 카드</span>
-      </div> : visibleSide === 'back' && detail && <div className={backClassName} style={collectibleStyle}>
+      </div> : visibleSide === 'back' && safeBackDetail && <div className={backClassName} style={collectibleStyle}>
         <div className="fan-card-back-meta">
           <span className="fan-card-official-label">OFFICIAL FAN CARD</span>
-          <strong>{detail.card.name}</strong>
-          <span>{detail.card.artistName ?? card.artist}{(detail.card.memberName ?? card.member) ? ` · ${detail.card.memberName ?? card.member}` : ''}</span>
+          <strong>{safeBackDetail.title}</strong>
+          <span>{safeBackDetail.artist}{safeBackDetail.member ? ` · ${safeBackDetail.member}` : ''}</span>
         </div>
         <dl className="fan-card-back-stats">
-          <div><dt>SERIAL</dt><dd>#{String(detail.serialNumber).padStart(3, '0')}</dd></div>
-          <div><dt>LIMIT</dt><dd>{detail.card.issueLimit ? `${detail.card.issueLimit.toLocaleString()}장` : 'UNLIMITED'}</dd></div>
-          <div><dt>SEAL</dt><dd>{detail.card.id.slice(-8).toUpperCase()}</dd></div>
+          <div><dt>SERIAL</dt><dd>{safeBackDetail.serialLabel}</dd></div>
+          <div><dt>LIMIT</dt><dd>{safeBackDetail.limitLabel}</dd></div>
+          <div><dt>SEAL</dt><dd>{safeBackDetail.sealLabel}</dd></div>
         </dl>
-        <p className="fan-card-hidden-message">{effects.back.hiddenMessage || '공식 컬렉션 인증 카드'}</p>
+        <p className="fan-card-hidden-message">{safeBackDetail.hiddenMessage}</p>
         <span className="fan-card-material" aria-hidden="true" />
         <span className="fan-card-surface" aria-hidden="true" />
       </div>}

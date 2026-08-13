@@ -12,7 +12,7 @@ import { FanGrowth } from './components/FanGrowth'
 import type { Card } from './types'
 import { demoCardImage, demoMemberImage, keepCardVisual } from './utils/cardVisual'
 
-type Tab = 'home' | 'collection' | 'discover' | 'alerts' | 'settings'
+type Tab = 'home' | 'discover' | 'collection' | 'growth' | 'settings' | 'alerts'
 
 const cardRoutePreviewKey = 'fanfolio.card-route-preview'
 
@@ -498,13 +498,15 @@ function App() {
         {tab === 'collection' && <Collection cards={collectionCards} summary={collectionSummary} benefits={collectionBenefits} loading={collectionLoading} onSelect={openCard} onRedeem={openRedeem} onDiscover={() => navigateTab('discover')} onClaim={claimBenefit} />}
         {tab === 'discover' && <Discover onSelect={openCard} />}
         {tab === 'alerts' && <Alerts items={notifications} error={notificationError} actionError={notificationActionError} onDismissActionError={() => setNotificationActionError('')} onRetry={() => window.dispatchEvent(new Event('fanfolio:refresh-notifications'))} onRead={markNotificationRead} onReadAll={markAllNotificationsRead} onNavigate={navigateTab} />}
-        {tab === 'settings' && currentUser && <><Settings user={currentUser} onUserUpdated={setCurrentUser} onLogout={logout} /><FanGrowth progression={fanProgression} loading={growthLoading} error={growthError} mode="full" onRetry={refreshGrowth} onClaim={claimGrowthReward} onClaimPassTier={claimGrowthPassTier} onEquip={saveGrowthEquipment} fanGrowthMode="full" /></>}
+        {tab === 'growth' && <FanGrowth progression={fanProgression} loading={growthLoading} error={growthError} mode="full" onRetry={refreshGrowth} onClaim={claimGrowthReward} onClaimPassTier={claimGrowthPassTier} onEquip={saveGrowthEquipment} fanGrowthMode="full" />}
+        {tab === 'settings' && currentUser && <Settings user={currentUser} onUserUpdated={setCurrentUser} onLogout={logout} />}
       </section>
 
       <nav className="bottom-nav" aria-label="주요 메뉴">
         <NavItem active={tab === 'home'} label="컬렉션" icon="home" onClick={() => navigateTab('home')} />
         <NavItem active={tab === 'discover'} label="탐색" onClick={() => navigateTab('discover')} />
         <NavItem active={tab === 'collection'} label="보관함" icon="collection" onClick={() => navigateTab('collection')} />
+        <NavItem active={tab === 'growth'} label="팬 레벨" icon="growth" onClick={() => navigateTab('growth')} />
         <NavItem active={tab === 'settings'} label="마이" icon="settings" onClick={() => navigateTab('settings')} />
       </nav>
 
@@ -518,6 +520,7 @@ function App() {
 function tabFromPath(pathname: string): Tab {
   if (pathname === '/home') return 'home'
   if (pathname === '/discover') return 'discover'
+  if (pathname === '/growth') return 'growth'
   if (pathname === '/notifications') return 'alerts'
   if (pathname === '/settings') return 'settings'
   return 'collection'
@@ -528,7 +531,7 @@ function SessionLoading() {
 }
 
 function pathForTab(tab: Tab): string {
-  return { home: '/home', collection: '/collection', discover: '/discover', alerts: '/notifications', settings: '/settings' }[tab]
+  return { home: '/home', discover: '/discover', collection: '/collection', growth: '/growth', settings: '/settings', alerts: '/notifications' }[tab]
 }
 
 function revealIdFromPath(pathname: string): string | null {
@@ -536,7 +539,7 @@ function revealIdFromPath(pathname: string): string | null {
   return match ? decodeURIComponent(match[1]) : null
 }
 
-function tabTitle(tab: Tab) { return { home: '내 컬렉션', collection: '보관함', discover: '탐색', alerts: '알림', settings: '마이' }[tab] }
+function tabTitle(tab: Tab) { return { home: '내 컬렉션', discover: '탐색', collection: '보관함', growth: '팬 레벨', settings: '마이', alerts: '알림' }[tab] }
 
 function Login({ onLogin }: { onLogin: () => void | Promise<void> }) {
   const [purpose, setPurpose] = useState<'login' | 'signup'>('login')
@@ -1027,10 +1030,10 @@ function RevealCard({ userCardId, onClose }: { userCardId: string, onClose: () =
     {revealed && <button type="button" className="primary" onClick={onClose}>컬렉션으로 이동</button>}
   </main>
 }
-  function NavItem({ active, label, icon = label === '탐색' ? 'discover' : label === '알림' ? 'alerts' : label === '설정' ? 'settings' : 'collection', badge, onClick }: { active: boolean, label: string, icon?: 'home' | 'collection' | 'discover' | 'alerts' | 'settings', badge?: number, onClick: () => void }) { return <button className={active ? 'nav-item active' : 'nav-item'} aria-current={active ? 'page' : undefined} onClick={onClick}><NavIcon name={icon} />{label}{badge ? <b className="nav-badge">{badge > 99 ? '99+' : badge}</b> : null}</button> }
+  function NavItem({ active, label, icon = label === '탐색' ? 'discover' : label === '알림' ? 'alerts' : label === '팬 레벨' ? 'growth' : label === '설정' ? 'settings' : 'collection', badge, onClick }: { active: boolean, label: string, icon?: 'home' | 'collection' | 'discover' | 'growth' | 'alerts' | 'settings', badge?: number, onClick: () => void }) { return <button className={active ? 'nav-item active' : 'nav-item'} aria-current={active ? 'page' : undefined} onClick={onClick}><NavIcon name={icon} />{label}{badge ? <b className="nav-badge">{badge > 99 ? '99+' : badge}</b> : null}</button> }
 
-function NavIcon({ name }: { name: 'home' | 'collection' | 'discover' | 'alerts' | 'settings' }) {
-  const paths = { home: 'M3 10.5 12 3l9 7.5M5.5 9v11h13V9M9 20v-6h6v6', collection: 'M6 3h12a2 2 0 0 1 2 2v16l-8-4-8 4V5a2 2 0 0 1 2-2Z', discover: 'm21 21-4.35-4.35M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z', alerts: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4', settings: 'M4 6h16M4 12h16M4 18h16M8 4v4M16 10v4M10 16v4' } as const
+function NavIcon({ name }: { name: 'home' | 'collection' | 'discover' | 'growth' | 'alerts' | 'settings' }) {
+  const paths = { home: 'M3 10.5 12 3l9 7.5M5.5 9v11h13V9M9 20v-6h6v6', collection: 'M6 3h12a2 2 0 0 1 2 2v16l-8-4-8 4V5a2 2 0 0 1 2-2Z', discover: 'm21 21-4.35-4.35M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z', growth: 'M4 19V5M4 19h16M8 15l3-3 3 2 5-7M18 7h1v5', alerts: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4', settings: 'M4 6h16M4 12h16M4 18h16M8 4v4M16 10v4M10 16v4' } as const
   return <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d={paths[name]} fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" /></svg>
 }
 

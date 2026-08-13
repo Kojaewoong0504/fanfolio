@@ -1010,9 +1010,38 @@ function cardRows(cards) {
         ? `<img src="${escapeHtml(state.cardThumbnailUrls[card.id])}" alt="" />`
         : icon("style");
       const selected = state.reviewCard?.id === card.id;
-      return `<tr class="${selected ? "selected-review-row" : ""}"><td data-label="카드"><div class="card-cell"><span class="card-thumb">${thumbnail}</span><div><strong>${escapeHtml(card.name)}</strong><small>${escapeHtml(card.seasonName || card.id)}</small></div></div></td><td data-label="메타데이터"><strong>${escapeHtml(catalogArtist?.name || card.ownerArtistId || card.artistId || "미지정")}</strong><small>${escapeHtml(card.rarity || "-")} · ${card.issueLimit ? Number(card.issueLimit).toLocaleString() : "제한 없음"}</small></td><td data-label="마감">${escapeHtml(cardDeadlineLabel(card))}</td><td data-label="담당자">${escapeHtml(cardAssigneeLabel(card))}</td><td data-label="상태"><span class="badge ${releaseBadgeClass(releaseStatus(card))}">${escapeHtml(releaseStatusLabel(releaseStatus(card)))}</span></td><td data-label="관리" class="row-actions">${action}</td></tr>`;
+      return `<tr class="${selected ? "review-table-row selected-review-row" : "review-table-row"}" tabindex="0" aria-label="${escapeHtml(card.name)} 상세 보기" aria-current="${selected ? "true" : "false"}" data-review-row-id="${escapeHtml(card.id)}"><td data-label="카드"><div class="card-cell"><span class="card-thumb">${thumbnail}</span><div><strong>${escapeHtml(card.name)}</strong><small>${escapeHtml(card.seasonName || card.id)}</small></div></div></td><td data-label="메타데이터"><strong>${escapeHtml(catalogArtist?.name || card.ownerArtistId || card.artistId || "미지정")}</strong><small>${escapeHtml(card.rarity || "-")} · ${card.issueLimit ? Number(card.issueLimit).toLocaleString() : "제한 없음"}</small></td><td data-label="마감">${escapeHtml(cardDeadlineLabel(card))}</td><td data-label="담당자">${escapeHtml(cardAssigneeLabel(card))}</td><td data-label="상태"><span class="badge ${releaseBadgeClass(releaseStatus(card))}">${escapeHtml(releaseStatusLabel(releaseStatus(card)))}</span></td><td data-label="관리" class="row-actions">${action}</td></tr>`;
     })
     .join("");
+}
+
+function isReviewRowInteractiveTarget(event) {
+  const interactive = event.target.closest('button, a, input, select, textarea, label, [role="button"]');
+  return interactive && interactive !== event.currentTarget;
+}
+
+function activateReviewRow(event, id, open = openReview) {
+  if (!id || isReviewRowInteractiveTarget(event)) return false;
+  if (event.key !== undefined) {
+    if (event.key !== "Enter" && event.key !== " ") return false;
+    event.preventDefault();
+  }
+  open(id);
+  return true;
+}
+
+function activateReviewButton(event, id, open = openReview) {
+  event.stopPropagation();
+  open(id);
+  return true;
+}
+
+function openReviewFromRow(event) {
+  activateReviewRow(event, event.currentTarget.dataset.reviewRowId);
+}
+
+function openReviewFromRowKey(event) {
+  activateReviewRow(event, event.currentTarget.dataset.reviewRowId);
 }
 
 async function loadCardThumbnails(cards) {
@@ -3011,8 +3040,14 @@ function bind() {
   document
     .querySelectorAll(".review-card")
     .forEach((button) =>
-      button.addEventListener("click", () => openReview(button.dataset.id)),
+      button.addEventListener("click", (event) =>
+        activateReviewButton(event, button.dataset.id),
+      ),
     );
+  document.querySelectorAll("[data-review-row-id]").forEach((row) => {
+    row.addEventListener("click", openReviewFromRow);
+    row.addEventListener("keydown", openReviewFromRowKey);
+  });
   document.querySelectorAll("[data-review-status-tab]").forEach((button) =>
     button.addEventListener("click", () => {
       state.status = button.dataset.reviewStatusTab || "all";

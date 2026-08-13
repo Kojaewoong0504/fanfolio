@@ -286,7 +286,7 @@ test('card detail renders normalized v3 front and back collectible classes', () 
     "material-${effects.back.material}",
     "back edge-foil-${effects.back.edgeFoil}",
     "spot-uv-${effects.back.spotUv}",
-    "const [visibleSide, setVisibleSide] = useState<'front' | 'back'>('front')",
+    "const [visibleSide, setVisibleSide] = useState<VisibleSide>('front')",
     "setVisibleSide('front')",
     'aria-pressed={visibleSide ===',
     '>앞면</button>',
@@ -302,7 +302,7 @@ test('card detail does not expose a fake back serial before owned detail loads',
   assert.doesNotMatch(detailSource, /detail\?\.serialNumber\s*\?\?\s*0/)
   assert.doesNotMatch(detailSource, /padStart\(3,\s*'0'\)[\s\S]{0,80}UNLIMITED/)
   assert.doesNotMatch(detailSource, />#000</)
-  assert.match(detailSource, /visibleSide === 'back' && detail/)
+  assert.match(detailSource, /visibleSide === 'back' && safeBackDetail/)
   assert.match(detailSource, /String\(detail\.serialNumber\)\.padStart\(3, '0'\)/)
 })
 
@@ -313,11 +313,12 @@ test('card detail only offers device motion before permission is settled on load
   assert.doesNotMatch(detailSource, /\{motionSupported && visibleSide === 'front' && effects\.front\.interaction !== 'static' && <button/)
 })
 
-test('card detail cannot leave the back side selected without loaded detail', () => {
-  assert.match(detailSource, /if \(!detail && visibleSide === 'back'\) setVisibleSide\('front'\)/)
-  assert.match(detailSource, /disabled=\{!detail\}/)
-  assert.match(detailSource, /aria-disabled=\{!detail\}/)
-  assert.doesNotMatch(detailSource, /aria-pressed=\{visibleSide === 'back'\} onClick=\{\(\) => setVisibleSide\('back'\)\}/)
+test('card detail keeps the back side selected with fallback metadata while detail loads', () => {
+  assert.doesNotMatch(detailSource, /if \(!detail && visibleSide === 'back'\) setVisibleSide\('front'\)/)
+  assert.doesNotMatch(detailSource, /disabled=\{!detail\}/)
+  assert.doesNotMatch(detailSource, /aria-disabled=\{!detail\}/)
+  assert.match(detailSource, /aria-pressed=\{visibleSide === 'back'\} onClick=\{\(\) => setVisibleSide\('back'\)\}/)
+  assert.match(detailSource, /const safeBackDetail =/)
 })
 
 test('card detail protects lenticular scene and keeps movement permission explicit', () => {

@@ -6,7 +6,7 @@ const appSource = await readFile(new URL('../src/App.tsx', import.meta.url), 'ut
 const appCssSource = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
 const apiSource = await readFile(new URL('../src/api/client.ts', import.meta.url), 'utf8')
 
-test('fan growth remains available from settings without competing with the collection-first home', async () => {
+test('fan growth is a persistent bottom tab instead of settings content', async () => {
   await access(new URL('../src/components/FanGrowth.tsx', import.meta.url))
   await access(new URL('../src/components/FanGrowth.css', import.meta.url))
   await access(new URL('../src/components/FanGrowth.test.tsx', import.meta.url))
@@ -15,7 +15,14 @@ test('fan growth remains available from settings without competing with the coll
   assert.match(appSource, /fanGrowthMode="full"/)
   assert.doesNotMatch(appSource, /fanGrowthMode="summary"/)
   assert.doesNotMatch(appSource, /label="팬 패스"/)
-  assert.equal([...appSource.matchAll(/<NavItem /g)].length, 4)
+  assert.equal([...appSource.matchAll(/<NavItem /g)].length, 5)
+  assert.match(appSource, /type Tab = 'home' \| 'discover' \| 'collection' \| 'growth' \| 'settings' \| 'alerts'/)
+  assert.match(appSource, /if \(pathname === '\/growth'\) return 'growth'/)
+  assert.match(appSource, /growth: '\/growth'/)
+  assert.match(appSource, /growth: '팬 레벨'/)
+  assert.match(appSource, /tab === 'growth' && <FanGrowth/)
+  assert.doesNotMatch(appSource, /tab === 'settings' && currentUser && <><Settings[\s\S]*<FanGrowth/)
+  assert.match(appSource, /label="팬 레벨"/)
 })
 
 test('fan growth API client exposes typed progression reward equipment and pass calls', () => {

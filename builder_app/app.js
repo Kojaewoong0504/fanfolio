@@ -36,12 +36,6 @@ const sampleAssets = {
   stardust: './assets/card-stardust-backstage.jpg',
 }
 
-const sampleAssetLabels = {
-  aurora: '오로라',
-  motion: '무대',
-  stardust: '스타더스트',
-}
-
 const builtInStickers = [
   {
     id: 'opal-heart',
@@ -172,8 +166,8 @@ function initialEditor() {
   return {
     tool: 'photo',
     side: 'front',
-    imageSrc: sampleAssets.aurora,
-    imageName: '오로라 포트레이트',
+    imageSrc: '',
+    imageName: '',
     imageFile: null,
     imageAssetId: null,
     material: 'pearl',
@@ -697,7 +691,7 @@ function creativeLayerMarkup(layer) {
   const content = layer.type === 'sticker'
     ? `<img src="${esc(layer.src)}" alt="" draggable="false" />`
     : '<span class="creative-layer-mask" aria-hidden="true"></span>'
-  return `<button type="button" class="creative-layer layer-${esc(layer.type)} ${selected ? 'selected' : ''}" data-layer-id="${esc(layer.id)}" style="${style}" aria-label="${creativeLayerLabel(layer)} 레이어${selected ? ' 선택됨' : ''}">${content}<span class="layer-selection" aria-hidden="true"></span></button>`
+  return `<button type="button" class="creative-layer layer-${esc(layer.type)} ${selected ? 'selected' : ''}" data-layer-id="${esc(layer.id)}" style="${style}" aria-label="${creativeLayerLabel(layer)} 레이어${selected ? ' 선택됨' : ''}">${content}<span class="layer-selection" aria-hidden="true"></span><span class="layer-handle layer-resize-handle" data-layer-handle="resize" aria-hidden="true"></span><span class="layer-handle layer-rotate-handle" data-layer-handle="rotate" aria-hidden="true">${icon('rotate_right')}</span></button>`
 }
 
 function creativeLayersMarkup(side) {
@@ -723,9 +717,12 @@ function cardVisual({ fan = false } = {}) {
   const isBack = editor.side === 'back' && !fan
   const isLenticular = editor.interaction === 'lenticular' && editor.lenticularSrc
   const effectMotion = editor.interaction !== 'static'
+  const photoMedia = editor.imageSrc
+    ? `<img class="card-photo" src="${esc(editor.imageSrc)}" alt="${esc(state.form.name)} 카드 이미지" />`
+    : `<div class="card-photo card-photo-empty" aria-label="카드 사진 없음">${icon('add_photo_alternate')}<span>사진 업로드</span></div>`
   const media = editor.videoEnabled && editor.videoSrc
     ? `<video src="${esc(editor.videoSrc)}" muted loop playsinline preload="metadata" ${fan ? 'controls' : 'autoplay'}></video>`
-    : `<img class="card-photo" src="${esc(editor.imageSrc || sampleAssets.aurora)}" alt="${esc(state.form.name)} 카드 이미지" />${isLenticular ? `<img class="lenticular-photo" src="${esc(editor.lenticularSrc)}" alt="" />` : ''}`
+    : `${photoMedia}${isLenticular ? `<img class="lenticular-photo" src="${esc(editor.lenticularSrc)}" alt="" />` : ''}`
   const effectOpacity = Number(editor.effectIntensity || 0)
   const tiltStyle = '--tilt-x:0deg;--tilt-y:0deg;--light-x:50%;--light-y:42%;--lenticular-reveal:0%'
   const reducedMotionControls =
@@ -784,14 +781,8 @@ function layerControls() {
 }
 
 function photoInspector() {
-  return `<div class="inspector-section"><span class="inspector-label">추천 비주얼</span><div class="sample-grid">
-    ${Object.entries(sampleAssets)
-      .map(
-        ([key, source]) => `<button type="button" class="sample-thumb ${state.editor.imageSrc === source ? 'active' : ''}" data-sample="${key}"><img src="${source}" alt="${key} 콘셉트" />${icon('check')}</button>`,
-      )
-      .join('')}
-  </div></div>
-  <div class="inspector-section">${uploadBox('image', 'image/png,image/jpeg,image/webp', '새 사진 업로드', 'JPG, PNG, WebP · 세로 2:3 권장')}</div>
+  const hasCurrentPhoto = Boolean(state.editor.imageFile || state.editor.imageAssetId || state.editor.imageName)
+  return `<div class="photo-upload-panel">${uploadBox('image', 'image/png,image/jpeg,image/webp', hasCurrentPhoto ? '사진 교체 업로드' : '사진 업로드', 'JPG, PNG, WebP · 세로 2:3 권장')}${hasCurrentPhoto ? `<div class="current-photo-file">${icon('image')}<span><strong>${esc(state.editor.imageName || '업로드된 사진')}</strong><small>현재 카드에 연결된 이미지</small></span><button type="button" class="text-button danger" data-action="remove-photo">삭제</button></div>` : `<div class="media-empty">${icon('add_photo_alternate')}<span>사진을 올리면 카드 캔버스에 바로 표시됩니다.</span></div>`}</div>
   <div class="info-card">${icon('crop_portrait')}<span><strong>카드 안전 영역</strong><small>얼굴과 핵심 요소는 중앙 80% 안에 배치해 주세요.</small></span></div>`
 }
 
@@ -898,12 +889,6 @@ function designStage() {
   const inspectorOpen = Boolean(state.editor.inspectorOpen)
   return `<section class="editor-workbench editor-design ${inspectorOpen ? 'inspector-open' : ''}">
     <aside class="tool-rail" aria-label="카드 편집 도구">${editorTools.map(([tool, symbol, label]) => `<button type="button" data-tool="${tool}" class="${state.editor.tool === tool ? 'active' : ''}" aria-pressed="${state.editor.tool === tool}" title="${label}">${icon(symbol)}<span>${label}</span></button>`).join('')}</aside>
-    <aside class="editor-media-library" aria-label="미디어 라이브러리">
-      <div class="media-library-heading"><span>MEDIA</span><strong>소스 라이브러리</strong></div>
-      <div class="media-library-section"><span class="inspector-label">사진</span><div class="media-library-grid">${Object.entries(sampleAssets).map(([key, source]) => `<button type="button" class="media-library-tile ${state.editor.imageSrc === source ? 'active' : ''}" data-sample="${key}" aria-label="${sampleAssetLabels[key]} 사진 적용"><img src="${source}" alt="" /><span>${sampleAssetLabels[key]}</span></button>`).join('')}</div></div>
-      <div class="media-library-section"><span class="inspector-label">스티커</span><div class="media-library-grid">${builtInStickers.slice(0, 3).map((sticker) => `<button type="button" class="media-library-tile sticker" data-built-in-sticker="${esc(sticker.id)}" aria-label="${esc(sticker.name)} 스티커 추가"><img src="${esc(sticker.source)}" alt="" /><span>${esc(sticker.name)}</span></button>`).join('')}</div></div>
-      <label class="media-library-upload"><input type="file" data-upload="image" accept="image/png,image/jpeg,image/webp" />${icon('upload_file')}<span><strong>사진 업로드</strong><small>실제 카드에 사용할 이미지</small></span></label>
-    </aside>
     <div class="editor-canvas-area">
       <div class="editor-canvas-shell">
         <div class="canvas-toolbar"><div class="side-switch"><button type="button" data-side="front" class="${state.editor.side === 'front' ? 'active' : ''}">앞면</button><button type="button" data-side="back" class="${state.editor.side === 'back' ? 'active' : ''}">뒷면</button></div><span>${icon('zoom_in')} 100% · 카드 캔버스</span></div>
@@ -1869,6 +1854,7 @@ function initCreativeLayerInteractions() {
   document.querySelectorAll('.creative-layer[data-layer-id]').forEach((element) => {
     element.addEventListener('pointerdown', (event) => {
       event.stopPropagation()
+      const handleType = event.target.closest?.('[data-layer-handle]')?.dataset.layerHandle || 'move'
       const layer = (state.editor.layers || []).find(
         (item) => item.id === element.dataset.layerId,
       )
@@ -1879,13 +1865,17 @@ function initCreativeLayerInteractions() {
       element.classList.add('selected')
       element.setPointerCapture?.(event.pointerId)
       const box = card.getBoundingClientRect()
-      const start = { clientX: event.clientX, clientY: event.clientY, x: Number(layer.x), y: Number(layer.y) }
+      const start = {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        x: Number(layer.x),
+        y: Number(layer.y),
+        width: Number(layer.width),
+        rotation: Number(layer.rotation),
+      }
       const move = (moveEvent) => {
         moveEvent.preventDefault()
-        layer.x = Math.max(0, Math.min(100, start.x + ((moveEvent.clientX - start.clientX) / box.width) * 100))
-        layer.y = Math.max(0, Math.min(100, start.y + ((moveEvent.clientY - start.clientY) / box.height) * 100))
-        element.style.setProperty('--layer-x', `${layer.x}%`)
-        element.style.setProperty('--layer-y', `${layer.y}%`)
+        updateLayerFromHandleDrag(handleType, layer, element, box, start, moveEvent)
       }
       const finish = (finishEvent) => {
         element.releasePointerCapture?.(finishEvent.pointerId)
@@ -1900,6 +1890,54 @@ function initCreativeLayerInteractions() {
       element.addEventListener('pointercancel', finish)
     })
   })
+}
+
+function shortestSignedAngularDelta(startRadians, nextRadians) {
+  return Math.atan2(Math.sin(nextRadians - startRadians), Math.cos(nextRadians - startRadians))
+}
+
+function clampLayerRotation(rotation) {
+  if (!Number.isFinite(Number(rotation))) return 0
+  const normalized = ((Number(rotation) + 180) % 360 + 360) % 360 - 180
+  return Object.is(normalized, -0) ? 0 : normalized
+}
+
+function computeLayerResizeWidth(startWidth, startDistance, nextDistance) {
+  const safeStartWidth = Number.isFinite(Number(startWidth)) ? Number(startWidth) : 8
+  const safeStartDistance = Math.max(1, Number(startDistance) || 1)
+  const safeNextDistance = Math.max(0, Number(nextDistance) || 0)
+  return Math.max(8, Math.min(100, safeStartWidth * (safeNextDistance / safeStartDistance)))
+}
+
+function updateLayerFromHandleDrag(handleType, layer, element, box, start, event) {
+  if (handleType === 'resize') {
+    const center = {
+      x: box.left + (start.x / 100) * box.width,
+      y: box.top + (start.y / 100) * box.height,
+    }
+    const startDistance = Math.hypot(start.clientX - center.x, start.clientY - center.y) || 1
+    const nextDistance = Math.hypot(event.clientX - center.x, event.clientY - center.y)
+    layer.width = computeLayerResizeWidth(start.width, startDistance, nextDistance)
+    element.style.setProperty('--layer-width', `${layer.width}%`)
+    return
+  }
+  if (handleType === 'rotate') {
+    const center = {
+      x: box.left + (start.x / 100) * box.width,
+      y: box.top + (start.y / 100) * box.height,
+    }
+    const startAngle = Math.atan2(start.clientY - center.y, start.clientX - center.x)
+    const nextAngle = Math.atan2(event.clientY - center.y, event.clientX - center.x)
+    layer.rotation = clampLayerRotation(
+      Math.round(start.rotation + (shortestSignedAngularDelta(startAngle, nextAngle) * 180) / Math.PI),
+    )
+    element.style.setProperty('--layer-rotation', `${layer.rotation}deg`)
+    return
+  }
+  layer.x = Math.max(0, Math.min(100, start.x + ((event.clientX - start.clientX) / box.width) * 100))
+  layer.y = Math.max(0, Math.min(100, start.y + ((event.clientY - start.clientY) / box.height) * 100))
+  element.style.setProperty('--layer-x', `${layer.x}%`)
+  element.style.setProperty('--layer-y', `${layer.y}%`)
 }
 
 async function requestBackgroundRemoval() {
@@ -2118,17 +2156,6 @@ app.addEventListener('click', async (event) => {
     render()
     return
   }
-  const sample = event.target.closest('[data-sample]')
-  if (sample) {
-    state.editor.imageSrc = sampleAssets[sample.dataset.sample]
-    state.editor.imageName = `${sample.dataset.sample} 콘셉트`
-    state.editor.imageFile = null
-    state.editor.imageAssetId = null
-    state.form.imageAssetId = null
-    markDirty()
-    render()
-    return
-  }
   const builtInSticker = event.target.closest('[data-built-in-sticker]')
   if (builtInSticker) {
     const sticker = builtInStickers.find((item) => item.id === builtInSticker.dataset.builtInSticker)
@@ -2251,6 +2278,16 @@ app.addEventListener('click', async (event) => {
   }
   if (action === 'close-inspector') {
     state.editor.inspectorOpen = false
+    render()
+  }
+  if (action === 'remove-photo') {
+    if (state.editor.imageSrc?.startsWith('blob:')) URL.revokeObjectURL(state.editor.imageSrc)
+    state.editor.imageSrc = ''
+    state.editor.imageName = ''
+    state.editor.imageFile = null
+    state.editor.imageAssetId = null
+    state.form.imageAssetId = null
+    markDirty()
     render()
   }
   if (action === 'go-review') {

@@ -62,7 +62,7 @@ test('card review route uses the commercial list and detail 검수 workspace', (
   assert.match(css, /\.commercial-review-workspace/)
   assert.match(css, /\.review-status-tabs/)
   assert.match(css, /\.selected-review-row/)
-  assert.match(css, /@media \(max-width: 1279px\)[\s\S]*\.review-workbench\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/)
+  assert.match(css, /@media \(max-width: 1119px\)[\s\S]*\.review-workbench\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/)
   assert.doesNotMatch(source, /function releaseQueue\(/)
 })
 

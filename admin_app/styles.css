@@ -2668,22 +2668,22 @@ button.top-avatar {
 
 .commercial-review-workspace {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .review-commandbar {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   align-items: flex-start;
   justify-content: space-between;
-  min-height: 72px;
+  min-height: 58px;
   padding: 2px 2px 0;
 }
 
 .review-commandbar h2 {
-  margin: 8px 0 6px;
+  margin: 5px 0 4px;
   color: var(--ink);
-  font-size: 26px;
+  font-size: 23px;
 }
 
 .review-commandbar p {
@@ -2744,8 +2744,8 @@ button.top-avatar {
 
 .review-workbench {
   display: grid;
-  grid-template-columns: minmax(640px, 1fr) minmax(330px, 360px);
-  gap: 14px;
+  grid-template-columns: minmax(520px, 1fr) minmax(320px, 420px);
+  gap: 10px;
   align-items: start;
 }
 
@@ -2758,14 +2758,14 @@ button.top-avatar {
 
 .review-list-panel {
   min-width: 0;
-  padding: 16px;
+  padding: 12px;
 }
 
 .review-list-heading {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .review-list-heading h3 {
@@ -2780,15 +2780,16 @@ button.top-avatar {
 
 .review-detail-panel {
   position: sticky;
-  top: 88px;
-  max-height: calc(100vh - 96px);
+  top: 78px;
+  max-height: calc(100vh - 86px);
   overflow-y: auto;
+  padding: 14px;
 }
 
 .review-detail-panel .review-content {
   grid-template-columns: minmax(0, 1fr);
-  gap: 10px;
-  margin-top: 10px;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .review-detail-panel .review-effect-card,
@@ -2807,7 +2808,22 @@ button.top-avatar {
 }
 
 .review-panel {
-  margin-bottom: 14px;
+  margin-bottom: 10px;
+}
+
+.card-table tr.review-table-row {
+  cursor: pointer;
+  outline-offset: -3px;
+  transition: background 160ms ease, box-shadow 160ms ease;
+}
+
+.card-table tr.review-table-row:hover {
+  background: #f8f7ff;
+}
+
+.card-table tr.review-table-row:focus-visible {
+  outline: 3px solid #8175ff;
+  background: #f7f6ff;
 }
 
 .card-table tr.selected-review-row {
@@ -2817,7 +2833,7 @@ button.top-avatar {
 }
 
 .review-list-panel .toolbar {
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .card-table th:nth-child(2),
@@ -3399,7 +3415,7 @@ code {
   }
 }
 
-@media (max-width: 1279px) {
+@media (max-width: 1119px) {
   .review-workbench {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -3412,6 +3428,19 @@ code {
     order: 2;
     position: static;
     max-height: none;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1119px) {
+  .review-detail-panel .review-content {
+    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .review-detail-panel .review-effect-card,
+  .review-detail-panel .review-image,
+  .review-detail-panel .review-effect-summary {
+    width: 100%;
   }
 }
 

@@ -1,12 +1,41 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
+import vm from 'node:vm'
 
 const css = await readFile(new URL('../styles.css', import.meta.url), 'utf8')
 const source = await readFile(new URL('../app.js', import.meta.url), 'utf8')
 
 function assertCssMatches(pattern, contract) {
   assert.ok(pattern.test(css), contract)
+}
+
+function extractFunction(name) {
+  const marker = `function ${name}(`
+  const start = source.indexOf(marker)
+  assert.notEqual(start, -1, `expected ${name} to exist`)
+  const bodyStart = source.indexOf('{', start)
+  let depth = 0
+  for (let index = bodyStart; index < source.length; index += 1) {
+    if (source[index] === '{') depth += 1
+    if (source[index] === '}') depth -= 1
+    if (depth === 0) return source.slice(start, index + 1)
+  }
+  throw new Error(`could not extract ${name}`)
+}
+
+function reviewRowHarness() {
+  const sandbox = {}
+  vm.createContext(sandbox)
+  vm.runInContext(
+    [
+      extractFunction('isReviewRowInteractiveTarget'),
+      extractFunction('activateReviewRow'),
+      extractFunction('activateReviewButton'),
+    ].join('\n'),
+    sandbox,
+  )
+  return sandbox
 }
 
 test('page root clips accidental horizontal overflow and layout children can shrink', () => {
@@ -118,6 +147,82 @@ test('card creation opens a right drawer and is not rendered as the old inline t
   assert.match(source, /card-create-drawer/)
   assert.match(source, /open-card-drawer/)
   assert.doesNotMatch(source, /<form class=["']toolbar["'] id=["']admin-card-form["']/)
+})
+
+test('card review rows open details from the whole row without double-triggering nested controls', () => {
+  assert.match(source, /review-table-row selected-review-row/)
+  assert.doesNotMatch(source, /<tr[^`]*role="button"/)
+  assert.match(source, /tabindex="0"/)
+  assert.match(source, /aria-label="\$\{escapeHtml\(card\.name\)\} 상세 보기"/)
+  assert.match(source, /aria-current="\$\{selected \? "true" : "false"\}"/)
+  assert.match(source, /data-review-row-id="\$\{escapeHtml\(card\.id\)\}"/)
+  assert.match(source, /function activateReviewRow\(/)
+  assert.match(source, /event\.key !== "Enter" && event\.key !== " "/)
+  assert.match(source, /event\.preventDefault\(\)/)
+  assert.match(source, /event\.target\.closest\('button, a, input, select, textarea, label, \[role="button"\]'\)/)
+  assert.match(source, /event\.stopPropagation\(\)/)
+  assert.match(source, /class="icon-button review-card"/, 'keeps the existing more button in the management cell')
+})
+
+test('card review row activation helper handles row keyboard mouse and nested controls', () => {
+  const { activateReviewRow, activateReviewButton } = reviewRowHarness()
+  const calls = []
+  const opener = (id) => calls.push(id)
+  const row = { dataset: { reviewRowId: 'card-1' } }
+  const rowTarget = { closest: () => row }
+  const nestedButton = { closest: () => ({ tagName: 'BUTTON' }) }
+  let prevented = 0
+  let stopped = 0
+
+  assert.equal(activateReviewRow({ currentTarget: row, target: rowTarget }, 'card-1', opener), true)
+  assert.deepEqual(calls, ['card-1'])
+  assert.equal(activateReviewRow({ currentTarget: row, target: rowTarget, key: 'Enter', preventDefault: () => { prevented += 1 } }, 'card-2', opener), true)
+  assert.equal(activateReviewRow({ currentTarget: row, target: rowTarget, key: ' ', preventDefault: () => { prevented += 1 } }, 'card-3', opener), true)
+  assert.equal(prevented, 2)
+  assert.equal(activateReviewRow({ currentTarget: row, target: rowTarget, key: 'Escape', preventDefault: () => { prevented += 1 } }, 'card-4', opener), false)
+  assert.equal(activateReviewRow({ currentTarget: row, target: nestedButton }, 'card-5', opener), false)
+  activateReviewButton({ stopPropagation: () => { stopped += 1 } }, 'card-6', opener)
+  assert.deepEqual(calls, ['card-1', 'card-2', 'card-3', 'card-6'])
+  assert.equal(stopped, 1)
+})
+
+test('commercial review workspace keeps a dense master-detail layout at laptop widths', () => {
+  assertCssMatches(
+    /\.review-workbench\s*\{[^}]*grid-template-columns:\s*minmax\(520px,\s*1fr\)\s+minmax\(320px,\s*420px\)/s,
+    'uses a compact list plus 320-420px detail column before tablet stacking',
+  )
+  assertCssMatches(
+    /@media\s*\(max-width:\s*1119px\)[\s\S]*\.review-workbench\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/,
+    'stacks the review workspace when the expanded 208px nav leaves too little content width',
+  )
+  assert.doesNotMatch(
+    css,
+    /@media\s*\(max-width:\s*1279px\)\s*\{\s*\.review-workbench\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/,
+    'does not collapse the master-detail review workspace at laptop widths',
+  )
+  assert.doesNotMatch(
+    css,
+    /@media\s*\(max-width:\s*1147px\)\s*\{\s*\.review-workbench\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/,
+    'keeps the review workspace two-column at the 1147px screenshot width',
+  )
+})
+
+test('card review table rows expose visible hover selected and keyboard focus states', () => {
+  assertCssMatches(/\.card-table tr\.review-table-row\s*\{[^}]*cursor:\s*pointer/s, 'marks review rows as clickable')
+  assertCssMatches(/\.card-table tr\.review-table-row:hover\s*\{[^}]*background:/s, 'shows hover feedback for clickable review rows')
+  assertCssMatches(/\.card-table tr\.review-table-row:focus-visible\s*\{[^}]*outline:\s*3px\s+solid/s, 'shows keyboard focus around review rows')
+  assertCssMatches(/\.card-table tr\.selected-review-row\s*\{[^}]*box-shadow:\s*inset 3px 0 0 #6357e8/s, 'keeps a persistent selected-row indicator')
+})
+
+test('tablet review detail keeps preview and metadata side by side until phone widths', () => {
+  assertCssMatches(
+    /@media\s*\(min-width:\s*768px\)\s*and\s*\(max-width:\s*1119px\)[\s\S]*\.review-detail-panel\s+\.review-content\s*\{[^}]*grid-template-columns:\s*minmax\(220px,\s*280px\)\s+minmax\(0,\s*1fr\)/,
+    'stacked tablet and narrow laptop detail keeps preview and metadata in two columns',
+  )
+  assertCssMatches(
+    /@media\s*\(max-width:\s*767px\)[\s\S]*\.review-content,[\s\S]*\.review-meta,[\s\S]*\.release-status-grid,[\s\S]*\.snapshot-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/,
+    'phone layouts stack review preview and metadata',
+  )
 })
 
 test('card artist choices use the current administrator assignment scope', () => {

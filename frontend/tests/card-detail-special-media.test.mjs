@@ -6,6 +6,13 @@ const detailSource = await readFile(new URL('../src/components/CardDetail.tsx', 
 const apiSource = await readFile(new URL('../src/api/client.ts', import.meta.url), 'utf8')
 const cssSource = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
 
+function loadHelper(name) {
+  const match = detailSource.match(new RegExp(`function ${name}\\(([^)]*)\\): [^{]+\\{([\\s\\S]*?)\\n\\}`))
+  assert.ok(match, `${name} helper must exist`)
+  const params = match[1].split(',').map(param => param.trim().split(':')[0].trim()).join(', ')
+  return Function(`return function ${name}(${params}) {${match[2]}\n}`)()
+}
+
 test('card detail API contract exposes special media and design configuration', () => {
   assert.match(apiSource, /designConfig\?: CardDesignConfig \| null/)
   assert.match(apiSource, /effectIntensity\?: number/)
@@ -39,6 +46,36 @@ test('card detail applies normalized collectible effects with reduced-motion sup
   assert.match(cssSource, /transition:none/)
   assert.doesNotMatch(detailSource, /hologram-aurora-texture\.jpg/)
   assert.doesNotMatch(cssSource, /\.detail-media\.hologram::before/)
+})
+
+test('card detail back side remains usable with safe fallback metadata', () => {
+  assert.match(detailSource, /const safeBackDetail =/)
+  assert.match(detailSource, /setVisibleSide\('back'\)/)
+  assert.doesNotMatch(detailSource, /disabled=\{!detail\}/)
+  assert.doesNotMatch(detailSource, /aria-disabled=\{!detail\}/)
+  assert.match(detailSource, /visibleSide === 'back' && safeBackDetail/)
+  assert.match(detailSource, /safeBackDetail\.title/)
+  assert.match(detailSource, /safeBackDetail\.serialLabel/)
+})
+
+test('card detail preserves selected back side when remote detail resolves', () => {
+  const resolveVisibleSideAfterCardIdentityChange = loadHelper('resolveVisibleSideAfterCardIdentityChange')
+  assert.equal(resolveVisibleSideAfterCardIdentityChange('back', 'owned-card-1', 'owned-card-1'), 'back')
+  assert.equal(resolveVisibleSideAfterCardIdentityChange('front', 'owned-card-1', 'owned-card-1'), 'front')
+  assert.equal(resolveVisibleSideAfterCardIdentityChange('back', 'owned-card-1', 'owned-card-2'), 'front')
+  assert.doesNotMatch(detailSource, /\[card\.id, detail\?\.userCardId\]/)
+})
+
+test('collectible front and back use a physical 2:3 framed card with clipped cover art', () => {
+  assert.match(cssSource, /\.fan-card-collectible\{[\s\S]*aspect-ratio:2\/3/)
+  assert.match(cssSource, /\.fan-card-collectible\{[\s\S]*flex:0 0 auto/)
+  assert.match(cssSource, /\.fan-card-collectible\{[\s\S]*padding:10px/)
+  assert.match(cssSource, /\.fan-card-collectible::before/)
+  assert.match(cssSource, /\.fan-card-art-window/)
+  assert.match(cssSource, /\.fan-card-art-window\{[\s\S]*overflow:hidden/)
+  assert.match(cssSource, /\.fan-card-photo,.fan-card-lenticular\{[\s\S]*object-fit:cover/)
+  assert.match(cssSource, /\.fan-card-collectible\.back\{[\s\S]*border:1px solid/)
+  assert.match(detailSource, /className="fan-card-art-window"/)
 })
 
 test('collectible cards react to intentional pointer movement while preserving scroll', () => {

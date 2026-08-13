@@ -105,6 +105,9 @@ globalThis.__motionHarness = {
   enableDeviceMotion,
   applyDeviceOrientation,
   syncDeviceMotionLifecycle: typeof syncDeviceMotionLifecycle === 'function' ? syncDeviceMotionLifecycle : null,
+  shortestSignedAngularDelta: typeof shortestSignedAngularDelta === 'function' ? shortestSignedAngularDelta : null,
+  clampLayerRotation: typeof clampLayerRotation === 'function' ? clampLayerRotation : null,
+  computeLayerResizeWidth: typeof computeLayerResizeWidth === 'function' ? computeLayerResizeWidth : null,
   listenerCount: __listenerCount,
   styleWrites: __styleWrites,
   permissionRequests: __permissionRequests,
@@ -121,6 +124,7 @@ test('collapsed navigation hides only labels and keeps every menu icon visible',
   assert.match(source, /class="nav-label"/)
   assert.match(css, /\.studio-shell\.sidebar-collapsed \.studio-sidebar nav button \.nav-label,[\s\S]{0,420}display:\s*none/)
   assert.match(css, /\.studio-shell\.sidebar-collapsed \.studio-sidebar nav button > \.material-symbols-rounded[\s\S]{0,220}display:\s*inline-grid/)
+  assert.match(css, /\.studio-shell\.sidebar-collapsed \.profile-chip\s*\{[\s\S]{0,260}display:\s*none/)
   assert.doesNotMatch(css, /\.sidebar-collapsed \.studio-sidebar nav button span,/)
 })
 
@@ -377,33 +381,89 @@ test('review readiness renders every dynamic item with an accurate total', async
   assert.doesNotMatch(source, /readiness-score[\s\S]{0,260}\/7/)
 })
 
-test('artist studio design stage uses collectible commercial workspace hierarchy', async () => {
+test('artist studio design stage uses upload-first photo workflow without permanent source library', async () => {
   const source = await readFile(appUrl, 'utf8')
   const css = await readFile(cssUrl, 'utf8')
 
   assert.match(source, /class="editor-workbench/)
-  assert.match(source, /class="editor-media-library"/)
+  assert.doesNotMatch(source, /추천 비주얼/)
+  assert.doesNotMatch(source, /소스 라이브러리/)
+  assert.doesNotMatch(source, /class="editor-media-library"/)
+  assert.doesNotMatch(source, /data-sample=/)
+  assert.doesNotMatch(css, /\.editor-media-library/)
+  assert.doesNotMatch(css, /\.media-library-/)
+  assert.match(source, /class="photo-upload-panel"/)
+  assert.match(source, /uploadBox\('image'/)
+  assert.match(source, /state\.editor\.imageFile \|\| state\.editor\.imageAssetId \|\| state\.editor\.imageName/)
+  assert.match(source, /data-action="remove-photo"/)
   assert.match(source, /class="editor-canvas-shell"/)
   assert.match(source, /class="editor-actions-strip"/)
   assert.match(source, /data-action="save-draft"[\s\S]{0,220}초안 저장/)
   assert.match(source, /data-action="go-details"[\s\S]{0,220}다음 단계/)
-  assert.match(css, /\.editor-design\s*\{[\s\S]{0,260}background:\s*#f8f9fc/)
+  assert.match(css, /\.editor-design\s*\{[\s\S]{0,260}grid-template-columns:\s*72px minmax\(420px,\s*1fr\) minmax\(330px,\s*380px\)/)
+  assert.match(css, /@media \(max-width: 1220px\)[\s\S]*?\.editor-design\s*\{[\s\S]{0,180}grid-template-columns:\s*68px minmax\(360px,\s*1fr\) 300px/)
+  assert.doesNotMatch(css, /@media \(max-width: 1220px\)[\s\S]*?\.editor-design\s*\{[\s\S]{0,180}grid-template-columns:\s*68px minmax\(156px,\s*190px\)/)
   assert.match(css, /\.tool-rail\s*\{[\s\S]{0,360}background:\s*#101836/)
-  assert.match(css, /\.media-library-grid\s*\{[\s\S]{0,220}grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/)
+  assert.match(css, /\.photo-upload-panel\s*\{/)
   assert.match(css, /\.editor-canvas-shell\s*\{[\s\S]{0,420}background:\s*#fff/)
   assert.match(css, /\.editor-actions-strip\s*\{[\s\S]{0,420}justify-content:\s*space-between/)
 })
 
-test('artist studio keeps media labels readable and tool navigation horizontal on phones', async () => {
+test('selected creative layers expose direct resize and rotate handles with pointer interactions', async () => {
   const source = await readFile(appUrl, 'utf8')
   const css = await readFile(cssUrl, 'utf8')
 
-  assert.match(source, /const sampleAssetLabels\s*=\s*\{[\s\S]{0,240}aurora:\s*'오로라'/)
-  assert.match(source, /sampleAssetLabels\[key\]/)
-  assert.doesNotMatch(source, /class="media-library-tile sticker"[\s\S]{0,260}\$\{icon\('interests'\)\}/)
-  assert.match(css, /\.media-library-tile span\s*\{[\s\S]{0,300}white-space:\s*normal/)
-  assert.match(css, /\.media-library-tile span\s*\{[\s\S]{0,360}overflow-wrap:\s*anywhere/)
+  assert.match(source, /class="layer-handle layer-resize-handle"/)
+  assert.match(source, /class="layer-handle layer-rotate-handle"/)
+  assert.match(source, /data-layer-handle="resize"/)
+  assert.match(source, /data-layer-handle="rotate"/)
+  assert.match(source, /data-layer-handle="resize"[^>]*aria-hidden="true"/)
+  assert.match(source, /data-layer-handle="rotate"[^>]*aria-hidden="true"/)
+  assert.doesNotMatch(source, /data-layer-handle="resize"[^>]*aria-label=/)
+  assert.doesNotMatch(source, /data-layer-handle="rotate"[^>]*aria-label=/)
+  assert.match(source, /function updateLayerFromHandleDrag\(/)
+  assert.match(source, /handleType === 'resize'[\s\S]{0,900}--layer-width/)
+  assert.match(source, /handleType === 'rotate'[\s\S]{0,900}--layer-rotation/)
+  assert.match(source, /event\.target\.closest\?\.\('\[data-layer-handle\]'\)/)
+  assert.match(css, /\.layer-handle\s*\{[\s\S]{0,260}touch-action:\s*none/)
+  assert.match(css, /\.layer-resize-handle\s*\{[\s\S]{0,180}cursor:\s*nwse-resize/)
+  assert.match(css, /\.layer-rotate-handle\s*\{[\s\S]{0,180}cursor:\s*grab/)
+})
+
+test('layer geometry helpers clamp resize and wrap rotation across the signed angle boundary', async () => {
+  const harness = await loadMotionHarness()
+  const nearlyEqual = (actual, expected) => Math.abs(actual - expected) < 1e-9
+
+  assert.equal(typeof harness.shortestSignedAngularDelta, 'function')
+  assert.equal(typeof harness.clampLayerRotation, 'function')
+  assert.equal(typeof harness.computeLayerResizeWidth, 'function')
+  assert.ok(
+    nearlyEqual(
+      harness.shortestSignedAngularDelta((179 * Math.PI) / 180, (-179 * Math.PI) / 180),
+      (2 * Math.PI) / 180,
+    ),
+  )
+  assert.ok(
+    nearlyEqual(
+      harness.shortestSignedAngularDelta((-179 * Math.PI) / 180, (179 * Math.PI) / 180),
+      (-2 * Math.PI) / 180,
+    ),
+  )
+  assert.equal(harness.clampLayerRotation(181), -179)
+  assert.equal(harness.clampLayerRotation(-181), 179)
+  assert.equal(harness.computeLayerResizeWidth(40, 20, 1), 8)
+  assert.equal(harness.computeLayerResizeWidth(40, 20, 200), 100)
+  assert.equal(harness.computeLayerResizeWidth(40, 20, 30), 60)
+})
+
+test('artist studio keeps editor usable on tablet and phone layouts', async () => {
+  const css = await readFile(cssUrl, 'utf8')
+
+  assert.match(css, /@media \(min-width: 761px\) and \(max-width: 1024px\)[\s\S]*?\.editor-design\s*\{[\s\S]{0,220}grid-template-columns:\s*58px minmax\(260px,\s*1fr\) minmax\(244px,\s*278px\)/)
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.editor-design\s*\{[\s\S]{0,220}grid-template-columns:\s*minmax\(0,\s*1fr\)/)
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.tool-rail\s*\{[\s\S]{0,260}flex-direction:\s*row/)
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.editor-inspector\s*\{[\s\S]{0,360}position:\s*fixed/)
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.editor-inspector\.open\s*\{[\s\S]{0,120}transform:\s*translateY\(0\)/)
 })
 
 test('artist studio editor removes dashboard chrome to keep the collectible canvas dominant', async () => {
