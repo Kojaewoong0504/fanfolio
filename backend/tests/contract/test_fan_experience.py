@@ -74,6 +74,22 @@ def _force_card_lenticular_asset(card_id: str, asset_id: str) -> None:
     asyncio.run(update_card())
 
 
+def _attach_card_to_live_drop(card_id: str) -> None:
+    """Prepare an isolated card fixture for the concrete live-drop contract."""
+
+    async def update_card() -> None:
+        async with SessionLocal() as session:
+            card = await session.get(Card, card_id)
+            assert card is not None
+            drop = await session.get(Drop, "drop_live")
+            assert drop is not None
+            card.drop_id = drop.id
+            card.release_status = "approved"
+            await session.commit()
+
+    asyncio.run(update_card())
+
+
 def _delete_asset_storage_object(asset_id: str) -> None:
     async def delete_object() -> None:
         async with SessionLocal() as session:
@@ -385,6 +401,7 @@ def test_owned_card_detail_exposes_handwriting_and_voice_entitlements(
         201,
     )
     assert_success(admin.post(f"/api/admin/cards/{card['id']}/publish"))
+    _attach_card_to_live_drop(card["id"])
     batch = assert_success(
         admin.post(
             "/api/admin/redeem-code-batches",
@@ -472,6 +489,7 @@ def test_owned_card_lenticular_route_returns_not_ready_until_asset_upload_finish
         201,
     )
     _force_card_lenticular_asset(card["id"], lenticular_asset["assetId"])
+    _attach_card_to_live_drop(card["id"])
     assert_success(admin.post(f"/api/admin/cards/{card['id']}/publish"))
     redeemed = _redeem_card_via_batch(admin, fan, card_id=card["id"], prefix="PENDING")
 
@@ -499,6 +517,7 @@ def test_owned_card_lenticular_route_ignores_legacy_non_card_image_asset(
     )
     card = assert_success(admin.post("/api/admin/cards", json={"name": "레거시 음성 카드"}), 201)
     _force_card_lenticular_asset(card["id"], voice_asset["assetId"])
+    _attach_card_to_live_drop(card["id"])
     assert_success(admin.post(f"/api/admin/cards/{card['id']}/publish"))
     redeemed = _redeem_card_via_batch(admin, fan, card_id=card["id"], prefix="LEGACYVOICE")
 
@@ -526,6 +545,7 @@ def test_owned_card_lenticular_route_returns_not_ready_when_storage_object_is_mi
     )
     card = assert_success(admin.post("/api/admin/cards", json={"name": "삭제된 이미지 카드"}), 201)
     _force_card_lenticular_asset(card["id"], lenticular_asset["assetId"])
+    _attach_card_to_live_drop(card["id"])
     assert_success(admin.post(f"/api/admin/cards/{card['id']}/publish"))
     redeemed = _redeem_card_via_batch(admin, fan, card_id=card["id"], prefix="MISSINGIMG")
     _delete_asset_storage_object(lenticular_asset["assetId"])
