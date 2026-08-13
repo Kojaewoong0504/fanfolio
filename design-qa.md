@@ -57,6 +57,44 @@ final result: passed
 
 ---
 
+# Admin Editorial Operations Design QA
+
+## Comparison input
+
+- Selected reference: `audits/admin-editorial-reference.png`
+- Implementation: `audits/admin-editorial-operations.png`
+- Side-by-side comparison: `audits/admin-editorial-operations-comparison.png`
+
+## Final verification
+
+- Preserved the product's real admin navigation, permissions, status model, filters, and review data.
+- Reworked card operations into a wide review table with selected-row emphasis and a sticky right inspection panel.
+- Verified status tabs, card selection, detail switching, local isolated API selection, and a 430px no-overflow login surface.
+- Final vision review accepted the implementation as a professional adaptation; real two-record QA density was retained rather than fabricating rows.
+
+final result: passed
+
+---
+
+# Artist Studio Editorial Design QA
+
+## Comparison input
+
+- Selected reference: `audits/artist-studio-editorial-reference.png`
+- Implementation: `audits/artist-studio-editorial.png`
+- Side-by-side comparison: `audits/artist-studio-editorial-comparison.png`
+
+## Final verification
+
+- Preserved the real four-stage authoring flow and all existing media, layer, effect, save, preview, and review actions.
+- Removed dashboard chrome only while editing so the source library, card canvas, and settings inspector become the dominant commercial workspace.
+- Verified recipe entry, media/tool selection, full-card visibility, bottom save/next actions, responsive no-overflow behavior, and isolated QA authentication.
+- Final vision review passed after increasing card prominence, simplifying the canvas, widening the inspector, and keeping the action strip visible.
+
+final result: passed
+
+---
+
 # Fan Collection Spotlight Design QA
 
 ## Comparison input

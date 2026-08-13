@@ -376,3 +376,32 @@ test('review readiness renders every dynamic item with an accurate total', async
   assert.match(source, /Object\.values\(readiness\.items\)\.length/)
   assert.doesNotMatch(source, /readiness-score[\s\S]{0,260}\/7/)
 })
+
+test('artist studio design stage uses collectible commercial workspace hierarchy', async () => {
+  const source = await readFile(appUrl, 'utf8')
+  const css = await readFile(cssUrl, 'utf8')
+
+  assert.match(source, /class="editor-workbench/)
+  assert.match(source, /class="editor-media-library"/)
+  assert.match(source, /class="editor-canvas-shell"/)
+  assert.match(source, /class="editor-actions-strip"/)
+  assert.match(source, /data-action="save-draft"[\s\S]{0,220}초안 저장/)
+  assert.match(source, /data-action="go-details"[\s\S]{0,220}다음 단계/)
+  assert.match(css, /\.editor-design\s*\{[\s\S]{0,260}background:\s*#f8f9fc/)
+  assert.match(css, /\.tool-rail\s*\{[\s\S]{0,360}background:\s*#101836/)
+  assert.match(css, /\.media-library-grid\s*\{[\s\S]{0,220}grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/)
+  assert.match(css, /\.editor-canvas-shell\s*\{[\s\S]{0,420}background:\s*#fff/)
+  assert.match(css, /\.editor-actions-strip\s*\{[\s\S]{0,420}justify-content:\s*space-between/)
+})
+
+test('artist studio editor removes dashboard chrome to keep the collectible canvas dominant', async () => {
+  const source = await readFile(new URL('../app.js', import.meta.url), 'utf8')
+  const styles = await readFile(new URL('../styles.css', import.meta.url), 'utf8')
+
+  assert.match(source, /editorFocused = state\.view === 'editor'/)
+  assert.match(source, /editorFocused \? 'editor-focused' : ''/)
+  assert.match(styles, /\.studio-shell\.editor-focused > \.studio-sidebar/)
+  assert.match(styles, /\.studio-shell\.editor-focused \.studio-topbar/)
+  assert.match(styles, /\.studio-shell\.editor-focused \.studio-content/)
+  assert.match(styles, /@media \(max-width: 760px\)[\s\S]*\.editor-design/)
+})

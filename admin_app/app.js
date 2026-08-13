@@ -1,8 +1,13 @@
 const isLocalHost = ["localhost", "127.0.0.1"].includes(
   window.location.hostname,
 );
+const localApiQuery =
+  isLocalHost && typeof URLSearchParams !== "undefined"
+    ? new URLSearchParams(window.location.search).get("api")
+    : "";
 const API_BASE = isLocalHost
-  ? window.localStorage.getItem("fanfolio_api_base") ||
+  ? localApiQuery ||
+    window.localStorage.getItem("fanfolio_api_base") ||
     "http://localhost:8000/api"
   : "/api";
 let ACCESS_TOKEN = "";
@@ -819,11 +824,11 @@ function cardsView() {
       (state.cardArtist === "all" ||
         card.ownerArtistId === state.cardArtist ||
         card.artistId === state.cardArtist) &&
-      (state.status === "all" ||
-        card.status === state.status ||
-        releaseStatus(card) === state.status),
+      cardMatchesStatus(card, state.status),
   );
-  return `<div class="page-heading with-actions"><div><p class="eyebrow">CARD LIBRARY</p><h2>${isRoot() ? "전체 카드 운영" : "담당 카드 운영"}</h2><p>${isRoot() ? "아티스트 카드의 검수와 공개 상태를 관리합니다." : "배정된 아티스트의 카드 초안을 만들고 검수를 요청합니다."}</p></div>${can("cards:write") ? `<button class="primary" id="open-card-drawer" type="button">${icon("add_card")} 카드 등록</button>` : ""}</div>${releaseQueue()}${reviewPanel()}<section class="panel"><div class="toolbar compact-toolbar"><label class="search-field grow">${icon("search")}<input id="card-search" placeholder="카드명, 아티스트 검색" value="${escapeHtml(state.query)}" /></label>${adminSelect({ id: "card-artist-filter", value: state.cardArtist, label: "아티스트 필터", className: "filter-select card-artist-filter", options: artistOptions })}${adminSelect({ id: "card-status", value: state.status, label: "카드 상태 필터", className: "filter-select card-status-filter", options: statusOptions })}</div><div class="table-wrap"><table class="table responsive-table card-table"><thead><tr><th>카드</th><th>아티스트</th><th>등급</th><th>발행 수량</th><th>상태</th><th><span class="sr-only">관리</span></th></tr></thead><tbody>${cardRows(visible)}</tbody></table></div></section>`;
+  const emptyDetail = `<section class="panel review-detail-panel empty-detail">${icon("rate_review")}<strong>검수할 카드를 선택하세요</strong><small>대기열이나 카드 목록에서 항목을 열면 제출 스냅샷과 승인·반려 컨트롤이 표시됩니다.</small></section>`;
+  const reviewDetail = reviewPanel() || emptyDetail;
+  return `<div class="commercial-review-workspace"><div class="review-commandbar"><div><nav class="review-breadcrumb" aria-label="카드 > 검수"><span>카드</span><span aria-hidden="true">&gt;</span><strong>검수</strong></nav><h2>${isRoot() ? "전체 카드 운영" : "담당 카드 운영"}</h2><p>${isRoot() ? "아티스트 카드의 검수와 공개 상태를 관리합니다." : "배정된 아티스트의 카드 초안을 만들고 검수를 요청합니다."}</p></div>${can("cards:write") ? `<button class="primary review-register-cta" id="open-card-drawer" type="button">${icon("add_card")} 카드 등록</button>` : ""}</div>${reviewStatusTabs()}<div class="review-workbench"><section class="panel review-list-panel"><div class="review-list-heading"><div><p class="eyebrow">RELEASE REVIEW</p><h3>검수 대기열</h3></div><span>${visible.length}개 항목</span></div><div class="toolbar compact-toolbar"><label class="search-field grow">${icon("search")}<input id="card-search" placeholder="카드명, 아티스트 검색" value="${escapeHtml(state.query)}" /></label>${adminSelect({ id: "card-artist-filter", value: state.cardArtist, label: "아티스트 필터", className: "filter-select card-artist-filter", options: artistOptions })}${adminSelect({ id: "card-status", value: state.status, label: "카드 상태 필터", className: "filter-select card-status-filter", options: statusOptions })}</div><div class="table-wrap"><table class="table responsive-table card-table"><thead><tr><th>카드</th><th>메타데이터</th><th>마감</th><th>담당자</th><th>상태</th><th><span class="sr-only">관리</span></th></tr></thead><tbody>${cardRows(visible)}</tbody></table></div></section>${reviewDetail}</div></div>`;
 }
 function statusLabel(status) {
   return (
@@ -965,16 +970,32 @@ function nextActionLabel(action) {
     }[action] || "대기"
   );
 }
-function releaseQueue() {
-  const actionable = state.cards.filter((card) => cardNextAction(card));
-  if (!actionable.length) return "";
-  const items = actionable
-    .map((card) => {
-      const action = cardNextAction(card);
-      return `<button class="release-queue-item" type="button" data-id="${escapeHtml(card.id)}"><span class="badge ${releaseBadgeClass(releaseStatus(card))}">${escapeHtml(releaseStatusLabel(releaseStatus(card)))}</span><strong>${escapeHtml(card.name)}</strong><small>${escapeHtml(nextActionLabel(action))} · v${Number(card.reviewVersion || 0)}</small></button>`;
+function cardMatchesStatus(card, status) {
+  if (status === "all") return true;
+  if (status === "pending_review") {
+    return card.status === "pending_review" || ["pending_partner_review", "pending_platform_review"].includes(releaseStatus(card));
+  }
+  return card.status === status || releaseStatus(card) === status;
+}
+function cardDeadlineLabel(card) {
+  return formatDate(card.reviewDueAt || card.dueAt || card.releaseDueAt || card.updatedAt || card.createdAt);
+}
+function cardAssigneeLabel(card) {
+  return card.assigneeName || card.reviewerName || card.partnerReviewerName || card.platformReviewerName || cardCreatorLabel(card);
+}
+function reviewStatusTabs() {
+  const tabs = [
+    { value: "all", label: "전체" },
+    { value: "pending_review", label: "검수 대기" },
+    { value: "changes_requested", label: "수정 요청" },
+    { value: "approved", label: "승인 완료" },
+  ];
+  return `<div class="review-status-tabs" role="tablist" aria-label="카드 검수 상태">${tabs
+    .map((tab) => {
+      const count = state.cards.filter((card) => cardMatchesStatus(card, tab.value)).length;
+      return `<button class="${state.status === tab.value ? "active" : ""}" type="button" role="tab" aria-selected="${state.status === tab.value ? "true" : "false"}" data-review-status-tab="${escapeHtml(tab.value)}"><span>${escapeHtml(tab.label)}</span><strong>${Number(count).toLocaleString()}</strong></button>`;
     })
-    .join("");
-  return `<section class="panel release-queue"><div class="panel-heading"><div><p class="eyebrow">RELEASE REVIEW</p><h2>검수 대기열</h2></div></div><div class="release-queue-list">${items}</div></section>`;
+    .join("")}</div>`;
 }
 function cardRows(cards) {
   if (!cards.length)
@@ -988,7 +1009,8 @@ function cardRows(cards) {
       const thumbnail = state.cardThumbnailUrls[card.id]
         ? `<img src="${escapeHtml(state.cardThumbnailUrls[card.id])}" alt="" />`
         : icon("style");
-      return `<tr><td data-label="카드"><div class="card-cell"><span class="card-thumb">${thumbnail}</span><div><strong>${escapeHtml(card.name)}</strong><small>${escapeHtml(card.seasonName || card.id)}</small></div></div></td><td data-label="아티스트">${escapeHtml(catalogArtist?.name || card.ownerArtistId || card.artistId || "미지정")}</td><td data-label="등급"><strong>${escapeHtml(card.rarity || "-")}</strong></td><td data-label="발행 수량">${card.issueLimit ? Number(card.issueLimit).toLocaleString() : "제한 없음"}</td><td data-label="상태"><span class="badge ${releaseBadgeClass(releaseStatus(card))}">${escapeHtml(releaseStatusLabel(releaseStatus(card)))}</span></td><td data-label="관리" class="row-actions">${action}</td></tr>`;
+      const selected = state.reviewCard?.id === card.id;
+      return `<tr class="${selected ? "selected-review-row" : ""}"><td data-label="카드"><div class="card-cell"><span class="card-thumb">${thumbnail}</span><div><strong>${escapeHtml(card.name)}</strong><small>${escapeHtml(card.seasonName || card.id)}</small></div></div></td><td data-label="메타데이터"><strong>${escapeHtml(catalogArtist?.name || card.ownerArtistId || card.artistId || "미지정")}</strong><small>${escapeHtml(card.rarity || "-")} · ${card.issueLimit ? Number(card.issueLimit).toLocaleString() : "제한 없음"}</small></td><td data-label="마감">${escapeHtml(cardDeadlineLabel(card))}</td><td data-label="담당자">${escapeHtml(cardAssigneeLabel(card))}</td><td data-label="상태"><span class="badge ${releaseBadgeClass(releaseStatus(card))}">${escapeHtml(releaseStatusLabel(releaseStatus(card)))}</span></td><td data-label="관리" class="row-actions">${action}</td></tr>`;
     })
     .join("");
 }
@@ -1114,7 +1136,7 @@ function reviewPanel() {
         ? `<div class="notice success">검수가 승인되었습니다. 드롭에 연결하면 코드 배치 작업으로 이어집니다.</div><div class="review-actions"><button class="primary open-drop-link" data-id="${escapeHtml(card.id)}">드롭 준비됨</button></div>`
         : "";
   const sideToggle = `<div class="review-side-toggle" role="group" aria-label="카드 면 선택"><button class="${state.reviewSide === "front" ? "active" : ""}" type="button" data-review-side="front">앞면</button><button class="${state.reviewSide === "back" ? "active" : ""}" type="button" data-review-side="back">뒷면</button></div>`;
-  return `<div class="panel review-panel"><div class="review-heading"><div><p class="eyebrow">카드 검수</p><h2>${escapeHtml(card.name)}</h2><span class="badge ${releaseBadgeClass(status)}">${escapeHtml(releaseStatusLabel(status))}</span></div><button class="secondary" id="close-review">닫기</button></div><div class="review-content"><div>${sideToggle}${image}${reviewEffectSummary(card)}</div><dl class="review-meta"><div><dt>제작자</dt><dd>${escapeHtml(cardCreatorLabel(card))}</dd></div><div><dt>시즌</dt><dd>${escapeHtml(card.seasonName || "-")}</dd></div><div><dt>등급</dt><dd>${escapeHtml(card.rarity || "-")}</dd></div><div><dt>발행 수량</dt><dd>${card.issueLimit ? Number(card.issueLimit).toLocaleString() : "-"}</dd></div><div><dt>사인 메시지</dt><dd>${escapeHtml(card.signatureText || "없음")}</dd></div><div><dt>특전</dt><dd>${card.hasVoice ? "보이스 포함" : "보이스 없음"}${card.videoAssetId ? " · 영상 포함" : ""}${card.handwritingAssetId ? " · 손글씨 포함" : ""}</dd></div></dl></div><div class="release-status-grid"><div><span>정책</span><strong>${escapeHtml(releasePolicyLabel(policy))}</strong></div><div><span>검수 버전</span><strong>v${Number(card.reviewVersion || 0)}</strong></div><div><span>다음 작업</span><strong>${escapeHtml(nextActionLabel(nextAction))}</strong></div></div>${releaseSnapshot(card)}${releaseHistory(card)}${editForm}${reviewNote}${reviewActions}</div>`;
+  return `<div class="panel review-panel review-detail-panel"><div class="review-heading"><div><p class="eyebrow">카드 검수</p><h2>${escapeHtml(card.name)}</h2><span class="badge ${releaseBadgeClass(status)}">${escapeHtml(releaseStatusLabel(status))}</span></div><button class="secondary" id="close-review">닫기</button></div><div class="review-content"><div>${sideToggle}${image}${reviewEffectSummary(card)}</div><dl class="review-meta"><div><dt>제작자</dt><dd>${escapeHtml(cardCreatorLabel(card))}</dd></div><div><dt>시즌</dt><dd>${escapeHtml(card.seasonName || "-")}</dd></div><div><dt>등급</dt><dd>${escapeHtml(card.rarity || "-")}</dd></div><div><dt>발행 수량</dt><dd>${card.issueLimit ? Number(card.issueLimit).toLocaleString() : "-"}</dd></div><div><dt>마감</dt><dd>${escapeHtml(cardDeadlineLabel(card))}</dd></div><div><dt>담당자</dt><dd>${escapeHtml(cardAssigneeLabel(card))}</dd></div><div><dt>사인 메시지</dt><dd>${escapeHtml(card.signatureText || "없음")}</dd></div><div><dt>특전</dt><dd>${card.hasVoice ? "보이스 포함" : "보이스 없음"}${card.videoAssetId ? " · 영상 포함" : ""}${card.handwritingAssetId ? " · 손글씨 포함" : ""}</dd></div></dl></div><div class="release-status-grid"><div><span>정책</span><strong>${escapeHtml(releasePolicyLabel(policy))}</strong></div><div><span>검수 버전</span><strong>v${Number(card.reviewVersion || 0)}</strong></div><div><span>다음 작업</span><strong>${escapeHtml(nextActionLabel(nextAction))}</strong></div></div>${releaseSnapshot(card)}${releaseHistory(card)}${editForm}${reviewNote}${reviewActions}</div>`;
 }
 
 function releaseSnapshot(card) {
@@ -2991,11 +3013,12 @@ function bind() {
     .forEach((button) =>
       button.addEventListener("click", () => openReview(button.dataset.id)),
     );
-  document
-    .querySelectorAll(".release-queue-item")
-    .forEach((button) =>
-      button.addEventListener("click", () => openReview(button.dataset.id)),
-    );
+  document.querySelectorAll("[data-review-status-tab]").forEach((button) =>
+    button.addEventListener("click", () => {
+      state.status = button.dataset.reviewStatusTab || "all";
+      layout();
+    }),
+  );
   document.querySelectorAll("[data-review-side]").forEach((button) =>
     button.addEventListener("click", () => {
       state.reviewSide = button.dataset.reviewSide === "back" ? "back" : "front";

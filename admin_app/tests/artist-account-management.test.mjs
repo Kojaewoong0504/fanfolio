@@ -31,6 +31,11 @@ test('hosted admin routes authentication through its same-origin API proxy', asy
   )
 })
 
+test('local admin preview accepts an explicit isolated API origin', () => {
+  assert.match(source, /new URLSearchParams\(window\.location\.search\)\.get\(["']api["']\)/)
+  assert.match(source, /localApiQuery \|\|/)
+})
+
 test('admin keeps the login form hidden while restoring a refresh-cookie session', () => {
   assert.match(source, /restoringSession:\s*true/)
   assert.match(source, /관리자 세션 확인 중/)

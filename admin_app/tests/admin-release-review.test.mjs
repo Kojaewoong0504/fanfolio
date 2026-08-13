@@ -32,8 +32,8 @@ test('approved cards are linked to drops instead of directly published', () => {
   assert.doesNotMatch(source, /review-publish/)
 })
 
-test('release workflow has queue, notification, and drop-link styles', () => {
-  assert.match(css, /release-queue/)
+test('release workflow has review status, notification, and drop-link styles', () => {
+  assert.match(css, /review-status-tabs/)
   assert.match(css, /notification-badge/)
   assert.match(css, /drop-link-drawer/)
 })
@@ -43,4 +43,25 @@ test('card list uses each card source asset for its thumbnail', () => {
   assert.match(source, /sourceImageUrl/)
   assert.match(source, /URL\.createObjectURL/)
   assert.match(css, /\.card-thumb img/)
+})
+
+test('card review route uses the commercial list and detail 검수 workspace', () => {
+  assert.match(source, /commercial-review-workspace/)
+  assert.match(source, /review-breadcrumb/)
+  assert.match(source, /카드\s*>[\s\S]*검수/)
+  assert.match(source, /review-status-tabs/)
+  assert.match(source, /review-list-heading/)
+  assert.match(source, /review-list-panel/)
+  assert.match(source, /review-detail-panel/)
+  assert.match(source, /review-register-cta/)
+  assert.match(source, /cardDeadlineLabel\(card\)/)
+  assert.match(source, /cardAssigneeLabel\(card\)/)
+  assert.match(source, /card\.status === "pending_review" \|\| \["pending_partner_review", "pending_platform_review"\]/)
+  assert.match(source, /selected-review-row/)
+  assert.match(css, /\.app-nav[\s\S]*#080d27/)
+  assert.match(css, /\.commercial-review-workspace/)
+  assert.match(css, /\.review-status-tabs/)
+  assert.match(css, /\.selected-review-row/)
+  assert.match(css, /@media \(max-width: 1279px\)[\s\S]*\.review-workbench\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/)
+  assert.doesNotMatch(source, /function releaseQueue\(/)
 })

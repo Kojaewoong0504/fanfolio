@@ -515,7 +515,8 @@ function shell(content, title, activeView = state.view) {
     ['settings', 'settings', '설정'],
   ]
   const sidebarCollapsed = state.viewportMode !== 'phone' && state.sidebarCollapsed
-  return `<div class="studio-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}" data-viewport-mode="${state.viewportMode}">
+  const editorFocused = state.view === 'editor'
+  return `<div class="studio-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${editorFocused ? 'editor-focused' : ''}" data-viewport-mode="${state.viewportMode}">
     <aside class="studio-sidebar">
       <div class="sidebar-head">${brand()}<button type="button" class="sidebar-toggle" data-action="toggle-sidebar" aria-label="${sidebarCollapsed ? '사이드바 펼치기' : '사이드바 접기'}" aria-expanded="${!sidebarCollapsed}">${icon(sidebarCollapsed ? 'right_panel_open' : 'left_panel_close')}</button></div>
       <nav aria-label="스튜디오 주요 메뉴">
@@ -889,15 +890,24 @@ function editorProgress() {
 
 function designStage() {
   const inspectorOpen = Boolean(state.editor.inspectorOpen)
-  return `<section class="editor-design ${inspectorOpen ? 'inspector-open' : ''}">
+  return `<section class="editor-workbench editor-design ${inspectorOpen ? 'inspector-open' : ''}">
     <aside class="tool-rail" aria-label="카드 편집 도구">${editorTools.map(([tool, symbol, label]) => `<button type="button" data-tool="${tool}" class="${state.editor.tool === tool ? 'active' : ''}" aria-pressed="${state.editor.tool === tool}" title="${label}">${icon(symbol)}<span>${label}</span></button>`).join('')}</aside>
+    <aside class="editor-media-library" aria-label="미디어 라이브러리">
+      <div class="media-library-heading"><span>MEDIA</span><strong>소스 라이브러리</strong></div>
+      <div class="media-library-section"><span class="inspector-label">사진</span><div class="media-library-grid">${Object.entries(sampleAssets).map(([key, source]) => `<button type="button" class="media-library-tile ${state.editor.imageSrc === source ? 'active' : ''}" data-sample="${key}" aria-label="${key} 사진 적용"><img src="${source}" alt="" /><span>${icon('image')} ${key}</span></button>`).join('')}</div></div>
+      <div class="media-library-section"><span class="inspector-label">스티커</span><div class="media-library-grid">${builtInStickers.slice(0, 3).map((sticker) => `<button type="button" class="media-library-tile sticker" data-built-in-sticker="${esc(sticker.id)}" aria-label="${esc(sticker.name)} 스티커 추가"><img src="${esc(sticker.source)}" alt="" /><span>${icon('interests')} ${esc(sticker.name)}</span></button>`).join('')}</div></div>
+      <label class="media-library-upload"><input type="file" data-upload="image" accept="image/png,image/jpeg,image/webp" />${icon('upload_file')}<span><strong>사진 업로드</strong><small>실제 카드에 사용할 이미지</small></span></label>
+    </aside>
     <div class="editor-canvas-area">
-      <div class="canvas-toolbar"><div class="side-switch"><button type="button" data-side="front" class="${state.editor.side === 'front' ? 'active' : ''}">앞면</button><button type="button" data-side="back" class="${state.editor.side === 'back' ? 'active' : ''}">뒷면</button></div><span>${icon('info')} 실제 팬 화면과 유사한 비율이에요.</span></div>
-      <div class="editor-stage">${cardVisual()}<span class="stage-shadow" aria-hidden="true"></span></div>
-      <div class="canvas-caption"><span>${icon('touch_app')} 카드를 기울이거나 레이어를 직접 움직여 보세요.</span><div><button type="button" class="text-button mobile-tool-settings" data-action="open-inspector">${icon('tune')} 도구 설정</button><button type="button" class="text-button" data-action="open-fan-preview">전체 화면 미리보기 ${icon('open_in_full')}</button></div></div>
+      <div class="editor-canvas-shell">
+        <div class="canvas-toolbar"><div class="side-switch"><button type="button" data-side="front" class="${state.editor.side === 'front' ? 'active' : ''}">앞면</button><button type="button" data-side="back" class="${state.editor.side === 'back' ? 'active' : ''}">뒷면</button></div><span>${icon('zoom_in')} 100% · 카드 캔버스</span></div>
+        <div class="editor-stage">${cardVisual()}<span class="stage-shadow" aria-hidden="true"></span></div>
+        <div class="canvas-caption"><span>${icon('touch_app')} 카드를 기울이거나 레이어를 직접 움직여 보세요.</span><div><button type="button" class="text-button mobile-tool-settings" data-action="open-inspector">${icon('tune')} 도구 설정</button><button type="button" class="text-button" data-action="open-fan-preview">전체 화면 미리보기 ${icon('open_in_full')}</button></div></div>
+      </div>
+      <div class="editor-actions-strip"><button type="button" class="secondary-button" data-action="save-draft" ${state.busy ? 'disabled' : ''}>${icon('save')} ${state.busy ? '저장 중' : '초안 저장'}</button><button type="button" class="primary-button" data-action="go-details">다음 단계 ${icon('arrow_forward')}</button></div>
     </div>
     <button type="button" class="mobile-inspector-backdrop" data-action="close-inspector" aria-label="도구 설정 닫기"></button>
-    <aside class="editor-inspector ${inspectorOpen ? 'open' : ''}" aria-label="선택한 편집 도구 설정"><div class="inspector-heading"><div><span>EDIT TOOL</span><h3>${editorTools.find(([tool]) => tool === state.editor.tool)?.[2] || '사진'}</h3></div><div><span class="inspector-side">${state.editor.side === 'front' ? '앞면' : '뒷면'}</span><button type="button" class="inspector-close" data-action="close-inspector" aria-label="도구 설정 닫기">${icon('close')}</button></div></div><div class="inspector-body">${editorInspector()}</div></aside>
+    <aside class="editor-inspector editor-inspector-panel ${inspectorOpen ? 'open' : ''}" aria-label="선택한 편집 도구 설정"><div class="inspector-heading"><div><span>EDIT TOOL</span><h3>${editorTools.find(([tool]) => tool === state.editor.tool)?.[2] || '사진'}</h3></div><div><span class="inspector-side">${state.editor.side === 'front' ? '앞면' : '뒷면'}</span><button type="button" class="inspector-close" data-action="close-inspector" aria-label="도구 설정 닫기">${icon('close')}</button></div></div><div class="inspector-body">${editorInspector()}</div></aside>
     <div class="mobile-editor-actions"><button type="button" class="secondary-button" data-action="save-draft">${icon('save')} 저장</button><button type="button" class="primary-button" data-action="go-details">다음 ${icon('arrow_forward')}</button></div>
   </section>`
 }
