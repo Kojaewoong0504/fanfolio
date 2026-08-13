@@ -671,7 +671,8 @@ function eventDrawer() {
   const event = state.drawerData?.event || {};
   const artists = scopedArtists();
   const type = event.eventType || "announcement";
-  return `${drawerHeader("EDITORIAL EVENT", event.id ? "이벤트 편집" : "새 이벤트 등록", "팬앱 홈과 이벤트 목록에 노출할 콘텐츠를 작성합니다.")}<form class="drawer-body form" id="event-form" data-event-id="${escapeHtml(event.id || "")}"><label class="field"><span>이벤트 이미지 URL</span><input name="heroAssetId" value="${escapeHtml(event.heroAssetId || "")}" placeholder="asset_event_banner" required /></label><label class="field"><span>이벤트명</span><input name="title" value="${escapeHtml(event.title || "")}" maxlength="100" required /></label><label class="field"><span>한 줄 설명</span><input name="summary" value="${escapeHtml(event.summary || "")}" maxlength="180" required /></label><label class="field"><span>상세 설명</span><textarea name="description" rows="4" maxlength="5000">${escapeHtml(event.description || "")}</textarea></label><div class="form-grid"><label class="field"><span>이벤트 유형</span><select name="eventType">${["announcement", "card_drop", "card", "fan_mission", "external"].map((value) => `<option value="${value}" ${type === value ? "selected" : ""}>${eventTypeLabel(value)}</option>`).join("")}</select></label><label class="field"><span>아티스트</span><select name="artistId"><option value="">전체 서비스</option>${artists.map((artist) => `<option value="${escapeHtml(artist.id)}" ${artist.id === event.artistId ? "selected" : ""}>${escapeHtml(artist.name)}</option>`).join("")}</select></label></div><div class="form-grid"><label class="field"><span>시작 일시</span><input name="startsAt" type="datetime-local" value="${event.startsAt ? String(event.startsAt).slice(0,16) : ""}" required /></label><label class="field"><span>종료 일시</span><input name="endsAt" type="datetime-local" value="${event.endsAt ? String(event.endsAt).slice(0,16) : ""}" /></label></div><label class="field"><span>연결 ID 또는 외부 HTTPS URL</span><input name="connection" value="${escapeHtml(event.dropId || event.cardId || event.achievementId || event.externalUrl || "")}" placeholder="drop_... 또는 https://..." /></label><label class="field"><span>버튼 문구</span><input name="ctaLabel" value="${escapeHtml(event.ctaLabel || "이벤트 보기")}" maxlength="80" /></label><label class="check-row"><input name="featured" type="checkbox" ${event.featured ? "checked" : ""} /><span>홈 대표 이벤트로 우선 노출</span></label><footer class="drawer-footer"><button class="secondary close-drawer" type="button">취소</button><button class="primary" type="submit">${event.id ? "변경 저장" : "초안 저장"}</button></footer></form>`;
+  const selectedConnection = event.dropId || event.cardId || event.achievementId || event.externalUrl || "";
+  return `${drawerHeader("EDITORIAL EVENT", event.id ? "이벤트 편집" : "새 이벤트 등록", "팬앱 홈과 이벤트 목록에 노출할 콘텐츠를 작성합니다.")}<form class="drawer-body form" id="event-form" data-event-id="${escapeHtml(event.id || "")}"><label class="field"><span>이벤트 배너</span><input id="event-banner-file" name="bannerFile" type="file" accept="image/png,image/jpeg,image/webp" ${event.id ? "" : "required"} /><input name="heroAssetId" value="${escapeHtml(event.heroAssetId || "")}" placeholder="업로드 후 자동 입력" readonly required /></label><label class="field"><span>이벤트명</span><input name="title" value="${escapeHtml(event.title || "")}" maxlength="100" required /></label><label class="field"><span>한 줄 설명</span><input name="summary" value="${escapeHtml(event.summary || "")}" maxlength="180" required /></label><label class="field"><span>상세 설명</span><textarea name="description" rows="4" maxlength="5000">${escapeHtml(event.description || "")}</textarea></label><div class="form-grid"><label class="field"><span>이벤트 유형</span><select name="eventType">${["announcement", "card_drop", "card", "fan_mission", "external"].map((value) => `<option value="${value}" ${type === value ? "selected" : ""}>${eventTypeLabel(value)}</option>`).join("")}</select></label><label class="field"><span>아티스트</span><select name="artistId"><option value="">전체 서비스</option>${artists.map((artist) => `<option value="${escapeHtml(artist.id)}" ${artist.id === event.artistId ? "selected" : ""}>${escapeHtml(artist.name)}</option>`).join("")}</select></label></div><div class="form-grid"><label class="field"><span>시작 일시</span><input name="startsAt" type="datetime-local" value="${event.startsAt ? String(event.startsAt).slice(0,16) : ""}" required /></label><label class="field"><span>종료 일시</span><input name="endsAt" type="datetime-local" value="${event.endsAt ? String(event.endsAt).slice(0,16) : ""}" /></label></div><label class="field"><span>연결 대상</span><div id="event-connection-field">${eventConnectionOptions(type, selectedConnection)}</div></label><label class="field"><span>버튼 문구</span><input name="ctaLabel" value="${escapeHtml(event.ctaLabel || "이벤트 보기")}" maxlength="80" /></label><label class="check-row"><input name="featured" type="checkbox" ${event.featured ? "checked" : ""} /><span>홈 대표 이벤트로 우선 노출</span></label><footer class="drawer-footer"><button class="secondary close-drawer" type="button">취소</button><button class="primary" type="submit">${event.id ? "변경 저장" : "초안 저장"}</button></footer></form>`;
 }
 
 function drawerHeader(eyebrow, title, description) {
@@ -1240,6 +1241,14 @@ function eventWorkflowLabel(status) {
 
 function eventTypeLabel(type) {
   return ({ announcement: "공지", card_drop: "카드 드롭", card: "카드", fan_mission: "팬 미션", external: "외부 링크" })[type] || type || "공지";
+}
+
+function eventConnectionOptions(type, selected = "") {
+  if (type === "announcement") return `<option value="">연결 없음</option>`;
+  if (type === "external") return `<input name="connection" value="${escapeHtml(selected)}" placeholder="https://..." required />`;
+  const source = type === "card_drop" ? state.drops : type === "card" ? state.cards : state.engagement.achievements;
+  const options = source.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === selected ? "selected" : ""}>${escapeHtml(item.name || item.title || item.id)}</option>`).join("");
+  return `<select name="connection" id="event-connection-select" required><option value="">연결 대상 선택</option>${options}</select>`;
 }
 
 function eventsView() {
@@ -2617,6 +2626,10 @@ async function saveEvent(event) {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
   const id = event.currentTarget.dataset.eventId;
+  const bannerFile = form.get("bannerFile");
+  if (!form.get("heroAssetId") && bannerFile instanceof File && bannerFile.size) {
+    try { event.currentTarget.querySelector('[type="submit"]').disabled = true; form.set("heroAssetId", await uploadAsset(bannerFile, "event_banner")); } catch { toast("이벤트 배너 업로드에 실패했습니다."); return; }
+  }
   const kind = form.get("eventType");
   const connection = String(form.get("connection") || "").trim();
   const payload = { heroAssetId: String(form.get("heroAssetId") || "").trim(), title: String(form.get("title") || "").trim(), summary: String(form.get("summary") || "").trim(), description: String(form.get("description") || ""), eventType: kind, artistId: form.get("artistId") || null, startsAt: new Date(form.get("startsAt")).toISOString(), endsAt: form.get("endsAt") ? new Date(form.get("endsAt")).toISOString() : null, ctaLabel: String(form.get("ctaLabel") || "").trim() || null, featured: form.get("featured") === "on", ...(kind === "card_drop" ? { dropId: connection } : {}), ...(kind === "card" ? { cardId: connection } : {}), ...(kind === "fan_mission" ? { achievementId: connection } : {}), ...(kind === "external" ? { externalUrl: connection } : {}) };
@@ -3095,6 +3108,14 @@ function bind() {
     ?.addEventListener("submit", updateAdminCard);
   document.querySelector("#open-event-drawer")?.addEventListener("click", () => openDrawer("event"));
   document.querySelector("#event-form")?.addEventListener("submit", saveEvent);
+  document.querySelector("#event-banner-file")?.addEventListener("change", async (event) => {
+    const file = event.currentTarget.files?.[0]; if (!file) return;
+    try { event.currentTarget.form.elements.heroAssetId.value = await uploadAsset(file, "event_banner"); toast("이벤트 배너를 업로드했습니다."); } catch { event.currentTarget.value = ""; toast("이벤트 배너 업로드에 실패했습니다."); }
+  });
+  document.querySelector('#event-form select[name="eventType"]')?.addEventListener("change", (event) => {
+    const field = document.querySelector("#event-connection-field"); if (!field) return;
+    field.innerHTML = eventConnectionOptions(event.currentTarget.value);
+  });
   document.querySelectorAll("[data-event-row-id]").forEach((row) => {
     const open = () => { state.selectedEvent = state.events.find((item) => item.id === row.dataset.eventRowId) || null; layout(); };
     row.addEventListener("click", (event) => { if (!event.target.closest("button")) open(); });

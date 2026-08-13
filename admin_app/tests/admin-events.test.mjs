@@ -33,3 +33,10 @@ test('event workspace remains responsive', () => {
   assert.match(css, /\.event-workspace\s*\{[\s\S]*grid-template-columns/)
   assert.match(css, /@media \(max-width: 920px\)[\s\S]*\.event-workspace\s*\{\s*grid-template-columns: 1fr/)
 })
+
+test('event editor uploads a banner asset and offers managed connection choices', () => {
+  assert.match(source, /event-banner-file/)
+  assert.match(source, /uploadAsset\(.*event_banner/s)
+  assert.match(source, /event-connection-select/)
+  assert.match(source, /dropId|cardId|achievementId/)
+})
