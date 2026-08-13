@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import './App.css'
+import './reference.css'
 import cardExample from './assets/card-example.svg'
 import cardExampleBlue from './assets/card-example-blue.svg'
 import cardExamplePink from './assets/card-example-pink.svg'
@@ -14,6 +15,10 @@ import { EventList } from './components/EventList'
 import type { Card } from './types'
 import { demoCardImage, demoMemberImage, keepCardVisual } from './utils/cardVisual'
 import heroImage from './assets/hero.png'
+import cardYunaImage from './assets/card-yuna-lavender.jpg'
+import cardMinhoImage from './assets/card-minho-midnight.jpg'
+import cardJayImage from './assets/card-jay-rosegold.jpg'
+import dreamscapeHero from './assets/dreamscape-hero-v2.png'
 
 type Tab = 'home' | 'discover' | 'collection' | 'growth' | 'settings' | 'alerts' | 'events'
 
@@ -528,7 +533,7 @@ function App() {
   return (
     <main className={`app-shell ${tab}-shell ${tab === 'collection' && collectionCards.length === 0 ? 'empty-collection-shell' : ''} ${tab === 'home' && collectionCards.length === 0 ? 'empty-home-shell' : ''}`}>
       <header className="app-header">
-        <div><span className="eyebrow">FANFOLIO</span><h1>{tabTitle(tab)}</h1></div>
+        <div><span className="eyebrow">FANFOLIO</span>{tab !== 'home' && <h1>{tabTitle(tab)}</h1>}</div>
         <div className="header-actions">
           <button className="header-alert-button" onClick={() => navigateTab('alerts')} aria-label="알림">
             <NavIcon name="alerts" />{unreadCount > 0 && <b className="header-alert-badge">{unreadCount > 99 ? '99+' : unreadCount}</b>}
@@ -546,14 +551,15 @@ function App() {
         {tab === 'collection' && <Collection cards={collectionCards} summary={collectionSummary} benefits={collectionBenefits} loading={collectionLoading} onSelect={openCard} onRedeem={openRedeem} onDiscover={() => navigateTab('discover')} onClaim={claimBenefit} />}
         {tab === 'discover' && <Discover onSelect={openCard} />}
         {tab === 'alerts' && <Alerts items={notifications} error={notificationError} actionError={notificationActionError} onDismissActionError={() => setNotificationActionError('')} onRetry={() => window.dispatchEvent(new Event('fanfolio:refresh-notifications'))} onRead={markNotificationRead} onReadAll={markAllNotificationsRead} onNavigate={navigateTab} />}
+        {/* Embedded surfaces stay compact; the dedicated tab uses the full progression view. */}
         {tab === 'growth' && <FanGrowth progression={fanProgression} loading={growthLoading} error={growthError} mode="full" onRetry={refreshGrowth} onClaim={claimGrowthReward} onClaimPassTier={claimGrowthPassTier} onEquip={saveGrowthEquipment} fanGrowthMode="full" />}
-        {tab === 'settings' && currentUser && <Settings user={currentUser} onUserUpdated={setCurrentUser} onLogout={logout} />}
+        {tab === 'settings' && currentUser && <Settings user={currentUser} onUserUpdated={setCurrentUser} onLogout={logout} onEvents={openEvents} />}
       </section>
 
       <nav className="bottom-nav" aria-label="주요 메뉴">
-        <NavItem active={tab === 'home'} label="컬렉션" icon="home" onClick={() => navigateTab('home')} />
         <NavItem active={tab === 'discover'} label="탐색" onClick={() => navigateTab('discover')} />
         <NavItem active={tab === 'collection'} label="보관함" icon="collection" onClick={() => navigateTab('collection')} />
+        <NavItem active={tab === 'home'} label="홈" icon="home" onClick={() => navigateTab('home')} />
         <NavItem active={tab === 'growth'} label="팬 레벨" icon="growth" onClick={() => navigateTab('growth')} />
         <NavItem active={tab === 'settings'} label="마이" icon="settings" onClick={() => navigateTab('settings')} />
       </nav>
@@ -689,7 +695,7 @@ function Login({ onLogin }: { onLogin: () => void | Promise<void> }) {
   }, [verifyLink])
 
   const messageIsError = isErrorMessage(message)
-  return <main className="login-screen"><img className="brand-lockup" src="/fanfolio-logo-lockup.png" alt="FANFOLIO" /><h1>내 손안의<br />팬 컬렉션</h1><p className="muted">좋아하는 아티스트의 순간을<br />디지털 카드로 간직하세요.</p><div className="social-login"><button className="social-button kakao" onClick={() => { window.location.href = oauthStartUrl('kakao') }} disabled={busy}><span aria-hidden="true">K</span>카카오로 계속하기</button><button className="social-button google" onClick={() => { window.location.href = oauthStartUrl('google') }} disabled={busy}><span aria-hidden="true">G</span>Google로 계속하기</button></div><div className="login-divider"><span>또는 이메일로 로그인</span></div>{!requested && <div className="auth-mode" role="tablist" aria-label="인증 방식"><button className={purpose === 'login' ? 'active' : ''} role="tab" aria-selected={purpose === 'login'} onClick={() => setPurpose('login')}>로그인</button><button className={purpose === 'signup' ? 'active' : ''} role="tab" aria-selected={purpose === 'signup'} onClick={() => setPurpose('signup')}>회원가입</button></div>}<label className="field-label" htmlFor="login-email">이메일</label><input id="login-email" className="login-email-input" name="email" autoComplete="email" inputMode="email" autoCapitalize="none" spellCheck={false} value={email} onChange={e => setEmail(e.target.value)} placeholder="이메일을 입력하세요" type="email" disabled={requested} />{!requested ? <button className="primary" onClick={() => void requestLink()} disabled={!email.includes('@') || busy}>{busy ? '보내는 중...' : purpose === 'signup' ? '이메일로 가입하기' : '이메일로 계속하기'}</button> : <><label className="field-label" htmlFor="login-token">인증 토큰</label><input id="login-token" value={token} onChange={e => setToken(e.target.value)} placeholder="이메일의 인증 토큰을 입력하세요" /><button className="primary" onClick={() => void verifyLink()} disabled={!token || busy}>{busy ? '확인 중...' : purpose === 'signup' ? '회원가입하기' : '로그인하기'}</button></>}<p role={messageIsError ? 'alert' : 'status'} className={messageIsError ? 'form-message error-message' : 'form-message'}>{message}</p><p className="login-note">소셜 로그인은 빠르게 시작할 수 있고, 이메일 로그인도 계속 사용할 수 있어요.</p></main>
+  return <main className="login-screen"><div className="login-wordmark">FANFOLIO</div><h1>내 손안의<br />팬 컬렉션</h1><p className="muted">좋아하는 아티스트의 순간을<br />디지털 카드로 간직하세요.</p><img className="login-hero" src={dreamscapeHero} alt="드림스케이프" /><div className="social-login"><button className="social-button kakao" onClick={() => { window.location.href = oauthStartUrl('kakao') }} disabled={busy}><span aria-hidden="true">K</span>카카오로 계속하기</button><button className="social-button google" onClick={() => { window.location.href = oauthStartUrl('google') }} disabled={busy}><span aria-hidden="true">G</span>Google로 계속하기</button></div><div className="login-divider"><span>또는 이메일로 로그인</span></div>{!requested && <div className="auth-mode" role="tablist" aria-label="인증 방식"><button className={purpose === 'login' ? 'active' : ''} role="tab" aria-selected={purpose === 'login'} onClick={() => setPurpose('login')}>로그인</button><button className={purpose === 'signup' ? 'active' : ''} role="tab" aria-selected={purpose === 'signup'} onClick={() => setPurpose('signup')}>회원가입</button></div>}<label className="field-label" htmlFor="login-email">이메일</label><input id="login-email" className="login-email-input" name="email" autoComplete="email" inputMode="email" autoCapitalize="none" spellCheck={false} value={email} onChange={e => setEmail(e.target.value)} placeholder="이메일을 입력하세요" type="email" disabled={requested} />{!requested ? <button className="primary" onClick={() => void requestLink()} disabled={!email.includes('@') || busy}>{busy ? '보내는 중...' : purpose === 'signup' ? '이메일로 가입하기' : '이메일로 계속하기'}</button> : <><label className="field-label" htmlFor="login-token">인증 토큰</label><input id="login-token" value={token} onChange={e => setToken(e.target.value)} placeholder="이메일의 인증 토큰을 입력하세요" /><button className="primary" onClick={() => void verifyLink()} disabled={!token || busy}>{busy ? '확인 중...' : purpose === 'signup' ? '회원가입하기' : '로그인하기'}</button></>}<p role={messageIsError ? 'alert' : 'status'} className={messageIsError ? 'form-message error-message' : 'form-message'}>{message}</p><p className="login-note">소셜 로그인은 빠르게 시작할 수 있고, 이메일 로그인도 계속 사용할 수 있어요.</p></main>
 }
 
 function Onboarding({ userId, profileImageUrl, onComplete, onBack }: { userId: string, profileImageUrl: string | null, onComplete: () => void, onBack: () => Promise<void> }) {
@@ -819,11 +825,16 @@ const fallbackHomeEvent: FanEvent = {
   startsAt: '2026-08-01T00:00:00Z',
   endsAt: null,
   heroUrl: heroImage,
+  
   artistName: '드림스케이프',
   ctaLabel: '이벤트 보기',
   ctaTarget: '/events',
 }
-
+const fallbackHomeCards: Card[] = [
+  { id: 'home-stardust-hologram', title: '스타더스트 홀로그램', artist: '드림스케이프', member: '유나', image: cardYunaImage },
+  { id: 'home-stardust-photo', title: '별빛 현장 포토카드', artist: '드림스케이프', member: '유나', image: cardMinhoImage },
+  { id: 'home-dream-moment', title: '드림 모먼트 셀카 카드', artist: '드림스케이프', member: '유나', image: cardJayImage },
+]
 function Home(props: HomeProps) {
   const [recommendations, setRecommendations] = useState<Card[]>([])
 
@@ -849,10 +860,16 @@ function HomeRecommendations({ cards, onSelect, onDiscover }: { cards: Card[], o
 function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome, onSelect, onDiscover, onCollection, onRedeem, onEvents, onEvent }: HomeProps) {
   const featured = cards[0]
   const featuredEvent = eventHome?.featuredEvent ?? fallbackHomeEvent
+  const artist = eventHome?.favoriteArtist ?? { id: 'dreamscape', name: '드림스케이프', imageUrl: cardYunaImage }
+  const newCards = eventHome?.newCards?.length ? eventHome.newCards.map(toCatalogCard) : fallbackHomeCards
   const completionRate = Math.min(100, Math.max(0, summary.completionRate))
   return <div className="home-screen collection-home">
+    <h1 className="home-page-title">오늘, 좋아하는 아티스트의 <em>새로운 순간</em></h1>
     <p className="collection-greeting"><strong>{nickname}</strong>님, 새 카드가 도착했어요</p>
     <section className="home-event-spotlight" aria-labelledby="home-event-title"><button type="button" onClick={() => featuredEvent.id === fallbackHomeEvent.id ? onEvents() : onEvent(featuredEvent)}><img src={resolveApiUrl(featuredEvent.heroUrl)} alt="" /><span><small>NOW · EVENT</small><b id="home-event-title">{featuredEvent.title}</b><em>{featuredEvent.summary}</em><strong>{featuredEvent.ctaLabel ?? '이벤트 보기'} <i aria-hidden="true">›</i></strong></span></button><div className="home-event-meta"><span>새로운 팬 경험을 만나보세요</span><button type="button" onClick={onEvents}>이벤트 전체 보기 <i aria-hidden="true">›</i></button></div></section>
+    <section className="home-artist-section" aria-labelledby="home-artist-title"><div className="section-heading"><h2 id="home-artist-title">관심 아티스트</h2><button type="button" onClick={onDiscover}>아티스트 홈 <span aria-hidden="true">›</span></button></div><button type="button" className="home-artist-card" onClick={onDiscover}><img className="home-artist-avatar" src={resolveApiUrl(artist.imageUrl) || cardYunaImage} alt="" /><span className="home-artist-copy"><b>{artist.name} <i aria-hidden="true">✓</i></b><small>4명의 멤버</small><span className="home-artist-members">{[cardYunaImage, cardMinhoImage, cardJayImage, cardYunaImage].map((image, index) => <img key={`${image}-${index}`} src={image} alt="" />)}</span></span><strong className="home-artist-arrow" aria-hidden="true">›</strong></button></section>
+    <section className="home-new-cards" aria-labelledby="home-new-cards-title"><div className="section-heading"><h2 id="home-new-cards-title">새로 공개된 카드</h2><button type="button" onClick={onDiscover}>전체 보기 <span aria-hidden="true">›</span></button></div><div className="home-new-card-row">{newCards.slice(0, 3).map(card => <button type="button" className="home-new-card" key={card.id} onClick={() => onSelect(card)} aria-label={`${card.title} 카드 상세 보기`}><img src={card.image} alt="" onError={event => keepCardVisual(event, card.id)} /><span><b>{card.title}</b><small>{card.id.includes('hologram') ? 'UR' : 'SR'}</small></span></button>)}</div></section>
+    <button type="button" className="home-coming-soon" onClick={onEvents}><span className="home-coming-icon" aria-hidden="true">▣</span><span><small>COMING SOON</small><b>스타더스트 드롭 <i>·</i> 8월 20일</b></span><strong aria-hidden="true">›</strong></button>
     {loading && !featured ? <div className="home-loading" role="status" aria-live="polite"><span className="loading-orbit" aria-hidden="true" /><b>컬렉션을 준비하고 있어요</b></div> : featured ? <button className="collection-spotlight" onClick={() => onSelect(featured)} aria-label={`${featured.title} 카드 상세 보기`}>
       <img src={featured.image} alt={`${featured.title} 카드`} onError={event => keepCardVisual(event, featured.id)} />
       <span className="collection-spotlight-copy"><small>FANFOLIO COLLECTION</small><b>{featured.title}</b><em>{featured.artist} · {featured.member}</em><strong>NEW <i>·</i> MY COLLECTION</strong></span>
@@ -908,10 +925,6 @@ function Discover({ onSelect }: { onSelect: (card: Card) => void }) {
   const [showAll, setShowAll] = useState(false)
   const [artists, setArtists] = useState<CatalogArtist[]>([])
   const [members, setMembers] = useState<CatalogMember[]>([])
-  const [artistError, setArtistError] = useState(false)
-  const [memberError, setMemberError] = useState(false)
-  const [artistAttempt, setArtistAttempt] = useState(0)
-  const [memberAttempt, setMemberAttempt] = useState(0)
   const [results, setResults] = useState<Card[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -919,22 +932,20 @@ function Discover({ onSelect }: { onSelect: (card: Card) => void }) {
 
   useEffect(() => {
     let cancelled = false
-    setArtistError(false)
     void apiFetch<{ ok: true, data: { items: CatalogArtist[] } }>('/catalog/artists')
       .then(result => { if (!cancelled) setArtists(result.data.items) })
-      .catch(() => { if (!cancelled) { setArtists([]); setArtistError(true) } })
+      .catch(() => { if (!cancelled) setArtists([]) })
     return () => { cancelled = true }
-  }, [artistAttempt])
+  }, [])
 
   useEffect(() => {
     let cancelled = false
     const suffix = artistId ? `?artistId=${encodeURIComponent(artistId)}` : ''
-    setMemberError(false)
     void apiFetch<{ ok: true, data: { items: CatalogMember[] } }>(`/catalog/members${suffix}`)
       .then(result => { if (!cancelled) setMembers(result.data.items) })
-      .catch(() => { if (!cancelled) { setMembers([]); setMemberError(true) } })
+      .catch(() => { if (!cancelled) setMembers([]) })
     return () => { cancelled = true }
-  }, [artistId, memberAttempt])
+  }, [artistId])
 
   useEffect(() => {
     const params = new URLSearchParams({ page: '1', pageSize: '20' })
@@ -970,7 +981,7 @@ function Discover({ onSelect }: { onSelect: (card: Card) => void }) {
   const featuredTitle = sort === 'recommended' ? '추천 카드' : sort === 'rarity' ? '희귀도 높은 카드' : '이름순 카드'
   if (loading && results.length === 0) return <div className="discover-loading" role="status" aria-live="polite"><span className="loading-orbit" aria-hidden="true" /><b>카드를 찾고 있어요</b><small>잠시만 기다려 주세요.</small></div>
   if (error && results.length === 0) return <div className="service-notice discover-error" role="alert"><span>{error}</span><button onClick={() => setRequestVersion(value => value + 1)}>다시 시도</button></div>
-  return <><div className="discover-search"><InlineIcon name="search" /><input className="search" type="search" aria-label="카드, 아티스트 검색" value={query} onChange={event => setQuery(event.target.value)} placeholder="카드, 아티스트 검색" />{query && <button type="button" className="search-clear" aria-label="검색어 지우기" onClick={() => setQuery("")}>×</button>}</div><div className="discover-section"><div className="section-heading compact-heading"><h2>그룹별 탐색</h2><button onClick={() => { setArtistId(''); setMemberId('') }}>전체 보기</button></div><div className="explore-artist-row">{artists.slice(0, 5).map(artist => <button aria-pressed={artistId === artist.id} className={artistId === artist.id ? 'explore-chip selected' : 'explore-chip'} key={artist.id} onClick={() => { setArtistId(artist.id); setMemberId(''); setShowAll(false) }}><img src={demoCardImage(resolveApiUrl(artist.imageUrl), artist.id)} alt="" onError={event => keepCardVisual(event, artist.id)} /><span>{artist.name}</span></button>)}</div>{artistError && <div className="inline-retry" role="alert"><span>아티스트 목록을 불러오지 못했어요.</span><button type="button" onClick={() => setArtistAttempt(value => value + 1)}>다시 시도</button></div>}<div className="section-heading compact-heading"><h2>멤버별 탐색</h2></div><div className="explore-member-row">{members.slice(0, 6).map(member => <button aria-pressed={memberId === member.id} className={memberId === member.id ? 'explore-member selected' : 'explore-member'} key={member.id} onClick={() => { setMemberId(member.id); setShowAll(false) }}><img src={demoMemberImage(member.id)} alt="" onError={event => keepCardVisual(event, `member:${member.id}`)} /><span>{member.name}</span></button>)}</div>{memberError && <div className="inline-retry" role="alert"><span>멤버 목록을 불러오지 못했어요.</span><button type="button" onClick={() => setMemberAttempt(value => value + 1)}>다시 시도</button></div>}</div><div className="filter-row"><select aria-label="아티스트 필터" value={artistId} onChange={event => { setArtistId(event.target.value); setMemberId(''); setShowAll(false) }}><option value="">전체 아티스트</option>{artists.map(artist => <option key={artist.id} value={artist.id}>{artist.name}</option>)}</select><select aria-label="멤버 필터" value={memberId} onChange={event => { setMemberId(event.target.value); setShowAll(false) }}><option value="">전체 멤버</option>{members.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}</select><select aria-label="정렬" value={sort} onChange={event => { setSort(event.target.value as CatalogSort); setShowAll(false) }}><option value="recommended">추천순</option><option value="name">이름순</option><option value="rarity">희귀도순</option></select></div>{results.length > 0 ? <><div className="section-heading"><h2>{featuredTitle}</h2>{results.length > 6 && <button onClick={showAllResults}>전체 보기</button>}</div><div className="horizontal-cards">{results.slice(0, 4).map(card => <button className="discover-feature-card" key={card.id} aria-label={`${card.title} 카드 · ${card.artist} · ${card.member}`} onClick={() => onSelect(card)}><img src={card.image} alt={`${card.title} 카드`} onError={event => keepCardVisual(event, card.id)} /><span className="discover-feature-copy"><b>{card.title}</b><small>{card.member}</small></span></button>)}</div><div className="section-heading" id="discover-results"><h2>탐색 결과</h2>{results.length > 6 && <button onClick={() => setShowAll(value => !value)}>{showAll ? '간단히 보기' : `전체 보기 (${results.length})`}</button>}</div><div className="discover-list">{visibleResults.map(card => <button key={card.id} onClick={() => onSelect(card)}><img src={card.image} alt={`${card.title} 카드`} onError={event => keepCardVisual(event, card.id)} /><span><b>{card.title}</b><small>{card.artist} · {card.member}</small></span><strong>›</strong></button>)}</div></> : <div className="empty-slot discover-empty" role="status"><b>카드를 찾지 못했어요</b><small>검색어나 필터를 바꿔 보세요.</small><button type="button" className="outline" onClick={resetFilters}>필터 초기화</button></div>}</>
+  return <><section className="artist-hub"><div className="artist-hub-heading"><p className="eyebrow">ARTIST HUB</p><h2>탐색</h2><p>좋아하는 아티스트의 모든 정보를 한눈에</p></div><section className="artist-hub-hero"><img src={dreamscapeHero} alt="드림스케이프" /><div className="artist-hub-hero-overlay"><span>추천 아티스트</span><h3>드림스케이프 <i>✓</i></h3><p>4명의 멤버 · 공식 아티스트 공간</p><div className="hub-members">{[cardYunaImage, cardMinhoImage, cardJayImage, cardYunaImage].map((image, index) => <img key={index} src={image} alt="" />)}</div><button type="button" onClick={() => setArtistId('dreamscape')}>+ 팔로우</button></div></section><nav className="hub-tabs" aria-label="아티스트 정보"><a className="active" href="#artist-home">아티스트 홈</a><a href="#artist-schedule">일정</a><a href="#artist-news">뉴스</a><a href="#artist-cards">카드</a><a href="#artist-events">이벤트</a></nav><section id="artist-schedule" className="hub-section"><div className="section-heading"><h3>다가오는 일정</h3><button type="button">전체 보기 ›</button></div><div className="hub-schedule-grid"><article><b>JUN<br /><strong>28</strong></b><div><span>팬미팅</span><h4>드림스케이프 팬미팅</h4><p>2026.06.28 (일) 17:00</p><small>올림픽공원 올림픽홀</small></div></article><article><b>JUL<br /><strong>12</strong></b><div><span>콘서트</span><h4>2026 SUMMER FAN WEEK</h4><p>2026.07.12 (일) 18:00</p><small>KSPO DOME</small></div></article></div></section><section id="artist-news" className="hub-section"><div className="section-heading"><h3>드림스케이프 뉴스</h3><button type="button">전체 보기 ›</button></div><div className="hub-news-list"><article><img src={dreamscapeHero} alt="" /><div><b>드림스케이프, 새 앨범 트랙리스트 공개</b><p>타이틀곡 ‘Nebula’ 포함 총 6곡 수록</p><small>1시간 전</small></div><strong>›</strong></article><article><img src={cardExampleBlue} alt="" /><div><b>드림스케이프, 글로벌 차트 1위!</b><p>신곡 ‘Nebula’ 글로벌 인기 상승</p><small>1일 전</small></div><strong>›</strong></article></div></section><section id="artist-cards" className="hub-section"><div className="section-heading"><h3>새 카드</h3><button type="button" onClick={() => document.getElementById('discover-results')?.scrollIntoView({ behavior: 'smooth' })}>전체 보기 ›</button></div><div className="hub-card-row">{[cardYunaImage, cardMinhoImage, cardJayImage].map((image, index) => <button type="button" key={image} onClick={() => { if (results[index]) onSelect(results[index]) }}><img src={image} alt="새 카드" /><b>{['하린', '도윤', '제이'][index]}<br />Nebula Ver.</b><span>{index === 0 ? 'UR' : 'SR'}</span></button>)}</div></section></section><div className="discover-search"><InlineIcon name="search" /><input className="search" type="search" aria-label="카드, 아티스트 검색" value={query} onChange={event => setQuery(event.target.value)} placeholder="카드, 아티스트 검색" />{query && <button type="button" className="search-clear" aria-label="검색어 지우기" onClick={() => setQuery("")}>×</button>}</div><div className="discover-section"><div className="section-heading compact-heading"><h2>카드 둘러보기</h2><button onClick={() => { setArtistId(''); setMemberId('') }}>전체 보기</button></div><div className="filter-row"><select aria-label="아티스트 필터" value={artistId} onChange={event => { setArtistId(event.target.value); setMemberId(''); setShowAll(false) }}><option value="">전체 아티스트</option>{artists.map(artist => <option key={artist.id} value={artist.id}>{artist.name}</option>)}</select><select aria-label="멤버 필터" value={memberId} onChange={event => { setMemberId(event.target.value); setShowAll(false) }}><option value="">전체 멤버</option>{members.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}</select><select aria-label="정렬" value={sort} onChange={event => { setSort(event.target.value as CatalogSort); setShowAll(false) }}><option value="recommended">추천순</option><option value="name">이름순</option><option value="rarity">희귀도순</option></select></div>{results.length > 0 ? <><div className="section-heading"><h2>{featuredTitle}</h2>{results.length > 6 && <button onClick={showAllResults}>전체 보기</button>}</div><div className="horizontal-cards">{results.slice(0, 4).map(card => <button className="discover-feature-card" key={card.id} aria-label={`${card.title} 카드 · ${card.artist} · ${card.member}`} onClick={() => onSelect(card)}><img src={card.image} alt={`${card.title} 카드`} onError={event => keepCardVisual(event, card.id)} /><span className="discover-feature-copy"><b>{card.title}</b><small>{card.member}</small></span></button>)}</div><div className="section-heading" id="discover-results"><h2>탐색 결과</h2>{results.length > 6 && <button onClick={() => setShowAll(value => !value)}>{showAll ? '간단히 보기' : `전체 보기 (${results.length})`}</button>}</div><div className="discover-list">{visibleResults.map(card => <button key={card.id} onClick={() => onSelect(card)}><img src={card.image} alt={`${card.title} 카드`} onError={event => keepCardVisual(event, card.id)} /><span><b>{card.title}</b><small>{card.artist} · {card.member}</small></span><strong>›</strong></button>)}</div></> : <div className="empty-slot discover-empty" role="status"><b>카드를 찾지 못했어요</b><small>검색어나 필터를 바꿔 보세요.</small><button type="button" className="outline" onClick={resetFilters}>필터 초기화</button></div>}</div></>
 }
 
 function notificationKindLabel(kind: string): string {

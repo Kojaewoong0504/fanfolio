@@ -31,11 +31,12 @@ test('legacy demo cards use a member-matched first-party portrait', () => {
 
 test('fan navigation uses five persistent destinations with alerts retained in the header', () => {
   assert.equal([...appSource.matchAll(/<NavItem /g)].length, 5)
-  assert.match(appSource, /label="컬렉션"/)
+  assert.match(appSource, /label="홈"/)
   assert.match(appSource, /label="탐색"/)
   assert.match(appSource, /label="보관함"/)
   assert.match(appSource, /label="팬 레벨"/)
   assert.match(appSource, /label="마이"/)
+  assert.match(appSource, /label="탐색"[\s\S]*label="보관함"[\s\S]*label="홈"/)
   assert.match(appSource, /header-alert-button/)
   assert.match(appSource, /navigateTab\('alerts'\)/)
 })
@@ -58,4 +59,13 @@ test('collection spotlight styles create the selected editorial hierarchy and mo
   assert.match(appCssSource, /overflow-x:auto/)
   assert.match(appCssSource, /\.collection-register-cta/)
   assert.match(appCssSource, /@media\(max-width:360px\)/)
+})
+
+test('home surfaces the editorial artist, new cards, and upcoming drop sections', () => {
+  assert.match(appSource, /className="home-artist-section"/)
+  assert.match(appSource, /관심 아티스트/)
+  assert.match(appSource, /className="home-new-cards"/)
+  assert.match(appSource, /새로 공개된 카드/)
+  assert.match(appSource, /className="home-coming-soon"/)
+  assert.match(appSource, /fallbackHomeCards/)
 })
