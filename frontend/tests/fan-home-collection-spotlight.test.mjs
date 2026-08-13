@@ -69,3 +69,11 @@ test('home surfaces the editorial artist, new cards, and upcoming drop sections'
   assert.match(appSource, /className="home-coming-soon"/)
   assert.match(appSource, /fallbackHomeCards/)
 })
+
+test('reference entry routes and artist hub heading stay aligned with the approved fan flow', () => {
+  assert.match(appSource, /if \(pathname === '\/' \|\| pathname === ''\) return 'home'/)
+  assert.match(appSource, /heroUrl: dreamscapeHero/)
+  assert.match(appSource, /resolveApiUrl\(featuredEvent\.heroUrl\) \|\| dreamscapeHero/)
+  assert.match(appSource, /const artistImage = artist\.imageUrl/)
+  assert.doesNotMatch(appSource, /artist-hub-heading"><p className="eyebrow">ARTIST HUB<\/p><h2>탐색<\/h2>/)
+})
