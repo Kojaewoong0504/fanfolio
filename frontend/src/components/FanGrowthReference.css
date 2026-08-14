@@ -1,0 +1,526 @@
+.fan-growth-reference{gap:0;padding:18px 0 112px;background:#fcfbff;overflow:visible}.fan-growth-reference-heading{margin:0 0 28px;padding:0 2px}.fan-growth-brand{margin:0 0 40px;color:#5146e5;font-size:25px;font-weight:900;letter-spacing:-.045em}.fan-growth-reference-heading h1{margin:0;color:#111938;font-size:30px;line-height:1.1;letter-spacing:-.07em}.fan-growth-reference-heading>p:last-child{margin:14px 0 0;color:#6f7690;font-size:15px;line-height:1.45;letter-spacing:-.035em}.fan-growth-hero{display:grid;grid-template-columns:1fr 1.08fr;gap:26px;align-items:center;min-height:328px;padding:28px;border:1px solid #e4e1ff;border-radius:25px;background:linear-gradient(135deg,#fff 0%,#f8f7ff 100%);box-shadow:0 12px 30px #4a3fdc12}.fan-growth-ring-large{display:grid;place-items:center;width:208px;height:208px;margin:auto;border-radius:50%;background:conic-gradient(#5146e5 0 var(--fan-progress),#e9e9f5 var(--fan-progress) 360deg);position:relative}.fan-growth-ring-large:after{position:absolute;inset:12px;content:'';border-radius:50%;background:#fff;box-shadow:inset 0 0 0 1px #f3f2ff}.fan-growth-ring-large>div{position:relative;z-index:1;display:grid;justify-items:center;gap:7px}.fan-growth-ring-large strong{color:#5146e5;font-size:42px;line-height:1;letter-spacing:-.075em}.fan-growth-ring-large b{color:#263055;font-size:16px;letter-spacing:-.04em}.fan-growth-ring-large span{color:#7b7f95;font-size:12px}.fan-growth-ring-large em{color:#5146e5;font-style:normal;font-weight:800}.fan-growth-hero-copy{min-width:0}.fan-growth-pill{display:inline-flex;align-items:center;min-height:28px;padding:0 13px;border-radius:999px;background:#367ee9;color:#fff;font-size:12px;font-weight:800}.fan-growth-hero-copy h2{margin:22px 0 8px;color:#111938;font-size:22px;line-height:1.3;letter-spacing:-.065em}.fan-growth-hero-copy h2 strong{color:#5146e5}.fan-growth-hero-copy>p{margin:0;color:#6f7690;font-size:14px;line-height:1.45}.fan-growth-benefit-cta{display:flex;align-items:center;gap:12px;width:100%;min-height:62px;margin-top:25px;padding:0 16px;border:1px solid #e1ddff;border-radius:17px;background:#fff;color:#263055;font-size:15px;font-weight:750;text-align:left;cursor:pointer}.fan-growth-benefit-cta span{display:grid;place-items:center;width:38px;height:38px;border-radius:50%;background:#ece9ff;color:#6252e8;font-size:23px}.fan-growth-benefit-cta b{margin-left:auto;color:#989bb0;font-size:28px;font-weight:400}.fan-growth-reference-section{margin-top:34px}.fan-growth-reference-title{display:flex;align-items:center;justify-content:space-between;margin:0 2px 14px}.fan-growth-reference-title h2{margin:0;color:#111938;font-size:21px;letter-spacing:-.06em}.fan-growth-reference-title button{display:inline-flex;align-items:center;gap:5px;border:0;background:none;color:#70778d;font-size:12px;font-weight:750;cursor:pointer}.fan-growth-reference-title button b{font-size:23px;font-weight:400;line-height:1}.fan-growth-missions{border:1px solid #e5e4fa;border-radius:19px;background:#fff;box-shadow:0 8px 22px #4a3fdc0b;overflow:hidden}.fan-growth-missions article{display:grid;grid-template-columns:54px minmax(0,1fr) auto;align-items:center;gap:12px;min-height:91px;padding:13px 18px;border-bottom:1px solid #ececf5}.fan-growth-missions article:last-child{border-bottom:0}.fan-growth-mission-icon{display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:#f0edff;color:#5d50e5;font-size:21px}.fan-growth-missions article>div{min-width:0}.fan-growth-missions article b{display:block;color:#1b2546;font-size:15px;line-height:1.35;letter-spacing:-.04em}.fan-growth-missions article p{margin:5px 0 0;overflow:hidden;color:#788097;font-size:12px;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}.fan-growth-missions article>strong{color:#5b50e5;font-size:14px;white-space:nowrap}.fan-growth-missions article.completed>strong{padding:7px 12px;border-radius:999px;background:#e5faf2;color:#2aa67b;font-size:12px}.fan-growth-milestones{display:flex;gap:10px;overflow-x:auto;padding:0 1px 13px;scrollbar-width:none;scroll-snap-type:x proximity}.fan-growth-milestones::-webkit-scrollbar{display:none}.fan-growth-milestone{position:relative;display:grid;flex:0 0 122px;align-content:start;justify-items:center;min-height:229px;padding:17px 10px 12px;border:1px solid #e5e4f5;border-radius:18px;background:#fff;box-shadow:0 7px 18px #4a3fdc08;scroll-snap-align:start}.fan-growth-milestone.is-current{border:2px solid #6655ee;box-shadow:0 10px 22px #5e51e52b}.fan-growth-milestone.is-locked{background:#fcfcff}.fan-growth-milestone>strong{align-self:start;color:#263055;font-size:14px}.fan-growth-milestone-art{display:grid;place-items:center;width:75px;height:89px;margin:9px 0;color:#6b59ee;font-size:46px;font-weight:800}.fan-growth-milestone>b{color:#293251;font-size:12px;line-height:1.35;text-align:center}.fan-growth-milestone>small{margin-top:2px;color:#6f7690;font-size:11px;text-align:center}.fan-growth-current-label{position:absolute;top:-16px;left:50%;padding:6px 14px;border-radius:10px;background:#5e50e8;color:#fff;font-size:11px;font-weight:800;transform:translateX(-50%)}.fan-growth-milestone-track{height:4px;margin:7px 52px 0;border-radius:99px;background:#e8e8f1}.fan-growth-milestone-track span{display:block;height:100%;border-radius:inherit;background:#5b50e8}.fan-growth-benefits{display:grid;grid-template-columns:1fr 1fr;overflow:hidden;border:1px solid #e3e2fa;border-radius:20px;background:#fff;box-shadow:0 8px 22px #4a3fdc0b}.fan-growth-benefits>img{width:100%;height:100%;min-height:225px;object-fit:cover}.fan-growth-benefits>div{display:flex;flex-direction:column;padding:22px 20px}.fan-growth-benefits ul{display:grid;gap:14px;margin:18px 0 22px;padding:0;list-style:none;color:#293251;font-size:13px;line-height:1.35}.fan-growth-benefits li:before{content:'☆';display:inline-block;margin-right:10px;color:#6a58ed;font-size:18px;vertical-align:-2px}.fan-growth-benefits>div>button{display:flex;align-items:center;justify-content:space-between;margin-top:auto;padding:16px 0 0;border:0;border-top:1px solid #ededf5;background:none;color:#616a86;font-size:12px;text-align:left;cursor:pointer}.fan-growth-benefits>div>button b{color:#9699ad;font-size:24px;font-weight:400}.fan-growth-reference .fan-growth-inline-error{margin-top:18px}.fan-growth-reference .fan-growth-sheet-backdrop{position:fixed}.fan-growth-reference button:focus-visible{outline:3px solid #8ea8ff;outline-offset:2px}
+@media(max-width:640px){.fan-growth-reference{padding-right:0;padding-left:0}.fan-growth-reference-heading{margin-bottom:24px}.fan-growth-brand{margin-bottom:34px;font-size:24px}.fan-growth-hero{grid-template-columns:1fr;gap:20px;min-height:0;padding:22px 18px;border-radius:20px}.fan-growth-ring-large{width:178px;height:178px}.fan-growth-ring-large strong{font-size:37px}.fan-growth-hero-copy h2{margin-top:16px;font-size:20px}.fan-growth-benefit-cta{margin-top:18px}.fan-growth-reference-section{margin-top:28px}.fan-growth-reference-title h2{font-size:20px}.fan-growth-benefits{grid-template-columns:1fr}.fan-growth-benefits>img{height:190px;min-height:0}.fan-growth-benefits>div{padding:20px}.fan-growth-milestone{flex-basis:118px;min-height:220px}}
+@media(max-width:360px){.fan-growth-reference-heading h1{font-size:28px}.fan-growth-hero{padding:18px 14px}.fan-growth-ring-large{width:164px;height:164px}.fan-growth-missions article{grid-template-columns:46px minmax(0,1fr);padding:12px}.fan-growth-missions article>strong{grid-column:2}.fan-growth-mission-icon{width:38px;height:38px}.fan-growth-reference-title h2{font-size:18px}}
+
+/* Reference canvas: the growth tab is a wide editorial page, not the compact 430px app card. */
+.app-shell.growth-shell{width:100%;max-width:853px;margin:0 auto;padding:26px 44px 132px;border:0;border-radius:0;box-shadow:none;background:#fcfbff}.app-shell.growth-shell .screen{min-height:0;padding:0}.app-shell.growth-shell .app-header{min-height:74px;margin-bottom:30px}.app-shell.growth-shell .app-header .eyebrow{font-size:31px;letter-spacing:-.055em;font-weight:900}.app-shell.growth-shell .app-header h1{margin-top:28px;font-size:44px;letter-spacing:-.08em}.app-shell.growth-shell .header-actions{gap:20px}.app-shell.growth-shell .header-alert-button,.app-shell.growth-shell .header-profile-button{width:62px;height:62px}.app-shell.growth-shell .header-alert-button{border-radius:18px;background:transparent}.app-shell.growth-shell .header-profile-button{box-shadow:0 0 0 1px #e4e3ec,0 7px 18px #171c3d14}.app-shell.growth-shell .bottom-nav{width:100%;max-width:853px;border-top:1px solid #e5e4f4;border-radius:26px 26px 0 0;padding:18px 28px 24px}.app-shell.growth-shell .nav-item{min-height:62px;font-size:14px}.app-shell.growth-shell .nav-icon{width:30px;height:30px}.fan-growth-reference{padding:0 0 18px}.fan-growth-reference-heading{margin:0 0 34px}.fan-growth-reference-heading>p:last-child{font-size:21px}.fan-growth-hero{min-height:364px;padding:34px 44px;border-radius:28px}.fan-growth-ring-large{width:286px;height:286px}.fan-growth-ring-large:after{inset:15px}.fan-growth-ring-large strong{font-size:60px}.fan-growth-ring-large b{font-size:23px}.fan-growth-ring-large span{font-size:17px}.fan-growth-hero-copy h2{font-size:29px}.fan-growth-hero-copy>p{font-size:18px}.fan-growth-pill{min-height:36px;padding:0 16px;font-size:15px}.fan-growth-benefit-cta{min-height:74px;font-size:19px}.fan-growth-benefit-cta span{width:46px;height:46px}.fan-growth-reference-section{margin-top:48px}.fan-growth-reference-title{margin-bottom:18px}.fan-growth-reference-title h2{font-size:27px}.fan-growth-reference-title button{font-size:16px}.fan-growth-missions{border-radius:22px}.fan-growth-missions article{grid-template-columns:66px minmax(0,1fr) auto;min-height:112px;padding:16px 24px}.fan-growth-mission-icon{width:54px;height:54px;font-size:25px}.fan-growth-missions article b{font-size:20px}.fan-growth-missions article p{font-size:16px}.fan-growth-missions article>strong{font-size:18px}.fan-growth-milestones{gap:14px;padding-bottom:20px}.fan-growth-milestone{flex-basis:148px;min-height:248px;padding:19px 12px}.fan-growth-milestone-art{width:96px;height:108px}.fan-growth-milestone>b{font-size:15px}.fan-growth-milestone>small{font-size:13px}.fan-growth-benefits{min-height:286px}.fan-growth-benefits>img{min-height:286px}.fan-growth-benefits>div{padding:30px 28px}.fan-growth-benefits ul{font-size:17px}.fan-growth-benefits>div>button{font-size:15px}
+@media(max-width:640px){.app-shell.growth-shell{padding:22px 28px 122px}.app-shell.growth-shell .app-header{min-height:64px;margin-bottom:24px}.app-shell.growth-shell .app-header .eyebrow{font-size:24px}.app-shell.growth-shell .app-header h1{margin-top:20px;font-size:34px}.app-shell.growth-shell .header-alert-button,.app-shell.growth-shell .header-profile-button{width:50px;height:50px}.app-shell.growth-shell .header-actions{gap:10px}.app-shell.growth-shell .bottom-nav{padding:14px 10px 20px}.app-shell.growth-shell .nav-item{font-size:12px}.app-shell.growth-shell .nav-icon{width:25px;height:25px}.fan-growth-reference-heading>p:last-child{font-size:17px}.fan-growth-hero{grid-template-columns:1fr 1.05fr;min-height:310px;padding:26px 24px;gap:20px}.fan-growth-ring-large{width:220px;height:220px}.fan-growth-ring-large strong{font-size:47px}.fan-growth-ring-large b{font-size:18px}.fan-growth-ring-large span{font-size:14px}.fan-growth-hero-copy h2{font-size:23px}.fan-growth-hero-copy>p{font-size:15px}.fan-growth-benefit-cta{font-size:16px}.fan-growth-reference-section{margin-top:38px}.fan-growth-reference-title h2{font-size:23px}.fan-growth-missions article{min-height:94px;padding:14px 18px}.fan-growth-missions article b{font-size:17px}.fan-growth-missions article p{font-size:13px}.fan-growth-missions article>strong{font-size:15px}.fan-growth-milestone{flex-basis:132px;min-height:226px}.fan-growth-benefits{min-height:240px}.fan-growth-benefits>img{min-height:240px}}
+@media(max-width:520px){.fan-growth-hero{grid-template-columns:1fr;min-height:0}.fan-growth-ring-large{width:190px;height:190px}.fan-growth-hero-copy h2{font-size:21px}.fan-growth-benefits{grid-template-columns:1fr}.fan-growth-benefits>img{height:190px;min-height:190px}}
+
+/* Keep the growth tab inside the same mobile-app shell as Home/Collection. */
+.app-shell.growth-shell{width:min(100%,430px);max-width:430px;padding:18px 22px 118px}
+.app-shell.growth-shell .app-header{min-height:58px;margin-bottom:24px}
+.app-shell.growth-shell .app-header .eyebrow{font-size:12px;letter-spacing:.13em}
+.app-shell.growth-shell .app-header h1{margin-top:8px;font-size:28px;letter-spacing:-.055em}
+.app-shell.growth-shell .header-actions{gap:4px}
+.app-shell.growth-shell .header-alert-button,.app-shell.growth-shell .header-profile-button{width:44px;height:44px}
+.app-shell.growth-shell .bottom-nav{width:min(100%,430px);max-width:430px;padding:13px 8px calc(18px + env(safe-area-inset-bottom))}
+.app-shell.growth-shell .nav-item{min-height:49px;font-size:10px}
+.app-shell.growth-shell .nav-icon{width:22px;height:22px}
+.fan-growth-reference{padding:0 0 18px}
+.fan-growth-reference-heading{margin:0 0 24px}
+.fan-growth-reference-heading>p:last-child{font-size:15px}
+.fan-growth-hero{min-height:310px;padding:22px 18px;border-radius:20px}
+.fan-growth-ring-large{width:178px;height:178px}
+.fan-growth-ring-large strong{font-size:37px}
+.fan-growth-ring-large b{font-size:16px}
+.fan-growth-ring-large span{font-size:12px}
+.fan-growth-hero-copy h2{font-size:20px}
+.fan-growth-hero-copy>p{font-size:14px}
+.fan-growth-benefit-cta{min-height:62px;font-size:15px}
+.fan-growth-reference-section{margin-top:28px}
+.fan-growth-reference-title h2{font-size:20px}
+.fan-growth-reference-title button{font-size:12px}
+.fan-growth-missions article{min-height:91px;padding:13px 18px}
+.fan-growth-missions article b{font-size:15px}
+.fan-growth-missions article p{font-size:12px}
+.fan-growth-missions article>strong{font-size:14px}
+.fan-growth-milestone{flex-basis:122px;min-height:229px}
+.fan-growth-milestone-art{width:75px;height:89px}
+.fan-growth-milestone>b{font-size:12px}
+.fan-growth-milestone>small{font-size:11px}
+.fan-growth-benefits{min-height:0}
+.fan-growth-benefits>img{min-height:225px}
+/* The shared app header owns FANFOLIO and the page title; keep only the reference subtitle here. */
+.fan-growth-reference-heading>p:last-child{margin:0;color:#6f7690;font-size:15px;line-height:1.45;letter-spacing:-.035em}
+
+/* The growth page is rendered inside the same 430px mobile shell as the home tab. */
+.app-shell.growth-shell .fan-growth-reference{display:block!important;width:100%!important;min-width:0!important;padding:0 0 18px!important}
+.app-shell.growth-shell .fan-growth-reference-heading{width:100%!important;margin:0 0 24px!important;padding:0 2px!important}
+.app-shell.growth-shell .fan-growth-reference-heading>p:last-child{font-size:15px!important;line-height:1.45!important;white-space:normal!important}
+.app-shell.growth-shell .fan-growth-hero{display:grid!important;grid-template-columns:1fr!important;gap:20px!important;min-height:0!important;padding:22px 18px!important;border-radius:20px!important}
+.app-shell.growth-shell .fan-growth-ring-large{width:178px!important;height:178px!important}
+.app-shell.growth-shell .fan-growth-ring-large strong{font-size:37px!important}
+.app-shell.growth-shell .fan-growth-ring-large b{font-size:16px!important}
+.app-shell.growth-shell .fan-growth-ring-large span{font-size:12px!important}
+.app-shell.growth-shell .fan-growth-hero-copy{width:100%!important;min-width:0!important}
+.app-shell.growth-shell .fan-growth-hero-copy h2{margin:16px 0 8px!important;font-size:20px!important;line-height:1.3!important}
+.app-shell.growth-shell .fan-growth-hero-copy>p{font-size:14px!important}
+.app-shell.growth-shell .fan-growth-benefit-cta{width:100%!important;min-height:62px!important;margin-top:18px!important;font-size:15px!important}
+.app-shell.growth-shell .fan-growth-missions{height:auto!important;min-height:0!important;overflow:hidden!important}
+.app-shell.growth-shell .fan-growth-missions article{display:grid!important;grid-template-columns:44px minmax(0,1fr) auto!important;min-height:91px!important;padding:13px 18px!important}
+.app-shell.growth-shell .fan-growth-missions article b{font-size:15px!important}
+.app-shell.growth-shell .fan-growth-missions article p{font-size:12px!important}
+.app-shell.growth-shell .fan-growth-missions article>strong{font-size:14px!important}
+.app-shell.growth-shell .fan-growth-reference-title h2{font-size:20px!important}
+.app-shell.growth-shell .fan-growth-reference-title button{font-size:12px!important}
+
+/* Match the supplied reference composition: a roomy mobile-app canvas with the
+   horizontal hero, mission list, milestone rail, and split benefit card. */
+.app-shell.growth-shell{width:min(100%,588px)!important;max-width:588px!important;padding:24px 44px 118px!important}
+.app-shell.growth-shell .app-header{min-height:74px!important;margin-bottom:30px!important}
+.app-shell.growth-shell .app-header .eyebrow{font-size:24px!important;letter-spacing:-.055em!important}
+.app-shell.growth-shell .app-header h1{margin-top:18px!important;font-size:34px!important;letter-spacing:-.08em!important}
+.app-shell.growth-shell .header-actions{gap:10px!important}
+.app-shell.growth-shell .header-alert-button,.app-shell.growth-shell .header-profile-button{width:50px!important;height:50px!important}
+.app-shell.growth-shell .fan-growth-reference-heading{margin-bottom:30px!important}
+.app-shell.growth-shell .fan-growth-reference-heading>p:last-child{font-size:17px!important}
+.app-shell.growth-shell .fan-growth-hero{grid-template-columns:minmax(0,1fr) minmax(0,1.08fr)!important;gap:24px!important;min-height:310px!important;padding:26px 24px!important;border-radius:24px!important}
+.app-shell.growth-shell .fan-growth-ring-large{width:min(100%,220px)!important;height:min(100%,220px)!important}
+.app-shell.growth-shell .fan-growth-ring-large strong{font-size:47px!important}
+.app-shell.growth-shell .fan-growth-ring-large b{font-size:18px!important}
+.app-shell.growth-shell .fan-growth-ring-large span{font-size:14px!important}
+.app-shell.growth-shell .fan-growth-hero-copy h2{margin:18px 0 8px!important;font-size:23px!important}
+.app-shell.growth-shell .fan-growth-hero-copy>p{font-size:15px!important}
+.app-shell.growth-shell .fan-growth-benefit-cta{min-height:66px!important;margin-top:18px!important;font-size:16px!important}
+.app-shell.growth-shell .fan-growth-reference-section{margin-top:38px!important}
+.app-shell.growth-shell .fan-growth-reference-title h2{font-size:23px!important}
+.app-shell.growth-shell .fan-growth-missions article{grid-template-columns:54px minmax(0,1fr) auto!important;min-height:94px!important;padding:14px 18px!important}
+.app-shell.growth-shell .fan-growth-missions article b{font-size:17px!important}
+.app-shell.growth-shell .fan-growth-missions article p{font-size:13px!important}
+.app-shell.growth-shell .fan-growth-missions article>strong{font-size:15px!important}
+.app-shell.growth-shell .fan-growth-milestones{gap:12px!important}
+.app-shell.growth-shell .fan-growth-milestone{flex-basis:132px!important;min-height:226px!important}
+.app-shell.growth-shell .fan-growth-benefits{grid-template-columns:1fr 1fr!important;min-height:240px!important}
+.app-shell.growth-shell .fan-growth-benefits>img{height:100%!important;min-height:240px!important}
+
+/* Final app-shell lock: growth must use the same compact mobile canvas as Home. */
+.app-shell.growth-shell{width:min(100%,430px)!important;max-width:430px!important;padding:18px 22px 118px!important}
+.app-shell.growth-shell .app-header{min-height:58px!important;margin-bottom:24px!important}
+.app-shell.growth-shell .app-header .eyebrow{font-size:12px!important;letter-spacing:.13em!important}
+.app-shell.growth-shell .app-header h1{margin-top:8px!important;font-size:28px!important;letter-spacing:-.055em!important}
+.app-shell.growth-shell .header-alert-button,.app-shell.growth-shell .header-profile-button{width:44px!important;height:44px!important}
+.app-shell.growth-shell .fan-growth-reference-heading{margin-bottom:24px!important}
+.app-shell.growth-shell .fan-growth-reference-heading>p:last-child{font-size:15px!important}
+.app-shell.growth-shell .fan-growth-hero{grid-template-columns:minmax(0,1fr) minmax(0,1.08fr)!important;gap:16px!important;min-height:280px!important;padding:20px 16px!important;border-radius:20px!important}
+.app-shell.growth-shell .fan-growth-ring-large{width:160px!important;height:160px!important}
+.app-shell.growth-shell .fan-growth-ring-large strong{font-size:36px!important}
+.app-shell.growth-shell .fan-growth-ring-large b{font-size:15px!important}
+.app-shell.growth-shell .fan-growth-ring-large span{font-size:11px!important}
+.app-shell.growth-shell .fan-growth-hero-copy h2{margin:14px 0 7px!important;font-size:18px!important}
+.app-shell.growth-shell .fan-growth-hero-copy>p{font-size:12px!important}
+.app-shell.growth-shell .fan-growth-benefit-cta{min-height:56px!important;margin-top:14px!important;padding:0 10px!important;font-size:13px!important}
+.app-shell.growth-shell .fan-growth-reference-section{margin-top:28px!important}
+.app-shell.growth-shell .fan-growth-reference-title h2{font-size:20px!important}
+.app-shell.growth-shell .fan-growth-missions article{grid-template-columns:44px minmax(0,1fr) auto!important;min-height:82px!important;padding:11px 14px!important}
+.app-shell.growth-shell .fan-growth-missions article b{font-size:14px!important}
+.app-shell.growth-shell .fan-growth-missions article p{font-size:11px!important}
+.app-shell.growth-shell .fan-growth-missions article>strong{font-size:13px!important}
+.app-shell.growth-shell .fan-growth-milestone{flex-basis:118px!important;min-height:210px!important}
+.app-shell.growth-shell .fan-growth-benefits{grid-template-columns:1fr 1fr!important;min-height:210px!important}
+.app-shell.growth-shell .fan-growth-benefits>img{min-height:210px!important}
+
+/* At the browser's 626px viewport the 430px shell has only 326px of content;
+   stack the two dense cards so reference text never gets clipped. */
+@media (max-width:700px){
+  .app-shell.growth-shell .fan-growth-hero{grid-template-columns:1fr!important;gap:18px!important;min-height:0!important}
+  .app-shell.growth-shell .fan-growth-ring-large{width:178px!important;height:178px!important}
+  .app-shell.growth-shell .fan-growth-hero-copy h2{font-size:20px!important}
+  .app-shell.growth-shell .fan-growth-hero-copy>p{font-size:14px!important}
+  .app-shell.growth-shell .fan-growth-benefits{grid-template-columns:1fr!important;min-height:0!important}
+  .app-shell.growth-shell .fan-growth-benefits>img{height:190px!important;min-height:190px!important}
+  .app-shell.growth-shell .fan-growth-benefits>div{padding:18px!important}
+}
+
+/* Override legacy reference.css rules that re-introduce 16px inner padding. */
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference{
+  width:100%!important;
+  min-width:0!important;
+  padding:0 0 18px!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-hero{
+  grid-template-columns:150px minmax(0,1fr)!important;
+  gap:14px!important;
+  min-height:280px!important;
+  padding:20px 14px!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-ring-large{
+  width:150px!important;
+  height:150px!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-ring-large strong{font-size:34px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-hero-copy h2{font-size:17px!important;line-height:1.28!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-hero-copy>p{font-size:12px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefit-cta{min-height:54px!important;font-size:12px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits{
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;
+  min-height:220px!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits>img{min-height:220px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits>div{padding:16px 12px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits ul{font-size:11px!important;gap:10px!important}
+@media (max-width:700px){
+  main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-hero{
+    grid-template-columns:1fr!important;
+    gap:18px!important;
+    min-height:0!important;
+  }
+  main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-ring-large{width:178px!important;height:178px!important}
+  main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-ring-large strong{font-size:37px!important}
+  main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-hero-copy h2{font-size:20px!important}
+  main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-hero-copy>p{font-size:14px!important}
+  main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits{grid-template-columns:1fr!important;min-height:0!important}
+  main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits>img{height:190px!important;min-height:190px!important}
+  main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits>div{padding:18px!important}
+}
+
+/* Reference-density pass: the supplied image is a compact 2x mobile capture.
+   Remove the legacy screen inset and keep its horizontal card proportions. */
+main.app-shell.growth-shell > section.screen{
+  width:100%!important;
+  max-width:none!important;
+  margin:0!important;
+  padding:0 0 24px!important;
+  box-sizing:border-box!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-hero{
+  grid-template-columns:140px minmax(0,1fr)!important;
+  gap:14px!important;
+  min-height:190px!important;
+  padding:16px 14px!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-ring-large{width:140px!important;height:140px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-ring-large strong{font-size:32px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-ring-large b{font-size:14px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-ring-large span{font-size:10px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-hero-copy h2{margin:12px 0 6px!important;font-size:16px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-hero-copy>p{font-size:11px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefit-cta{min-height:42px!important;margin-top:12px!important;font-size:11px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-reference-section{margin-top:24px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-reference-title h2{font-size:18px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-missions article{grid-template-columns:36px minmax(0,1fr) auto!important;min-height:54px!important;padding:6px 10px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-missions article>span{width:32px!important;height:32px!important;font-size:18px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-missions article b{font-size:11px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-missions article p{font-size:9px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-missions article>strong{font-size:10px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone{flex-basis:108px!important;min-height:180px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestones{
+  grid-template-columns:repeat(6,minmax(0,1fr))!important;
+  gap:6px!important;
+  overflow:visible!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone{
+  min-width:0!important;
+  min-height:120px!important;
+  padding:8px 4px!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone-art{
+  width:100%!important;
+  height:48px!important;
+  margin:4px 0!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone>b{
+  width:100%!important;
+  font-size:8px!important;
+  line-height:1.2!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone>small{
+  font-size:7px!important;
+  line-height:1.15!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;min-height:120px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits>img{height:120px!important;min-height:120px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits>div{padding:8px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits ul{font-size:8px!important;line-height:1.1!important;gap:3px!important;margin:6px 0!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits button{padding:4px 0 0!important;font-size:8px!important;line-height:1.1!important;white-space:nowrap!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-pill{min-height:24px!important;padding:0 9px!important;font-size:10px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefit-cta{gap:8px!important;white-space:nowrap!important;overflow:hidden!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefit-cta span{width:28px!important;height:28px!important;flex:0 0 28px!important;font-size:16px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefit-cta b{font-size:18px!important}
+
+/* Final reference pass: typography and shared navigation follow the supplied mobile capture. */
+main.app-shell.growth-shell .app-header .eyebrow{font-size:18px!important;letter-spacing:.08em!important}
+main.app-shell.growth-shell .app-header h1{margin-top:7px!important;font-size:32px!important;line-height:1.08!important}
+main.app-shell.growth-shell .app-header{min-height:64px!important;margin-bottom:20px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-reference-heading{margin-bottom:18px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-reference-heading>p:last-child{font-size:16px!important;line-height:1.4!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-hero{grid-template-columns:180px minmax(0,1fr)!important;min-height:230px!important;padding:18px 16px!important;gap:14px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-ring-large{width:180px!important;height:180px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-ring-large strong{font-size:40px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-ring-large b{font-size:17px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-ring-large span{font-size:12px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-hero-copy h2{font-size:16px!important;line-height:1.25!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-hero-copy>p{font-size:11px!important;line-height:1.35!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefit-cta{min-height:42px!important;font-size:11px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-reference-section{margin-top:4px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-reference-title{margin-bottom:8px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-reference-title h2{font-size:20px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-reference-title button{font-size:14px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-missions article{min-height:72px!important;padding:8px 12px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-missions article>span{width:40px!important;height:40px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-mission-svg{width:22px!important;height:22px!important;fill:none!important;stroke:currentColor!important;stroke-width:1.8!important;stroke-linecap:round!important;stroke-linejoin:round!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-missions article b{font-size:14px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-missions article p{font-size:11px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-missions article>strong{font-size:12px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestones{grid-template-columns:repeat(6,minmax(64px,1fr))!important;gap:6px!important;overflow-x:auto!important;overflow-y:visible!important;padding-bottom:10px!important;scrollbar-width:auto!important;scrollbar-color:#b9bac2 #f1f1f4!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestones::-webkit-scrollbar{display:block!important;height:8px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestones::-webkit-scrollbar-track{background:#f1f1f4!important;border-radius:0!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestones::-webkit-scrollbar-thumb{background:#b9bac2!important;border-radius:4px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone{min-height:150px!important;padding:10px 4px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone-art{height:60px!important;margin:6px 0!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone>b{font-size:9px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone>small{font-size:8px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone-track{height:8px!important;margin:4px 38px 0!important;border:1px solid #ededf2!important;border-radius:0!important;background:#fff!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone-track span{background:#b9bac2!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone-track{display:none!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits{min-height:150px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits>img{height:150px!important;min-height:150px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits>div{padding:10px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits ul{font-size:10px!important;line-height:1.2!important;gap:5px!important;margin:8px 0!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits button{font-size:10px!important}
+
+/* Growth uses the exact same bottom navigation geometry as the other app tabs. */
+main.app-shell.growth-shell > nav.bottom-nav{border-radius:0!important;padding:7px 10px!important}
+main.app-shell.growth-shell > nav.bottom-nav .nav-item{min-height:52px!important;font-size:10px!important}
+main.app-shell.growth-shell > nav.bottom-nav .nav-icon{width:23px!important;height:23px!important}
+
+/* The supplied 853px reference is a 2x capture of the 430px mobile shell. */
+main.app-shell.growth-shell .app-header{min-height:58px!important;margin-bottom:18px!important}
+main.app-shell.growth-shell .app-header .eyebrow{font-size:14px!important;letter-spacing:.1em!important}
+main.app-shell.growth-shell .app-header h1{margin-top:4px!important;font-size:24px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-reference-heading{margin-bottom:14px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-reference-heading>p:last-child{font-size:13px!important;line-height:1.4!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-hero{grid-template-columns:140px minmax(0,1fr)!important;min-height:190px!important;padding:16px 14px!important;gap:14px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-ring-large{width:140px!important;height:140px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-ring-large strong{font-size:32px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-ring-large b{font-size:14px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-ring-large span{font-size:10px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-hero-copy h2{font-size:14px!important;line-height:1.25!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-hero-copy>p{font-size:10px!important;line-height:1.35!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefit-cta{min-height:42px!important;font-size:10px!important}
+/* The inspected orange strip is this section's deliberate 12px top gap. */
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference{gap:0!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-reference-section{margin-top:12px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-missions,
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestones,
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits{margin-top:0!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-reference-title{margin-bottom:8px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-reference-title h2{font-size:16px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-reference-title button{font-size:11px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-missions article{min-height:54px!important;padding:6px 10px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-missions article>span{width:32px!important;height:32px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-missions article b{font-size:12px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-missions article p{font-size:9px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-missions article>strong{font-size:10px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestones{grid-template-columns:repeat(6,minmax(64px,1fr))!important;gap:6px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone{min-height:120px!important;padding:8px 4px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone-art{height:48px!important;margin:4px 0!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone>b{font-size:8px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone>small{font-size:7px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits{min-height:120px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits>img{height:120px!important;min-height:120px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits>div{padding:8px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits ul{font-size:8px!important;line-height:1.1!important;gap:3px!important;margin:6px 0!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits button{font-size:8px!important;padding-top:4px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestones{scrollbar-width:none!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestones::-webkit-scrollbar{display:none!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone-track{display:block!important;height:8px!important;margin:4px 38px 0!important;border:1px solid #ededf2!important;border-radius:0!important;background:#fff!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone-track span{width:35%!important;background:#b9bac2!important}
+
+/* Measured from the supplied 853 x 1844px (2x) reference capture. */
+main.app-shell.growth-shell .app-header{margin-bottom:10px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-reference-heading{margin-bottom:0!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-hero{min-height:183px!important;padding:16px 14px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-ring-large{width:145px!important;height:145px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-hero-copy h2{font-size:14px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestones{grid-template-columns:repeat(6,minmax(0,1fr))!important;overflow:hidden!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits{height:115px!important;min-height:115px!important;overflow:hidden!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits>img{height:115px!important;min-height:115px!important}
+main.app-shell.growth-shell > nav.bottom-nav{padding:8px 10px!important}
+main.app-shell.growth-shell > nav.bottom-nav .nav-item{min-height:52px!important}
+
+/* Keep the final content gap aligned with the approved home tab. The fixed
+   navigation is overlaid, so the page needs its own small safe area. */
+main.app-shell.growth-shell{padding-bottom:78px!important}
+main.app-shell.growth-shell > section.screen{padding-bottom:var(--fan-content-bottom-gap)!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference{padding-bottom:0!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone-track{padding:0!important;height:8px!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone-track{position:relative;border:0!important;background:linear-gradient(#e6e6ee,#e6e6ee) center/100% 2px no-repeat!important;overflow:visible!important}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone-track::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 0 50%,#5b4cff 0 3px,transparent 3.5px),radial-gradient(circle at 20% 50%,#5b4cff 0 3px,transparent 3.5px),radial-gradient(circle at 40% 50%,#d7d7df 0 3px,transparent 3.5px),radial-gradient(circle at 60% 50%,#d7d7df 0 3px,transparent 3.5px),radial-gradient(circle at 80% 50%,#d7d7df 0 3px,transparent 3.5px),radial-gradient(circle at 100% 50%,#d7d7df 0 3px,transparent 3.5px);pointer-events:none}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone-track span{position:absolute;left:0;top:3px;height:2px;border-radius:2px;background:#5b4cff!important;z-index:1}
+/* Growth keeps the title stack, but shares the same compact header controls as home. */
+main.app-shell.growth-shell .header-actions{align-self:flex-start!important;gap:12px!important}
+main.app-shell.growth-shell .header-alert-button,
+main.app-shell.growth-shell .header-profile-button{width:32px!important;height:32px!important}
+main.app-shell.growth-shell{border-radius:28px 28px 0 0!important}
+.fan-growth-milestone-art{font-size:0;background-repeat:no-repeat;background-size:300% 200%;background-position:center;filter:saturate(.92)}
+.fan-growth-milestone:nth-child(1) .fan-growth-milestone-art{background-position:0 0}
+.fan-growth-milestone:nth-child(2) .fan-growth-milestone-art{background-position:50% 0}
+.fan-growth-milestone:nth-child(3) .fan-growth-milestone-art{background-position:100% 0}
+.fan-growth-milestone:nth-child(4) .fan-growth-milestone-art{background-position:0 100%}
+.fan-growth-milestone:nth-child(5) .fan-growth-milestone-art{background-position:50% 100%}
+.fan-growth-milestone:nth-child(6) .fan-growth-milestone-art{background-position:100% 100%}
+
+/* Final mobile parity pass: use the same global header geometry as home and
+   keep the compact reference cards from expanding their parent section. */
+main.app-shell.growth-shell{
+  width:min(100%,430px)!important;
+  max-width:430px!important;
+  padding:22px 22px 78px!important;
+}
+main.app-shell.growth-shell > header.app-header{
+  width:100%!important;
+  min-height:44px!important;
+  margin:0!important;
+}
+main.app-shell.growth-shell > header.app-header .eyebrow{
+  font-size:16px!important;
+  font-weight:800!important;
+  line-height:1.2!important;
+  letter-spacing:.02em!important;
+}
+main.app-shell.growth-shell > header.app-header h1{
+  margin-top:10px!important;
+  font-size:24px!important;
+  line-height:1!important;
+  letter-spacing:-.06em!important;
+}
+main.app-shell.growth-shell > header.app-header{
+  margin-bottom:6px!important;
+}
+main.app-shell.growth-shell > header.app-header .header-actions{
+  align-self:flex-start!important;
+  gap:12px!important;
+}
+main.app-shell.growth-shell > header.app-header .header-alert-button,
+main.app-shell.growth-shell > header.app-header .header-profile-button{
+  width:32px!important;
+  height:32px!important;
+}
+main.app-shell.growth-shell > header.app-header .profile-avatar-fallback{
+  font-size:11px!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-reference-heading{
+  margin-bottom:8px!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-current-label{
+  top:-14px!important;
+  height:28px!important;
+  min-height:28px!important;
+  padding:0 10px!important;
+  box-sizing:border-box!important;
+  border-radius:9px!important;
+  font-size:11px!important;
+  line-height:28px!important;
+  white-space:nowrap!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits>div{
+  height:115px!important;
+  min-height:0!important;
+  box-sizing:border-box!important;
+  overflow:hidden!important;
+}
+
+/* Match the supplied lower reference crop: visible state badges, an
+   unclipped current tab, and a compact split benefits card. */
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestones{
+  position:relative!important;
+  overflow:visible!important;
+  padding-top:14px!important;
+  padding-bottom:8px!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone{
+  min-height:144px!important;
+  padding:8px 4px 7px!important;
+  border-radius:13px!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone>strong{
+  font-size:11px!important;
+  line-height:1.1!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone-art{
+  width:58px!important;
+  height:54px!important;
+  margin:7px 0 4px!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone>b{
+  font-size:8px!important;
+  line-height:1.2!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone>small{
+  font-size:7px!important;
+  line-height:1.15!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone-state{
+  position:absolute!important;
+  top:7px!important;
+  right:7px!important;
+  z-index:2!important;
+  display:grid!important;
+  place-items:center!important;
+  width:13px!important;
+  height:13px!important;
+  font-size:9px!important;
+  line-height:1!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone-state.is-complete{
+  border-radius:50%!important;
+  background:#6655ee!important;
+  color:#fff!important;
+  font-weight:900!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone-state.is-locked{
+  color:#9a9cac!important;
+  opacity:.75!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone-state svg{
+  width:11px!important;
+  height:11px!important;
+  fill:currentColor!important;
+  stroke:currentColor!important;
+  stroke-width:1.5!important;
+  stroke-linecap:round!important;
+  stroke-linejoin:round!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-current-label{
+  top:-13px!important;
+  min-width:34px!important;
+  height:25px!important;
+  padding:0 8px!important;
+  line-height:25px!important;
+  border-radius:8px!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits{
+  height:115px!important;
+  min-height:115px!important;
+  grid-template-columns:1fr 1fr!important;
+  border-radius:14px!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits>img{
+  height:115px!important;
+  min-height:115px!important;
+  object-fit:cover!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits>div{
+  height:115px!important;
+  padding:7px 9px!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits .fan-growth-pill{
+  min-height:18px!important;
+  padding:0 7px!important;
+  font-size:7px!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits ul{
+  gap:3px!important;
+  margin:5px 0 4px!important;
+  font-size:7px!important;
+  line-height:1.1!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits li:before{
+  margin-right:5px!important;
+  font-size:12px!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-benefits>div>button{
+  padding:4px 0 0!important;
+  font-size:7px!important;
+}

@@ -60,6 +60,11 @@ class AdminPasswordLogin(BaseModel):
     password: str = Field(min_length=1, max_length=200)
 
 
+class FanPasswordCredentials(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=200)
+
+
 class ArtistPasswordChange(BaseModel):
     current_password: str = Field(alias="currentPassword", min_length=1, max_length=200)
     new_password: str = Field(alias="newPassword", min_length=12, max_length=200)

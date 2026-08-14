@@ -33,3 +33,4 @@ fanfolio.db
 storage/
 output/
 .playwright-cli/
+.vercel

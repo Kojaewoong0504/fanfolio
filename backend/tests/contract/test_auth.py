@@ -29,6 +29,44 @@ def test_magic_link_request_delivers_the_created_token(
     assert delivered[0][1]
 
 
+def test_fan_can_sign_up_and_log_in_with_email_and_password(client: TestClient) -> None:
+    signup = client.post(
+        "/api/auth/fan/signup",
+        headers={"X-Fanfolio-Client": "fan"},
+        json={"email": "password-fan@example.com", "password": "fan-password-2026"},
+    )
+    signup_data = assert_success(signup, 201)
+    assert signup_data["user"]["role"] == "fan"
+    assert signup_data["accessToken"]
+    assert "fanfolio_fan_refresh=" in signup.headers["set-cookie"]
+
+    client.post("/api/auth/logout", headers={"X-Fanfolio-Client": "fan"})
+    login = client.post(
+        "/api/auth/fan/login",
+        headers={"X-Fanfolio-Client": "fan"},
+        json={"email": "password-fan@example.com", "password": "fan-password-2026"},
+    )
+    login_data = assert_success(login)
+    assert login_data["user"]["email"] == "password-fan@example.com"
+    assert login_data["onboardingCompleted"] is False
+
+    refreshed = client.post(
+        "/api/auth/refresh",
+        headers={"X-Fanfolio-Client": "fan"},
+    )
+    refreshed_data = assert_success(refreshed)
+    assert refreshed_data["accessToken"]
+
+
+def test_fan_password_login_rejects_invalid_credentials(client: TestClient) -> None:
+    response = client.post(
+        "/api/auth/fan/login",
+        headers={"X-Fanfolio-Client": "fan"},
+        json={"email": "fan@example.com", "password": "wrong-password"},
+    )
+    assert_error(response, 401, "INVALID_CREDENTIALS")
+
+
 def test_admin_password_login_and_first_password_change(
     client: TestClient, seeded: dict[str, object]
 ) -> None:

@@ -5,6 +5,9 @@ import test from 'node:test'
 const appSource = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
 const appCssSource = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
 const apiSource = await readFile(new URL('../src/api/client.ts', import.meta.url), 'utf8')
+const fanGrowthSource = await readFile(new URL('../src/components/FanGrowth.tsx', import.meta.url), 'utf8')
+const fanGrowthCssSource = await readFile(new URL('../src/components/FanGrowth.css', import.meta.url), 'utf8')
+const fanGrowthReferenceCssSource = await readFile(new URL('../src/components/FanGrowthReference.css', import.meta.url), 'utf8')
 
 test('fan growth is a persistent bottom tab instead of settings content', async () => {
   await access(new URL('../src/components/FanGrowth.tsx', import.meta.url))
@@ -55,6 +58,29 @@ test('progression refresh is parallel with collection and non-blocking on failur
   assert.match(appSource, /Promise\.allSettled\(\[\s*refreshCollection\(\),\s*refreshGrowth\(\)/s)
   assert.match(appSource, /성장 정보를 불러오지 못했어요/)
   assert.doesNotMatch(appSource, /await refreshCollection\(\)\s*;\s*await refreshGrowth\(\)/)
+})
+
+test('full fan level view exposes the supplied reference composition while keeping live progression mapping', () => {
+  const source = fanGrowthSource
+  assert.match(source, /팬 활동을 통해 레벨을 올리고 특별한 혜택을 받아보세요!/, 'reference subtitle should be present')
+  assert.match(source, /fan-growth-reference-heading/, 'reference heading wrapper should be present')
+  assert.match(source, /fan-growth-hero/, 'reference level hero should be present')
+  assert.match(source, /fan-growth-missions/, 'reference mission section should be present')
+  assert.match(source, /fan-growth-milestones/, 'reference milestone section should be present')
+  assert.match(source, /fan-growth-benefits/, 'reference benefits section should be present')
+  assert.match(source, /progression\.level\.totalXp/, 'level XP must come from live progression')
+  assert.match(source, /progression\.achievements/, 'missions must come from live progression')
+  assert.match(source, /completedAt/, 'mission completion must remain data-driven')
+  assert.match(source, /currentValue[\s\S]{0,80}targetValue/, 'mission progress must remain data-driven')
+})
+
+test('fan level reference stylesheet defines the mobile geometry and fixed navigation-safe spacing', () => {
+  const cssSource = `${fanGrowthCssSource}\n${fanGrowthReferenceCssSource}`
+  assert.match(cssSource, /fan-growth-reference/, 'reference styles should be scoped to the feature')
+  assert.match(cssSource, /fan-growth-milestones/, 'milestones should have dedicated styles')
+  assert.match(cssSource, /max-width:\s*640px/, 'mobile stacking breakpoint should be present')
+  assert.match(cssSource, /padding:\s*18px 0 112px/, 'content should reserve space for fixed bottom navigation')
+  assert.match(cssSource, /growth-shell\{width:min\(100%,430px\)!important/, 'growth must remain inside the shared mobile app shell')
 })
 
 test('fan growth UI has Korean reward pass equipment states and bottom sheet behavior', async () => {

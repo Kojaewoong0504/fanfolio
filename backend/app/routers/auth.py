@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from fastapi import APIRouter, Cookie, Header, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy import delete, select
@@ -38,6 +40,7 @@ from app.schemas import (
     AdminPasswordLogin,
     ArtistPasswordChange,
     ArtistPasswordLogin,
+    FanPasswordCredentials,
     MagicLinkRequest,
     MagicLinkVerify,
     OAuthExchangeRequest,
@@ -64,6 +67,28 @@ def _admin_user_data(user: User) -> dict[str, object]:
         "displayName": user.nickname,
         "role": user.role.value,
     }
+
+
+def _fan_user_data(user: User) -> dict[str, object]:
+    return {
+        "id": user.id,
+        "email": user.email,
+        "displayName": user.nickname,
+        "role": user.role.value,
+    }
+
+
+def _set_refresh_cookie(response: Response, client: str, refresh_token: str) -> None:
+    settings = get_settings()
+    response.set_cookie(
+        refresh_cookie_name(client),
+        refresh_token,
+        httponly=True,
+        secure=settings.is_hosted,
+        samesite=_refresh_cookie_samesite(),
+        path="/",
+        max_age=settings.jwt_refresh_ttl_seconds,
+    )
 
 
 def _refresh_cookie_samesite() -> str:
@@ -196,6 +221,72 @@ async def request_magic_link(
             "로그인 링크를 보내지 못했습니다. 잠시 후 다시 시도해 주세요.",
         ) from error
     return {"ok": True, "data": {"delivery": "queued"}}
+
+
+@router.post("/fan/signup", status_code=status.HTTP_201_CREATED)
+async def fan_password_signup(
+    payload: FanPasswordCredentials,
+    request: Request,
+    response: Response,
+    session: DbSession,
+    client: str | None = Header(default=None, alias="X-Fanfolio-Client"),
+) -> dict:
+    if client not in {None, "fan"}:
+        raise AppError(403, "FAN_CLIENT_REQUIRED", "팬 앱 전용 회원가입입니다.")
+    email = str(payload.email).lower()
+    client_host = request.client.host if request.client else "unknown"
+    await enforce_rate_limit(f"fan-signup:{email}:{client_host}", limit=5, window_seconds=15 * 60)
+    existing = await session.scalar(select(User).where(User.email == email, User.role == Role.FAN))
+    if existing is not None:
+        raise AppError(409, "EMAIL_ALREADY_REGISTERED", "이미 가입된 이메일입니다.")
+    user = User(
+        id=f"user_{uuid4().hex[:12]}",
+        email=email,
+        password_hash=hash_password(payload.password),
+        role=Role.FAN,
+    )
+    session.add(user)
+    await session.flush()
+    access_token, refresh_token, _ = await issue_token_pair(session, user, "fan")
+    await session.commit()
+    _set_refresh_cookie(response, "fan", refresh_token)
+    return {
+        "ok": True,
+        "data": {
+            "accessToken": access_token,
+            "user": _fan_user_data(user),
+            "onboardingCompleted": user.onboarding_completed,
+        },
+    }
+
+
+@router.post("/fan/login")
+async def fan_password_login(
+    payload: FanPasswordCredentials,
+    request: Request,
+    response: Response,
+    session: DbSession,
+    client: str | None = Header(default=None, alias="X-Fanfolio-Client"),
+) -> dict:
+    if client not in {None, "fan"}:
+        raise AppError(403, "FAN_CLIENT_REQUIRED", "팬 앱 전용 로그인입니다.")
+    email = str(payload.email).lower()
+    client_host = request.client.host if request.client else "unknown"
+    await enforce_rate_limit(f"fan-password:{email}:{client_host}", limit=5, window_seconds=15 * 60)
+    user = await session.scalar(select(User).where(User.email == email, User.role == Role.FAN))
+    if user is None or not verify_password(payload.password, user.password_hash):
+        raise AppError(401, "INVALID_CREDENTIALS", "이메일 또는 비밀번호가 올바르지 않습니다.")
+    access_token, refresh_token, _ = await issue_token_pair(session, user, "fan")
+    await session.commit()
+    _set_refresh_cookie(response, "fan", refresh_token)
+    return {
+        "ok": True,
+        "data": {
+            "accessToken": access_token,
+            "user": _fan_user_data(user),
+            "onboardingCompleted": user.onboarding_completed,
+        },
+    }
 
 
 @router.post("/artist/login")

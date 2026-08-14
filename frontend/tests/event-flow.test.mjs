@@ -19,8 +19,8 @@ test('fan app has event list and detail routes', () => {
   assert.match(app, /<EventDetail /)
 })
 
-test('event list offers active, upcoming, and ended filters', () => {
-  assert.match(list, /진행 중/)
+test('event list offers application, upcoming, and ended filters', () => {
+  assert.match(list, /신청 중/)
   assert.match(list, /예정/)
   assert.match(list, /종료/)
 })
