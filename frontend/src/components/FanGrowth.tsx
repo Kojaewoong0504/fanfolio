@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type { FanProgression, PassTierClaim, ProfileEquipment, RewardGrant } from '../api/client'
 import './FanGrowth.css'
 import './FanGrowthReference.css'
@@ -55,6 +55,18 @@ function progressPercent(current: number, target: number): number {
   return Math.max(0, Math.min(100, Math.round(current / target * 100)))
 }
 
+function scrollMilestonesWithKeyboard(event: ReactKeyboardEvent<HTMLDivElement>) {
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+  event.preventDefault()
+  event.currentTarget.scrollBy({ left: event.key === 'ArrowRight' ? 132 : -132, behavior: 'smooth' })
+}
+
+function MilestoneLockIcon() {
+  return <svg className="fan-growth-lock-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /><circle cx="12" cy="14.5" r="1.2" /><path d="M12 15.7v1.7" /></svg>
+}
+
+type MilestoneScrollState = { ratio: number; viewportRatio: number }
+
 export function FanGrowth({ progression, loading, error, mode, onRetry, onClaim, onClaimPassTier, onEquip }: FanGrowthProps) {
   const [activeSheet, setActiveSheet] = useState<FanGrowthSheet>(null)
   const [claimingRewardId, setClaimingRewardId] = useState<string | null>(null)
@@ -62,6 +74,8 @@ export function FanGrowth({ progression, loading, error, mode, onRetry, onClaim,
   const [equipmentSaving, setEquipmentSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [draftEquipment, setDraftEquipment] = useState<ProfileEquipment | null>(null)
+  const milestoneRailRef = useRef<HTMLDivElement | null>(null)
+  const [milestoneScroll, setMilestoneScroll] = useState<MilestoneScrollState>({ ratio: 0, viewportRatio: 1 })
 
   useEffect(() => {
     setDraftEquipment(progression?.equipment ?? null)
@@ -75,6 +89,30 @@ export function FanGrowth({ progression, loading, error, mode, onRetry, onClaim,
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [activeSheet])
+
+  const handleMilestoneScroll = useCallback(() => {
+    const rail = milestoneRailRef.current
+    if (!rail) return
+    const maxScrollLeft = Math.max(0, rail.scrollWidth - rail.clientWidth)
+    setMilestoneScroll({
+      ratio: maxScrollLeft > 0 ? Math.min(1, Math.max(0, rail.scrollLeft / maxScrollLeft)) : 0,
+      viewportRatio: rail.scrollWidth > 0 ? Math.min(1, rail.clientWidth / rail.scrollWidth) : 1,
+    })
+  }, [])
+
+  useEffect(() => {
+    if (mode !== 'full') return
+    const rail = milestoneRailRef.current
+    if (!rail) return
+    handleMilestoneScroll()
+    rail.addEventListener('scroll', handleMilestoneScroll, { passive: true })
+    const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(handleMilestoneScroll)
+    resizeObserver?.observe(rail)
+    return () => {
+      rail.removeEventListener('scroll', handleMilestoneScroll)
+      resizeObserver?.disconnect()
+    }
+  }, [handleMilestoneScroll, mode, progression?.level.level])
 
   const claimableRewards = progression?.claimableRewards ?? []
   const claimedRewards = useMemo(
@@ -164,18 +202,16 @@ export function FanGrowth({ progression, loading, error, mode, onRetry, onClaim,
       { id: 'preview-like', title: '아티스트 콘텐츠 좋아요', description: '아티스트 콘텐츠에 좋아요를 10회 눌러보세요.', currentValue: 6, targetValue: 10, completedAt: null },
     ]
     const milestoneLevels = [
-      { level: Math.max(1, progression.level.level - 2), label: '스페셜 포토카드', detail: 'SET A' },
-      { level: progression.level.level, label: '단독 디지털', detail: '포스터', current: true },
-      { level: progression.level.level + 2, label: '500', detail: 'FAN POINT', locked: true },
-      { level: progression.level.level + 4, label: '아티스트', detail: '메시지 (1회)', locked: true },
-      { level: progression.level.level + 6, label: '미공개 셀카', detail: '포토카드', locked: true },
-      { level: progression.level.level + 8, label: '프리미엄', detail: '포토북', locked: true },
+      { level: Math.max(1, progression.level.level - 2), label: '스페셜 포토카드', detail: 'SET A', status: 'complete' as const },
+      { level: progression.level.level, label: '단독 디지털', detail: '포스터', status: 'currentLocked' as const },
+      { level: progression.level.level + 2, label: '500', detail: 'FAN POINT', status: 'locked' as const },
+      { level: progression.level.level + 4, label: '아티스트', detail: '메시지 (1회)', status: 'locked' as const },
+      { level: progression.level.level + 6, label: '미공개 셀카', detail: '포토카드', status: 'locked' as const },
+      { level: progression.level.level + 8, label: '프리미엄', detail: '포토북', status: 'locked' as const },
     ]
+    const milestoneProgressPercent = Math.max(18, levelPercent)
+    const visibleMilestoneIndex = Math.round(milestoneScroll.ratio * (milestoneLevels.length - 1))
     return <section className="fan-growth full fan-growth-reference" aria-label="팬 레벨">
-      <header className="fan-growth-reference-heading">
-        <p>팬 활동을 통해 레벨을 올리고 특별한 혜택을 받아보세요!</p>
-      </header>
-
       <article className="fan-growth-hero">
         <div className="fan-growth-ring-large" aria-label={`레벨 진행률 ${levelPercent}%`} style={{ '--fan-progress': `${levelPercent * 3.6}deg` } as CSSProperties}>
           <div><strong>Lv.{progression.level.level}</strong><b>{progression.level.level >= 10 ? 'DREAMER' : 'RISING FAN'}</b><span><em>{progression.level.totalXp.toLocaleString()}</em> / {nextXp.toLocaleString()} XP</span></div>
@@ -201,14 +237,18 @@ export function FanGrowth({ progression, loading, error, mode, onRetry, onClaim,
 
       <section className="fan-growth-reference-section">
         <div className="fan-growth-reference-title"><h2>레벨 마일스톤</h2><button type="button" onClick={() => setActiveSheet('pass')}>전체 보기 <b aria-hidden="true">›</b></button></div>
-        <div className="fan-growth-milestones" role="list">
-          {milestoneLevels.map(item => <article key={item.level} className={`fan-growth-milestone ${item.current ? 'is-current' : ''} ${item.locked ? 'is-locked' : ''}`} role="listitem">
-            {item.current && <span className="fan-growth-current-label">현재</span>}
-            {!item.current && <span className={`fan-growth-milestone-state ${item.locked ? 'is-locked' : 'is-complete'}`} aria-label={item.locked ? '잠긴 보상' : '받은 보상'}>{item.locked ? <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg> : '✓'}</span>}
+        <div ref={milestoneRailRef} className="fan-growth-milestones" role="list" aria-label="전체 레벨 마일스톤" tabIndex={0} onKeyDown={scrollMilestonesWithKeyboard} onScroll={handleMilestoneScroll}>
+          {milestoneLevels.map(item => <article key={`${item.level}-${item.label}`} className={`fan-growth-milestone ${item.status === 'currentLocked' ? 'is-current is-locked' : ''} ${item.status === 'locked' ? 'is-locked' : ''}`} role="listitem">
+            {item.status === 'currentLocked' && <span className="fan-growth-current-label">현재</span>}
+            <span className={`fan-growth-milestone-state ${item.status === 'complete' ? 'is-complete' : 'is-locked'}`} aria-label={item.status === 'complete' ? '받은 보상' : '잠긴 보상'}>{item.status === 'complete' ? '✓' : <MilestoneLockIcon />}</span>
             <strong>Lv.{item.level}</strong><span className="fan-growth-milestone-art" style={{ backgroundImage: `url(${milestoneSprite})` }} aria-label={item.label} /><b>{item.label}</b><small>{item.detail}</small>
           </article>)}
         </div>
-        <div className="fan-growth-milestone-track" aria-hidden="true"><span style={{ width: `${Math.max(18, levelPercent)}%` }} /></div>
+        <div className="fan-growth-milestone-track" aria-hidden="true">
+          <b className="fan-growth-milestone-track-fill" style={{ '--milestone-fill-width': `${milestoneProgressPercent}%` } as CSSProperties} />
+          <b className="fan-growth-milestone-track-viewport" style={{ '--milestone-viewport-left': `${milestoneScroll.ratio * 100}%` } as CSSProperties} />
+          {milestoneLevels.map((item, index) => <i key={`${item.level}-${item.label}-dot`} className={`fan-growth-milestone-track-dot ${index <= visibleMilestoneIndex ? 'is-active' : ''}`} style={{ left: `${index / (milestoneLevels.length - 1) * 100}%` }} />)}
+        </div>
       </section>
 
       <section className="fan-growth-reference-section">

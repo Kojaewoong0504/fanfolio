@@ -4,6 +4,7 @@ import test from 'node:test'
 
 const appSource = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
 const appCssSource = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
+const referenceCssSource = await readFile(new URL('../src/reference.css', import.meta.url), 'utf8')
 const apiSource = await readFile(new URL('../src/api/client.ts', import.meta.url), 'utf8')
 const fanGrowthSource = await readFile(new URL('../src/components/FanGrowth.tsx', import.meta.url), 'utf8')
 const fanGrowthCssSource = await readFile(new URL('../src/components/FanGrowth.css', import.meta.url), 'utf8')
@@ -26,6 +27,17 @@ test('fan growth is a persistent bottom tab instead of settings content', async 
   assert.match(appSource, /tab === 'growth' && <FanGrowth/)
   assert.doesNotMatch(appSource, /tab === 'settings' && currentUser && <><Settings[\s\S]*<FanGrowth/)
   assert.match(appSource, /label="팬 레벨"/)
+})
+
+test('all authenticated screens use one shared app header contract', () => {
+  assert.equal([...appSource.matchAll(/<header className="app-header">/g)].length, 1)
+  assert.match(referenceCssSource, /Global app header contract[\s\S]*main\.app-shell > header\.app-header/)
+  assert.match(referenceCssSource, /main\.app-shell > header\.app-header \.header-alert-button,[\s\S]*?width:\s*32px\s*!important/)
+  assert.match(referenceCssSource, /main\.app-shell > header\.app-header \.header-profile-button[\s\S]*?width:\s*32px\s*!important/)
+  assert.match(referenceCssSource, /main\.app-shell > header\.app-header \.header-profile-button \.profile-avatar[\s\S]*?height:\s*32px\s*!important/)
+  assert.match(referenceCssSource, /main\.app-shell > header\.app-header \.eyebrow[\s\S]*?color:\s*var\(--fan-violet\)\s*!important/)
+  assert.match(fanGrowthReferenceCssSource, /Keep the growth route on the same global app-header contract[\s\S]*?header-alert-button[\s\S]*?width:32px!important/)
+  assert.match(referenceCssSource, /Home header spacing contract[\s\S]*?main\.app-shell\.home-shell > header\.app-header[\s\S]*?margin-bottom:\s*0\s*!important/)
 })
 
 test('fan growth API client exposes typed progression reward equipment and pass calls', () => {
@@ -62,8 +74,7 @@ test('progression refresh is parallel with collection and non-blocking on failur
 
 test('full fan level view exposes the supplied reference composition while keeping live progression mapping', () => {
   const source = fanGrowthSource
-  assert.match(source, /팬 활동을 통해 레벨을 올리고 특별한 혜택을 받아보세요!/, 'reference subtitle should be present')
-  assert.match(source, /fan-growth-reference-heading/, 'reference heading wrapper should be present')
+  assert.doesNotMatch(source, /팬 활동을 통해 레벨을 올리고 특별한 혜택을 받아보세요!/, 'page subtitle belongs to the shared app header')
   assert.match(source, /fan-growth-hero/, 'reference level hero should be present')
   assert.match(source, /fan-growth-missions/, 'reference mission section should be present')
   assert.match(source, /fan-growth-milestones/, 'reference milestone section should be present')
@@ -81,6 +92,94 @@ test('fan level reference stylesheet defines the mobile geometry and fixed navig
   assert.match(cssSource, /max-width:\s*640px/, 'mobile stacking breakpoint should be present')
   assert.match(cssSource, /padding:\s*18px 0 112px/, 'content should reserve space for fixed bottom navigation')
   assert.match(cssSource, /growth-shell\{width:min\(100%,430px\)!important/, 'growth must remain inside the shared mobile app shell')
+})
+
+test('milestone cards keep a readable fixed width inside a keyboard-scrollable horizontal rail', () => {
+  assert.match(
+    fanGrowthSource,
+    /className="fan-growth-milestones"[^>]*role="list"[^>]*aria-label="전체 레벨 마일스톤"[^>]*tabIndex=\{0\}/,
+    'the milestone rail should be focusable and named for keyboard users',
+  )
+  assert.match(
+    fanGrowthSource,
+    /event\.key !== 'ArrowLeft'[\s\S]*?event\.key !== 'ArrowRight'[\s\S]*?scrollBy\(\{ left:/,
+    'left and right arrow keys should move the focused milestone rail',
+  )
+  assert.doesNotMatch(
+    fanGrowthSource,
+    /milestoneLevels\.map\(item => <article key=\{item\.level\}/,
+    'low levels can repeat numerically, so milestone keys must include reward identity',
+  )
+  assert.match(
+    fanGrowthReferenceCssSource,
+    /Milestone rail scroll contract:[\s\S]*?\.fan-growth-milestones\s*\{[\s\S]*?display:flex!important;[\s\S]*?overflow-x:auto!important;[\s\S]*?scroll-snap-type:x proximity!important;[\s\S]*?\}/,
+    'the final shell override should preserve horizontal scrolling',
+  )
+  assert.match(
+    fanGrowthReferenceCssSource,
+    /Milestone rail scroll contract:[\s\S]*?\.fan-growth-milestone\s*\{[\s\S]*?flex:0 0 122px!important;[\s\S]*?\}/,
+    'milestone cards should not shrink below the reference width',
+  )
+  assert.match(
+    fanGrowthReferenceCssSource,
+    /Milestone rail scroll contract:[\s\S]*?\.fan-growth-milestone:last-child\s*\{[\s\S]*?scroll-snap-align:end!important;/,
+    'the final milestone should snap fully into view',
+  )
+  assert.match(
+    fanGrowthSource,
+    /function MilestoneLockIcon\(/,
+    'locked milestone states should use a named lock icon component',
+  )
+  assert.match(
+    fanGrowthSource,
+    /circle cx="12" cy="14\.5"/,
+    'the lock icon should include a visible keyhole instead of ambiguous overlapping circles',
+  )
+  assert.match(
+    fanGrowthSource,
+    /currentLocked/,
+    'the current milestone should support a locked state',
+  )
+  assert.match(
+    fanGrowthSource,
+    /onScroll=\{handleMilestoneScroll\}/,
+    'the rail should publish native scroll updates',
+  )
+  assert.match(
+    fanGrowthSource,
+    /fan-growth-milestone-track-viewport/,
+    'the lower track should render a small scroll-position marker',
+  )
+  assert.match(
+    fanGrowthSource,
+    /scrollWidth[\s\S]*clientWidth/,
+    'scroll progress should use the rail geometry',
+  )
+  assert.doesNotMatch(
+    fanGrowthSource,
+    /milestoneIndicatorPercent = Math\.max\(levelPercent[\s\S]*milestoneScroll\.ratio/,
+    'the XP progress line should not grow into a large scroll-position bar',
+  )
+  assert.match(
+    fanGrowthSource,
+    /milestoneProgressPercent = Math\.max\(18, levelPercent\)/,
+    'the progress line should stay tied to live XP progress',
+  )
+  assert.match(
+    fanGrowthSource,
+    /fan-growth-milestone-track-fill[\s\S]*fan-growth-milestone-track-viewport/,
+    'the track should expose separate XP progress and scroll-position layers',
+  )
+  assert.match(
+    fanGrowthSource,
+    /<b className="fan-growth-milestone-track-fill"[\s\S]*<b className="fan-growth-milestone-track-viewport"/,
+    'track layers should avoid generic span styling that creates an oversized pill',
+  )
+  assert.match(
+    fanGrowthReferenceCssSource,
+    /fan-growth-milestone-track-viewport[\s\S]*width:8px!important/,
+    'the scroll-position marker should remain visually small',
+  )
 })
 
 test('fan growth UI has Korean reward pass equipment states and bottom sheet behavior', async () => {

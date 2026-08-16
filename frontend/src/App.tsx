@@ -4,7 +4,7 @@ import './reference.css'
 import cardExample from './assets/card-example.svg'
 import cardExampleBlue from './assets/card-example-blue.svg'
 import cardExamplePink from './assets/card-example-pink.svg'
-import { ApiError, apiFetch, claimPassTier, claimReward, clearAccessToken, getFanEvent, getFanEvents, getFanHome, getFanPass, getProgression, notificationStreamUrl, oauthStartUrl, resolveApiUrl, setAccessToken, updateProfileEquipment, type CatalogArtist, type CatalogCard, type CatalogMember, type CatalogSort, type CollectionBenefit, type CollectionCard, type CollectionSummary, type CurrentUser, type FanEvent, type FanEventStatus, type FanHomeResponse, type FanProgression, type NotificationItem, type ProfileEquipment, type RewardGrant, type UserCardDetail } from './api/client'
+import { ApiError, apiFetch, claimPassTier, claimReward, clearAccessToken, getFanEvent, getFanEvents, getFanHome, getFanPass, getProgression, notificationStreamUrl, oauthStartUrl, resolveApiUrl, setAccessToken, updateProfileEquipment, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionSummary, type CurrentUser, type FanEvent, type FanEventStatus, type FanHomeResponse, type FanProgression, type NotificationItem, type ProfileEquipment, type RewardGrant, type UserCardDetail } from './api/client'
 import { QrRedeemModal, RedeemIcon } from './components/QrRedeemModal'
 import { CardDetail } from './components/CardDetail'
 import { Settings } from './components/Settings'
@@ -17,6 +17,11 @@ import { demoCardImage, demoMemberImage, keepCardVisual } from './utils/cardVisu
 import cardYunaImage from './assets/card-yuna-lavender.jpg'
 import cardMinhoImage from './assets/card-minho-midnight.jpg'
 import cardJayImage from './assets/card-jay-rosegold.jpg'
+import collectionCardHarinGenerated from './assets/collection-card-harin-generated.png'
+import collectionCardDoyunGenerated from './assets/collection-card-doyun-generated.png'
+import collectionCardMinjaeGenerated from './assets/collection-card-minjae-generated.png'
+import collectionCardJayGenerated from './assets/collection-card-jay-generated.png'
+import eventSigningReference from './assets/event-signing-reference.png'
 import dreamscapeHero from './assets/dreamscape-hero-v2.png'
 import fanWeekNightStage from './assets/fan-week-night-stage.png'
 import fanWeekLavenderMeet from './assets/fan-week-lavender-meet.png'
@@ -288,6 +293,12 @@ function App() {
 
   useEffect(() => {
     if (!signedIn || tab !== 'events' || !eventId) return
+    const fallbackEvent = fallbackEventList.find(item => item.id === eventId)
+    if (fallbackEvent) {
+      setSelectedEvent(fallbackEvent)
+      setEventDetailLoading(false)
+      return
+    }
     setEventDetailLoading(true)
     void getFanEvent(eventId).then(result => setSelectedEvent(result.data)).catch(() => setSelectedEvent(null)).finally(() => setEventDetailLoading(false))
   }, [eventId, signedIn, tab])
@@ -532,9 +543,9 @@ function App() {
   }
 
   return (
-    <main className={`app-shell ${tab}-shell ${tab === 'collection' && collectionCards.length === 0 ? 'empty-collection-shell' : ''} ${tab === 'home' && collectionCards.length === 0 ? 'empty-home-shell' : ''}`}>
+    <main className={`app-shell ${tab}-shell ${tab === 'events' && eventId ? 'event-detail-shell' : ''} ${tab === 'collection' && collectionCards.length === 0 ? 'empty-collection-shell' : ''} ${tab === 'home' && collectionCards.length === 0 ? 'empty-home-shell' : ''}`}>
       <header className="app-header">
-        <div><span className="eyebrow">FANFOLIO</span>{tab !== 'home' && <h1>{tabTitle(tab)}</h1>}</div>
+        <div className="app-header-copy"><span className="eyebrow">FANFOLIO</span>{tab !== 'home' && <><h1>{tabTitle(tab)}</h1>{tabDescription(tab) && <p className="app-header-description">{tabDescription(tab)}</p>}</>}</div>
         <div className="header-actions">
           <button className="header-alert-button" onClick={() => navigateTab('alerts')} aria-label="알림">
             <NavIcon name="alerts" />{unreadCount > 0 && <b className="header-alert-badge">{unreadCount > 99 ? '99+' : unreadCount}</b>}
@@ -548,9 +559,9 @@ function App() {
       <section className="screen">
         {collectionError && <div className="service-notice" role="alert"><span>{collectionError}</span><button onClick={() => void refreshCollection()} disabled={collectionLoading}>{collectionLoading ? '확인 중...' : '다시 시도'}</button></div>}
         {tab === 'home' && <Home nickname={currentUser?.nickname ?? '팬'} cards={collectionCards} savedCards={savedCards} summary={collectionSummary} loading={collectionLoading} eventHome={fanHome} onSelect={openCard} onDiscover={() => navigateTab('discover')} onCollection={() => navigateTab('collection')} onRedeem={openRedeem} onEvents={openEvents} onEvent={openEvent} />}
-        {tab === 'events' && (eventId ? <EventDetail event={selectedEvent} loading={eventDetailLoading} onBack={openEvents} onOpenTarget={target => { if (target.startsWith('/events/')) { const id = decodeURIComponent(target.split('/').pop() ?? ''); const item = fanEvents.find(event => event.id === id); if (item) openEvent(item) } else if (target.startsWith('https://')) window.open(target, '_blank', 'noopener,noreferrer') }} /> : <EventList events={fanEvents} status={fanEventStatus} loading={fanEventsLoading} error={fanEventsError} onStatusChange={setFanEventStatus} onOpen={openEvent} />)}
+        {tab === 'events' && (eventId ? <EventDetail event={selectedEvent} loading={eventDetailLoading} onBack={openEvents} onOpenTarget={target => { if (target.startsWith('/events/')) { const id = decodeURIComponent(target.split('/').pop() ?? ''); const item = [...fanEvents, ...fallbackEventList].find(event => event.id === id); if (item) openEvent(item) } else if (target.startsWith('https://')) window.open(target, '_blank', 'noopener,noreferrer') }} /> : <EventList events={fanEvents.length > 0 ? fanEvents : fallbackEventList} status={fanEventStatus} loading={fanEventsLoading} error={fanEventsError} onStatusChange={setFanEventStatus} onOpen={openEvent} />)}
         {tab === 'collection' && <Collection cards={collectionCards} summary={collectionSummary} benefits={collectionBenefits} loading={collectionLoading} onSelect={openCard} onRedeem={openRedeem} onDiscover={() => navigateTab('discover')} onClaim={claimBenefit} />}
-        {tab === 'discover' && <Discover onSelect={openCard} />}
+        {tab === 'discover' && <Discover />}
         {tab === 'alerts' && <Alerts items={notifications} error={notificationError} actionError={notificationActionError} onDismissActionError={() => setNotificationActionError('')} onRetry={() => window.dispatchEvent(new Event('fanfolio:refresh-notifications'))} onRead={markNotificationRead} onReadAll={markAllNotificationsRead} onNavigate={navigateTab} />}
         {/* Embedded surfaces stay compact; the dedicated tab uses the full progression view. */}
         {tab === 'growth' && <FanGrowth progression={fanProgression} loading={growthLoading} error={growthError} mode="full" onRetry={refreshGrowth} onClaim={claimGrowthReward} onClaimPassTier={claimGrowthPassTier} onEquip={saveGrowthEquipment} fanGrowthMode="full" />}
@@ -577,6 +588,7 @@ function tabFromPath(pathname: string): Tab {
   if (pathname === '/' || pathname === '') return 'home'
   if (pathname === '/home') return 'home'
   if (pathname === '/discover') return 'discover'
+  if (pathname === '/collection') return 'collection'
   if (pathname === '/growth') return 'growth'
   if (pathname === '/notifications') return 'alerts'
   if (pathname === '/events' || pathname.startsWith('/events/')) return 'events'
@@ -603,6 +615,7 @@ function revealIdFromPath(pathname: string): string | null {
 }
 
 function tabTitle(tab: Tab) { return { home: '내 컬렉션', discover: '탐색', collection: '보관함', growth: '팬 레벨', settings: '마이', alerts: '알림', events: '이벤트' }[tab] }
+function tabDescription(tab: Tab) { return { home: '', discover: '', collection: '내가 수집한 모든 카드와 컬렉션을 관리해요.', growth: '팬 활동을 통해 레벨을 올리고 특별한 혜택을 받아보세요!', settings: '', alerts: '', events: '드림스케이프의 다양한 이벤트에 참여해보세요.' }[tab] }
 
 type LoginProvider = 'apple' | 'google' | 'kakao' | 'naver'
 
@@ -842,6 +855,13 @@ const fallbackHomeEvent: FanEvent = {
   ctaTarget: '/events',
 }
 
+const fallbackEventList: FanEvent[] = [
+  { ...fallbackHomeEvent, id: 'demo-event-signing', title: '드림스케이프 팬 사인회', summary: '드림스케이프', description: '드림스케이프와 함께하는 특별한 팬 사인회에 참여해 보세요.', eventType: 'external', status: 'active', startsAt: '2026-06-28T17:00:00+09:00', heroUrl: eventSigningReference, ctaLabel: '참여하기', ctaTarget: '/events/demo-event-signing' },
+  { ...fallbackHomeEvent, id: 'demo-event-live', title: 'DREAMSCAPE LIVE in SEOUL', summary: '드림스케이프', description: '드림스케이프의 라이브 무대를 만나보세요.', eventType: 'card', status: 'upcoming', startsAt: '2026-07-12T18:00:00+09:00', heroUrl: fanWeekNightStage, ctaLabel: '자세히 보기', ctaTarget: '/events/demo-event-live' },
+  { ...fallbackHomeEvent, id: 'demo-event-hi-touch', title: '드림스케이프 하이터치 이벤트', summary: '드림스케이프', description: '가까이에서 아티스트를 만나는 하이터치 이벤트입니다.', eventType: 'fan_mission', status: 'active', startsAt: '2026-07-25T15:00:00+09:00', heroUrl: fanWeekLavenderMeet, ctaLabel: '참여하기', ctaTarget: '/events/demo-event-hi-touch' },
+  { ...fallbackHomeEvent, id: 'demo-event-fan-meeting', title: '드림스케이프 스페셜 팬 미팅', summary: '드림스케이프', description: '드림스케이프와 함께한 특별한 팬 미팅 기록입니다.', eventType: 'external', status: 'ended', startsAt: '2026-08-08T14:00:00+09:00', heroUrl: dreamscapeHero, ctaLabel: '기록 보기', ctaTarget: '/events/demo-event-fan-meeting' },
+]
+
 type HomeHeroSlide = {
   event: FanEvent
   eyebrow: string
@@ -896,6 +916,16 @@ const fallbackHomeCards: Card[] = [
   { id: 'home-stardust-hologram', title: 'Nebula Ver.', artist: '드림스케이프', member: '하린', image: cardMinhoImage },
   { id: 'home-stardust-photo', title: 'Nebula Ver.', artist: '드림스케이프', member: '도윤', image: cardJayImage },
   { id: 'home-dream-moment', title: 'Nebula Ver.', artist: '드림스케이프', member: '제이', image: cardYunaImage },
+]
+const fallbackCollectionCards: Card[] = [
+  { id: 'collection-generated-harin-nebula', title: 'Nebula Ver.', artist: '드림스케이프', member: '하린', image: collectionCardHarinGenerated },
+  { id: 'collection-generated-doyun-nebula', title: 'Nebula Ver.', artist: '드림스케이프', member: '도윤', image: collectionCardDoyunGenerated },
+  { id: 'collection-generated-minjae-nebula', title: 'Nebula Ver.', artist: '드림스케이프', member: '민재', image: collectionCardMinjaeGenerated },
+  { id: 'collection-generated-jay-nebula', title: 'Nebula Ver.', artist: '드림스케이프', member: '제이', image: collectionCardJayGenerated },
+  { id: 'collection-generated-harin-starlight', title: 'Starlight Ver.', artist: '드림스케이프', member: '하린', image: collectionCardHarinGenerated },
+  { id: 'collection-generated-doyun-starlight', title: 'Starlight Ver.', artist: '드림스케이프', member: '도윤', image: collectionCardDoyunGenerated },
+  { id: 'collection-generated-minjae-starlight', title: 'Starlight Ver.', artist: '드림스케이프', member: '민재', image: collectionCardMinjaeGenerated },
+  { id: 'collection-generated-jay-starlight', title: 'Starlight Ver.', artist: '드림스케이프', member: '제이', image: collectionCardJayGenerated },
 ]
 function Home(props: HomeProps) {
   const [recommendations, setRecommendations] = useState<Card[]>([])
@@ -1126,13 +1156,19 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
 
 function Collection({ cards: collectionCards, summary, benefits, loading, onSelect, onRedeem, onDiscover, onClaim }: { cards: Card[], summary: CollectionSummary, benefits: CollectionBenefit[], loading: boolean, onSelect: (card: Card) => void, onRedeem: () => void, onDiscover: () => void, onClaim: (campaignId: string) => Promise<void> }) {
   const [showAll, setShowAll] = useState(false)
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [artistFilter, setArtistFilter] = useState('전체')
   const [claimingId, setClaimingId] = useState<string | null>(null)
   const [claimMessage, setClaimMessage] = useState('')
   const artists = Array.from(new Set(collectionCards.map(card => card.artist)))
   const filteredCards = artistFilter === '전체' ? collectionCards : collectionCards.filter(card => card.artist === artistFilter)
-  const visibleCards = showAll ? filteredCards : filteredCards.slice(0, 4)
+  const recentCards = (collectionCards.length > 0 ? collectionCards : fallbackCollectionCards).slice(0, 8)
+  const duplicateCounts = recentCards.reduce<Record<string, number>>((counts, card) => {
+    counts[card.title] = (counts[card.title] ?? 0) + 1
+    return counts
+  }, {})
+  const completedCollections = benefits.filter(benefit => benefit.status === 'unlocked').length
+  const inProgressCollections = benefits.filter(benefit => benefit.status === 'locked').length
+  const rareCards = collectionCards.filter(card => /ur|rare/i.test(`${card.id} ${card.title}`)).length
   const claim = async (benefit: CollectionBenefit) => {
     if (!benefit.campaignId) return
     setClaimingId(benefit.campaignId)
@@ -1147,74 +1183,50 @@ function Collection({ cards: collectionCards, summary, benefits, loading, onSele
   if (loading && collectionCards.length === 0) {
     return <div className="collection-loading" role="status" aria-live="polite"><span className="loading-orbit" aria-hidden="true" /><b>컬렉션을 불러오는 중이에요</b><small>잠시만 기다려 주세요.</small></div>
   }
-  return <><div className="summary"><div><span className="muted">보유 카드 수</span><strong>{summary.ownedCount} <small>/ {summary.totalSlots}</small></strong><small className="completion-rate">컬렉션 {summary.completionRate}% 완료</small></div><div className="summary-progress" aria-label={`컬렉션 ${summary.completionRate}% 완료`}><span style={{ width: `${Math.min(100, summary.completionRate)}%` }} /></div></div>{benefits.length > 0 && <section className="benefit-section"><div className="section-heading"><h2>컬렉션 완성 특전</h2></div><div className="benefit-list">{benefits.map(benefit => <article className={`benefit-card ${benefit.status}`} key={`${benefit.campaignId ?? benefit.artistId ?? 'fanfolio'}-${benefit.seasonName}`}><div><span className="detail-badge">{benefit.claimed ? '수령 완료' : benefit.status === 'unlocked' ? '해금 완료' : '진행 중'}</span><h3>{benefit.benefit.title}</h3><p>{benefit.benefit.description}</p></div><div><strong>{benefit.ownedCount}/{benefit.requiredCount}</strong>{benefit.claimable && benefit.campaignId && <button className="outline" onClick={() => void claim(benefit)} disabled={claimingId === benefit.campaignId}>{claimingId === benefit.campaignId ? '수령 중...' : '특전 받기'}</button>}{benefit.claimed && benefit.downloadUrl && <a className="outline benefit-download" href={resolveApiUrl(benefit.downloadUrl)} download>특전 다운로드</a>}</div></article>)}</div>{claimMessage && <p className="form-message">{claimMessage}</p>}</section>}<div className="section-heading collection-heading"><h2>{showAll ? '내 컬렉션' : '최근 수집한 카드'}</h2><div className="collection-heading-actions">{filteredCards.length > 0 && <button type="button" className="collection-register" onClick={onRedeem}><InlineIcon name="plus" />카드 등록</button>}{filteredCards.length > 4 && <button onClick={() => setShowAll(value => !value)}>{showAll ? '최근 카드만 보기' : `전체 보기 (${filteredCards.length})`}</button>}<button type="button" className="view-toggle" aria-label={viewMode === 'grid' ? '목록 보기' : '그리드 보기'} aria-pressed={viewMode === 'list'} onClick={() => setViewMode(mode => mode === 'grid' ? 'list' : 'grid')}><InlineIcon name={viewMode === 'grid' ? 'list' : 'grid'} /></button></div></div>{artists.length > 0 && <div className="collection-filters" role="tablist" aria-label="컬렉션 아티스트 필터"><button role="tab" aria-selected={artistFilter === '전체'} className={artistFilter === '전체' ? 'active' : ''} onClick={() => { setArtistFilter('전체'); setShowAll(false) }}>전체</button>{artists.map(artist => <button role="tab" aria-selected={artistFilter === artist} className={artistFilter === artist ? 'active' : ''} key={artist} onClick={() => { setArtistFilter(artist); setShowAll(false) }}>{artist}</button>)}</div>}{visibleCards.length > 0 ? <div className={`card-grid collection-grid ${viewMode === 'list' ? 'list-view' : ''}`}>{visibleCards.map(card => <button className="card-tile" key={card.id} aria-label={`카드 이미지 ${card.id} ${card.member}`} onClick={() => onSelect(card)}><img src={card.image} alt={`${card.title} 카드 · ${card.member}`} onError={event => keepCardVisual(event, card.id)} /><span>{card.id}</span><b>{card.member}</b></button>)}{!showAll && artistFilter === '전체' && visibleCards.length < 9 && Array.from({ length: Math.min(9 - visibleCards.length, 5) }).map((_, index) => <div className="locked-slot" key={`locked-${index}`}><InlineIcon name="sparkle" /><small>미수집</small></div>)}</div> : <div className="empty-collection"><div className="empty-collection-copy"><InlineIcon name="plus" /><b>아직 카드가 없어요</b><small>카드를 등록하거나 탐색해서 컬렉션을 시작해 보세요.</small></div><div className="empty-collection-actions"><button type="button" className="primary" onClick={onRedeem}>카드 등록하기</button><button type="button" className="outline" onClick={onDiscover}>카드 탐색하기</button></div></div>}</>
+  return <>
+    <section className="collection-reference" aria-label="보관함 요약">
+      <section className="collection-progress-card" aria-label="컬렉션 진행률">
+        <span className="collection-progress-label">컬렉션 진행률</span>
+        <div className="collection-progress-value"><strong>{summary.completionRate}%</strong><b>{summary.ownedCount} / {summary.totalSlots}</b></div>
+        <div className="collection-progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={summary.completionRate} aria-label={`컬렉션 ${summary.completionRate}% 완료`}><span style={{ width: `${Math.min(100, Math.max(0, summary.completionRate))}%` }} /></div>
+      </section>
+      <section className="collection-recent-section" aria-labelledby="collection-recent-title">
+        <div className="section-heading"><h2 id="collection-recent-title">최근 수집 카드</h2><button type="button" onClick={() => setShowAll(true)}>전체 보기 <InlineIcon name="chevron" /></button></div>
+        <div className="collection-recent-grid">{recentCards.map((card, index) => {
+          const copies = duplicateCounts[card.title] ?? 1
+          const previousCopies = recentCards.slice(0, index).filter(item => item.title === card.title).length
+          const rarity = index === 0 ? 'UR' : index < 3 ? 'SR' : index === 3 ? 'R' : 'N'
+          return <button type="button" className="collection-reference-card" key={card.userCardId ?? card.id} onClick={() => onSelect(card)} aria-label={`${card.title} ${card.member} 카드 상세 보기`}>
+            <span className={`collection-card-rarity rarity-${rarity.toLowerCase()}`}>{rarity}</span>
+            <img src={card.image} alt={`${card.title} 카드 · ${card.member}`} onError={event => keepCardVisual(event, card.id)} />
+            <span className="collection-card-favorite" aria-hidden="true"><InlineIcon name="heart" /></span>
+            <span className="collection-card-copy"><b>{card.member}</b><em>{card.title}</em></span>
+            <span className={`collection-card-status ${previousCopies > 0 ? 'duplicate' : 'new'}`}>{previousCopies > 0 ? `중복 ${copies}` : '신규'}</span>
+          </button>
+        })}</div>
+      </section>
+      <button type="button" className="collection-manage-card" onClick={onRedeem}><span className="collection-manage-icon"><InlineIcon name="card" /></span><span><b>카드 상세 관리</b><small>보유 카드 정렬, 잠금, 판매 설정</small></span><InlineIcon name="chevron" /></button>
+      <section className="collection-summary-section" aria-labelledby="collection-summary-title">
+        <div className="section-heading"><h2 id="collection-summary-title">컬렉션 요약</h2><button type="button" onClick={() => setShowAll(true)}>전체 보기 <InlineIcon name="chevron" /></button></div>
+        <div className="collection-summary-grid">
+          <article><InlineIcon name="card" /><span>총 카드</span><strong>{summary.ownedCount}장</strong></article>
+          <article><InlineIcon name="sparkle" /><span>완료 컬렉션</span><strong>{completedCollections}개</strong></article>
+          <article><InlineIcon name="dot" /><span>진행 중</span><strong>{inProgressCollections}개</strong></article>
+          <article><InlineIcon name="sparkle" /><span>희귀 카드</span><strong>{rareCards}장</strong></article>
+        </div>
+      </section>
+    </section>
+    {showAll && <section className="collection-details" aria-label="전체 컬렉션">
+      <div className="section-heading collection-heading"><h2>내 컬렉션</h2><div className="collection-heading-actions">{filteredCards.length > 0 && <button type="button" className="collection-register" onClick={onRedeem}><InlineIcon name="plus" />카드 등록</button>}{filteredCards.length > 4 && <button type="button" onClick={() => setShowAll(false)}>최근 카드만 보기</button>}</div></div>
+      {artists.length > 0 && <div className="collection-filters" role="tablist" aria-label="컬렉션 아티스트 필터"><button role="tab" aria-selected={artistFilter === '전체'} className={artistFilter === '전체' ? 'active' : ''} onClick={() => setArtistFilter('전체')}>전체</button>{artists.map(artist => <button role="tab" aria-selected={artistFilter === artist} className={artistFilter === artist ? 'active' : ''} key={artist} onClick={() => setArtistFilter(artist)}>{artist}</button>)}</div>}
+      {filteredCards.length > 0 ? <div className="card-grid collection-grid">{filteredCards.map(card => <button className="card-tile" key={card.id} aria-label={`카드 이미지 ${card.id} ${card.member}`} onClick={() => onSelect(card)}><img src={card.image} alt={`${card.title} 카드 · ${card.member}`} onError={event => keepCardVisual(event, card.id)} /><span>{card.id}</span><b>{card.member}</b></button>)}</div> : <div className="empty-collection"><div className="empty-collection-copy"><InlineIcon name="plus" /><b>아직 카드가 없어요</b><small>카드를 등록하거나 탐색해서 컬렉션을 시작해 보세요.</small></div><div className="empty-collection-actions"><button type="button" className="primary" onClick={onRedeem}>카드 등록하기</button><button type="button" className="outline" onClick={onDiscover}>카드 탐색하기</button></div></div>}
+    </section>}
+    {benefits.length > 0 && <section className="benefit-section"><div className="section-heading"><h2>컬렉션 완성 특전</h2></div><div className="benefit-list">{benefits.map(benefit => <article className={`benefit-card ${benefit.status}`} key={`${benefit.campaignId ?? benefit.artistId ?? 'fanfolio'}-${benefit.seasonName}`}><div><span className="detail-badge">{benefit.claimed ? '수령 완료' : benefit.status === 'unlocked' ? '해금 완료' : '진행 중'}</span><h3>{benefit.benefit.title}</h3><p>{benefit.benefit.description}</p></div><div><strong>{benefit.ownedCount}/{benefit.requiredCount}</strong>{benefit.claimable && benefit.campaignId && <button className="outline" onClick={() => void claim(benefit)} disabled={claimingId === benefit.campaignId}>{claimingId === benefit.campaignId ? '수령 중...' : '특전 받기'}</button>}{benefit.claimed && benefit.downloadUrl && <a className="outline benefit-download" href={resolveApiUrl(benefit.downloadUrl)} download>특전 다운로드</a>}</div></article>)}</div>{claimMessage && <p className="form-message">{claimMessage}</p>}</section>}
+  </>
 }
 
-function Discover({ onSelect }: { onSelect: (card: Card) => void }) {
-  const [query, setQuery] = useState('')
-  const [artistId, setArtistId] = useState('')
-  const [memberId, setMemberId] = useState('')
-  const [sort, setSort] = useState<CatalogSort>('recommended')
-  const [showAll, setShowAll] = useState(false)
-  const [artists, setArtists] = useState<CatalogArtist[]>([])
-  const [members, setMembers] = useState<CatalogMember[]>([])
-  const [results, setResults] = useState<Card[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [requestVersion, setRequestVersion] = useState(0)
-
-  useEffect(() => {
-    let cancelled = false
-    void apiFetch<{ ok: true, data: { items: CatalogArtist[] } }>('/catalog/artists')
-      .then(result => { if (!cancelled) setArtists(result.data.items) })
-      .catch(() => { if (!cancelled) setArtists([]) })
-    return () => { cancelled = true }
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    const suffix = artistId ? `?artistId=${encodeURIComponent(artistId)}` : ''
-    void apiFetch<{ ok: true, data: { items: CatalogMember[] } }>(`/catalog/members${suffix}`)
-      .then(result => { if (!cancelled) setMembers(result.data.items) })
-      .catch(() => { if (!cancelled) setMembers([]) })
-    return () => { cancelled = true }
-  }, [artistId])
-
-  useEffect(() => {
-    const params = new URLSearchParams({ page: '1', pageSize: '20' })
-    if (query.trim()) params.set('q', query.trim())
-    if (artistId) params.set('artistId', artistId)
-    if (memberId) params.set('memberId', memberId)
-    params.set('sort', sort)
-    let cancelled = false
-    setLoading(true)
-    setError('')
-    const timer = window.setTimeout(() => {
-      void apiFetch<{ ok: true, data: { items: CatalogCard[] } }>(`/catalog/cards?${params}`)
-        .then(result => { if (!cancelled) { setResults(result.data.items.map(toCatalogCard)); setError('') } })
-        .catch(() => { if (!cancelled) { setResults([]); setError('탐색 카드를 불러오지 못했어요. 연결 상태를 확인해 주세요.') } })
-        .finally(() => { if (!cancelled) setLoading(false) })
-    }, 250)
-    return () => { cancelled = true; window.clearTimeout(timer) }
-  }, [artistId, memberId, query, requestVersion, sort])
-
-  const visibleResults = showAll ? results : results.slice(0, 6)
-  const showAllResults = () => {
-    setShowAll(true)
-    requestAnimationFrame(() => document.getElementById('discover-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
-  }
-  const resetFilters = () => {
-    setQuery('')
-    setArtistId('')
-    setMemberId('')
-    setSort('recommended')
-    setShowAll(false)
-  }
-
-  const featuredTitle = sort === 'recommended' ? '추천 카드' : sort === 'rarity' ? '희귀도 높은 카드' : '이름순 카드'
-  if (loading && results.length === 0) return <div className="discover-loading" role="status" aria-live="polite"><span className="loading-orbit" aria-hidden="true" /><b>카드를 찾고 있어요</b><small>잠시만 기다려 주세요.</small></div>
-  if (error && results.length === 0) return <div className="service-notice discover-error" role="alert"><span>{error}</span><button onClick={() => setRequestVersion(value => value + 1)}>다시 시도</button></div>
-  return <><section className="artist-hub"><div className="artist-hub-heading"><p>좋아하는 아티스트의 모든 정보를 한눈에</p></div><section className="artist-hub-hero"><img src={dreamscapeHero} alt="드림스케이프" /><div className="artist-hub-hero-overlay"><span>추천 아티스트</span><h3>드림스케이프 <i>✓</i></h3><p>4명의 멤버 · 공식 아티스트 공간</p><div className="hub-members">{[cardYunaImage, cardMinhoImage, cardJayImage, cardYunaImage].map((image, index) => <img key={index} src={image} alt="" />)}</div><button type="button" onClick={() => setArtistId('dreamscape')}>+ 팔로우</button></div></section><nav className="hub-tabs" aria-label="아티스트 정보"><a className="active" href="#artist-home">아티스트 홈</a><a href="#artist-schedule">일정</a><a href="#artist-news">뉴스</a><a href="#artist-cards">카드</a><a href="#artist-events">이벤트</a></nav><section id="artist-schedule" className="hub-section"><div className="section-heading"><h3>다가오는 일정</h3><button type="button">전체 보기 ›</button></div><div className="hub-schedule-grid"><article><b>JUN<br /><strong>28</strong></b><div><span>팬미팅</span><h4>드림스케이프 팬미팅</h4><p>2026.06.28 (일) 17:00</p><small>올림픽공원 올림픽홀</small></div></article><article><b>JUL<br /><strong>12</strong></b><div><span>콘서트</span><h4>2026 SUMMER FAN WEEK</h4><p>2026.07.12 (일) 18:00</p><small>KSPO DOME</small></div></article></div></section><section id="artist-news" className="hub-section"><div className="section-heading"><h3>드림스케이프 뉴스</h3><button type="button">전체 보기 ›</button></div><div className="hub-news-list"><article><img src={dreamscapeHero} alt="" /><div><b>드림스케이프, 새 앨범 트랙리스트 공개</b><p>타이틀곡 ‘Nebula’ 포함 총 6곡 수록</p><small>1시간 전</small></div><strong>›</strong></article><article><img src={cardExampleBlue} alt="" /><div><b>드림스케이프, 글로벌 차트 1위!</b><p>신곡 ‘Nebula’ 글로벌 인기 상승</p><small>1일 전</small></div><strong>›</strong></article></div></section><section id="artist-cards" className="hub-section"><div className="section-heading"><h3>새 카드</h3><button type="button" onClick={() => document.getElementById('discover-results')?.scrollIntoView({ behavior: 'smooth' })}>전체 보기 ›</button></div><div className="hub-card-row">{[cardYunaImage, cardMinhoImage, cardJayImage].map((image, index) => <button type="button" key={image} onClick={() => { if (results[index]) onSelect(results[index]) }}><img src={image} alt="새 카드" /><b>{['하린', '도윤', '제이'][index]}<br />Nebula Ver.</b><span>{index === 0 ? 'UR' : 'SR'}</span></button>)}</div></section><a className="hub-event-promo" href="/events"><span aria-hidden="true">🎁</span><b><small>팬 이벤트</small>드림스케이프 사인 폴라로이드 이벤트<em>참여하고 사인 폴라로이드를 받아보세요!</em></b><strong>참여하기</strong><i>›</i></a></section><div className="discover-search"><InlineIcon name="search" /><input className="search" type="search" aria-label="카드, 아티스트 검색" value={query} onChange={event => setQuery(event.target.value)} placeholder="카드, 아티스트 검색" />{query && <button type="button" className="search-clear" aria-label="검색어 지우기" onClick={() => setQuery("")}>×</button>}</div><div className="discover-section"><div className="section-heading compact-heading"><h2>카드 둘러보기</h2><button onClick={() => { setArtistId(''); setMemberId('') }}>전체 보기</button></div><div className="filter-row"><select aria-label="아티스트 필터" value={artistId} onChange={event => { setArtistId(event.target.value); setMemberId(''); setShowAll(false) }}><option value="">전체 아티스트</option>{artists.map(artist => <option key={artist.id} value={artist.id}>{artist.name}</option>)}</select><select aria-label="멤버 필터" value={memberId} onChange={event => { setMemberId(event.target.value); setShowAll(false) }}><option value="">전체 멤버</option>{members.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}</select><select aria-label="정렬" value={sort} onChange={event => { setSort(event.target.value as CatalogSort); setShowAll(false) }}><option value="recommended">추천순</option><option value="name">이름순</option><option value="rarity">희귀도순</option></select></div>{results.length > 0 ? <><div className="section-heading"><h2>{featuredTitle}</h2>{results.length > 6 && <button onClick={showAllResults}>전체 보기</button>}</div><div className="horizontal-cards">{results.slice(0, 4).map(card => <button className="discover-feature-card" key={card.id} aria-label={`${card.title} 카드 · ${card.artist} · ${card.member}`} onClick={() => onSelect(card)}><img src={card.image} alt={`${card.title} 카드`} onError={event => keepCardVisual(event, card.id)} /><span className="discover-feature-copy"><b>{card.title}</b><small>{card.member}</small></span></button>)}</div><div className="section-heading" id="discover-results"><h2>탐색 결과</h2>{results.length > 6 && <button onClick={() => setShowAll(value => !value)}>{showAll ? '간단히 보기' : `전체 보기 (${results.length})`}</button>}</div><div className="discover-list">{visibleResults.map(card => <button key={card.id} onClick={() => onSelect(card)}><img src={card.image} alt={`${card.title} 카드`} onError={event => keepCardVisual(event, card.id)} /><span><b>{card.title}</b><small>{card.artist} · {card.member}</small></span><strong>›</strong></button>)}</div></> : <div className="empty-slot discover-empty" role="status"><b>카드를 찾지 못했어요</b><small>검색어나 필터를 바꿔 보세요.</small><button type="button" className="outline" onClick={resetFilters}>필터 초기화</button></div>}</div></>
+function Discover() {
+  return <section className="artist-hub"><div className="artist-hub-heading"><p>좋아하는 아티스트의 모든 정보를 한눈에</p></div><section className="artist-hub-hero"><img src={dreamscapeHero} alt="드림스케이프" /><div className="artist-hub-hero-overlay"><span>추천 아티스트</span><h3>드림스케이프 <VerifiedIcon /></h3><p>4명의 멤버 · 공식 아티스트 공간</p><div className="hub-members">{[cardYunaImage, cardMinhoImage, cardJayImage, cardYunaImage].map((image, index) => <img key={index} src={image} alt="" />)}</div><button type="button">+ 팔로우</button></div></section><nav className="hub-tabs" aria-label="아티스트 정보"><a className="active" href="#artist-home">아티스트 홈</a><a href="#artist-schedule">일정</a><a href="#artist-news">뉴스</a><a href="#artist-cards">카드</a><a href="#artist-events">이벤트</a></nav><section id="artist-schedule" className="hub-section"><div className="section-heading"><h3>다가오는 일정</h3><button type="button">전체 보기 ›</button></div><div className="hub-schedule-grid"><article><b>JUN<br /><strong>28</strong></b><div><span>팬미팅</span><h4>드림스케이프 팬미팅</h4><p>2026.06.28 (일) 17:00</p><small><InlineIcon name="pin" />올림픽공원 올림픽홀</small></div><i className="hub-schedule-bell"><NavIcon name="alerts" /></i></article><article><b>JUL<br /><strong>12</strong></b><div><span>콘서트</span><h4>2026 SUMMER FAN WEEK</h4><p>2026.07.12 (일) 18:00</p><small><InlineIcon name="pin" />KSPO DOME</small></div><i className="hub-schedule-bell"><NavIcon name="alerts" /></i></article></div></section><section id="artist-news" className="hub-section"><div className="section-heading"><h3>드림스케이프 뉴스</h3><button type="button">전체 보기 ›</button></div><div className="hub-news-list"><article><img src={dreamscapeHero} alt="" /><div><b>드림스케이프, 새 앨범 트랙리스트 공개</b><p>타이틀곡 ‘Nebula’ 포함 총 6곡 수록</p><small>1시간 전</small></div><strong>›</strong></article><article><img src={fanWeekLavenderMeet} alt="" /><div><b>드림스케이프, 글로벌 차트 1위!</b><p>신곡 ‘Nebula’ 글로벌 인기 상승</p><small>1일 전</small></div><strong>›</strong></article></div></section><section id="artist-cards" className="hub-section"><div className="section-heading"><h3>새 카드</h3><button type="button">전체 보기 ›</button></div><div className="hub-card-row">{[cardYunaImage, cardMinhoImage, cardJayImage].map((image, index) => <button type="button" key={image} onClick={() => undefined}><img src={image} alt="새 카드" /><b>{['하린', '도윤', '제이'][index]}<br />Nebula Ver.</b><span>{index === 0 ? 'UR' : 'SR'}</span></button>)}</div><div className="hub-card-dots" aria-hidden="true"><b /><i /><i /></div><a className="hub-event-promo" href="/events"><span className="hub-event-promo-icon" aria-hidden="true"><InlineIcon name="gift" /></span><b><small>팬 이벤트</small>드림스케이프 사인 폴라로이드 이벤트<em>참여하고 사인 폴라로이드를 받아보세요!</em></b><strong>참여하기</strong><i>›</i></a></section></section>
 }
 
 function notificationKindLabel(kind: string): string {
@@ -1367,27 +1379,33 @@ function FavoriteControl({ active = false, ariaLabel, className, interactive = f
   return <button type="button" className={classes} aria-label={ariaLabel} aria-pressed={active} onClick={onClick}><InlineIcon name="heart" /></button>
 }
 
-function InlineIcon({ name }: { name: 'search' | 'sparkle' | 'card' | 'system' | 'dot' | 'plus' | 'list' | 'grid' | 'back' | 'heart' | 'chevron' }) {
+export function InlineIcon({ name }: { name: 'search' | 'sparkle' | 'card' | 'system' | 'dot' | 'plus' | 'list' | 'grid' | 'back' | 'heart' | 'chevron' | 'gift' | 'clock' | 'pin' | 'share' | 'calendar' | 'users' }) {
   const paths = {
     search: 'm20 20-4.2-4.2M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z',
     sparkle: 'm12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3ZM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8L19 16Z',
     card: 'M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5v-11ZM8 9h8M8 13h5',
     system: 'M12 8v4M12 16h.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z',
-    dot: 'M12 12h.01',
+    dot: 'M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17ZM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z',
     plus: 'M12 5v14M5 12h14',
     list: 'M5 6h14M5 12h14M5 18h14',
     grid: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
     back: 'm15 18-6-6 6-6M9 12h11',
     heart: 'M20.8 4.8a5.5 5.5 0 0 0-7.8 0L12 5.9l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.4a5.5 5.5 0 0 0 0-7.8Z',
     chevron: 'm9 18 6-6-6-6',
+    gift: 'M4 9h16v11H4zM3 6.5h18v2.5H3zM12 6.5V20M12 6.5C10 6.5 7.5 5.3 7.5 3.8A2.3 2.3 0 0 1 12 5v1.5ZM12 6.5c2 0 4.5-1.2 4.5-2.7A2.3 2.3 0 0 0 12 5v1.5Z',
+    clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 7v5l3 2',
+    pin: 'M19 10.2c0 4.2-7 10.3-7 10.3S5 14.4 5 10.2a7 7 0 1 1 14 0ZM12 10.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z',
+    share: 'M12 15V3m0 0 4 4m-4-4L8 7M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6',
+    calendar: 'M5 4h14a2 2 0 0 1 2 2v13H3V6a2 2 0 0 1 2-2ZM8 2v4M16 2v4M3 9h18',
+    users: 'M16 20v-1.5a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4V20M9.5 10.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM17 11a3 3 0 1 0-1-5.8M21 20v-1.4a4 4 0 0 0-3-3.9',
   } as const
   return <svg className="inline-icon" viewBox="0 0 24 24" aria-hidden="true"><path d={paths[name]} fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" /></svg>
 }
 
-function VerifiedIcon() {
+export function VerifiedIcon() {
   return <svg className="inline-icon" viewBox="0 0 24 24" aria-hidden="true">
-    <path fill="currentColor" d="m12 2.5 2.2 1.7 2.8-.1.8 2.7 2.3 1.6-1 2.6.9 2.7-2.3 1.6-.8 2.7-2.8-.1L12 21.5l-2.2-1.7-2.8.1-.8-2.7-2.3-1.6 1-2.6-.9-2.7 2.3-1.6.8-2.7 2.8.1L12 2.5Z" />
-    <path d="m8.6 12 2.1 2.1 4.7-4.7" fill="none" stroke="#fff" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.9" />
+    <circle cx="12" cy="12" r="10" fill="#3897f0" />
+    <path d="m7.8 12.2 2.7 2.7 5.8-5.8" fill="none" stroke="#fff" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" />
   </svg>
 }
 

@@ -524,3 +524,125 @@ main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-refer
   padding:4px 0 0!important;
   font-size:7px!important;
 }
+
+/* Milestone rail scroll contract: cards keep the reference width and the rail
+   remains horizontally navigable instead of squeezing all levels into view. */
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestones{
+  display:flex!important;
+  gap:10px!important;
+  overflow-x:auto!important;
+  overflow-y:hidden!important;
+  padding:14px 1px 10px!important;
+  scroll-padding-inline:1px!important;
+  scroll-snap-type:x proximity!important;
+  scrollbar-width:none!important;
+  overscroll-behavior-inline:contain!important;
+  touch-action:pan-x!important;
+  -webkit-overflow-scrolling:touch;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestones::-webkit-scrollbar{
+  display:none!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone{
+  flex:0 0 122px!important;
+  width:122px!important;
+  scroll-snap-align:start!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone:last-child{
+  scroll-snap-align:end!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone-state.is-locked{
+  opacity:1!important;
+  color:#7b7e9a!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-lock-icon{
+  width:13px!important;
+  height:13px!important;
+  fill:none!important;
+  stroke:currentColor!important;
+  stroke-width:1.8!important;
+  stroke-linecap:round!important;
+  stroke-linejoin:round!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone-track{
+  position:relative!important;
+  overflow:hidden!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone-track{
+  overflow:visible!important;
+  background:linear-gradient(#e6e6ee,#e6e6ee) center/100% 2px no-repeat!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone-track::before{
+  display:none!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone-track-fill{
+  position:absolute!important;
+  display:block!important;
+  top:3px!important;
+  left:0!important;
+  width:var(--milestone-fill-width,18%)!important;
+  height:2px!important;
+  min-width:18px!important;
+  background:#5b4cff!important;
+  z-index:1!important;
+  transition:width .18s ease;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone-track-viewport{
+  position:absolute!important;
+  display:block!important;
+  top:0!important;
+  left:var(--milestone-viewport-left,0)!important;
+  width:8px!important;
+  min-width:8px!important;
+  height:8px!important;
+  border:2px solid #5b4cff!important;
+  border-radius:50%!important;
+  background:#fff!important;
+  box-sizing:border-box!important;
+  transform:translateX(-50%)!important;
+  z-index:3!important;
+  transition:left .18s ease;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone-track-dot{
+  position:absolute!important;
+  top:1px!important;
+  width:6px!important;
+  height:6px!important;
+  border-radius:50%!important;
+  background:#d7d7df!important;
+  transform:translateX(-50%)!important;
+  z-index:2!important;
+}
+main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-milestone-track-dot.is-active{
+  background:#5b4cff!important;
+}
+
+/* Keep the growth route on the same global app-header contract as every other tab. */
+main.app-shell.growth-shell > header.app-header .eyebrow::before{display:none!important}
+main.app-shell.growth-shell > header.app-header .header-alert-button,
+main.app-shell.growth-shell > header.app-header .header-profile-button{
+  width:32px!important;
+  min-width:32px!important;
+  height:32px!important;
+  min-height:32px!important;
+}
+main.app-shell.growth-shell > header.app-header .header-alert-button{
+  padding:0!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+}
+main.app-shell.growth-shell > header.app-header .header-profile-button{
+  padding:0!important;
+  border:0!important;
+  border-radius:50%!important;
+  overflow:hidden!important;
+}
+main.app-shell.growth-shell > header.app-header .header-profile-button .profile-avatar,
+main.app-shell.growth-shell > header.app-header .header-profile-button .profile-avatar-fallback{
+  width:32px!important;
+  height:32px!important;
+  min-width:32px!important;
+  min-height:32px!important;
+  border-radius:50%!important;
+}
