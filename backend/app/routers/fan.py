@@ -740,14 +740,7 @@ async def card_image(card_id: str, session: DbSession) -> Response:
 
 @router.get("/catalog/artists")
 async def catalog_artists(_: FanUser, session: DbSession) -> dict:
-    artists = await session.scalars(
-        select(Artist)
-        .join(Card, Card.artist_id == Artist.id)
-        .outerjoin(Drop, Card.drop_id == Drop.id)
-        .where(Card.status == "published", Card.is_official.is_(True), catalog_release_visible())
-        .distinct()
-        .order_by(Artist.name)
-    )
+    artists = await session.scalars(select(Artist).order_by(Artist.name))
     return {
         "ok": True,
         "data": {
@@ -766,9 +759,9 @@ async def catalog_members(_: FanUser, session: DbSession, artistId: str | None =
         .outerjoin(Drop, Card.drop_id == Drop.id)
         .where(Card.status == "published", Card.is_official.is_(True), catalog_release_visible())
     )
-    filters = [Member.artist_id.in_(available_artist_ids)]
-    if artistId:
-        filters.append(Member.artist_id == artistId)
+    filters = (
+        [Member.artist_id == artistId] if artistId else [Member.artist_id.in_(available_artist_ids)]
+    )
     members = await session.scalars(select(Member).where(*filters).distinct().order_by(Member.name))
     return {
         "ok": True,

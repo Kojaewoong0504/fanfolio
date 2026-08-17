@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import './App.css'
 import './reference.css'
-import cardExample from './assets/card-example.svg'
-import cardExampleBlue from './assets/card-example-blue.svg'
-import cardExamplePink from './assets/card-example-pink.svg'
-import { ApiError, apiFetch, claimPassTier, claimReward, clearAccessToken, getFanEvent, getFanEvents, getFanHome, getFanPass, getProgression, notificationStreamUrl, oauthStartUrl, resolveApiUrl, setAccessToken, updateProfileEquipment, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionSummary, type CurrentUser, type FanEvent, type FanEventStatus, type FanHomeResponse, type FanProgression, type NotificationItem, type ProfileEquipment, type RewardGrant, type UserCardDetail } from './api/client'
+import { ApiError, apiFetch, claimPassTier, claimReward, clearAccessToken, getFanEvent, getFanEvents, getFanHome, getFanPass, getProgression, notificationStreamUrl, oauthStartUrl, resolveApiUrl, setAccessToken, updateProfileEquipment, type CardDesignConfig, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionSummary, type CurrentUser, type FanEvent, type FanEventStatus, type FanHomeResponse, type FanProgression, type NotificationItem, type ProfileEquipment, type RewardGrant, type UserCardDetail } from './api/client'
 import { QrRedeemModal, RedeemIcon } from './components/QrRedeemModal'
 import { CardDetail } from './components/CardDetail'
+import { InteractiveCollectibleCard } from './components/InteractiveCollectibleCard'
 import { Settings } from './components/Settings'
 import { ProfileAvatar } from './components/ProfileAvatar'
 import { FanGrowth } from './components/FanGrowth'
@@ -30,10 +28,32 @@ import appleLoginIcon from './assets/login/apple.svg'
 import googleLoginIcon from './assets/login/google.svg'
 import kakaoLoginIcon from './assets/login/kakao.svg'
 import naverLoginIcon from './assets/login/naver.svg'
+import registrationCardImage from './assets/card-registration-idol-generated.png'
+import mysteryCardImage from './assets/card-reveal-mystery-generated.png'
+import registrationCompleteCelebration from './assets/registration-complete-celebration-v2.png'
+import fanLevelStar from './assets/fan-level-star-v2.png'
 
 type Tab = 'home' | 'discover' | 'collection' | 'growth' | 'settings' | 'alerts' | 'events'
 
 const cardRoutePreviewKey = 'fanfolio.card-route-preview'
+
+const qaRevealDesignConfig = {
+  version: 3,
+  front: {
+    material: 'pearl',
+    foilPattern: 'prism',
+    foilCoverage: 'full',
+    interaction: 'tilt',
+    intensity: 0.72,
+    angle: 135,
+  },
+  back: {
+    material: 'matte',
+    edgeFoil: 'silver',
+    spotUv: 'serial',
+    hiddenMessage: '드림스케이프 공식 컬렉션 카드',
+  },
+} satisfies CardDesignConfig
 
 function readCardRoutePreview(pathname: string): Card | null {
   const match = pathname.match(/^\/cards\/(.+)$/)
@@ -165,6 +185,8 @@ function App() {
   const [fanEventStatus, setFanEventStatus] = useState<'all' | FanEventStatus>('all')
   const [selectedEvent, setSelectedEvent] = useState<FanEvent | null>(null)
   const [eventDetailLoading, setEventDetailLoading] = useState(false)
+  const [showApplicationComplete, setShowApplicationComplete] = useState(false)
+  const [showNotificationSettings, setShowNotificationSettings] = useState(false)
   const savedCardsOwnerRef = useRef<string | null>(null)
   const savedCardIds = savedCards.map(card => card.userCardId ?? card.id)
 
@@ -539,7 +561,23 @@ function App() {
   }
 
   if (revealedCardId) {
-    return <RevealCard userCardId={revealedCardId} onClose={closeReveal} />
+    return <RevealCard
+      userCardId={revealedCardId}
+      collectionSummary={collectionSummary}
+      fanProgression={fanProgression}
+      onClose={closeReveal}
+      onViewCollection={() => { closeReveal(); navigateTab('collection') }}
+      onRegisterAnother={() => { closeReveal(); openRedeem() }}
+      onStart={() => { closeReveal(); navigateTab('home') }}
+    />
+  }
+
+  if (showApplicationComplete) {
+    return <EventApplicationComplete onBack={() => setShowApplicationComplete(false)} onEvents={() => { setShowApplicationComplete(false); openEvents() }} onApplications={() => { setShowApplicationComplete(false); navigateTab('settings') }} />
+  }
+
+  if (showNotificationSettings) {
+    return <NotificationSettings onBack={() => setShowNotificationSettings(false)} />
   }
 
   return (
@@ -559,13 +597,13 @@ function App() {
       <section className="screen">
         {collectionError && <div className="service-notice" role="alert"><span>{collectionError}</span><button onClick={() => void refreshCollection()} disabled={collectionLoading}>{collectionLoading ? '확인 중...' : '다시 시도'}</button></div>}
         {tab === 'home' && <Home nickname={currentUser?.nickname ?? '팬'} cards={collectionCards} savedCards={savedCards} summary={collectionSummary} loading={collectionLoading} eventHome={fanHome} onSelect={openCard} onDiscover={() => navigateTab('discover')} onCollection={() => navigateTab('collection')} onRedeem={openRedeem} onEvents={openEvents} onEvent={openEvent} />}
-        {tab === 'events' && (eventId ? <EventDetail event={selectedEvent} loading={eventDetailLoading} onBack={openEvents} onOpenTarget={target => { if (target.startsWith('/events/')) { const id = decodeURIComponent(target.split('/').pop() ?? ''); const item = [...fanEvents, ...fallbackEventList].find(event => event.id === id); if (item) openEvent(item) } else if (target.startsWith('https://')) window.open(target, '_blank', 'noopener,noreferrer') }} /> : <EventList events={fanEvents.length > 0 ? fanEvents : fallbackEventList} status={fanEventStatus} loading={fanEventsLoading} error={fanEventsError} onStatusChange={setFanEventStatus} onOpen={openEvent} />)}
+        {tab === 'events' && (eventId ? <EventDetail event={selectedEvent} loading={eventDetailLoading} onBack={openEvents} onApply={() => setShowApplicationComplete(true)} onOpenTarget={target => { if (target.startsWith('/events/')) { const id = decodeURIComponent(target.split('/').pop() ?? ''); const item = [...fanEvents, ...fallbackEventList].find(event => event.id === id); if (item) openEvent(item) } else if (target.startsWith('https://')) window.open(target, '_blank', 'noopener,noreferrer') }} /> : <EventList events={fanEvents.length > 0 ? fanEvents : fallbackEventList} status={fanEventStatus} loading={fanEventsLoading} error={fanEventsError} onStatusChange={setFanEventStatus} onOpen={openEvent} />)}
         {tab === 'collection' && <Collection cards={collectionCards} summary={collectionSummary} benefits={collectionBenefits} loading={collectionLoading} onSelect={openCard} onRedeem={openRedeem} onDiscover={() => navigateTab('discover')} onClaim={claimBenefit} />}
         {tab === 'discover' && <Discover />}
         {tab === 'alerts' && <Alerts items={notifications} error={notificationError} actionError={notificationActionError} onDismissActionError={() => setNotificationActionError('')} onRetry={() => window.dispatchEvent(new Event('fanfolio:refresh-notifications'))} onRead={markNotificationRead} onReadAll={markAllNotificationsRead} onNavigate={navigateTab} />}
         {/* Embedded surfaces stay compact; the dedicated tab uses the full progression view. */}
         {tab === 'growth' && <FanGrowth progression={fanProgression} loading={growthLoading} error={growthError} mode="full" onRetry={refreshGrowth} onClaim={claimGrowthReward} onClaimPassTier={claimGrowthPassTier} onEquip={saveGrowthEquipment} fanGrowthMode="full" />}
-        {tab === 'settings' && currentUser && <Settings user={currentUser} onUserUpdated={setCurrentUser} onLogout={logout} onEvents={openEvents} />}
+        {tab === 'settings' && currentUser && <Settings user={currentUser} onUserUpdated={setCurrentUser} onLogout={logout} onEvents={openEvents} onNotificationSettings={() => setShowNotificationSettings(true)} />}
       </section>
 
       <nav className="bottom-nav" aria-label="주요 메뉴">
@@ -822,13 +860,34 @@ function Onboarding({ userId, profileImageUrl, onComplete, onBack }: { userId: s
   }
   const filteredArtists = artists.filter(artist => artist.name.toLowerCase().includes(artistQuery.trim().toLowerCase()))
   const selectedArtist = artists.find(artist => artist.id === group)
+  const selectedMember = members.find(item => item.id === member)
   return <main className="onboarding-screen">
     <div className="onboarding-top"><button type="button" className="back-button" onClick={() => void goBack()} disabled={backBusy || busy} aria-label={step > 1 ? '이전 단계로 돌아가기' : '로그인으로 돌아가기'}>{backBusy ? '…' : <InlineIcon name="back" />}</button><b>최초 설정</b><small>{step} / 3</small></div>
-    <div className="progress" role="progressbar" aria-label="최초 설정 진행률" aria-valuemin={1} aria-valuemax={3} aria-valuenow={step}><span style={{ width: `${step / 3 * 100}%` }} /></div>
+    <div className="onboarding-progress-segments" role="progressbar" aria-label="최초 설정 진행률" aria-valuemin={1} aria-valuemax={3} aria-valuenow={step}>{Array.from({ length: 3 }, (_, index) => <span key={index} className={index < step ? 'is-complete' : ''} aria-current={index + 1 === step ? 'step' : undefined} />)}</div>
     {draftRestored && <p className="onboarding-draft-notice" role="status">이전에 진행하던 설정을 복원했어요.</p>}
-    {step === 1 && <><p className="eyebrow">팬포리오에 오신 것을 환영해요</p><h1>좋아하는 아티스트를<br />선택해 주세요</h1><p className="muted">관심 있는 카드를 가장 먼저 알려드릴게요.</p><label className="field-label" htmlFor="artist-search">좋아하는 그룹</label><div className="artist-search-wrap"><InlineIcon name="search" /><input id="artist-search" value={artistQuery} onChange={e => setArtistQuery(e.target.value)} placeholder="아티스트 검색" disabled={artistLoading} /></div>{artistLoading && <div className="catalog-loading" role="status">아티스트를 불러오는 중이에요…</div>}{!artistLoading && <div className="artist-grid">{filteredArtists.map(artist => <button type="button" className={group === artist.id ? 'artist-choice selected' : 'artist-choice'} key={artist.id} onClick={() => setGroup(artist.id)}><img src={demoCardImage(resolveApiUrl(artist.imageUrl), artist.id)} alt="" onError={event => keepCardVisual(event, artist.id)} /><span>{artist.name}</span>{group === artist.id && <b aria-hidden="true">✓</b>}</button>)}</div>}{selectedArtist && !artistLoading && <div className="onboarding-preview" aria-live="polite"><img src={demoCardImage(resolveApiUrl(selectedArtist.imageUrl), selectedArtist.id)} alt="" onError={event => keepCardVisual(event, selectedArtist.id)} /><div><span>맞춤 추천</span><b>{selectedArtist.name} 카드 소식을 먼저 알려드려요</b><small>새 카드와 드롭이 공개되면 알림으로 알려드릴게요.</small></div><strong aria-hidden="true">✦</strong></div>}{artistError && <div className="inline-retry" role="alert"><span>아티스트 목록을 불러오지 못했어요.</span><button type="button" onClick={() => setArtistAttempt(value => value + 1)}>다시 시도</button></div>}{!artistLoading && filteredArtists.length === 0 && !artistError && <p className="muted empty-search">검색 결과가 없어요. 다른 이름으로 찾아보세요.</p>}<button type="button" className="primary" onClick={next} disabled={artistLoading || !group}>다음: 멤버 선택</button></>}
-    {step === 2 && <><p className="eyebrow">좋아하는 멤버</p><h1>{selectedArtist?.name ?? '아티스트'}의<br />멤버를 선택해 주세요</h1><p className="muted">가장 좋아하는 멤버를 선택하면 맞춤 카드 소식을 알려드릴게요.</p><div className="selection-caption">멤버 목록</div>{memberLoading && <div className="catalog-loading" role="status">멤버를 불러오는 중이에요…</div>}{!memberLoading && <div className="member-grid">{members.map(item => <button type="button" className={member === item.id ? 'member-card selected' : 'member-card'} key={item.id} onClick={() => setMember(item.id)}><img src={demoMemberImage(item.id)} alt="" onError={event => keepCardVisual(event, `member:${item.id}`)} /><span>{item.name}</span>{member === item.id && <b aria-hidden="true">✓</b>}</button>)}</div>}{memberError && <div className="inline-retry" role="alert"><span>멤버 목록을 불러오지 못했어요.</span><button type="button" onClick={() => setMemberAttempt(value => value + 1)}>다시 시도</button></div>}<button type="button" className="primary" onClick={next} disabled={memberLoading || !member}>다음: 닉네임 설정</button></>}
-    {step === 3 && <><p className="eyebrow">나만의 컬렉션</p><h1>팬포리오에서 사용할<br />닉네임을 정해 주세요</h1><p className="muted">{selectedArtist?.name ?? '좋아하는 아티스트'} · {members.find(item => item.id === member)?.name ?? '선택한 멤버'}의 카드를 모아볼게요.</p><div className="nickname-preview" aria-live="polite"><ProfileAvatar imageUrl={resolveApiUrl(profileImageUrl)} fallback={nickname || '팬'} alt="내 프로필 이미지" /><div><span>컬렉션 프로필</span><b>{nickname.trim() || '나의 팬 닉네임'}</b><small>{selectedArtist?.name ?? '좋아하는 아티스트'} · {members.find(item => item.id === member)?.name ?? '선택한 멤버'}</small></div></div><div className="nickname-field-card"><div className="nickname-field-heading"><div><label className="field-label" htmlFor="onboarding-nickname">닉네임</label><p>컬렉션에서 사용할 이름을 정해 주세요.</p></div><span className="nickname-field-icon" aria-hidden="true">✦</span></div><div className="nickname-input-wrap"><input id="onboarding-nickname" className="nickname-input" value={nickname} onChange={e => setNickname(e.target.value)} placeholder="예: 유나의 작은 우주" maxLength={40} aria-describedby="nickname-help" /><small>{nickname.length}/40</small></div><p id="nickname-help" className="field-help">나중에 설정에서 언제든 바꿀 수 있어요.</p></div><button type="button" className="primary" onClick={() => void save()} disabled={!nickname.trim() || busy || backBusy}>{busy ? '저장 중...' : '나만의 컬렉션 시작하기'}</button></>}
+    {step === 1 && <section className="onboarding-step onboarding-artist-step">
+      <header className="onboarding-step-copy"><span>STEP 1</span><h1>좋아하는 아티스트를<br />선택해 주세요</h1><p>선택한 아티스트를 중심으로 새로운 카드와 이벤트를 추천해 드릴게요.</p></header>
+      <div className="artist-search-wrap"><InlineIcon name="search" /><input id="artist-search" value={artistQuery} onChange={e => setArtistQuery(e.target.value)} placeholder="아티스트 이름을 검색해 보세요" aria-label="아티스트 검색" disabled={artistLoading} /></div>
+      {artistLoading && <div className="catalog-loading" role="status">아티스트를 불러오는 중이에요…</div>}
+      {!artistLoading && <div className="artist-grid">{filteredArtists.map(artist => <button type="button" aria-pressed={group === artist.id} className={group === artist.id ? 'artist-choice selected' : 'artist-choice'} key={artist.id} onClick={() => setGroup(artist.id)}><span className="choice-visual"><img src={demoCardImage(resolveApiUrl(artist.imageUrl), `artist:${artist.id}`)} alt="" onError={event => keepCardVisual(event, `artist:${artist.id}`)} />{group === artist.id && <span className="choice-check" aria-hidden="true"><InlineIcon name="check" /></span>}</span><span className="choice-copy"><b>{artist.name}</b><small>공식 아티스트</small></span></button>)}</div>}
+      {artistError && <div className="inline-retry" role="alert"><span>아티스트 목록을 불러오지 못했어요.</span><button type="button" onClick={() => setArtistAttempt(value => value + 1)}>다시 시도</button></div>}
+      {!artistLoading && filteredArtists.length === 0 && !artistError && <p className="muted empty-search">검색 결과가 없어요. 다른 이름으로 찾아보세요.</p>}
+      <div className="onboarding-action"><button type="button" className="primary" onClick={next} disabled={artistLoading || !group}>다음: 멤버 선택 <InlineIcon name="chevron" /></button></div>
+    </section>}
+    {step === 2 && <section className="onboarding-step onboarding-member-step">
+      <header className="onboarding-step-copy"><span>STEP 2</span><h1>{selectedArtist?.name ?? '아티스트'}의<br />최애 멤버를 선택해 주세요</h1><p>가장 좋아하는 멤버의 카드와 새로운 소식을 먼저 만나보세요.</p></header>
+      {selectedArtist && <div className="selected-artist-summary"><img src={demoCardImage(resolveApiUrl(selectedArtist.imageUrl), `artist:${selectedArtist.id}`)} alt="" onError={event => keepCardVisual(event, `artist:${selectedArtist.id}`)} /><div><small>선택한 아티스트</small><b>{selectedArtist.name}</b></div><span><InlineIcon name="check" /> 선택 완료</span></div>}
+      {memberLoading && <div className="catalog-loading" role="status">멤버를 불러오는 중이에요…</div>}
+      {!memberLoading && <div className="member-grid">{members.map(item => <button type="button" aria-pressed={member === item.id} className={member === item.id ? 'member-card selected' : 'member-card'} key={item.id} onClick={() => setMember(item.id)}><span className="choice-visual"><img src={demoMemberImage(item.id)} alt="" onError={event => keepCardVisual(event, `member:${item.id}`)} />{member === item.id && <span className="choice-check" aria-hidden="true"><InlineIcon name="check" /></span>}</span><span className="choice-copy"><b>{item.name}</b><small>{selectedArtist?.name ?? '아티스트'} 멤버</small></span></button>)}</div>}
+      {memberError && <div className="inline-retry" role="alert"><span>멤버 목록을 불러오지 못했어요.</span><button type="button" onClick={() => setMemberAttempt(value => value + 1)}>다시 시도</button></div>}
+      <div className="onboarding-action"><button type="button" className="primary" onClick={next} disabled={memberLoading || !member}>다음: 닉네임 설정 <InlineIcon name="chevron" /></button></div>
+    </section>}
+    {step === 3 && <section className="onboarding-step onboarding-profile-step">
+      <header className="onboarding-step-copy"><span>STEP 3</span><h1>팬폴리오에서 사용할<br />닉네임을 정해 주세요</h1><p>나만의 팬 컬렉션에 표시될 프로필을 완성해 주세요.</p></header>
+      <div className="nickname-preview" aria-live="polite"><div className="profile-photo"><ProfileAvatar imageUrl={resolveApiUrl(profileImageUrl)} fallback={nickname || '팬'} alt="내 프로필 이미지" /><button type="button" className="profile-photo-edit" aria-label="프로필 이미지 변경" onClick={() => setMessage('프로필 이미지는 가입 후 마이 페이지에서 변경할 수 있어요.')}><InlineIcon name="camera" /></button></div><div><span>컬렉션 프로필</span><b>{nickname.trim() || '나의 팬 닉네임'}</b><small>{selectedArtist?.name ?? '좋아하는 아티스트'} · {selectedMember?.name ?? '선택한 멤버'}</small></div></div>
+      <div className="nickname-field-card"><div className="nickname-field-heading"><div><label className="field-label" htmlFor="onboarding-nickname">닉네임</label><p>컬렉션에서 사용할 이름을 정해 주세요.</p></div><span className="nickname-field-icon" aria-hidden="true"><InlineIcon name="users" /></span></div><div className="nickname-input-wrap"><input id="onboarding-nickname" className="nickname-input" value={nickname} onChange={e => setNickname(e.target.value)} placeholder="예: 유나의 작은 우주" maxLength={40} aria-describedby="nickname-help" /><small>{nickname.length}/40</small></div><p id="nickname-help" className="field-help">나중에 마이 페이지에서 언제든 바꿀 수 있어요.</p></div>
+      <div className="onboarding-action"><button type="button" className="primary" onClick={() => void save()} disabled={!nickname.trim() || busy || backBusy}>{busy ? '저장 중...' : <>나만의 컬렉션 시작하기 <InlineIcon name="chevron" /></>}</button></div>
+    </section>}
     {message && !artistError && !memberError && <p className="form-message error-message" role="alert">{message}</p>}
   </main>
 }
@@ -1156,12 +1215,22 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
 
 function Collection({ cards: collectionCards, summary, benefits, loading, onSelect, onRedeem, onDiscover, onClaim }: { cards: Card[], summary: CollectionSummary, benefits: CollectionBenefit[], loading: boolean, onSelect: (card: Card) => void, onRedeem: () => void, onDiscover: () => void, onClaim: (campaignId: string) => Promise<void> }) {
   const [showAll, setShowAll] = useState(false)
+  const [showFilter, setShowFilter] = useState(false)
+  const [filterKind, setFilterKind] = useState<'all' | 'new' | 'duplicate' | 'rare'>('all')
+  const [sortKind, setSortKind] = useState<'latest' | 'rarity' | 'acquired'>('latest')
   const [artistFilter, setArtistFilter] = useState('전체')
   const [claimingId, setClaimingId] = useState<string | null>(null)
   const [claimMessage, setClaimMessage] = useState('')
   const artists = Array.from(new Set(collectionCards.map(card => card.artist)))
   const filteredCards = artistFilter === '전체' ? collectionCards : collectionCards.filter(card => card.artist === artistFilter)
-  const recentCards = (collectionCards.length > 0 ? collectionCards : fallbackCollectionCards).slice(0, 8)
+  const sourceCards = collectionCards.length > 0 ? collectionCards : fallbackCollectionCards
+  const recentCards = [...sourceCards].sort((a, b) => sortKind === 'rarity' ? b.id.localeCompare(a.id) : sortKind === 'acquired' ? b.title.localeCompare(a.title) : 0).filter((card, index, cards) => {
+    if (filterKind === 'all') return true
+    const count = cards.filter(item => item.title === card.title).length
+    if (filterKind === 'duplicate') return count > 1
+    if (filterKind === 'rare') return /ur|rare|special/i.test(`${card.id} ${card.title}`)
+    return index === 0
+  }).slice(0, 8)
   const duplicateCounts = recentCards.reduce<Record<string, number>>((counts, card) => {
     counts[card.title] = (counts[card.title] ?? 0) + 1
     return counts
@@ -1190,8 +1259,13 @@ function Collection({ cards: collectionCards, summary, benefits, loading, onSele
         <div className="collection-progress-value"><strong>{summary.completionRate}%</strong><b>{summary.ownedCount} / {summary.totalSlots}</b></div>
         <div className="collection-progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={summary.completionRate} aria-label={`컬렉션 ${summary.completionRate}% 완료`}><span style={{ width: `${Math.min(100, Math.max(0, summary.completionRate))}%` }} /></div>
       </section>
+      <button type="button" className="collection-register-entry" onClick={onRedeem}>
+        <span className="collection-register-entry-icon"><RedeemIcon name="scan" /></span>
+        <span><b>새 카드 등록하기</b><small>QR 코드, 인증 코드 또는 사진으로 컬렉션에 추가해요.</small></span>
+        <InlineIcon name="chevron" />
+      </button>
       <section className="collection-recent-section" aria-labelledby="collection-recent-title">
-        <div className="section-heading"><h2 id="collection-recent-title">최근 수집 카드</h2><button type="button" onClick={() => setShowAll(true)}>전체 보기 <InlineIcon name="chevron" /></button></div>
+        <div className="section-heading"><h2 id="collection-recent-title">최근 수집 카드</h2><div className="collection-recent-actions"><button type="button" className="collection-filter-trigger" onClick={() => setShowFilter(true)}><InlineIcon name="settings" />정렬 및 필터</button><button type="button" onClick={() => setShowAll(true)}>전체 보기 <InlineIcon name="chevron" /></button></div></div>
         <div className="collection-recent-grid">{recentCards.map((card, index) => {
           const copies = duplicateCounts[card.title] ?? 1
           const previousCopies = recentCards.slice(0, index).filter(item => item.title === card.title).length
@@ -1210,9 +1284,9 @@ function Collection({ cards: collectionCards, summary, benefits, loading, onSele
         <div className="section-heading"><h2 id="collection-summary-title">컬렉션 요약</h2><button type="button" onClick={() => setShowAll(true)}>전체 보기 <InlineIcon name="chevron" /></button></div>
         <div className="collection-summary-grid">
           <article><InlineIcon name="card" /><span>총 카드</span><strong>{summary.ownedCount}장</strong></article>
-          <article><InlineIcon name="sparkle" /><span>완료 컬렉션</span><strong>{completedCollections}개</strong></article>
+          <article><InlineIcon name="check" /><span>완료 컬렉션</span><strong>{completedCollections}개</strong></article>
           <article><InlineIcon name="dot" /><span>진행 중</span><strong>{inProgressCollections}개</strong></article>
-          <article><InlineIcon name="sparkle" /><span>희귀 카드</span><strong>{rareCards}장</strong></article>
+          <article><InlineIcon name="gift" /><span>희귀 카드</span><strong>{rareCards}장</strong></article>
         </div>
       </section>
     </section>
@@ -1222,21 +1296,64 @@ function Collection({ cards: collectionCards, summary, benefits, loading, onSele
       {filteredCards.length > 0 ? <div className="card-grid collection-grid">{filteredCards.map(card => <button className="card-tile" key={card.id} aria-label={`카드 이미지 ${card.id} ${card.member}`} onClick={() => onSelect(card)}><img src={card.image} alt={`${card.title} 카드 · ${card.member}`} onError={event => keepCardVisual(event, card.id)} /><span>{card.id}</span><b>{card.member}</b></button>)}</div> : <div className="empty-collection"><div className="empty-collection-copy"><InlineIcon name="plus" /><b>아직 카드가 없어요</b><small>카드를 등록하거나 탐색해서 컬렉션을 시작해 보세요.</small></div><div className="empty-collection-actions"><button type="button" className="primary" onClick={onRedeem}>카드 등록하기</button><button type="button" className="outline" onClick={onDiscover}>카드 탐색하기</button></div></div>}
     </section>}
     {benefits.length > 0 && <section className="benefit-section"><div className="section-heading"><h2>컬렉션 완성 특전</h2></div><div className="benefit-list">{benefits.map(benefit => <article className={`benefit-card ${benefit.status}`} key={`${benefit.campaignId ?? benefit.artistId ?? 'fanfolio'}-${benefit.seasonName}`}><div><span className="detail-badge">{benefit.claimed ? '수령 완료' : benefit.status === 'unlocked' ? '해금 완료' : '진행 중'}</span><h3>{benefit.benefit.title}</h3><p>{benefit.benefit.description}</p></div><div><strong>{benefit.ownedCount}/{benefit.requiredCount}</strong>{benefit.claimable && benefit.campaignId && <button className="outline" onClick={() => void claim(benefit)} disabled={claimingId === benefit.campaignId}>{claimingId === benefit.campaignId ? '수령 중...' : '특전 받기'}</button>}{benefit.claimed && benefit.downloadUrl && <a className="outline benefit-download" href={resolveApiUrl(benefit.downloadUrl)} download>특전 다운로드</a>}</div></article>)}</div>{claimMessage && <p className="form-message">{claimMessage}</p>}</section>}
+    {showFilter && <CollectionFilterSheet filterKind={filterKind} sortKind={sortKind} onFilter={setFilterKind} onSort={setSortKind} onClose={() => setShowFilter(false)} />}
   </>
+}
+
+function EventApplicationComplete({ onBack, onEvents, onApplications }: { onBack: () => void, onEvents: () => void, onApplications: () => void }) {
+  return <main className="event-application-screen">
+    <header className="event-application-topbar">
+      <button type="button" aria-label="뒤로 가기" onClick={onBack}><InlineIcon name="back" /></button>
+      <strong>FANFOLIO</strong>
+      <button type="button" aria-label="공유하기"><InlineIcon name="share" /></button>
+    </header>
+    <section className="event-application-content">
+      <h1>신청 완료</h1>
+      <div className="event-application-success"><img src={registrationCompleteCelebration} alt="신청 완료" /><span>신청 완료</span></div>
+      <h2>드림스케이프 팬 사인회</h2>
+      <div className="event-application-meta"><p><InlineIcon name="calendar" />2026.06.28 (일) 17:00</p><p><InlineIcon name="pin" />올림픽공원 올림픽홀</p></div>
+      <section className="event-application-info"><h3>선택한 참여 정보</h3><p><InlineIcon name="users" /><b>일반 참여 (1인)</b></p><p><InlineIcon name="gift" />사인 앨범 1장</p></section>
+      <button type="button" className="event-application-primary" onClick={onApplications}>신청 내역 보기</button>
+      <button type="button" className="event-application-secondary" onClick={onEvents}>이벤트 목록으로</button>
+      <small>신청 내역은 마이 &gt; 나의 이벤트에서 확인할 수 있어요.</small>
+    </section>
+  </main>
+}
+
+function NotificationSettings({ onBack }: { onBack: () => void }) {
+  const [values, setValues] = useState({ events: true, cards: false, levels: true, marketing: false })
+  const rows = [
+    { key: 'events', label: '이벤트 알림', icon: 'calendar' as const },
+    { key: 'cards', label: '카드 등록 알림', icon: 'card' as const },
+    { key: 'levels', label: '팬 레벨 알림', icon: 'star' as const },
+    { key: 'marketing', label: '마케팅 알림', icon: 'gift' as const },
+  ]
+  return <main className="notification-settings-screen">
+    <header className="notification-settings-topbar"><button type="button" aria-label="뒤로 가기" onClick={onBack}><InlineIcon name="back" /></button><h1>알림 설정</h1></header>
+    <section className="notification-settings-content">
+      <div className="notification-settings-hero"><span><InlineIcon name="bell" /></span><p>새로운 소식을 놓치지 않도록<br />알림을 관리해보세요.</p></div>
+      <section className="notification-settings-panel">{rows.map(row => <button type="button" className="notification-setting-row" key={row.key} onClick={() => setValues(current => ({ ...current, [row.key]: !current[row.key as keyof typeof current] }))}><span className="notification-setting-icon"><InlineIcon name={row.icon} /></span><b>{row.label}</b><em>{values[row.key as keyof typeof values] ? '켜짐' : '꺼짐'}</em><span className={`notification-toggle ${values[row.key as keyof typeof values] ? 'is-on' : ''}`} aria-hidden="true"><i /></span></button>)}</section>
+      <p className="notification-settings-note"><InlineIcon name="system" />알림은 푸시 알림으로 제공되며, 서비스 주요 안내 사항은 꺼짐 상태에서도 받을 수 있어요.</p>
+      <button type="button" className="notification-save" onClick={onBack}>변경사항 저장</button>
+    </section>
+  </main>
+}
+
+function CollectionFilterSheet({ filterKind, sortKind, onFilter, onSort, onClose }: { filterKind: 'all' | 'new' | 'duplicate' | 'rare', sortKind: 'latest' | 'rarity' | 'acquired', onFilter: (value: 'all' | 'new' | 'duplicate' | 'rare') => void, onSort: (value: 'latest' | 'rarity' | 'acquired') => void, onClose: () => void }) {
+  const filters = [{ value: 'all', label: '전체', icon: 'card' as const }, { value: 'new', label: '신규', icon: 'sparkles' as const }, { value: 'duplicate', label: '중복', icon: 'grid' as const }, { value: 'rare', label: '희귀', icon: 'star' as const }]
+  const sorts = [{ value: 'latest', label: '최신순' }, { value: 'rarity', label: '등급순' }, { value: 'acquired', label: '획득일순' }]
+  return <div className="collection-filter-backdrop" onClick={onClose}>
+    <section className="collection-filter-sheet" role="dialog" aria-modal="true" aria-labelledby="collection-filter-title" onClick={event => event.stopPropagation()}>
+      <span className="collection-filter-handle" aria-hidden="true" /><header><h2 id="collection-filter-title">카드 정렬 및 필터</h2><button type="button" aria-label="닫기" onClick={onClose}>×</button></header>
+      <div className="collection-filter-grid">{filters.map(item => <button type="button" key={item.value} className={filterKind === item.value ? 'is-selected' : ''} aria-pressed={filterKind === item.value} onClick={() => onFilter(item.value as typeof filterKind)}>{filterKind === item.value && <span className="collection-filter-check" aria-hidden="true"><InlineIcon name="check" /></span>}<span className="collection-filter-icon" aria-hidden="true"><InlineIcon name={item.icon} /></span><span>{item.label}</span></button>)}</div>
+      <h3>정렬 기준</h3><div className="collection-sort-grid">{sorts.map(item => <button type="button" key={item.value} className={sortKind === item.value ? 'is-selected' : ''} aria-pressed={sortKind === item.value} onClick={() => onSort(item.value as typeof sortKind)}>{sortKind === item.value && <span className="collection-filter-check" aria-hidden="true"><InlineIcon name="check" /></span>}<span>{item.label}</span></button>)}</div>
+      <button type="button" className="collection-filter-apply" onClick={onClose}>적용하기</button>
+    </section>
+  </div>
 }
 
 function Discover() {
   return <section className="artist-hub"><div className="artist-hub-heading"><p>좋아하는 아티스트의 모든 정보를 한눈에</p></div><section className="artist-hub-hero"><img src={dreamscapeHero} alt="드림스케이프" /><div className="artist-hub-hero-overlay"><span>추천 아티스트</span><h3>드림스케이프 <VerifiedIcon /></h3><p>4명의 멤버 · 공식 아티스트 공간</p><div className="hub-members">{[cardYunaImage, cardMinhoImage, cardJayImage, cardYunaImage].map((image, index) => <img key={index} src={image} alt="" />)}</div><button type="button">+ 팔로우</button></div></section><nav className="hub-tabs" aria-label="아티스트 정보"><a className="active" href="#artist-home">아티스트 홈</a><a href="#artist-schedule">일정</a><a href="#artist-news">뉴스</a><a href="#artist-cards">카드</a><a href="#artist-events">이벤트</a></nav><section id="artist-schedule" className="hub-section"><div className="section-heading"><h3>다가오는 일정</h3><button type="button">전체 보기 ›</button></div><div className="hub-schedule-grid"><article><b>JUN<br /><strong>28</strong></b><div><span>팬미팅</span><h4>드림스케이프 팬미팅</h4><p>2026.06.28 (일) 17:00</p><small><InlineIcon name="pin" />올림픽공원 올림픽홀</small></div><i className="hub-schedule-bell"><NavIcon name="alerts" /></i></article><article><b>JUL<br /><strong>12</strong></b><div><span>콘서트</span><h4>2026 SUMMER FAN WEEK</h4><p>2026.07.12 (일) 18:00</p><small><InlineIcon name="pin" />KSPO DOME</small></div><i className="hub-schedule-bell"><NavIcon name="alerts" /></i></article></div></section><section id="artist-news" className="hub-section"><div className="section-heading"><h3>드림스케이프 뉴스</h3><button type="button">전체 보기 ›</button></div><div className="hub-news-list"><article><img src={dreamscapeHero} alt="" /><div><b>드림스케이프, 새 앨범 트랙리스트 공개</b><p>타이틀곡 ‘Nebula’ 포함 총 6곡 수록</p><small>1시간 전</small></div><strong>›</strong></article><article><img src={fanWeekLavenderMeet} alt="" /><div><b>드림스케이프, 글로벌 차트 1위!</b><p>신곡 ‘Nebula’ 글로벌 인기 상승</p><small>1일 전</small></div><strong>›</strong></article></div></section><section id="artist-cards" className="hub-section"><div className="section-heading"><h3>새 카드</h3><button type="button">전체 보기 ›</button></div><div className="hub-card-row">{[cardYunaImage, cardMinhoImage, cardJayImage].map((image, index) => <button type="button" key={image} onClick={() => undefined}><img src={image} alt="새 카드" /><b>{['하린', '도윤', '제이'][index]}<br />Nebula Ver.</b><span>{index === 0 ? 'UR' : 'SR'}</span></button>)}</div><div className="hub-card-dots" aria-hidden="true"><b /><i /><i /></div><a className="hub-event-promo" href="/events"><span className="hub-event-promo-icon" aria-hidden="true"><InlineIcon name="gift" /></span><b><small>팬 이벤트</small>드림스케이프 사인 폴라로이드 이벤트<em>참여하고 사인 폴라로이드를 받아보세요!</em></b><strong>참여하기</strong><i>›</i></a></section></section>
-}
-
-function notificationKindLabel(kind: string): string {
-  const labels: Record<string, string> = {
-    system: '공지',
-    card_published: '새 카드',
-    card_redeemed: '컬렉션',
-    drop_started: '새 드롭',
-  }
-  return labels[kind] ?? '알림'
 }
 
 function notificationTimeLabel(createdAt: string): string {
@@ -1247,13 +1364,8 @@ function notificationTimeLabel(createdAt: string): string {
   const hours = Math.floor(minutes / 60)
   if (hours < 24) return `${hours}시간 전`
   const days = Math.floor(hours / 24)
+  if (days === 1) return '어제'
   return days < 7 ? `${days}일 전` : new Date(createdAt).toLocaleDateString('ko-KR')
-}
-
-function notificationImage(kind: string, id: string): string {
-  if (kind === 'card_published') return demoCardImage('hero.png', `notification:${id}`)
-  if (kind === 'card_redeemed') return cardExampleBlue
-  return cardExamplePink
 }
 
 function notificationDestination(kind: string): Tab | null {
@@ -1263,34 +1375,79 @@ function notificationDestination(kind: string): Tab | null {
 }
 
 function Alerts({ items, error, actionError, onDismissActionError, onRetry, onRead, onReadAll, onNavigate }: { items: NotificationItem[], error: string, actionError: string, onDismissActionError: () => void, onRetry: () => void, onRead: (id: string) => Promise<void>, onReadAll: () => Promise<void>, onNavigate: (tab: Tab) => void }) {
-  const [category, setCategory] = useState<'all' | 'card' | 'collection' | 'system'>('all')
+  const [category, setCategory] = useState<'all' | 'activity'>('all')
   const categories = [
     { value: 'all', label: '전체', matches: () => true },
-    { value: 'card', label: '새 카드', matches: (item: NotificationItem) => item.kind === 'card_published' || item.kind === 'drop_started' },
-    { value: 'collection', label: '컬렉션', matches: (item: NotificationItem) => item.kind === 'card_redeemed' },
-    { value: 'system', label: '공지', matches: (item: NotificationItem) => item.kind === 'system' },
+    { value: 'activity', label: '활동', matches: (item: NotificationItem) => item.kind !== 'system' },
   ] as const
   const selectedCategory = categories.find(item => item.value === category) ?? categories[0]
   const filteredItems = items.filter(selectedCategory.matches)
   const unreadCount = items.filter(item => !item.isRead).length
-  const unreadFor = (value: typeof category) => items.filter(item => !item.isRead && (value === 'all' || categories.find(categoryItem => categoryItem.value === value)?.matches(item))).length
-  const categoryUnreadCount = unreadFor(category)
-  if (error) return <div className="notification-error-panel" role="alert"><span className="notification-error-icon" aria-hidden="true"><NavIcon name="alerts" /></span><div><b>알림을 불러오지 못했어요</b><p>{error}</p></div><button type="button" onClick={onRetry}>다시 시도</button></div>
+  const unreadFor = (value: typeof category) => items.filter(item => !item.isRead && categories.find(categoryItem => categoryItem.value === value)?.matches(item)).length
+
+  const dayLabel = (createdAt: string) => {
+    const created = new Date(createdAt)
+    const now = new Date()
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+    const startOfCreated = new Date(created.getFullYear(), created.getMonth(), created.getDate()).getTime()
+    const dayDiff = Math.round((startOfToday - startOfCreated) / 86_400_000)
+    if (dayDiff <= 0) return '오늘'
+    if (dayDiff === 1) return '어제'
+    return created.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })
+  }
+
+  const groups = filteredItems.reduce<Array<{ label: string, items: NotificationItem[] }>>((acc, item) => {
+    const label = dayLabel(item.createdAt)
+    const group = acc.find(entry => entry.label === label)
+    if (group) group.items.push(item)
+    else acc.push({ label, items: [item] })
+    return acc
+  }, [])
+
   const openNotification = (item: NotificationItem) => {
     if (!item.isRead) void onRead(item.id)
     const destination = notificationDestination(item.kind)
     if (destination) onNavigate(destination)
   }
-  const categoryTitle = category === 'all' ? '새로운 소식' : category === 'card' ? '새 카드 알림' : category === 'collection' ? '컬렉션 알림' : '공지사항'
-  return <>{actionError && <div className="inline-retry notification-action-error" role="alert"><span>{actionError}</span><button type="button" onClick={onDismissActionError}>닫기</button></div>}<div className="alert-tabs" role="tablist" aria-label="알림 종류">{categories.map(item => <button key={item.value} role="tab" aria-selected={category === item.value} className={category === item.value ? 'active' : ''} onClick={() => setCategory(item.value)}><span>{item.label}</span>{unreadFor(item.value) > 0 && <b className="alert-tab-badge">{unreadFor(item.value)}</b>}</button>)}</div><div className="section-heading"><div><h2>{categoryTitle}</h2>{categoryUnreadCount > 0 && <small className="unread-summary">읽지 않은 알림 {categoryUnreadCount}개</small>}</div>{unreadCount > 0 && <button onClick={() => void onReadAll()}>모두 읽음</button>}</div>{filteredItems.length > 0 ? <div className="alert-list">{filteredItems.map(item => { const destination = notificationDestination(item.kind); return <button className={item.isRead ? 'alert-card read' : 'alert-card'} key={item.id} aria-label={`${item.title} 알림${destination ? ' 열기' : ''}`} onClick={() => openNotification(item)}><span className="alert-thumb"><img src={notificationImage(item.kind, item.id)} alt="" /></span><span className={`alert-leading-icon ${item.kind}`} aria-hidden="true"><InlineIcon name={item.kind === 'card_published' || item.kind === 'drop_started' ? 'sparkle' : item.kind === 'card_redeemed' ? 'card' : item.kind === 'system' ? 'system' : 'dot'} /></span><span className="tag">{notificationKindLabel(item.kind)}</span><span className={item.isRead ? 'alert-state read' : 'alert-state'}>{item.isRead ? '확인함' : '새 알림'}</span>{!item.isRead && <span className="unread-dot" aria-label="읽지 않음" />}<h2>{item.title}</h2><p>{item.body ?? 'Fanfolio의 새로운 소식이 도착하면 알려드릴게요.'}</p><small>{notificationTimeLabel(item.createdAt)}</small></button> })}</div> : <div className="empty-slot notification-empty" role="status"><NavIcon name="alerts" /><b>{category === 'all' ? '새로운 알림이 없습니다' : `${categoryTitle}이 없습니다`}</b><small>{category === 'all' ? '새 카드와 컬렉션 소식이 도착하면 알려드릴게요.' : '다른 분류를 선택해 보세요.'}</small>{category === 'all' && <button type="button" className="outline" onClick={() => onNavigate('discover')}>카드 둘러보기</button>}</div>}</>
+
+  const iconName = (kind: string): 'card' | 'gift' | 'calendar' | 'system' => {
+    if (kind === 'card_published' || kind === 'card_redeemed') return 'card'
+    if (kind === 'drop_started') return 'gift'
+    if (kind === 'system') return 'calendar'
+    return 'system'
+  }
+
+  return <>
+    <div className="alerts-reference-topbar">
+      <button type="button" className="alerts-back-button" aria-label="뒤로가기" onClick={() => onNavigate('home')}><InlineIcon name="back" /></button>
+      <h1>알림</h1>
+      <button type="button" className="alerts-settings-button" aria-label="알림 설정" onClick={() => onNavigate('settings')}><InlineIcon name="settings" /></button>
+    </div>
+    {actionError && <div className="inline-retry notification-action-error" role="alert"><span>{actionError}</span><button type="button" onClick={onDismissActionError}>닫기</button></div>}
+    {error ? <div className="notification-error-panel" role="alert"><span className="notification-error-icon" aria-hidden="true"><NavIcon name="alerts" /></span><div><b>알림을 불러오지 못했어요</b><p>{error}</p></div><button type="button" onClick={onRetry}>다시 시도</button></div> : <>
+      <div className="alerts-reference-tabs" role="tablist" aria-label="알림 필터">{categories.map(item => <button key={item.value} role="tab" aria-selected={category === item.value} className={category === item.value ? 'active' : ''} onClick={() => setCategory(item.value)}><span>{item.label}</span>{unreadFor(item.value) > 0 && <b>{unreadFor(item.value)}</b>}</button>)}</div>
+      {groups.length > 0 ? <>{groups.map(group => <section className="notification-day" key={group.label}><h2>{group.label}</h2><div className="alert-list">{group.items.map(item => { const destination = notificationDestination(item.kind); return <button className={item.isRead ? 'alert-card read' : 'alert-card'} key={item.id} aria-label={`${item.title} 알림${destination ? ' 열기' : ''}`} onClick={() => openNotification(item)}><span className={`alert-leading-icon ${item.kind}`} aria-hidden="true"><InlineIcon name={iconName(item.kind)} /></span><span className="notification-copy"><strong>{item.title}</strong><small>{notificationTimeLabel(item.createdAt).replace(' 전', '')}</small></span>{!item.isRead && <span className="unread-dot" aria-label="읽지 않음" />}</button> })}</div></section>)}<div className="empty-slot notification-empty" role="status"><span className="notification-empty-illustration"><NavIcon name="alerts" /><InlineIcon name="sparkles" /></span><b>새로운 알림이 없어요</b><small>중요한 소식이 여기에 표시돼요.</small></div></> : <div className="empty-slot notification-empty" role="status"><span className="notification-empty-illustration"><NavIcon name="alerts" /><InlineIcon name="sparkles" /></span><b>새로운 알림이 없어요</b><small>중요한 소식이 여기에 표시돼요.</small></div>}
+      <button type="button" className="alerts-mark-all" onClick={() => void onReadAll()} disabled={unreadCount === 0}>모두 읽음</button>
+    </>}
+  </>
 }
 
 
-function RevealCard({ userCardId, onClose }: { userCardId: string, onClose: () => void }) {
+type RevealCardProps = {
+  userCardId: string
+  collectionSummary: CollectionSummary
+  fanProgression: FanProgression | null
+  onClose: () => void
+  onViewCollection: () => void
+  onRegisterAnother: () => void
+  onStart: () => void
+}
+
+function RevealCard({ userCardId, collectionSummary, fanProgression, onClose, onViewCollection, onRegisterAnother, onStart }: RevealCardProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null)
-  const [revealed, setRevealed] = useState(() => {
-    try { return window.sessionStorage.getItem(revealStorageKey(userCardId)) === '1' } catch { return false }
-  })
+  const revealTimerRef = useRef<number | null>(null)
+  const isRandomReveal = userCardId === 'qa-registration-complete'
+  const [phase, setPhase] = useState<'mystery' | 'revealing' | 'revealed' | 'complete'>(() => isRandomReveal ? 'mystery' : 'revealed')
   const [detail, setDetail] = useState<UserCardDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(true)
   const [detailError, setDetailError] = useState(false)
@@ -1331,31 +1488,189 @@ function RevealCard({ userCardId, onClose }: { userCardId: string, onClose: () =
     }
   }, [onClose])
 
+  useEffect(() => () => {
+    if (revealTimerRef.current !== null) window.clearTimeout(revealTimerRef.current)
+  }, [])
+
   const reveal = () => {
-    if (!detail || detailLoading || detailError) return
-    setRevealed(true)
-    try { window.sessionStorage.setItem(revealStorageKey(userCardId), '1') } catch { /* optional reveal-state cache */ }
+    if (!isRandomReveal && (!detail || detailLoading || detailError)) return
+    if (phase === 'revealing') return
+    setPhase('revealing')
+    revealTimerRef.current = window.setTimeout(() => setPhase('revealed'), 900)
   }
 
-  const configuredEffect = detail?.card.designConfig?.front?.effect ?? 'none'
-  const revealEffect = ['holographic', 'prismatic', 'foil', 'sparkle'].includes(configuredEffect) ? configuredEffect : 'none'
-  const configuredIntensity = Number(detail?.card.designConfig?.front?.effectIntensity ?? 0)
-  const revealEffectStyle = { '--reveal-effect-intensity': String(Math.max(0, Math.min(1, configuredIntensity > 1 ? configuredIntensity / 100 : configuredIntensity))) } as CSSProperties
+  const completeRegistration = () => {
+    setPhase('complete')
+    try { window.sessionStorage.setItem(revealStorageKey(userCardId), '1') } catch { /* optional completion-state cache */ }
+  }
 
-  return <main className="reveal-screen">
-    <button ref={closeButtonRef} type="button" className="reveal-close" onClick={onClose}>닫기</button>
-    <p className="eyebrow">{revealed ? '카드 공개 완료' : '새 카드 도착'}</p>
-    <h1>{revealed ? '새 카드가 컬렉션에 추가됐어요' : '카드가 도착했어요'}</h1>
-    <p className="muted">{revealed ? '나만의 디지털 컬렉션에서 확인해 보세요.' : '카드 정보를 확인한 뒤 공개할 수 있어요.'}</p>
-    <div className={`reveal-card ${revealed ? 'revealed' : ''} reveal-effect-${revealEffect}`} style={revealEffectStyle}>
-      <img src={demoCardImage(resolveApiUrl(detail?.card.imageUrl ?? cardExample))} alt="등록된 공식 카드" onError={event => keepCardVisual(event, userCardId)} />
-      {revealed && <span className="official-badge">공식 카드</span>}
-    </div>
-    {detailLoading && <p className="reveal-status" role="status">카드 정보를 확인하는 중이에요…</p>}
-    {detailError && <div className="reveal-error" role="alert"><span>카드 정보를 불러오지 못했어요.</span><button type="button" className="outline" onClick={() => setDetailAttempt(value => value + 1)}>다시 시도</button></div>}
-    {revealed && detail && <div className="reveal-meta"><b>{detail.card.name}</b><span>{detail.card.artistName ?? 'Fanfolio 아티스트'} · {detail.card.memberName ?? '공식 카드'}</span><span>카드 유형 · {cardTypeLabel(detail.card.cardType)} · 발행번호 #{String(detail.serialNumber).padStart(3, '0')} · {detail.acquisitionSource === 'qr' ? 'QR 스캔' : detail.acquisitionSource === 'manual' ? '코드 직접 입력' : '콘텐츠 코드'}</span>{detail.card.hasVideo && detail.card.videoUrl && <video className="reveal-video" controls playsInline loop preload="metadata" src={resolveApiUrl(detail.card.videoUrl)} aria-label="카드 모션 레이어 재생" />}{detail.card.handwritingImageUrl && <img className="reveal-handwriting" src={resolveApiUrl(detail.card.handwritingImageUrl)} alt="손글씨 특전" />}{detail.card.hasVoice && <audio controls preload="metadata" src={resolveApiUrl(detail.card.voiceAudioUrl)} aria-label="보이스 특전 재생" />}</div>}
-    {!revealed && <button type="button" className="primary" onClick={reveal} disabled={detailLoading || detailError || !detail}>{detailLoading ? '카드 정보 확인 중...' : '카드 공개하기'}</button>}
-    {revealed && <button type="button" className="primary" onClick={onClose}>컬렉션으로 이동</button>}
+  if (phase === 'complete' && (detail || isRandomReveal)) {
+    const rarity = isRandomReveal ? 'SR' : (detail?.card.rarity?.toUpperCase() || 'SR')
+    const level = fanProgression?.level.level ?? 1
+    const totalXp = fanProgression?.level.totalXp ?? 100
+    const nextLevelXp = fanProgression?.level.nextLevelXp ?? Math.max(100, level * 100)
+    const displayOwnedCount = isRandomReveal ? Math.max(1, collectionSummary.ownedCount) : collectionSummary.ownedCount
+    const displayTotalSlots = isRandomReveal ? 40 : collectionSummary.totalSlots
+    const displayXpLabel = isRandomReveal ? '100 XP 획득' : `${totalXp} XP 누적`
+    const levelProgress = isRandomReveal ? 42 : Math.min(100, Math.max(0, (totalXp / nextLevelXp) * 100))
+    const collectionProgress = Math.min(100, Math.max(0, (displayOwnedCount / displayTotalSlots) * 100))
+    const artistName = isRandomReveal ? '드림스케이프' : (detail?.card.artistName ?? '드림스케이프')
+    const memberName = isRandomReveal ? '하린' : (detail?.card.memberName ?? '공식 카드')
+    const cardName = isRandomReveal ? 'Nebula Ver.' : (detail?.card.name ?? '공식 카드')
+    const seasonName = isRandomReveal ? '2026 SPRING' : (detail?.card.seasonName ?? 'FANFOLIO COLLECTION')
+    const cardImage = isRandomReveal ? registrationCardImage : demoCardImage(resolveApiUrl(detail?.card.imageUrl), `member:${memberName}`)
+
+    return <main className="registration-complete-screen">
+      <header className="registration-complete-topbar">
+        <button ref={closeButtonRef} type="button" className="registration-complete-back" aria-label="카드 공개 화면으로 돌아가기" onClick={onClose}><InlineIcon name="back" /></button>
+        <b>등록 완료</b>
+        <strong>4 / 4</strong>
+      </header>
+      <div className="registration-complete-progress" role="progressbar" aria-label="카드 등록 진행률" aria-valuemin={0} aria-valuemax={4} aria-valuenow={4}><span /></div>
+
+      <section className="registration-complete-hero" aria-labelledby="registration-complete-title">
+        <div className="registration-complete-celebration" aria-hidden="true">
+          <img className="registration-complete-celebration-art" src={registrationCompleteCelebration} alt="" />
+        </div>
+        <h1 id="registration-complete-title">첫 카드가 컬렉션에 추가됐어요!</h1>
+        <p>{memberName}의 새로운 순간을 보관함에서 만나보세요.</p>
+      </section>
+
+      <article className="registration-complete-card-summary">
+        <div className="registration-complete-card-art">
+          <img src={cardImage} alt={`${cardName} 카드`} onError={event => keepCardVisual(event, userCardId)} />
+          <span>{rarity}</span>
+        </div>
+        <div className="registration-complete-card-copy">
+          <h2>{memberName} · {cardName}</h2>
+          <p>{artistName} {seasonName}</p>
+          <span className="registration-complete-rarity">{rarity}</span>
+          <button type="button" className="registration-complete-favorite" aria-label="관심 카드로 저장"><InlineIcon name="heart" /></button>
+        </div>
+      </article>
+
+      <section className="registration-complete-stats" aria-label="등록 보상 요약">
+        <article>
+          <span className="registration-complete-stat-icon"><InlineIcon name="card" /></span>
+          <b>컬렉션 진행률</b>
+          <strong>{displayOwnedCount} <small>/ {displayTotalSlots}</small></strong>
+          <span className="registration-complete-stat-progress"><i style={{ width: `${collectionProgress}%` }} /></span>
+        </article>
+        <article>
+          <span className="registration-complete-stat-icon"><InlineIcon name="users" /></span>
+          <b>팬 레벨</b>
+          <strong>Lv.{level}</strong>
+          <small>{displayXpLabel}</small>
+          <span className="registration-complete-level-emblem" aria-hidden="true"><img src={fanLevelStar} alt="" /></span>
+          <span className="registration-complete-stat-progress"><i style={{ width: `${levelProgress}%` }} /></span>
+        </article>
+      </section>
+
+      <div className="registration-complete-mission">
+        <span><InlineIcon name="calendar" /></span>
+        <b>첫 카드 등록하기</b>
+        <strong>완료&nbsp; +100 XP</strong>
+      </div>
+
+      <section className="registration-complete-next">
+        <h2>다음으로 무엇을 할까요?</h2>
+        <div className="registration-complete-actions">
+          <button type="button" onClick={onViewCollection}>
+            <span><NavIcon name="collection" /></span>
+            <b>보관함에서 카드 보기</b>
+            <small>내가 등록한 카드를 보관함에서 확인해보세요.</small>
+            <InlineIcon name="chevron" />
+          </button>
+          <button type="button" onClick={onRegisterAnother}>
+            <span><RedeemIcon name="scan" /></span>
+            <b>새 카드 더 등록하기</b>
+            <small>다른 카드도 등록하고 컬렉션을 채워보세요.</small>
+            <InlineIcon name="chevron" />
+          </button>
+        </div>
+      </section>
+
+      <footer className="registration-complete-footer">
+        <button type="button" className="primary" onClick={onStart}>홈으로 이동</button>
+        <small>언제든 보관함에서 카드를 관리할 수 있어요.</small>
+      </footer>
+    </main>
+  }
+
+  const rarity = isRandomReveal ? 'SR' : (detail?.card.rarity?.toUpperCase() || 'SR')
+  const memberName = isRandomReveal ? '하린' : (detail?.card.memberName ?? '공식 카드')
+  const cardName = isRandomReveal ? 'Nebula Ver.' : (detail?.card.name ?? '카드 정보 확인 중')
+  const artistName = isRandomReveal ? '드림스케이프' : (detail?.card.artistName ?? 'Fanfolio')
+  const seasonName = isRandomReveal ? '2026 SPRING' : (detail?.card.seasonName ?? 'COLLECTION')
+  const serialNumber = isRandomReveal ? 'DS-HR-024' : `#${String(detail?.serialNumber ?? 0).padStart(3, '0')}`
+  const cardImage = isRandomReveal ? registrationCardImage : demoCardImage(resolveApiUrl(detail?.card.imageUrl), `member:${memberName}`)
+
+  if (phase === 'mystery' || phase === 'revealing') {
+    const isRevealing = phase === 'revealing'
+    return <main className="reveal-screen reveal-mystery-screen">
+      <header className="card-reveal-topbar">
+        <button ref={closeButtonRef} type="button" className="card-reveal-close" aria-label="카드 공개 닫기" onClick={onClose}>×</button>
+        <b>카드 공개</b>
+        <strong>3 / 4</strong>
+      </header>
+      <div className="card-reveal-progress" role="progressbar" aria-label="카드 등록 진행률" aria-valuemin={0} aria-valuemax={4} aria-valuenow={3}><span /></div>
+      <section className="reveal-mystery-copy">
+        <span>랜덤 카드 도착</span>
+        <h1>랜덤 카드가 도착했어요</h1>
+        <p>어떤 카드인지 공개하기 전까지 알 수 없어요.</p>
+      </section>
+      <div className={isRevealing ? 'reveal-mystery-card is-revealing' : 'reveal-mystery-card'}>
+        <img src={mysteryCardImage} alt="아직 공개되지 않은 랜덤 카드" />
+        {isRevealing && <span className="reveal-animation-status" role="status" aria-live="polite">카드를 공개하는 중이에요</span>}
+      </div>
+      <button type="button" className="primary card-reveal-primary" onClick={reveal} disabled={isRevealing}>{isRevealing ? '카드 공개 중…' : '카드 공개하기'}</button>
+    </main>
+  }
+
+  return <main className="reveal-screen card-reveal-result">
+    <header className="card-reveal-topbar">
+      <button ref={closeButtonRef} type="button" className="card-reveal-close" aria-label="카드 공개 닫기" onClick={onClose}>×</button>
+      <b>카드 공개</b>
+      <strong>3 / 4</strong>
+    </header>
+    <div className="card-reveal-progress" role="progressbar" aria-label="카드 등록 진행률" aria-valuemin={0} aria-valuemax={4} aria-valuenow={3}><span /></div>
+
+    <section className="card-reveal-hero" aria-labelledby="card-reveal-title">
+      <h1 id="card-reveal-title">새로운 카드를 발견했어요!</h1>
+      <InteractiveCollectibleCard
+        imageUrl={cardImage}
+        imageAlt={`${memberName} ${cardName} 카드 앞면`}
+        identity={userCardId}
+        title={cardName}
+        artist={artistName}
+        member={memberName}
+        serialLabel={serialNumber}
+        limitLabel={detail?.card.issueLimit ? `${detail.card.issueLimit.toLocaleString()}장` : 'FANFOLIO'}
+        sealLabel={detail?.card.id.slice(-8).toUpperCase() ?? 'DSHR024'}
+        designConfig={isRandomReveal ? qaRevealDesignConfig : detail?.card.designConfig}
+        lenticularImageUrl={detail?.card.lenticularImageUrl ? resolveApiUrl(detail.card.lenticularImageUrl) : null}
+        hiddenMessage={isRandomReveal ? '드림스케이프 공식 컬렉션 카드' : undefined}
+        badgeLabel={rarity}
+        onImageError={event => keepCardVisual(event, userCardId)}
+        presentation="reveal"
+        enableDeviceMotion={false}
+      />
+      <span className="card-reveal-new">NEW</span>
+      <h2>{memberName} · {cardName}</h2>
+      <p>{artistName} {seasonName}</p>
+    </section>
+
+    {detailLoading && !isRandomReveal && <p className="reveal-status" role="status">카드 정보를 확인하는 중이에요…</p>}
+    {detailError && !isRandomReveal && <div className="reveal-error" role="alert"><span>카드 정보를 불러오지 못했어요.</span><button type="button" className="outline" onClick={() => setDetailAttempt(value => value + 1)}>다시 시도</button></div>}
+
+    <section className="card-reveal-meta" aria-label="공개된 카드 정보">
+      <div><span><InlineIcon name="card" /></span><small>등급</small><b>{rarity}</b></div>
+      <div><span><InlineIcon name="grid" /></span><small>카드 번호</small><b>{serialNumber}</b></div>
+      <div><span><InlineIcon name="gift" /></span><small>획득</small><b>1번째</b></div>
+    </section>
+    <div className="card-reveal-bonus"><span><InlineIcon name="gift" /></span><b>첫 카드 등록 보너스</b><strong>+100 XP</strong></div>
+    <button type="button" className="primary card-reveal-primary" onClick={completeRegistration} disabled={!detail && !isRandomReveal}>컬렉션에 추가</button>
+    <button type="button" className="card-reveal-again" onClick={() => setPhase('mystery')}>다시 확인하기</button>
   </main>
 }
 function NavItem({ active, label, icon = label === '탐색' ? 'discover' : label === '알림' ? 'alerts' : label === '팬 레벨' ? 'growth' : label === '설정' ? 'settings' : 'collection', badge, onClick }: { active: boolean, label: string, icon?: 'home' | 'collection' | 'discover' | 'growth' | 'alerts' | 'settings', badge?: number, onClick: () => void }) { return <button className={active ? 'nav-item active' : 'nav-item'} aria-current={active ? 'page' : undefined} onClick={onClick}><NavIcon name={icon} />{label}{badge ? <b className="nav-badge">{badge > 99 ? '99+' : badge}</b> : null}</button> }
@@ -1379,17 +1694,16 @@ function FavoriteControl({ active = false, ariaLabel, className, interactive = f
   return <button type="button" className={classes} aria-label={ariaLabel} aria-pressed={active} onClick={onClick}><InlineIcon name="heart" /></button>
 }
 
-export function InlineIcon({ name }: { name: 'search' | 'sparkle' | 'card' | 'system' | 'dot' | 'plus' | 'list' | 'grid' | 'back' | 'heart' | 'chevron' | 'gift' | 'clock' | 'pin' | 'share' | 'calendar' | 'users' }) {
+export function InlineIcon({ name }: { name: 'search' | 'card' | 'system' | 'dot' | 'plus' | 'list' | 'grid' | 'back' | 'heart' | 'chevron' | 'gift' | 'clock' | 'pin' | 'share' | 'calendar' | 'users' | 'check' | 'camera' | 'star' | 'rotate' | 'sparkles' | 'motion' | 'settings' | 'bell' }) {
   const paths = {
     search: 'm20 20-4.2-4.2M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z',
-    sparkle: 'm12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3ZM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8L19 16Z',
     card: 'M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5v-11ZM8 9h8M8 13h5',
     system: 'M12 8v4M12 16h.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z',
     dot: 'M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17ZM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z',
     plus: 'M12 5v14M5 12h14',
     list: 'M5 6h14M5 12h14M5 18h14',
     grid: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
-    back: 'm15 18-6-6 6-6M9 12h11',
+    back: 'm14.5 18-6-6 6-6M8.5 12h9',
     heart: 'M20.8 4.8a5.5 5.5 0 0 0-7.8 0L12 5.9l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.4a5.5 5.5 0 0 0 0-7.8Z',
     chevron: 'm9 18 6-6-6-6',
     gift: 'M4 9h16v11H4zM3 6.5h18v2.5H3zM12 6.5V20M12 6.5C10 6.5 7.5 5.3 7.5 3.8A2.3 2.3 0 0 1 12 5v1.5ZM12 6.5c2 0 4.5-1.2 4.5-2.7A2.3 2.3 0 0 0 12 5v1.5Z',
@@ -1398,6 +1712,14 @@ export function InlineIcon({ name }: { name: 'search' | 'sparkle' | 'card' | 'sy
     share: 'M12 15V3m0 0 4 4m-4-4L8 7M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6',
     calendar: 'M5 4h14a2 2 0 0 1 2 2v13H3V6a2 2 0 0 1 2-2ZM8 2v4M16 2v4M3 9h18',
     users: 'M16 20v-1.5a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4V20M9.5 10.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM17 11a3 3 0 1 0-1-5.8M21 20v-1.4a4 4 0 0 0-3-3.9',
+    check: 'm5 12.5 4.2 4.2L19 7',
+    camera: 'M4 7.5h3l1.5-2h7l1.5 2h3v11H4v-11ZM12 16a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z',
+    star: 'm12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z',
+    rotate: 'M5 9a7.5 7.5 0 0 1 12.8-3.8L20 7.4M20 7.4V3.8M20 7.4h-3.6M19 15a7.5 7.5 0 0 1-12.8 3.8L4 16.6M4 16.6v3.6M4 16.6h3.6',
+    sparkles: 'm12 3 1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3ZM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15ZM5 15l.6 1.4L7 17l-1.4.6L5 19l-.6-1.4L3 17l1.4-.6L5 15Z',
+    motion: 'M8 5H5v3M5 8a8 8 0 0 1 13.6-3.6M16 19h3v-3M19 16a8 8 0 0 1-13.6 3.6',
+    settings: 'M12 3.5 14 5l2.5-.2 1.1 2.2 2.2 1.1-.2 2.5 1.5 2-1.5 2 .2 2.5-2.2 1.1-1.1 2.2-2.5-.2-2 1.5-2-1.5-2.5.2-1.1-2.2-2.2-1.1.2-2.5-1.5-2 1.5-2-.2-2.5 2.2-1.1 1.1-2.2L10 5l2-1.5ZM12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z',
+    bell: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4',
   } as const
   return <svg className="inline-icon" viewBox="0 0 24 24" aria-hidden="true"><path d={paths[name]} fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" /></svg>
 }

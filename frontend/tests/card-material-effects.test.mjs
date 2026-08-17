@@ -11,6 +11,10 @@ const frontendRoot = dirname(fileURLToPath(new URL('../package.json', import.met
 const apiSource = await readFile(new URL('../src/api/client.ts', import.meta.url), 'utf8')
 const effectsSource = await readFile(new URL('../src/utils/cardEffects.ts', import.meta.url), 'utf8')
 const detailSource = await readFile(new URL('../src/components/CardDetail.tsx', import.meta.url), 'utf8')
+const collectibleSource = await readFile(
+  new URL('../src/components/InteractiveCollectibleCard.tsx', import.meta.url),
+  'utf8',
+)
 const cssSource = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
 
 function sourceContainsAll(source, snippets) {
@@ -276,55 +280,56 @@ test('normalizeCardEffects accepts lenticular asset ids only for lenticular inte
   })
 })
 
-test('card detail renders normalized v3 front and back collectible classes', () => {
-  sourceContainsAll(detailSource, [
+test('shared collectible renders normalized v3 front and back classes', () => {
+  sourceContainsAll(collectibleSource, [
     "import { normalizeCardEffects",
-    'normalizeCardEffects(detail?.card.designConfig)',
+    'normalizeCardEffects(designConfig)',
     "material-${effects.front.material}",
     "pattern-${effects.front.foilPattern}",
     "coverage-${effects.front.foilCoverage}",
     "material-${effects.back.material}",
     "back edge-foil-${effects.back.edgeFoil}",
     "spot-uv-${effects.back.spotUv}",
-    "const [visibleSide, setVisibleSide] = useState<VisibleSide>('front')",
+    'const [visibleSide, setVisibleSide] = useState<VisibleSide>(initialSide)',
     "setVisibleSide('front')",
     'aria-pressed={visibleSide ===',
     '>앞면</button>',
     '>뒷면</button>',
-    '.slice(-8).toUpperCase()',
     'effects.back.hiddenMessage',
   ])
-  assert.doesNotMatch(detailSource, /import hologramTexture/)
-  assert.doesNotMatch(detailSource, /hologramStyle/)
+  assert.match(detailSource, /\.slice\(-8\)\.toUpperCase\(\)/)
+  assert.doesNotMatch(collectibleSource, /import hologramTexture/)
+  assert.doesNotMatch(collectibleSource, /hologramStyle/)
 })
 
 test('card detail does not expose a fake back serial before owned detail loads', () => {
   assert.doesNotMatch(detailSource, /detail\?\.serialNumber\s*\?\?\s*0/)
   assert.doesNotMatch(detailSource, /padStart\(3,\s*'0'\)[\s\S]{0,80}UNLIMITED/)
   assert.doesNotMatch(detailSource, />#000</)
-  assert.match(detailSource, /visibleSide === 'back' && safeBackDetail/)
+  assert.match(collectibleSource, /visibleSide === 'back'/)
   assert.match(detailSource, /String\(detail\.serialNumber\)\.padStart\(3, '0'\)/)
 })
 
 test('card detail only offers device motion before permission is settled on loaded owned detail', () => {
-  assert.match(detailSource, /const canRequestDeviceMotion = Boolean\([\s\S]*detail[\s\S]*motionStatus === 'idle'[\s\S]*motionSupported[\s\S]*effects\.front\.interaction !== 'static'[\s\S]*\)/)
-  assert.match(detailSource, /if \(!detail \|\| motionStatus !== 'idle'\) return/)
-  assert.match(detailSource, /\{canRequestDeviceMotion && <button/)
-  assert.doesNotMatch(detailSource, /\{motionSupported && visibleSide === 'front' && effects\.front\.interaction !== 'static' && <button/)
+  assert.match(collectibleSource, /const canRequestDeviceMotion = Boolean\([\s\S]*enableDeviceMotion[\s\S]*motionStatus === 'idle'[\s\S]*motionSupported[\s\S]*effects\.front\.interaction !== 'static'[\s\S]*\)/)
+  assert.match(collectibleSource, /if \(!enableDeviceMotion \|\| motionStatus !== 'idle'\) return/)
+  assert.match(collectibleSource, /\{canRequestDeviceMotion && <button/)
+  assert.doesNotMatch(collectibleSource, /\{motionSupported && visibleSide === 'front' && effects\.front\.interaction !== 'static' && <button/)
+  assert.match(detailSource, /enableDeviceMotion/)
 })
 
 test('card detail keeps the back side selected with fallback metadata while detail loads', () => {
-  assert.doesNotMatch(detailSource, /if \(!detail && visibleSide === 'back'\) setVisibleSide\('front'\)/)
-  assert.doesNotMatch(detailSource, /disabled=\{!detail\}/)
-  assert.doesNotMatch(detailSource, /aria-disabled=\{!detail\}/)
-  assert.match(detailSource, /aria-pressed=\{visibleSide === 'back'\} onClick=\{\(\) => setVisibleSide\('back'\)\}/)
+  assert.doesNotMatch(collectibleSource, /if \(!detail && visibleSide === 'back'\) setVisibleSide\('front'\)/)
+  assert.doesNotMatch(collectibleSource, /disabled=\{!detail\}/)
+  assert.doesNotMatch(collectibleSource, /aria-disabled=\{!detail\}/)
+  assert.match(collectibleSource, /aria-pressed=\{visibleSide === 'back'\} onClick=\{\(\) => setVisibleSide\('back'\)\}/)
   assert.match(detailSource, /const safeBackDetail =/)
 })
 
 test('card detail protects lenticular scene and keeps movement permission explicit', () => {
-  sourceContainsAll(detailSource, [
+  sourceContainsAll(collectibleSource, [
     'hasLenticular',
-    'detail.card.lenticularImageUrl',
+    'lenticularImageUrl',
     'className="fan-card-lenticular"',
     '--lenticular-reveal',
     'requestDeviceMotion',
@@ -337,15 +342,16 @@ test('card detail protects lenticular scene and keeps movement permission explic
     '첫 장면',
     '두 번째 장면',
   ])
-  assert.match(detailSource, /navigator[\s\S]{0,160}deviceMemory/)
-  const permissionButtonIndex = detailSource.indexOf('기기 움직임으로 보기')
-  const requestPermissionIndex = detailSource.indexOf('requestPermission')
+  assert.match(detailSource, /detail\.card\.lenticularImageUrl/)
+  assert.match(collectibleSource, /navigator[\s\S]{0,160}deviceMemory/)
+  const permissionButtonIndex = collectibleSource.indexOf('기기 움직임으로 보기')
+  const requestPermissionIndex = collectibleSource.indexOf('requestPermission')
   assert.ok(permissionButtonIndex > -1 && requestPermissionIndex > -1)
   assert.ok(
     requestPermissionIndex < permissionButtonIndex,
     'requestPermission should live in the explicit handler rendered by the button',
   )
-  assert.doesNotMatch(detailSource, /useEffect\([\s\S]{0,240}requestPermission/)
+  assert.doesNotMatch(collectibleSource, /useEffect\([\s\S]{0,240}requestPermission/)
 })
 
 test('fan collectible css replaces moving texture with reduced-motion-safe layered surfaces', () => {

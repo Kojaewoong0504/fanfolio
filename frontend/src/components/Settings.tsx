@@ -28,11 +28,13 @@ export function Settings({
   onUserUpdated,
   onLogout,
   onEvents,
+  onNotificationSettings,
 }: {
   user: CurrentUser
   onUserUpdated: (user: CurrentUser) => void
   onLogout: () => Promise<void>
   onEvents: () => void
+  onNotificationSettings?: () => void
 }) {
   const [panel, setPanel] = useState<MyPanel>(null)
   void user
@@ -78,7 +80,7 @@ export function Settings({
             <span>나의 이벤트</span>
             <Chevron />
           </button>
-          <button className="my-setting-row" type="button" onClick={() => setPanel('notifications')}>
+          <button className="my-setting-row" type="button" onClick={() => onNotificationSettings ? onNotificationSettings() : setPanel('notifications')}>
             <MyIcon><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></MyIcon>
             <span>알림 설정</span>
             <Chevron />

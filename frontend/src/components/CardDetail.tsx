@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type SyntheticEvent } from 'react'
+import { useEffect, useRef, useState, type SyntheticEvent } from 'react'
 import { apiFetch, resolveApiUrl, type UserCardDetail } from '../api/client'
 import type { Card } from '../types'
 import { normalizeCardEffects } from '../utils/cardEffects'
+import { InteractiveCollectibleCard } from './InteractiveCollectibleCard'
+import { InlineIcon } from '../App'
 
 type CardDetailProps = {
   card: Card
@@ -12,44 +14,6 @@ type CardDetailProps = {
   imageFor: (imageUrl: string, seed: string) => string
   onImageError: (event: SyntheticEvent<HTMLImageElement>, seed: string) => void
   cardTypeLabel: (cardType: string | null) => string
-}
-
-type CollectibleStyle = CSSProperties & Record<'--tilt-x' | '--tilt-y' | '--light-x' | '--light-y' | '--lenticular-reveal' | '--effect-opacity' | '--effect-angle' | '--effect-spread' | '--effect-grain', string>
-type MotionStatus = 'idle' | 'granted' | 'denied' | 'unsupported'
-type VisibleSide = 'front' | 'back'
-
-function resolveVisibleSideAfterCardIdentityChange(current: VisibleSide, previousCardIdentity: string | null, nextCardIdentity: string): VisibleSide {
-  return previousCardIdentity === null || previousCardIdentity === nextCardIdentity ? current : 'front'
-}
-
-function prefersReducedEffects(): boolean {
-  const reducedMotion =
-    typeof window !== 'undefined' &&
-    window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true
-  const browserNavigator = typeof navigator !== 'undefined'
-    ? navigator as Navigator & { deviceMemory?: number }
-    : null
-  const deviceMemory = Number.isFinite(Number(browserNavigator?.deviceMemory))
-    ? Number(browserNavigator?.deviceMemory)
-    : null
-  return reducedMotion || (deviceMemory !== null && deviceMemory <= 2)
-}
-
-function supportsDeviceMotion(): boolean {
-  return window.isSecureContext === true && typeof window.DeviceOrientationEvent !== 'undefined'
-}
-
-function clampMotion(value: number | null): number {
-  if (!Number.isFinite(Number(value))) return 0
-  return Math.max(-15, Math.min(15, Number(value)))
-}
-
-function resetCollectibleVars(element: HTMLElement): void {
-  element.style.setProperty('--tilt-x', '0deg')
-  element.style.setProperty('--tilt-y', '0deg')
-  element.style.setProperty('--light-x', '50%')
-  element.style.setProperty('--light-y', '42%')
-  element.style.setProperty('--lenticular-reveal', '0%')
 }
 
 function useDialogFocus(open: boolean): void {
@@ -95,13 +59,7 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
   const [detail, setDetail] = useState<UserCardDetail | null>(null)
   const [detailError, setDetailError] = useState(false)
   const [detailAttempt, setDetailAttempt] = useState(0)
-  const [visibleSide, setVisibleSide] = useState<VisibleSide>('front')
-  const [motionStatus, setMotionStatus] = useState<MotionStatus>('idle')
-  const [deviceMotionEnabled, setDeviceMotionEnabled] = useState(false)
-  const collectibleRef = useRef<HTMLDivElement | null>(null)
-  const dragStartRef = useRef<{ pointerId: number, x: number, y: number } | null>(null)
   const cardIdentity = card.userCardId ?? card.id
-  const previousCardIdentityRef = useRef<string | null>(cardIdentity)
   const isOwned = Boolean(card.userCardId)
   const hasRemoteDetail = Boolean(card.userCardId && !card.userCardId.startsWith('user-card-'))
   const [detailLoading, setDetailLoading] = useState(hasRemoteDetail)
@@ -111,8 +69,6 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
     let cancelled = false
     setDetail(null)
     setDetailError(false)
-    setMotionStatus('idle')
-    setDeviceMotionEnabled(false)
     const remoteDetail = Boolean(card.userCardId && !card.userCardId.startsWith('user-card-'))
     setDetailLoading(remoteDetail)
     if (!remoteDetail || !card.userCardId) return
@@ -123,14 +79,6 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
   }, [card.userCardId, detailAttempt])
 
   useEffect(() => {
-    setVisibleSide(current => resolveVisibleSideAfterCardIdentityChange(current, previousCardIdentityRef.current, cardIdentity))
-    previousCardIdentityRef.current = cardIdentity
-    setMotionStatus('idle')
-    setDeviceMotionEnabled(false)
-    if (collectibleRef.current) resetCollectibleVars(collectibleRef.current)
-  }, [cardIdentity])
-
-  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
     }
@@ -139,22 +87,13 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
   }, [onClose])
 
   const effects = normalizeCardEffects(detail?.card.designConfig)
-  const designConfig = detail?.card.designConfig
-  const legacyHolographic = designConfig?.front?.effect === 'holographic'
-  const hasSurface = Boolean(legacyHolographic || designConfig?.version === 3)
-  const hasLenticular = Boolean(effects.front.interaction === 'lenticular' && detail && detail.card.lenticularImageUrl)
-  const lenticularImageUrl = detail?.card.lenticularImageUrl ?? ''
-  const reducedEffects = prefersReducedEffects()
-  const motionSupported = !reducedEffects && supportsDeviceMotion()
-  const canRequestDeviceMotion = Boolean(
-    detail &&
-    motionStatus === 'idle' &&
-    motionSupported &&
-    visibleSide === 'front' &&
-    effects.front.interaction !== 'static',
-  )
   const imageUrl = detail?.card.imageUrl ?? card.image
-  const imageError = (event: SyntheticEvent<HTMLImageElement>) => onImageError(event, card.id)
+  const displayMember = detail?.card.memberName ?? card.member ?? '유나'
+  // Catalog/demo records can still carry the old silhouette or hero placeholder.
+  // Resolve the visual fallback from the member identity so the detail view always
+  // presents a collectible card asset instead of an unrelated placeholder.
+  const imageSeed = `member:${displayMember}`
+  const imageError = (event: SyntheticEvent<HTMLImageElement>) => onImageError(event, imageSeed)
   const cardImageAlt = `${detail?.card.name ?? card.title} 공식 카드 앞면`
   const safeBackDetail = {
     title: detail?.card.name ?? card.title,
@@ -165,192 +104,50 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
     sealLabel: detail?.card.id.slice(-8).toUpperCase() ?? ((card.userCardId ?? card.id).replace(/[^a-zA-Z0-9]/g, '').slice(-8).toUpperCase() || 'OFFICIAL'),
     hiddenMessage: effects.back.hiddenMessage || (detail ? '공식 컬렉션 인증 카드' : '컬렉션 상세를 불러오면 인증 정보가 업데이트됩니다'),
   }
-  const collectibleStyle = {
-    '--tilt-x': '0deg',
-    '--tilt-y': '0deg',
-    '--light-x': '50%',
-    '--light-y': '42%',
-    '--lenticular-reveal': '0%',
-    '--effect-opacity': hasSurface ? String(0.2 + effects.front.intensity * 0.42) : '0',
-    '--effect-angle': `${effects.front.angle}deg`,
-    '--effect-spread': `${Math.round(effects.front.effectSpread * 100)}%`,
-    '--effect-grain': String(effects.front.effectGrain),
-  } as CollectibleStyle
-  const frontClassName = `fan-card-collectible front material-${effects.front.material} pattern-${effects.front.foilPattern} coverage-${effects.front.foilCoverage} interaction-${effects.front.interaction}${hasLenticular ? ' has-lenticular' : ''}${hasSurface ? ' has-surface' : ''}`
-  const backClassName = `fan-card-collectible material-${effects.back.material} back edge-foil-${effects.back.edgeFoil} spot-uv-${effects.back.spotUv}`
-
-  const handleCollectibleMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (visibleSide !== 'front' || reducedEffects) return
-    if (event.pointerType === 'touch' && !event.currentTarget.hasPointerCapture(event.pointerId)) {
-      const start = dragStartRef.current
-      if (!start || start.pointerId !== event.pointerId) return
-      const deltaX = Math.abs(event.clientX - start.x)
-      const deltaY = Math.abs(event.clientY - start.y)
-      if (deltaX < 8 && deltaY < 8) return
-      if (deltaY > deltaX) return
-      event.currentTarget.setPointerCapture(event.pointerId)
-    }
-    const element = event.currentTarget
-    const box = element.getBoundingClientRect()
-    const x = Math.max(0, Math.min(1, (event.clientX - box.left) / box.width))
-    const y = Math.max(0, Math.min(1, (event.clientY - box.top) / box.height))
-    if (effects.front.interaction !== 'static') {
-      element.style.setProperty('--tilt-x', `${((0.5 - y) * 10).toFixed(2)}deg`)
-      element.style.setProperty('--tilt-y', `${((x - 0.5) * 12).toFixed(2)}deg`)
-    }
-    element.style.setProperty('--light-x', `${Math.round(x * 100)}%`)
-    element.style.setProperty('--light-y', `${Math.round(y * 100)}%`)
-    if (hasLenticular) {
-      element.style.setProperty('--lenticular-reveal', `${Math.round(x * 100)}%`)
-    }
-  }
-  const handleCollectibleStart = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (visibleSide !== 'front' || reducedEffects) return
-    dragStartRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY }
-    if (event.pointerType !== 'touch') {
-      event.currentTarget.setPointerCapture(event.pointerId)
-      handleCollectibleMove(event)
-    }
-  }
-  const handleCollectibleReset = (element: HTMLElement) => {
-    resetCollectibleVars(element)
-  }
-  const handleCollectibleEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-    dragStartRef.current = null
-    handleCollectibleReset(event.currentTarget)
-  }
-  const setLenticularReveal = (reveal: '0%' | '100%') => {
-    collectibleRef.current?.style.setProperty('--lenticular-reveal', reveal)
-  }
-  const requestDeviceMotion = async () => {
-    if (!detail || motionStatus !== 'idle') return
-    if (reducedEffects || !supportsDeviceMotion()) {
-      setMotionStatus('unsupported')
-      setDeviceMotionEnabled(false)
-      return
-    }
-    try {
-      const DeviceOrientationEvent = window.DeviceOrientationEvent as typeof window.DeviceOrientationEvent & {
-        requestPermission?: () => Promise<PermissionState | 'default'>
-      }
-      const permission = typeof DeviceOrientationEvent.requestPermission === 'function'
-        ? await DeviceOrientationEvent.requestPermission()
-        : 'granted'
-      if (permission !== 'granted') throw new Error('denied')
-      setMotionStatus('granted')
-      setDeviceMotionEnabled(true)
-    } catch {
-      setMotionStatus('denied')
-      setDeviceMotionEnabled(false)
-    }
-  }
-
-  useEffect(() => {
-    if (
-      !deviceMotionEnabled ||
-      visibleSide !== 'front' ||
-      reducedEffects ||
-      effects.front.interaction === 'static' ||
-      !detail ||
-      !supportsDeviceMotion()
-    ) {
-      return
-    }
-    const applyDeviceOrientation = (event: DeviceOrientationEvent) => {
-      const element = collectibleRef.current
-      if (!element) return
-      const beta = clampMotion(event.beta)
-      const gamma = clampMotion(event.gamma)
-      const lightX = Math.round(((gamma + 15) / 30) * 100)
-      const lightY = Math.round(((beta + 15) / 30) * 100)
-      element.style.setProperty('--tilt-x', `${(-beta).toFixed(2)}deg`)
-      element.style.setProperty('--tilt-y', `${gamma.toFixed(2)}deg`)
-      element.style.setProperty('--light-x', `${lightX}%`)
-      element.style.setProperty('--light-y', `${lightY}%`)
-      if (hasLenticular) {
-        element.style.setProperty('--lenticular-reveal', `${lightX}%`)
-      }
-    }
-    window.addEventListener('deviceorientation', applyDeviceOrientation, { passive: true })
-    return () => window.removeEventListener('deviceorientation', applyDeviceOrientation)
-  }, [detail, deviceMotionEnabled, effects.front.interaction, hasLenticular, reducedEffects, visibleSide])
-
   const voiceAudioUrl = detail?.card.hasVoice && detail.card.voiceAudioUrl ? resolveApiUrl(detail.card.voiceAudioUrl) : ''
   const videoUrl = detail?.card.hasVideo && detail.card.videoUrl ? resolveApiUrl(detail.card.videoUrl) : ''
   const hasSpecialMedia = Boolean(voiceAudioUrl || videoUrl)
 
   return <div className="detail-backdrop" role="presentation" onClick={event => { if (event.target === event.currentTarget) onClose() }}>
-    <aside className="detail-panel" role="dialog" aria-modal="true" aria-labelledby="card-detail-title">
+    <aside className="detail-panel detail-reference-panel" role="dialog" aria-modal="true" aria-labelledby="card-detail-title">
       <div className="detail-topbar">
-        <button onClick={onClose}>닫기</button>
+        <button className="detail-back-button" onClick={onClose} aria-label="카드 상세 닫기"><InlineIcon name="back" /></button>
+        <h1>카드 상세</h1>
         <button className={isSaved ? 'favorite-button saved' : 'favorite-button'} aria-label={isSaved ? '관심 카드에서 제거' : '관심 카드로 저장'} aria-pressed={isSaved} onClick={onToggleSaved}>
-          {isSaved ? '♥' : '♡'}<span>{isSaved ? '저장됨' : '관심 카드'}</span>
+          <InlineIcon name="heart" /><span className="sr-only">{isSaved ? '저장됨' : '관심 카드'}</span>
         </button>
       </div>
       {detailLoading && <p className="detail-loading" role="status" aria-live="polite">카드 상세 정보를 확인하는 중이에요…</p>}
-      <div className="card-side-toggle" role="group" aria-label="카드 면 선택">
-        <button type="button" aria-pressed={visibleSide === 'front'} onClick={() => setVisibleSide('front')}>앞면</button>
-        <button type="button" aria-pressed={visibleSide === 'back'} onClick={() => setVisibleSide('back')}>뒷면</button>
-      </div>
-      {visibleSide === 'front' ? <div
-        ref={collectibleRef}
-        className={frontClassName}
-        style={collectibleStyle}
-        onPointerDown={handleCollectibleStart}
-        onPointerMove={handleCollectibleMove}
-        onPointerUp={handleCollectibleEnd}
-        onPointerLeave={handleCollectibleEnd}
-        onPointerCancel={handleCollectibleEnd}
-      >
-        <div className="fan-card-art-window">
-          <img className="fan-card-photo" src={imageFor(resolveApiUrl(imageUrl), card.id)} alt={cardImageAlt} onError={imageError} />
-          {hasLenticular && <img className="fan-card-lenticular" src={resolveApiUrl(lenticularImageUrl)} alt="" aria-hidden="true" />}
-        </div>
-        <span className="fan-card-material" aria-hidden="true" />
-        <span className="fan-card-surface" aria-hidden="true" />
-        <span className="official-badge">공식 카드</span>
-      </div> : visibleSide === 'back' && safeBackDetail && <div className={backClassName} style={collectibleStyle}>
-        <div className="fan-card-back-meta">
-          <span className="fan-card-official-label">OFFICIAL FAN CARD</span>
-          <strong>{safeBackDetail.title}</strong>
-          <span>{safeBackDetail.artist}{safeBackDetail.member ? ` · ${safeBackDetail.member}` : ''}</span>
-        </div>
-        <dl className="fan-card-back-stats">
-          <div><dt>SERIAL</dt><dd>{safeBackDetail.serialLabel}</dd></div>
-          <div><dt>LIMIT</dt><dd>{safeBackDetail.limitLabel}</dd></div>
-          <div><dt>SEAL</dt><dd>{safeBackDetail.sealLabel}</dd></div>
-        </dl>
-        <p className="fan-card-hidden-message">{safeBackDetail.hiddenMessage}</p>
-        <span className="fan-card-material" aria-hidden="true" />
-        <span className="fan-card-surface" aria-hidden="true" />
-      </div>}
-      <div className="fan-card-motion-actions">
-        {canRequestDeviceMotion && <button type="button" className="motion-permission-button" onClick={requestDeviceMotion}>기기 움직임으로 보기</button>}
-        {motionStatus === 'denied' && <p className="motion-helper">손가락으로 움직여 볼 수 있어요</p>}
-        {hasLenticular && reducedEffects && visibleSide === 'front' && <div className="lenticular-scene-controls" aria-label="렌티큘러 장면 선택">
-          <button type="button" onClick={() => setLenticularReveal('0%')}>첫 장면</button>
-          <button type="button" onClick={() => setLenticularReveal('100%')}>두 번째 장면</button>
-        </div>}
-      </div>
-      <p className="detail-kicker">공식 디지털 카드</p>
-      <h2 id="card-detail-title" className="detail-title">{detail?.card.name ?? card.title}</h2>
-      <dl>
-        <div><dt>아티스트</dt><dd>{detail?.card.artistName ?? card.artist}</dd></div>
-        <div><dt>멤버</dt><dd>{detail?.card.memberName ?? card.member}</dd></div>
+      <InteractiveCollectibleCard
+        imageUrl={imageFor(resolveApiUrl(imageUrl), imageSeed)}
+        imageAlt={cardImageAlt}
+        identity={cardIdentity}
+        title={safeBackDetail.title}
+        artist={safeBackDetail.artist}
+        member={safeBackDetail.member}
+        serialLabel={safeBackDetail.serialLabel}
+        limitLabel={safeBackDetail.limitLabel}
+        sealLabel={safeBackDetail.sealLabel}
+        hiddenMessage={safeBackDetail.hiddenMessage}
+        designConfig={detail?.card.designConfig}
+        lenticularImageUrl={detail?.card.lenticularImageUrl ? resolveApiUrl(detail.card.lenticularImageUrl) : null}
+        onImageError={imageError}
+        enableDeviceMotion
+      />
+      <p className="detail-kicker">{detail?.card.seasonName ?? '드림스케이프 2026 SPRING'}</p>
+      <h2 id="card-detail-title" className="detail-title">{detail?.card.memberName ?? card.member} · {detail?.card.name ?? card.title}</h2>
+      <dl className="detail-reference-meta">
+        {detail?.card.rarity && <div><dt><InlineIcon name="star" />등급</dt><dd>{detail.card.rarity}</dd></div>}
+        <div><dt><InlineIcon name="grid" />카드 번호</dt><dd>{detail ? `DS-${String(detail.serialNumber).padStart(3, '0')}` : safeBackDetail.serialLabel}</dd></div>
+        <div><dt><InlineIcon name="calendar" />획득일</dt><dd>{detail ? new Date(detail.acquiredAt).toLocaleDateString('ko-KR') : '최근 획득'}</dd></div>
+        <div className="detail-meta-secondary"><dt>아티스트</dt><dd>{detail?.card.artistName ?? card.artist}</dd></div>
+        <div className="detail-meta-secondary"><dt>멤버</dt><dd>{detail?.card.memberName ?? card.member}</dd></div>
         {detail && <>
-          <div><dt>카드 유형</dt><dd>{cardTypeLabel(detail.card.cardType)}</dd></div>
-          <div><dt>발행번호</dt><dd>#{String(detail.serialNumber).padStart(3, '0')}</dd></div>
-          <div><dt>획득일</dt><dd>{new Date(detail.acquiredAt).toLocaleDateString('ko-KR')}</dd></div>
-          <div><dt>획득 경로</dt><dd>{detail.acquisitionSource === 'qr' ? 'QR 스캔' : detail.acquisitionSource === 'manual' ? '코드 직접 입력' : '콘텐츠 코드'}</dd></div>
-          {detail.drop && <div><dt>드롭</dt><dd>{detail.drop.name}</dd></div>}
-          {detail.card.seasonName && <div><dt>시즌</dt><dd>{detail.card.seasonName}</dd></div>}
-          {detail.card.rarity && <div><dt>등급</dt><dd>{detail.card.rarity}</dd></div>}
-          {detail.card.issueLimit && <div><dt>발행 한도</dt><dd>{detail.card.issueLimit.toLocaleString()}장</dd></div>}
+          <div className="detail-meta-secondary"><dt>카드 유형</dt><dd>{cardTypeLabel(detail.card.cardType)}</dd></div>
+          <div className="detail-meta-secondary"><dt>획득 경로</dt><dd>{detail.acquisitionSource === 'qr' ? 'QR 스캔' : detail.acquisitionSource === 'manual' ? '코드 직접 입력' : '콘텐츠 코드'}</dd></div>
         </>}
       </dl>
+      <p className="detail-motion-hint"><InlineIcon name="motion" />카드를 움직여 특별한 효과를 확인해보세요.</p>
       {detail?.card.signatureText && <p className="detail-hint">“{detail.card.signatureText}”</p>}
       {detail?.futureBenefitPreview && <div className="notice">{detail.futureBenefitPreview}</div>}
       {detail?.card.handwritingImageUrl && <div className="handwriting-special"><p className="detail-badge">손글씨 특전</p><img src={resolveApiUrl(detail.card.handwritingImageUrl)} alt="손글씨 특전" /></div>}

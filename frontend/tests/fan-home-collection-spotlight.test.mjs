@@ -81,6 +81,8 @@ test('collection reference composition exposes progress, recent cards, managemen
   assert.match(appSource, /collectionCardHarinGenerated/)
   assert.match(appSource, /collectionCardDoyunGenerated/)
   assert.match(referenceCssSource, /Collection reference contract[\s\S]*?\.collection-recent-grid[\s\S]*?grid-template-columns:\s*repeat\(4/)
+  assert.match(referenceCssSource, /main\.collection-shell \.collection-reference-card img \{[^}]*height:calc\(100% - 24px\)!important;/)
+  assert.doesNotMatch(referenceCssSource, /main\.collection-shell \.collection-reference-card img \{[^}]*height:(?:112|106)px!important;/)
   assert.match(referenceCssSource, /Collection reference contract[\s\S]*?\.collection-summary-grid[\s\S]*?grid-template-columns:\s*repeat\(4/)
   assert.match(referenceCssSource, /main\.collection-shell \.app-header \{ min-height:0!important; margin-bottom:0!important; \}/)
 })

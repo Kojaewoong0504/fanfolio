@@ -37,12 +37,12 @@
 - Typography: Noto Sans KR, 숫자와 코드에는 Manrope
 - Spacing/layout rhythm: 8px 단위, 데스크톱 sidebar + 넓은 작업 영역
 - Shape/radius/elevation: 9~14px radius, 얕은 border와 soft shadow
-- Motion: 저장·제출·작업 요청은 짧은 toast와 상태 배지로 피드백
+- Motion: 저장·제출·작업 요청은 짧은 toast와 상태 배지로 피드백한다. 카드 공개는 최초 진입 시 한 번만 짧게 강조하고, 이후에는 사용자가 직접 앞뒤 전환·기울기 효과를 조작한다.
 - Imagery/iconography: 카드 이미지는 세로형, 아이콘은 텍스트 기호 또는 단순 선형 아이콘
 
 ## Components
-- Existing components to reuse: 팬 앱의 카드/버튼 스타일, 관리자 화면의 sidebar·metric·table·toast
-- New/changed components: StudioShell, Stepper, CardCanvas, HandwritingPad, ReviewChecklist
+- Existing components to reuse: 팬 앱의 카드/버튼 스타일, 관리자 화면의 sidebar·metric·table·toast, 공개·보관함 상세가 함께 사용하는 `InteractiveCollectibleCard`
+- New/changed components: StudioShell, Stepper, CardCanvas, HandwritingPad, ReviewChecklist, InteractiveCollectibleCard
 - Variants and states: draft, pending_review, published, queued, processing, completed, failed
 - Token/component ownership: 현재는 각 앱의 CSS 변수로 관리하고, 공통 디자인 토큰은 앱이 안정된 뒤 추출한다.
 
@@ -51,12 +51,13 @@
 - Keyboard/focus behavior: 입력 순서와 단계 이동 순서를 일관되게 유지한다.
 - Contrast/readability: 상태는 텍스트 라벨을 함께 제공한다.
 - Screen-reader semantics: form label, button name, canvas 대체 설명을 제공한다.
-- Reduced motion and sensory considerations: MVP는 필수 애니메이션을 사용하지 않는다.
+- Reduced motion and sensory considerations: `prefers-reduced-motion`에서는 카드 공개를 불투명도 전환으로 축소하고, 렌티큘러는 자동 움직임 대신 명시적인 장면 선택 버튼을 제공한다.
 
 ## Responsive behavior
 - Supported breakpoints/devices: 1100px 데스크톱, 768px 태블릿, 600px 모바일
 - Layout adaptations: sidebar 축소, 카드 제작 패널 단일 열, 미리보기 우선 배치
 - Touch/hover differences: 캔버스는 pointer 이벤트를 사용해 마우스·터치 입력을 모두 허용한다.
+- Collectible interaction: 카드 표면의 포인터 이동은 세로 스크롤을 가로막지 않으며, 앞면·뒷면 버튼은 키보드와 스크린 리더로도 조작 가능해야 한다.
 
 ## Interaction states
 - Loading: API 요청 버튼을 비활성화하고 진행 문구를 표시한다.

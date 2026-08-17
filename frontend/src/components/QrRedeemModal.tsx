@@ -4,29 +4,42 @@ import { apiFetch } from '../api/client'
 import '../App.css'
 import './QrRedeemModal.css'
 import { normalizeQrValue } from './qrUtils'
+import registrationCardImage from '../assets/card-registration-idol-generated.png'
+import qrScannerImage from '../assets/card-registration-qr-scanner-generated.png'
 
 type RedemptionSource = 'manual' | 'qr'
+type RegistrationMethod = 'qr' | 'manual' | 'photo'
+type RegistrationStep = 1 | 2 | 3
 
 function isRedemptionErrorMessage(message: string): boolean {
   return ['실패', '찾을 수', '찾지 못', '비활성화', '사용할 수', '이미 사용', '만료된', '만료되었습니다', '카메라를 사용할 수 없습니다'].some(keyword => message.includes(keyword))
 }
 
 export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, onRedeemed: (userCardId: string) => void }) {
+  const [step, setStep] = useState<RegistrationStep>(1)
   const [code, setCode] = useState('')
   // QR is the primary digital-card path. Keep manual entry behind an explicit
   // choice so the first modal view is about selecting a digital source, not
   // staring at a generic text field.
   const [source, setSource] = useState<RedemptionSource>('qr')
+  const [selectedMethod, setSelectedMethod] = useState<RegistrationMethod>('qr')
   const [message, setMessage] = useState('')
   const [saving, setSaving] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [readingImage, setReadingImage] = useState(false)
+  const [isDemo, setIsDemo] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const backdropRef = useRef<HTMLDivElement>(null)
   const scannerControlsRef = useRef<IScannerControls | null>(null)
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const codeInputRef = useRef<HTMLInputElement>(null)
+  const photoInputRef = useRef<HTMLInputElement>(null)
   const messageRef = useRef<HTMLParagraphElement>(null)
   const previousActiveElementRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    backdropRef.current?.scrollTo({ top: 0 })
+  }, [step])
 
   useEffect(() => {
     previousActiveElementRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
@@ -80,6 +93,7 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
             controls.stop()
             scannerControlsRef.current = null
             setScanning(false)
+            setStep(3)
           },
         )
         if (cancelled) controls.stop()
@@ -135,6 +149,7 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
       setCode(normalizeQrValue(result.getText()))
       setSource('qr')
       setMessage('사진에서 QR 코드가 인식되었습니다.')
+      setStep(3)
     } catch {
       setMessage('사진에서 QR을 찾지 못했습니다. 더 선명한 사진을 사용하거나 코드를 직접 입력해 주세요.')
     } finally {
@@ -166,10 +181,10 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
   }, [onClose])
 
   useEffect(() => {
-    if (source !== 'manual' || scanning) return
+    if (step !== 2 || source !== 'manual' || scanning) return
     const frame = window.requestAnimationFrame(() => codeInputRef.current?.focus())
     return () => window.cancelAnimationFrame(frame)
-  }, [scanning, source])
+  }, [scanning, source, step])
 
   useEffect(() => {
     if (!message || !isRedemptionErrorMessage(message)) return
@@ -178,14 +193,148 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
   }, [message])
 
   const messageIsError = isRedemptionErrorMessage(message)
-  return <div className="modal-backdrop" role="presentation" onClick={event => { if (event.target === event.currentTarget) onClose() }}><div className="modal redeem-modal" role="dialog" aria-modal="true" aria-labelledby="redeem-title"><div className="redeem-modal-header"><div><p className="eyebrow">디지털 카드</p><h2 id="redeem-title">카드 등록</h2></div><button ref={closeButtonRef} className="modal-close" aria-label="카드 등록 닫기" onClick={onClose}>×</button></div><p className="muted">카드 패키지에서 받은 정보를 선택해 주세요.</p><div className="redeem-methods" role="group" aria-label="카드 등록 방법"><div className="redeem-method-heading"><b>등록 방법</b><span>원하는 방법을 선택하세요</span></div>{scanning ? <div className="scanner redeem-scanner"><video ref={videoRef} playsInline muted /><button type="button" onClick={() => { setScanning(false); setMessage('') }}>스캔 취소</button></div> : <button type="button" className={source === 'qr' ? 'redeem-method qr-box selected' : 'redeem-method qr-box'} onClick={() => { setCode(''); setSource('qr'); setMessage('카메라를 준비하고 있습니다.'); setScanning(true) }}><RedeemIcon name="scan" /><span><b>QR 스캔</b><small>카메라로 카드 패키지의 QR을 비춰요.</small></span><strong aria-hidden="true">›</strong></button>}<label className="redeem-method qr-photo-upload"><RedeemIcon name="photo" /><span><b>사진으로 QR 읽기</b><small>{readingImage ? '사진을 확인하고 있어요.' : '저장된 QR 사진을 선택해요.'}</small></span><strong aria-hidden="true">›</strong><input type="file" accept="image/*" capture="environment" onChange={onQrImageChange} disabled={readingImage} /></label><button type="button" className={source === 'manual' ? 'redeem-method manual-method selected' : 'redeem-method manual-method'} onClick={() => { setSource('manual'); setMessage('') }}><RedeemIcon name="code" /><span><b>카드 코드 입력</b><small>패키지에 적힌 코드를 직접 입력해요.</small></span><strong aria-hidden="true">›</strong></button></div>{source === 'manual' && !scanning && <div className="redeem-code-field"><label className="field-label" htmlFor="redeem-code">카드 코드</label><input ref={codeInputRef} id="redeem-code" value={code} onChange={event => { setCode(event.target.value); setSource('manual') }} placeholder="예: NOVA-VALID-01" autoComplete="off" /><small>코드는 대소문자를 구분하지 않습니다.</small></div>}{code && !scanning && !readingImage && <button type="button" className="primary" disabled={saving} onClick={() => void redeem()}>{saving ? '등록 중...' : '카드 등록하기'}</button>}{message && <p ref={messageRef} className={messageIsError ? 'form-message error-message' : 'form-message'} role={messageIsError ? 'alert' : 'status'}>{message}</p>}</div></div>
+  const continueRegistration = () => {
+    setMessage('')
+    setIsDemo(false)
+    setStep(2)
+    if (selectedMethod === 'qr') {
+      setCode('')
+      setSource('qr')
+      setScanning(false)
+      return
+    }
+    if (selectedMethod === 'photo') {
+      setSource('qr')
+      window.requestAnimationFrame(() => photoInputRef.current?.click())
+      return
+    }
+    setSource('manual')
+    window.requestAnimationFrame(() => codeInputRef.current?.focus())
+  }
+
+  const goBack = () => {
+    setMessage('')
+    setScanning(false)
+    if (step === 1) onClose()
+    else setStep(previous => Math.max(1, previous - 1) as RegistrationStep)
+  }
+
+  const previewDemoCard = () => {
+    setCode('FANFOLIO-DEMO-CARD')
+    setSource('qr')
+    setIsDemo(true)
+    setScanning(false)
+    onRedeemed('qa-registration-complete')
+  }
+
+  const confirmRegistration = () => {
+    if (isDemo) {
+      onRedeemed('qa-registration-complete')
+      return
+    }
+    void redeem()
+  }
+
+  const title = step === 1 ? '카드 등록' : step === 2 ? (selectedMethod === 'manual' ? '인증 코드 입력' : selectedMethod === 'photo' ? '사진으로 등록' : 'QR 코드 스캔') : '카드 확인'
+
+  return <div ref={backdropRef} className="modal-backdrop redeem-flow-backdrop" role="presentation" onClick={event => { if (event.target === event.currentTarget) onClose() }}>
+    <div className="modal redeem-modal redeem-flow-screen" data-step={step} role="dialog" aria-modal="true" aria-labelledby="redeem-title">
+      <header className="redeem-flow-topbar">
+        <button ref={closeButtonRef} type="button" className="redeem-flow-back" aria-label={step === 1 ? '카드 등록 닫기' : '이전 단계'} onClick={goBack}><RedeemIcon name="back" /></button>
+        <h2 id="redeem-title">{title}</h2>
+        <strong aria-label={`${step} / 4 단계`}><em>{step}</em> / 4</strong>
+      </header>
+      <div className="redeem-flow-progress" role="progressbar" aria-label="카드 등록 진행률" aria-valuemin={0} aria-valuemax={4} aria-valuenow={step}><span style={{ width: `${step * 25}%` }} /></div>
+
+      {step === 1 && <>
+        <section className="redeem-flow-intro">
+          <h1>첫 카드를 등록해볼까요?</h1>
+          <p>보유한 카드를 간편하게 컬렉션에 추가해보세요.</p>
+        </section>
+
+        <div className="redeem-flow-card-preview" aria-hidden="true">
+          <img src={registrationCardImage} alt="" />
+          <span>SR</span>
+        </div>
+
+        <div className="redeem-flow-methods" role="radiogroup" aria-label="카드 등록 방법">
+          <button type="button" role="radio" aria-checked={selectedMethod === 'qr'} className={selectedMethod === 'qr' ? 'redeem-flow-method selected' : 'redeem-flow-method'} onClick={() => { setSelectedMethod('qr'); setSource('qr'); setScanning(false) }}>
+            <RedeemIcon name="scan" /><span><b>QR 코드 스캔</b><small>카드 뒷면의 QR 코드를 촬영해요.</small></span><RedeemIcon name="chevron" />
+          </button>
+          <button type="button" role="radio" aria-checked={selectedMethod === 'manual'} className={selectedMethod === 'manual' ? 'redeem-flow-method selected' : 'redeem-flow-method'} onClick={() => { setSelectedMethod('manual'); setSource('manual'); setScanning(false) }}>
+            <RedeemIcon name="code" /><span><b>인증 코드 입력</b><small>카드의 12자리 코드를 직접 입력해요.</small></span><RedeemIcon name="chevron" />
+          </button>
+          <button type="button" role="radio" aria-checked={selectedMethod === 'photo'} className={selectedMethod === 'photo' ? 'redeem-flow-method selected' : 'redeem-flow-method'} onClick={() => { setSelectedMethod('photo'); setSource('qr'); setScanning(false) }}>
+            <RedeemIcon name="photo" /><span><b>사진으로 등록</b><small>카드 앞·뒷면을 촬영해 확인해요.</small></span><small className="redeem-flow-review">검토 필요</small><RedeemIcon name="chevron" />
+          </button>
+        </div>
+
+        <footer className="redeem-flow-footer">
+          <button type="button" className="primary" onClick={continueRegistration}>다음</button>
+          <button type="button" className="redeem-flow-help">카드 등록이 어려우신가요?</button>
+        </footer>
+      </>}
+
+      {step === 2 && <section className="redeem-flow-step-two">
+        {selectedMethod === 'qr' && <>
+          <div className="redeem-flow-intro redeem-flow-scan-intro">
+            <h1>카드 뒷면의 QR 코드를 비춰주세요</h1>
+            <p>프레임 안에 코드를 맞추면 자동으로 인식해요.</p>
+          </div>
+          <div className="redeem-flow-scan-stage">
+            <img src={qrScannerImage} alt="보라색 팬폴리오 카드 뒷면의 QR 코드를 스캔하는 예시" />
+            {scanning && <video ref={videoRef} playsInline muted aria-label="QR 코드 카메라 화면" />}
+            <span className="redeem-flow-scan-status"><i />{scanning ? '인식 중' : '스캔 준비'}</span>
+          </div>
+          <button type="button" className="redeem-flow-camera-start" onClick={() => setScanning(value => !value)}>{scanning ? '스캔 중지' : '카메라로 스캔 시작'}</button>
+          <div className="redeem-flow-scan-tips" aria-label="QR 코드 촬영 팁">
+            <div><RedeemIcon name="scan" /><b>밝은 곳에서</b></div>
+            <div><RedeemIcon name="photo" /><b>카드를 평평하게</b></div>
+            <div><RedeemIcon name="scan" /><b>프레임에 맞추기</b></div>
+          </div>
+          <div className="redeem-flow-or"><span>또는</span></div>
+          <button type="button" className="redeem-flow-secondary" onClick={() => { setSelectedMethod('manual'); setSource('manual'); setScanning(false) }}><RedeemIcon name="code" />인증 코드 직접 입력</button>
+          <button type="button" className="redeem-flow-demo" onClick={previewDemoCard}>샘플 카드로 3단계 미리보기</button>
+          <p className="redeem-flow-privacy">촬영 이미지는 기기에 저장되지 않아요.</p>
+        </>}
+
+        {selectedMethod === 'manual' && <>
+          <div className="redeem-flow-intro redeem-flow-scan-intro"><h1>인증 코드를 입력해 주세요</h1><p>카드 뒷면의 12자리 코드를 입력하면 정보를 확인할 수 있어요.</p></div>
+          <div className="redeem-code-field redeem-flow-code-field"><label className="field-label" htmlFor="redeem-code">인증 코드</label><input ref={codeInputRef} id="redeem-code" value={code} onChange={event => { setCode(event.target.value); setSource('manual') }} placeholder="12자리 코드를 입력하세요" autoComplete="off" /><small>코드는 대소문자를 구분하지 않습니다.</small></div>
+          <button type="button" className="primary redeem-flow-step-button" disabled={!code.trim()} onClick={() => setStep(3)}>다음</button>
+          <button type="button" className="redeem-flow-demo" onClick={previewDemoCard}>샘플 카드로 3단계 미리보기</button>
+        </>}
+
+        {selectedMethod === 'photo' && <>
+          <div className="redeem-flow-intro redeem-flow-scan-intro"><h1>카드 사진을 선택해 주세요</h1><p>QR 코드가 선명하게 보이는 카드 뒷면 사진을 사용해 주세요.</p></div>
+          <button type="button" className="redeem-flow-photo-picker" onClick={() => photoInputRef.current?.click()}><RedeemIcon name="photo" /><b>{readingImage ? '사진 확인 중...' : '사진 선택하기'}</b></button>
+          <button type="button" className="redeem-flow-demo" onClick={previewDemoCard}>샘플 카드로 3단계 미리보기</button>
+        </>}
+        <input ref={photoInputRef} className="redeem-flow-file" type="file" accept="image/*" capture="environment" onChange={onQrImageChange} disabled={readingImage} />
+      </section>}
+
+      {step === 3 && <section className="redeem-flow-confirm">
+        <div className="redeem-flow-intro"><h1>카드 정보를 확인해 주세요</h1><p>등록할 카드가 맞는지 확인한 뒤 컬렉션에 추가해요.</p></div>
+        <article className="redeem-flow-confirm-card">
+          <div className="redeem-flow-confirm-image"><img src={registrationCardImage} alt="하린 Nebula 버전 카드" /><span>SR</span></div>
+          <div><small>드림스케이프 2026 SPRING</small><h3>하린 · Nebula Ver.</h3><b>SR</b><p>{isDemo ? '샘플 미리보기 카드' : '인증 코드 확인 완료'}</p></div>
+        </article>
+        <div className="redeem-flow-confirm-notice"><RedeemIcon name="scan" /><span><b>카드 정보 확인 완료</b><small>다음 단계에서 카드가 공개되고 컬렉션에 추가돼요.</small></span></div>
+        <button type="button" className="primary redeem-flow-step-button" disabled={saving} onClick={confirmRegistration}>{saving ? '등록 중...' : '이 카드 등록하기'}</button>
+      </section>}
+
+      {message && <p ref={messageRef} className={messageIsError ? 'form-message error-message' : 'form-message'} role={messageIsError ? 'alert' : 'status'}>{message}</p>}
+    </div>
+  </div>
 }
 
-export function RedeemIcon({ name }: { name: 'scan' | 'photo' | 'code' }) {
+export function RedeemIcon({ name }: { name: 'scan' | 'photo' | 'code' | 'back' | 'chevron' }) {
   const paths = {
     scan: 'M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8M12 8v8',
     photo: 'M4 6a2 2 0 0 1 2-2h2l1.2-1.5h5.6L16 4h2a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6ZM12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z',
     code: 'M8 8 4 12l4 4M16 8l4 4-4 4M14 5l-4 14',
+    back: 'm15 18-6-6 6-6',
+    chevron: 'm9 18 6-6-6-6',
   } as const
   return <span className="redeem-method-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d={paths[name]} fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" /></svg></span>
 }

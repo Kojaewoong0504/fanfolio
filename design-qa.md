@@ -127,6 +127,181 @@ Final result: `passed`
 
 final result: passed
 
+---
+
+# Collection recent-card image fill QA — 2026-08-17
+
+- Source visual truth: user browser annotation on the first recent card at `http://127.0.0.1:4173/collection`.
+- Root cause: the 150px card used a fixed 112px image plus a 24px status row, exposing 12px of the card's dark fallback background between them.
+- Fix: the image height now derives from the card height minus the 24px status row at every supported viewport; existing overlays, crop origin, rarity, favorite, and status treatments remain unchanged.
+- Browser geometry after reload: image bottom **509.49px**, status top **509.49px**, gap **0px**.
+- Visual result: the portrait now continues directly to the lavender `신규` row with no black strip.
+- Validation: **90/90 tests passed**, lint passed, production build passed, and `git diff --check` passed.
+
+final result: passed
+
+---
+
+# Registration completion icon cleanup — 2026-08-17
+
+- Source visual truth: `/Users/gojaewoong/Downloads/스크린샷 2026-08-16 오후 11.27.23.png` and `/Users/gojaewoong/Downloads/스크린샷 2026-08-16 오후 11.27.39.png`.
+- Implementation: `http://127.0.0.1:4173/reveal/qa-registration-complete` at the completed `4 / 4` state.
+- Replaced the repeated four-point sparkle decoration with a dedicated transparent celebration asset containing the reference-style check badge and restrained square confetti.
+- Replaced the fan-level sparkle with a people icon and a dedicated five-point star gauge asset.
+- Removed the generic sparkle icon from onboarding, collection summary, notification, reveal metadata, and registration bonus surfaces; each now uses a role-specific icon.
+- Browser verification confirmed the completion heading, card, collection progress, fan-level card, mission reward, and onward actions remain present and readable.
+- Validation: **90/90 tests passed**, lint passed, production build passed, and `git diff --check` passed.
+
+final result: passed
+
+---
+
+# Random-card reveal flow QA — 2026-08-16
+
+## Comparison setup
+
+- Source visual truth, reveal step 3: `/Users/gojaewoong/.codex/generated_images/01a0029d-3fcf-70f0-9e6a-356bd2ea97ad/exec-eba1945b-0f45-4ce3-92d5-d3cb95f37026.png`.
+- Combined reference + implementation evidence: `docs/design/qa/card-reveal-reference-vs-implementation.png`.
+- Browser route: `http://127.0.0.1:4173/reveal/qa-registration-complete`.
+- State sequence: unidentified random card → card reveal **3 / 4** → collection addition → registration complete **4 / 4**.
+
+## Findings and fixes
+
+1. **P1 resolved — the pre-reveal state exposed the card identity.** The blurred portrait was replaced by a generated mystery-card back with no person, silhouette, name, rarity, or readable identity.
+2. **P1 resolved — registration and random reveal semantics were mixed.** Only the random-card QA path uses the mystery reveal; known-card confirmation paths enter the revealed state without asking the user to rediscover a card they already identified.
+3. **P1 resolved — the reveal reference was skipped.** `카드 공개하기` now opens a dedicated **3 / 4** result matching the supplied hierarchy before `컬렉션에 추가` advances to **4 / 4**.
+4. **P1 resolved — revealed and completed card metadata diverged.** The random path consistently carries `하린 · Nebula Ver.`, `SR`, `드림스케이프 2026 SPRING`, and the same artwork into the completion screen.
+
+## Verification
+
+- [x] Mystery state contains the generated question-mark card and no visible member identity.
+- [x] Browser semantics expose `아직 공개되지 않은 랜덤 카드` before reveal.
+- [x] Reveal state exposes `SR`, `DS-HR-024`, `1번째`, `+100 XP`, and `컬렉션에 추가`.
+- [x] Completion state preserves the revealed card identity and rarity.
+- [x] Reference and implementation were reviewed together in one comparison image.
+- [x] Targeted registration suite: **15 passed**.
+- [x] `npm run lint`.
+- [x] `npm run build`.
+
+No actionable P0/P1/P2 finding remains in the requested random-card reveal flow.
+
+final result: passed
+
+---
+
+# Card registration entry and 4-step flow QA — 2026-08-16
+
+## Comparison setup
+
+- Source visual truth, registration step 1: `/Users/gojaewoong/.codex/generated_images/01a0029d-3fcf-70f0-9e6a-356bd2ea97ad/exec-15e431eb-6c85-4482-a6ee-30e717adbc96.png` (**853 × 1844 px**).
+- Source visual truth, registration complete: `/Users/gojaewoong/.codex/generated_images/01a0029d-3fcf-70f0-9e6a-356bd2ea97ad/exec-7b46396d-b6d0-40ea-9c7d-7a3c5dc80f4b.png` (**853 × 1844 px**).
+- Implementation, registration step 1: `.tmp-registration-qa.png` (**478 × 905 px**).
+- Implementation, registration complete: `.tmp-registration-complete-qa.png` (**478 × 905 px**).
+- Browser viewport: **493 × 933 CSS px**, device scale factor 1.
+- State: signed-in collection view, visible `새 카드 등록하기` entry, registration method selection, and `/reveal/qa-registration-complete` success state.
+
+## Findings and comparison history
+
+1. **P1 resolved — no visible path into card registration.** A persistent `새 카드 등록하기` action now appears directly below collection progress and opens the four-step registration flow.
+2. **P1 resolved — generic blurred preview did not read as a collectible card.** The preview now uses the generated purple-stage idol card asset with an SR badge and the reference tilt/crop treatment.
+3. **P2 resolved — completion-level panel was visually empty.** The fan-level stat now includes the circular star progress emblem shown by the source composition.
+4. **P2 resolved — next-action icons did not match their destinations.** Collection uses the bookmark/collection icon and additional registration uses the scan icon.
+5. **P2 resolved — product naming drift.** The completion CTA and onboarding copy consistently use `팬폴리오`; regression coverage rejects `팬포리오` in the implementation.
+
+## Required fidelity surfaces
+
+- Fonts and typography: compact mobile heading, body, option-label, and progress-label hierarchy preserves Korean wrapping without overflow.
+- Spacing and layout rhythm: topbar, 1/4 progress, card preview, three method rows, footer CTA, 4/4 summary cards, and next actions retain the source order and mobile density.
+- Colors and visual tokens: existing violet/blue gradient, pale lavender borders, mint completion state, and dark navy text are preserved.
+- Image quality and asset fidelity: the new **1024 × 1536 px** generated card image is stored in the project and rendered with cover cropping; no placeholder image remains in the registration preview.
+- Copy and content: registration methods, completion labels, reward copy, and the `팬폴리오` brand spelling match the approved flow.
+
+## Verification
+
+- [x] The collection entry is visible and opens `/redeem`.
+- [x] Registration screen exposes all three methods and the `다음` action.
+- [x] Completion screen exposes collection, additional registration, and start actions.
+- [x] Reference and implementation captures were reviewed together for both 1/4 and 4/4 states.
+- [x] Browser console check found no warnings or errors during the visual pass.
+- [x] Full frontend suite: **78 passed**.
+- [x] Production build passed.
+- [x] `git diff --check` passed.
+
+No actionable P0/P1/P2 findings remain in the requested card-registration scope.
+
+final result: passed
+
+---
+
+# Card registration complete QA — 2026-08-16
+
+## Comparison setup
+
+- Source visual truth: `/Users/gojaewoong/.codex/generated_images/01a0029d-3fcf-70f0-9e6a-356bd2ea97ad/exec-7b46396d-b6d0-40ea-9c7d-7a3c5dc80f4b.png`
+- Source dimensions: **852 × 1852 px** (approximately 426 × 926 CSS px at 2× density).
+- Implementation capture: `registration-complete-implementation.png`.
+- Browser route: `http://127.0.0.1:4173/reveal/qa-registration-complete`.
+- State: authenticated, a real locally stored card revealed, completion step **4 / 4**.
+
+## Fidelity and behavior
+
+- [x] Registration-complete hierarchy matches the reference: compact toolbar, completed progress, success hero, card summary, collection/fan statistics, completed mission, next actions, and primary CTA.
+- [x] The card summary uses live card artwork and metadata instead of duplicating the mock reference copy.
+- [x] The 430px surface stays inside the browser viewport with no DOM-level horizontal overflow; a crop visible in the screenshot transport was checked against rendered element bounds and is not layout overflow.
+- [x] Icons use the existing vector icon component rather than emoji, text glyphs, or CSS-drawn approximations.
+- [x] `보관함에서 카드 보기` navigates to `/collection`.
+- [x] `새 카드 더 등록하기` opens `/redeem` and the registration dialog.
+- [x] `홈으로 이동` navigates to `/home`.
+- [x] The layout falls back to a single-column action grid at 360px and respects reduced-motion preferences.
+
+## Findings
+
+- P0: none.
+- P1: none.
+- P2: the live QA card intentionally differs from the generated mock's member, rarity, and collection name; the visual structure and data bindings are preserved.
+
+Final result: `passed`
+
+---
+
+# Onboarding four-group catalog QA — 2026-08-16
+
+## Comparison setup
+
+- Source visual truth: `/Users/gojaewoong/.codex/generated_images/01a0029d-3fcf-70f0-9e6a-356bd2ea97ad/exec-c2918743-7dd7-465d-823d-1d60e4096ff5.png`
+- Source pixels: **853 × 1844 px**.
+- Implementation screenshot: unavailable for the updated authenticated state.
+- Browser viewport: **493 × 933 CSS px**.
+- Intended state: onboarding step 1 with four artist groups in the existing two-column choice grid.
+
+## Evidence and findings
+
+- The browser session showed the onboarding screen before the backend restart, but its in-memory access token was cleared by the restart. The refreshed page therefore returned to the signed-out login state and cannot serve as same-state comparison evidence.
+- The local demo database contains exactly four artists and three selectable members per artist.
+- The catalog contract verifies all four artist records and verifies member lookup for an added group.
+- Existing onboarding CSS retains the approved `repeat(2, minmax(0, 1fr))` artist grid, so the four returned records occupy a 2 × 2 layout without a new layout override.
+
+## Required fidelity surfaces
+
+- Fonts and typography: unchanged from the previously implemented onboarding reference.
+- Spacing and layout rhythm: unchanged two-column choice-card grid; live authenticated capture remains required.
+- Colors and visual tokens: unchanged selection, border, and violet accent tokens.
+- Image quality and asset fidelity: four existing first-party Fanfolio images are assigned; live crop and fallback behavior remain to be visually confirmed.
+- Copy and content: four group names and their three-member follow-up choices are backed by the demo catalog.
+
+## Verification
+
+- [x] Backend contract: **27 passed**.
+- [x] Frontend regression suite: **68 passed**.
+- [x] Frontend lint.
+- [x] Frontend production build.
+- [x] `git diff --check`.
+- [ ] Same-state authenticated browser capture and combined visual comparison.
+
+No automated regression remains. Visual handoff is blocked only by the restarted local browser session being signed out.
+
+final result: blocked
+
 ## Event detail reference implementation — 2026-08-16
 
 ### Source and implementation evidence
@@ -150,6 +325,43 @@ final result: passed
 - [x] `npm run build`.
 - [x] `npm test -- --runInBand` (63 passed; one existing source-contract assertion was restored and is now expected to pass on rerun).
 - [x] `git diff --check`.
+
+final result: passed
+
+---
+
+# Registration reveal and celebration polish QA — 2026-08-17
+
+## Comparison setup
+
+- Source hero crop: `/Users/gojaewoong/Downloads/스크린샷 2026-08-16 오후 11.27.23.png` (**756 × 348 px**).
+- Source progress crop: `/Users/gojaewoong/Downloads/스크린샷 2026-08-16 오후 11.27.39.png` (**784 × 272 px**).
+- Browser route: `http://127.0.0.1:4173/reveal/qa-registration-complete`.
+- Verified sequence: mystery card → **900ms** reveal transition → revealed interactive card → collection completion.
+- Visual state: QA random-card path at steps **3 / 4** and **4 / 4**, scrolled to the top before the final completion capture.
+
+## Findings and fixes
+
+1. **P1 resolved — reveal changed screens without a visible transition.** The mystery card now brightens, scales, rotates in 3D, emits a violet flare, exposes a live progress label, and disables the CTA during the transition.
+2. **P2 resolved — completion did not feel celebratory.** The completion hero now uses a larger glowing check medallion, radial light, and eight animated vector sparkles around the success mark.
+3. **P2 resolved — progress cards lacked the reference hierarchy.** Collection count is presented as `1 / 40`; fan level shows `Lv.1`, `100 XP 획득`, a large circular arc emblem, and separate progress tracks.
+4. **P2 resolved — topbar back glyph was optically right-heavy.** The SVG path and icon transform were shifted left inside the circular button.
+5. **P2 resolved — the terminal CTA implied first-time product onboarding.** `팬폴리오 시작하기` was replaced with the destination-specific `홈으로 이동`.
+
+## Browser and regression verification
+
+- [x] Mystery state contains no card identity and exposes `카드 공개하기`.
+- [x] Mid-transition state exposes `카드를 공개하는 중이에요` and a disabled `카드 공개 중…` action.
+- [x] Revealed state exposes the interactive front/back card and `컬렉션에 추가`.
+- [x] Completion state exposes the celebratory hero, `1 / 40`, `Lv.1`, `100 XP 획득`, and `홈으로 이동`.
+- [x] Final completion capture shows the back glyph optically centered in its circular control.
+- [x] Focused reference crops and the live browser capture were visually reviewed in the same QA pass; a synthetic browser-side montage was not used because the browser blocked `data:` navigation.
+- [x] Targeted registration-complete suite: **11 passed**.
+- [x] Full frontend suite: **90 passed**.
+- [x] `npm run lint`.
+- [x] `npm run build`.
+
+No actionable P0/P1/P2 finding remains in this requested reveal/completion scope.
 
 final result: passed
 
@@ -356,5 +568,17 @@ final result: blocked
 - [x] Reference and corrected implementation reviewed together in the combined comparison image.
 
 No actionable P0/P1/P2 findings remain in the requested milestone rail scope.
+
+final result: passed
+
+---
+
+# Latest card-registration verification — 2026-08-16
+
+- Source visual truth: `exec-15e431eb-6c85-4482-a6ee-30e717adbc96.png` for 1/4 and `exec-7b46396d-b6d0-40ea-9c7d-7a3c5dc80f4b.png` for 4/4.
+- Browser evidence: `.tmp-registration-qa.png` and `.tmp-registration-complete-qa.png`, captured at a **493 × 933 CSS px** mobile viewport.
+- Verified state: the visible collection CTA opens `/redeem`; all three registration methods render; the generated SR card asset is present; the 4/4 fan-level emblem and destination-specific action icons render; the CTA uses `팬폴리오`.
+- Comparison result: typography, spacing, violet/blue token use, image crop, icon meaning, and copy have no remaining P0/P1/P2 mismatch in this requested scope.
+- Validation: **78/78 tests passed**, production build passed, `git diff --check` passed, and the visual browser pass produced no console warnings or errors.
 
 final result: passed

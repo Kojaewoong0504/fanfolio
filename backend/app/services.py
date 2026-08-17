@@ -1084,17 +1084,31 @@ async def ensure_demo_catalog(session: AsyncSession) -> None:
     users, admin sessions, or redeem codes, so enabling it in a hosted
     environment cannot grant access or manufacture collectible inventory.
     """
-    artist_id = "artist_nova3"
-    artist = await session.get(Artist, artist_id)
-    if artist is None:
-        session.add(Artist(id=artist_id, name="드림스케이프", image_url="/src/assets/hero.png"))
+    artist_rows = (
+        ("artist_nova3", "드림스케이프", "/src/assets/hero.png"),
+        ("artist_luminous", "루미너스", "/src/assets/fan-week-lavender-meet.png"),
+        ("artist_velora", "벨로라", "/src/assets/fan-week-night-stage.png"),
+        ("artist_stellon", "스텔라온", "/src/assets/login/dreamscape-group.png"),
+    )
+    for artist_id, name, image_url in artist_rows:
+        if await session.get(Artist, artist_id) is None:
+            session.add(Artist(id=artist_id, name=name, image_url=image_url))
 
     member_rows = (
-        ("member_yuna", "유나"),
-        ("member_minho", "민호"),
-        ("member_jei", "제이"),
+        ("member_yuna", "artist_nova3", "유나"),
+        ("member_minho", "artist_nova3", "민호"),
+        ("member_jei", "artist_nova3", "제이"),
+        ("member_luminous_arin", "artist_luminous", "아린"),
+        ("member_luminous_ian", "artist_luminous", "이안"),
+        ("member_luminous_sena", "artist_luminous", "세나"),
+        ("member_velora_haneul", "artist_velora", "하늘"),
+        ("member_velora_leo", "artist_velora", "레오"),
+        ("member_velora_rin", "artist_velora", "린"),
+        ("member_stellon_dan", "artist_stellon", "단"),
+        ("member_stellon_roa", "artist_stellon", "로아"),
+        ("member_stellon_siwoo", "artist_stellon", "시우"),
     )
-    for member_id, name in member_rows:
+    for member_id, artist_id, name in member_rows:
         if await session.get(Member, member_id) is None:
             session.add(Member(id=member_id, artist_id=artist_id, name=name))
 
@@ -1106,7 +1120,7 @@ async def ensure_demo_catalog(session: AsyncSession) -> None:
                 status="published",
                 release_policy="partner_and_platform",
                 release_status="published",
-                artist_id=artist_id,
+                artist_id="artist_nova3",
                 member_id="member_yuna",
                 season_name="2026 SPRING",
                 rarity="Special",
@@ -1431,9 +1445,33 @@ async def seed_core(session: AsyncSession) -> dict:
     session.add_all(
         [
             Artist(id="artist_nova3", name="드림스케이프", image_url="/src/assets/hero.png"),
+            Artist(
+                id="artist_luminous",
+                name="루미너스",
+                image_url="/src/assets/fan-week-lavender-meet.png",
+            ),
+            Artist(
+                id="artist_velora",
+                name="벨로라",
+                image_url="/src/assets/fan-week-night-stage.png",
+            ),
+            Artist(
+                id="artist_stellon",
+                name="스텔라온",
+                image_url="/src/assets/login/dreamscape-group.png",
+            ),
             Member(id="member_yuna", artist_id="artist_nova3", name="유나"),
             Member(id="member_minho", artist_id="artist_nova3", name="민호"),
             Member(id="member_jei", artist_id="artist_nova3", name="제이"),
+            Member(id="member_luminous_arin", artist_id="artist_luminous", name="아린"),
+            Member(id="member_luminous_ian", artist_id="artist_luminous", name="이안"),
+            Member(id="member_luminous_sena", artist_id="artist_luminous", name="세나"),
+            Member(id="member_velora_haneul", artist_id="artist_velora", name="하늘"),
+            Member(id="member_velora_leo", artist_id="artist_velora", name="레오"),
+            Member(id="member_velora_rin", artist_id="artist_velora", name="린"),
+            Member(id="member_stellon_dan", artist_id="artist_stellon", name="단"),
+            Member(id="member_stellon_roa", artist_id="artist_stellon", name="로아"),
+            Member(id="member_stellon_siwoo", artist_id="artist_stellon", name="시우"),
             Card(
                 id="card_published",
                 name="컴백 기념 사인 카드",

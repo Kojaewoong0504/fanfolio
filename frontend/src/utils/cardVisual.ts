@@ -7,7 +7,9 @@ import cardPlaceholder from '../assets/card-example.svg'
 export function demoCardImage(imageUrl: string, seed = ''): string {
   // A released card must use its stored asset URL. The placeholder is only
   // used for legacy records that still point at the old hero.png demo asset.
-  if (imageUrl && !imageUrl.includes('hero.png')) return imageUrl
+  // Legacy demo records may point at the generic silhouette SVG as well as the
+  // old hero image. Treat both as placeholders so member-specific artwork wins.
+  if (imageUrl && !imageUrl.includes('hero.png') && !imageUrl.includes('card-example')) return imageUrl
   if (!seed.startsWith('member:') && !seed.startsWith('artist:')) return cardPlaceholder
   if (seed.includes('유나') || seed.toLowerCase().includes('yuna')) return cardYuna
   if (seed.includes('민호') || seed.toLowerCase().includes('minho')) return cardMinho

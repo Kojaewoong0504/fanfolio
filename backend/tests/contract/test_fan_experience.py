@@ -750,12 +750,31 @@ def test_catalog_supports_search_and_pagination(actors: dict[str, TestClient]) -
     assert catalog["meta"]["pagination"] == {"page": 1, "pageSize": 1, "total": 1}
 
 
-def test_catalog_exposes_published_artists_and_members(
+def test_catalog_exposes_onboarding_artists_and_members(
     actors: dict[str, TestClient],
 ) -> None:
     artists = assert_success(actors["fan"].get("/api/catalog/artists"))
     assert artists["items"] == [
-        {"id": "artist_nova3", "name": "드림스케이프", "imageUrl": "/src/assets/hero.png"}
+        {
+            "id": "artist_nova3",
+            "name": "드림스케이프",
+            "imageUrl": "/src/assets/hero.png",
+        },
+        {
+            "id": "artist_luminous",
+            "name": "루미너스",
+            "imageUrl": "/src/assets/fan-week-lavender-meet.png",
+        },
+        {
+            "id": "artist_velora",
+            "name": "벨로라",
+            "imageUrl": "/src/assets/fan-week-night-stage.png",
+        },
+        {
+            "id": "artist_stellon",
+            "name": "스텔라온",
+            "imageUrl": "/src/assets/login/dreamscape-group.png",
+        },
     ]
 
     members = assert_success(
@@ -766,6 +785,29 @@ def test_catalog_exposes_published_artists_and_members(
         "member_minho",
         "member_yuna",
     }
+
+    expected_demo_members = {
+        "artist_luminous": {
+            "member_luminous_arin",
+            "member_luminous_ian",
+            "member_luminous_sena",
+        },
+        "artist_velora": {
+            "member_velora_haneul",
+            "member_velora_leo",
+            "member_velora_rin",
+        },
+        "artist_stellon": {
+            "member_stellon_dan",
+            "member_stellon_roa",
+            "member_stellon_siwoo",
+        },
+    }
+    for artist_id, expected_member_ids in expected_demo_members.items():
+        mock_members = assert_success(
+            actors["fan"].get("/api/catalog/members", params={"artistId": artist_id})
+        )
+        assert {member["id"] for member in mock_members["items"]} == expected_member_ids
 
 
 def test_catalog_can_filter_cards_by_artist_and_member(
