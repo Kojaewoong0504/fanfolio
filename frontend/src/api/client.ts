@@ -6,9 +6,13 @@ const isDeployedFanApp = typeof window !== 'undefined' && window.location.hostna
 const apiBaseUrl = isDeployedFanApp ? '/api' : configuredApiBaseUrl
 const oauthApiBaseUrl = configuredApiBaseUrl.startsWith('/') ? apiBaseUrl : configuredApiBaseUrl
 const API_REQUEST_TIMEOUT_MS = 15_000
+const MEDIA_REQUEST_TIMEOUT_MS = 10_000
+const MEDIA_CACHE_LIMIT = 64
 
 let accessToken: string | null = null
 let refreshInFlight: Promise<string | null> | null = null
+const mediaUrlCache = new Map<string, string>()
+const mediaRequestCache = new Map<string, Promise<string | null>>()
 
 export function setAccessToken(token: string | null): void {
   accessToken = token
@@ -62,18 +66,53 @@ export function resolveApiUrl(path: string | null | undefined): string {
   return new URL(path, `${apiOrigin}/`).toString()
 }
 
+/** Public fan media can be loaded as a normal image so the browser/CDN cache works. */
+export function isPublicFanMediaPath(path: string): boolean {
+  return /^\/api\/(?:cards|rewards)\/[^/]+\/image(?:\?|$)/.test(path)
+}
+
 export async function fetchAuthenticatedMedia(path: string): Promise<string | null> {
-  const request = async () => fetch(resolveApiUrl(path), {
-    credentials: 'include',
-    headers: {
-      'X-Fanfolio-Client': 'fan',
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-    },
-  })
-  let response = await request()
-  if (response.status === 401 && await refreshAccessToken()) response = await request()
-  if (!response.ok) return null
-  return URL.createObjectURL(await response.blob())
+  if (isPublicFanMediaPath(path)) return resolveApiUrl(path)
+  const cacheKey = resolveApiUrl(path)
+  const cachedUrl = mediaUrlCache.get(cacheKey)
+  if (cachedUrl) return cachedUrl
+  const pending = mediaRequestCache.get(cacheKey)
+  if (pending) return pending
+
+  const requestPromise = (async () => {
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), MEDIA_REQUEST_TIMEOUT_MS)
+    try {
+      const request = async () => fetch(cacheKey, {
+        credentials: 'include',
+        signal: controller.signal,
+        headers: {
+          'X-Fanfolio-Client': 'fan',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+      })
+      let response = await request()
+      if (response.status === 401 && await refreshAccessToken()) response = await request()
+      if (!response.ok) return null
+      const objectUrl = URL.createObjectURL(await response.blob())
+      mediaUrlCache.set(cacheKey, objectUrl)
+      while (mediaUrlCache.size > MEDIA_CACHE_LIMIT) {
+        const oldest = mediaUrlCache.keys().next().value
+        if (!oldest) break
+        const evicted = mediaUrlCache.get(oldest)
+        mediaUrlCache.delete(oldest)
+        if (evicted) URL.revokeObjectURL(evicted)
+      }
+      return objectUrl
+    } catch {
+      return null
+    } finally {
+      window.clearTimeout(timeout)
+      mediaRequestCache.delete(cacheKey)
+    }
+  })()
+  mediaRequestCache.set(cacheKey, requestPromise)
+  return requestPromise
 }
 
 export function notificationStreamUrl(): string {

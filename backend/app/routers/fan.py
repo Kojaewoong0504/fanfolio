@@ -822,7 +822,10 @@ async def card_image(card_id: str, session: DbSession) -> Response:
     if not asset or not asset.storage_path:
         raise AppError(404, "CARD_IMAGE_NOT_READY", "카드 이미지가 아직 준비되지 않았습니다.")
     return storage_response(
-        configured_asset_storage(), asset.storage_path, media_type=asset.content_type or "image/png"
+        configured_asset_storage(),
+        asset.storage_path,
+        media_type=asset.content_type or "image/png",
+        cache_control="public, max-age=300, s-maxage=86400, stale-while-revalidate=604800",
     )
 
 
@@ -844,7 +847,10 @@ async def reward_image(reward_id: str, session: DbSession) -> Response:
     ):
         raise AppError(404, "REWARD_IMAGE_NOT_FOUND", "보상 이미지를 찾을 수 없습니다.")
     return storage_response(
-        configured_asset_storage(), asset.storage_path, media_type=asset.content_type or "image/png"
+        configured_asset_storage(),
+        asset.storage_path,
+        media_type=asset.content_type or "image/png",
+        cache_control="public, max-age=300, s-maxage=86400, stale-while-revalidate=604800",
     )
 
 

@@ -243,13 +243,17 @@ def storage_response(
     *,
     media_type: str,
     filename: str | None = None,
+    cache_control: str | None = None,
 ) -> Response:
     """Serve either a local file or a remote object through one route helper."""
     if storage_path.startswith("s3://"):
         headers = {}
         if filename:
             headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+        if cache_control:
+            headers["Cache-Control"] = cache_control
         return Response(
             content=storage.read_bytes(storage_path), media_type=media_type, headers=headers
         )
-    return FileResponse(storage_path, media_type=media_type, filename=filename)
+    headers = {"Cache-Control": cache_control} if cache_control else None
+    return FileResponse(storage_path, media_type=media_type, filename=filename, headers=headers)
