@@ -83,3 +83,35 @@ body main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-
 body main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-artist-art{width:calc(100% + 30px)!important;margin-left:-30px!important}
 body main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-hero-copy h2{font-size:16px!important;white-space:nowrap!important}
 body main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-hero-copy>p{font-size:10px!important;white-space:nowrap!important}
+
+/* Keep the first paint intentional while authenticated growth data is pending. */
+.fan-growth.full.fan-growth-loading{display:grid!important;gap:12px!important;padding:0 0 118px!important;background:transparent!important}
+.fan-growth-loading-hero,.fan-growth-loading-section{position:relative;display:grid;gap:12px;overflow:hidden;border:1px solid #e7e5f4;border-radius:20px;background:#fff;box-shadow:0 8px 24px rgba(74,63,220,.05)}
+.fan-growth-loading-hero{min-height:232px;align-content:center;padding:24px 20px}
+.fan-growth-loading-kicker,.fan-growth-loading-title,.fan-growth-loading-copy,.fan-growth-loading-section-title,.fan-growth-loading-rail i,.fan-growth-loading-row i,.fan-growth-loading-row span,.fan-growth-loading-row b{display:block;border-radius:99px;background:linear-gradient(90deg,#eeecf9 25%,#faf9ff 50%,#eeecf9 75%);background-size:220% 100%;animation:fan-growth-loading-shimmer 1.4s ease-in-out infinite}
+.fan-growth-loading-kicker{width:128px;height:13px}
+.fan-growth-loading-title{width:190px;height:28px}
+.fan-growth-loading-copy{width:250px;height:12px}
+.fan-growth-loading-progress{height:5px;margin-top:5px;overflow:hidden;border-radius:99px;background:#eeecfa}
+.fan-growth-loading-progress i{display:block;width:38%;height:100%;border-radius:inherit;background:#6757ed;animation:fan-growth-loading-progress 1.35s ease-in-out infinite}
+.fan-growth-loading-status{display:flex;align-items:center;gap:8px;margin-top:5px;color:#4e46a9;font-size:13px;font-weight:700}
+.fan-growth-loading-status small{color:#8a8ea4;font-size:11px;font-weight:500}
+.fan-growth-loading-spinner{width:16px;height:16px;border:2px solid #dcd9fb;border-top-color:#5e4fee;border-radius:50%;animation:fan-growth-loading-spin .8s linear infinite}
+.fan-growth-loading-hero>small{color:#8a8ea4;font-size:11px}
+.fan-growth-loading-section{min-height:126px;padding:16px}
+.fan-growth-loading-section-title{width:120px;height:16px}
+.fan-growth-loading-rail{display:flex;gap:10px}
+.fan-growth-loading-rail i{flex:1;height:70px;border-radius:15px}
+.fan-growth-loading-track{height:4px;border-radius:99px;background:#eeecf9}
+.fan-growth-loading-row{grid-template-columns:42px 1fr 22px;align-items:center;min-height:68px}
+.fan-growth-loading-row i{width:42px;height:42px;border-radius:50%}
+.fan-growth-loading-row span{width:70%;height:14px}
+.fan-growth-loading-row b{width:18px;height:18px}
+.fan-growth-empty-state{display:grid;gap:5px;min-height:82px;align-content:center;padding:14px 18px;border:1px dashed #dcd9f2;border-radius:16px;background:#faf9ff;color:#535b75;text-align:center}
+.fan-growth-empty-state strong{color:#303855;font-size:13px}
+.fan-growth-empty-state small{color:#888da4;font-size:10px;line-height:1.5}
+.fan-growth-next-reward-empty{min-height:68px;text-align:left}
+@keyframes fan-growth-loading-shimmer{0%{background-position:100% 0}100%{background-position:-100% 0}}
+@keyframes fan-growth-loading-progress{0%{transform:translateX(-110%)}100%{transform:translateX(290%)}}
+@keyframes fan-growth-loading-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.fan-growth-loading-kicker,.fan-growth-loading-title,.fan-growth-loading-copy,.fan-growth-loading-section-title,.fan-growth-loading-rail i,.fan-growth-loading-row i,.fan-growth-loading-row span,.fan-growth-loading-row b,.fan-growth-loading-progress i,.fan-growth-loading-spinner{animation:none!important}}

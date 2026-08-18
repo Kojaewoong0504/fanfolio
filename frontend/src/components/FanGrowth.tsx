@@ -79,6 +79,26 @@ function rewardArtworkUrl(reward: { id?: string; rewardId?: string; metadata?: R
   return null
 }
 
+function FanGrowthLoading() {
+  return <section className="fan-growth full fan-growth-reference fan-growth-loading" aria-label="팬 레벨 불러오는 중" aria-busy="true">
+    <div className="fan-growth-loading-hero">
+      <span className="fan-growth-loading-kicker" />
+      <span className="fan-growth-loading-title" />
+      <span className="fan-growth-loading-copy" />
+      <div className="fan-growth-loading-progress" aria-hidden="true"><i /></div>
+      <span className="fan-growth-loading-status"><i className="fan-growth-loading-spinner" aria-hidden="true" />팬 레벨을 불러오는 중이에요</span>
+      <small>현재 팬 활동과 공개된 보상을 확인하고 있어요.</small>
+    </div>
+    <div className="fan-growth-loading-section">
+      <span className="fan-growth-loading-section-title" />
+      <div className="fan-growth-loading-rail"><i /><i /><i /></div>
+      <div className="fan-growth-loading-track" />
+    </div>
+    <div className="fan-growth-loading-section fan-growth-loading-row"><i /><span /><b /></div>
+    <div className="fan-growth-loading-section fan-growth-loading-row"><i /><span /><b /></div>
+  </section>
+}
+
 export { rewardArtworkUrl }
 
 function progressPercent(current: number, target: number): number {
@@ -213,7 +233,7 @@ export function FanGrowth({ progression, globalProgression = null, artistScopes 
   }
 
   if (loading && !progression) {
-    return <section className="fan-growth-card" aria-label="나의 팬 활동" aria-busy="true"><span className="fan-growth-loader" aria-hidden="true" /><b>팬 활동을 불러오는 중이에요</b></section>
+    return <FanGrowthLoading />
   }
 
   if (error && !progression) {
@@ -284,8 +304,8 @@ export function FanGrowth({ progression, globalProgression = null, artistScopes 
       </section>
 
       <section className="fan-growth-reference-section fan-growth-milestone-section">
-        <div className="fan-growth-reference-title"><h2>레벨 마일스톤</h2><button type="button" onClick={() => onViewPass()}>전체 보기 <b aria-hidden="true">›</b></button></div>
-        {milestoneLevels.length > 0 ? <>
+        <div className="fan-growth-reference-title"><h2>레벨 마일스톤</h2>{currentSeason && <button type="button" onClick={() => onViewPass()}>전체 보기 <b aria-hidden="true">›</b></button>}</div>
+        {currentSeason && milestoneLevels.length > 0 ? <>
           <div ref={milestoneRailRef} className="fan-growth-milestones" role="list" aria-label="전체 레벨 마일스톤" tabIndex={0} onKeyDown={scrollMilestonesWithKeyboard} onScroll={handleMilestoneScroll}>
             {milestoneLevels.map(({ tier, ...item }) => <article className="fan-growth-pass-tier fan-growth-milestone" key={`${item.level}-${item.label}`} data-tier-id={tier.id} data-state={item.status} role="listitem">
               {item.status === 'currentLocked' && <span className="fan-growth-current-label">현재</span>}
@@ -298,24 +318,22 @@ export function FanGrowth({ progression, globalProgression = null, artistScopes 
             <b className="fan-growth-milestone-track-viewport" style={{ '--milestone-viewport-left': `${milestoneScroll.ratio * 100}%` } as CSSProperties} />
             {milestoneLevels.length > 1 && milestoneLevels.map((item, index) => <i key={`${item.level}-${item.label}-dot`} className={`fan-growth-milestone-track-dot ${index <= visibleMilestoneIndex ? 'is-active' : ''}`} style={{ left: `${index / (milestoneLevels.length - 1) * 100}%` }} />)}
           </div>
-        </> : <div className="fan-growth-milestone-placeholder" aria-label="관리자가 공개한 레벨 마일스톤 준비 중">
-          <div className="fan-growth-placeholder-milestones" aria-hidden="true">
-            <article className="is-current"><strong>Lv.1</strong><b>팬 시작 배지</b></article>
-            <article><strong>Lv.2</strong><b>미공개 콘텐츠</b></article>
-            <article><strong>Lv.3</strong><b>팬 전용 배지</b><span aria-hidden="true">⌕</span></article>
-          </div>
-          <div className="fan-growth-placeholder-track" aria-hidden="true"><i /><b /><b /><b /></div>
-          <p>관리자가 레벨 마일스톤을 공개하면 보상을 확인할 수 있어요.</p>
+        </> : <div className="fan-growth-empty-state" aria-label={currentSeason ? '공개된 레벨 마일스톤 없음' : '공개된 팬 패스 없음'}>
+          <strong>{currentSeason ? '공개된 레벨 마일스톤이 없어요' : '현재 공개된 팬 패스가 없어요'}</strong>
+          <small>{currentSeason ? '관리자가 마일스톤을 등록하면 보상을 확인할 수 있어요.' : '관리자가 팬 패스를 공개하면 레벨 보상과 마일스톤이 표시돼요.'}</small>
         </div>}
       </section>
 
       <section className="fan-growth-reference-section fan-growth-next-reward-section">
         <div className="fan-growth-reference-title"><h2>다음 보상</h2></div>
-        <button type="button" className="fan-growth-next-reward" onClick={() => onViewPass(nextPassTier?.id)}>
+        {currentSeason && (visibleBenefits[0] || nextPassTier) ? <button type="button" className="fan-growth-next-reward" onClick={() => onViewPass(nextPassTier?.id)}>
           <span className="fan-growth-next-reward-icon" aria-hidden="true">{rewardArtworkUrl(visibleBenefits[0] ?? nextPassTier?.reward) ? <img src={rewardArtworkUrl(visibleBenefits[0] ?? nextPassTier?.reward) ?? ''} alt="" /> : <GrowthGlyph kind="ticket" />}</span>
           <span className="fan-growth-next-reward-copy"><b>{visibleBenefits[0]?.name ?? nextPassTier?.reward?.name ?? `${scopeName} 다음 보상`}</b><small>{visibleBenefits[0] ? rewardLabel(visibleBenefits[0]) : nextPassTier ? `Lv.${Math.max(1, Math.floor(nextPassTier.requiredXp / 100) + 1)} 달성 시 획득` : `Lv.${progression.level.level + 1} 달성 시 확인`}</small></span>
           <b className="fan-growth-next-reward-arrow" aria-hidden="true">›</b>
-        </button>
+        </button> : <div className="fan-growth-empty-state fan-growth-next-reward-empty" role="status">
+          <strong>현재 다음 보상이 없어요</strong>
+          <small>공개된 팬 패스가 생기면 다음 보상이 표시돼요.</small>
+        </div>}
       </section>
 
       {selectedArtistId && globalProgression && <section className="fan-growth-global-section" aria-label="계정 전체 성장">
