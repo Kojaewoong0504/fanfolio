@@ -62,8 +62,57 @@ export function resolveApiUrl(path: string | null | undefined): string {
   return new URL(path, `${apiOrigin}/`).toString()
 }
 
+export async function fetchAuthenticatedMedia(path: string): Promise<string | null> {
+  const request = async () => fetch(resolveApiUrl(path), {
+    credentials: 'include',
+    headers: {
+      'X-Fanfolio-Client': 'fan',
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+  })
+  let response = await request()
+  if (response.status === 401 && await refreshAccessToken()) response = await request()
+  if (!response.ok) return null
+  return URL.createObjectURL(await response.blob())
+}
+
 export function notificationStreamUrl(): string {
   return `${apiBaseUrl}/notifications/stream?client=fan`
+}
+
+export async function connectNotificationStream(
+  onNotification: (item: NotificationItem) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  if (!accessToken) return
+  const response = await fetch(notificationStreamUrl(), {
+    credentials: 'include',
+    signal,
+    headers: {
+      'X-Fanfolio-Client': 'fan',
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
+  if (!response.ok) throw new ApiError(response.status, `알림 스트림 연결에 실패했습니다. (${response.status})`)
+  if (!response.body) return
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let eventName = ''
+  while (!signal.aborted) {
+    const chunk = await reader.read()
+    if (chunk.done) break
+    buffer += decoder.decode(chunk.value, { stream: true })
+    const lines = buffer.split(/\r?\n/)
+    buffer = lines.pop() ?? ''
+    for (const line of lines) {
+      if (line.startsWith('event:')) eventName = line.slice(6).trim()
+      if (line.startsWith('data:') && eventName === 'notification') {
+        try { onNotification(JSON.parse(line.slice(5).trim()) as NotificationItem) } catch { /* polling remains the source of truth */ }
+      }
+      if (!line.trim()) eventName = ''
+    }
+  }
 }
 
 export function oauthStartUrl(provider: 'google' | 'kakao'): string {
@@ -124,7 +173,17 @@ export type CatalogArtist = { id: string; name: string; imageUrl: string | null 
 export type CatalogMember = { id: string; artistId: string; name: string }
 
 export type FanEventStatus = 'upcoming' | 'active' | 'ended'
-export type FanEventType = 'announcement' | 'card_drop' | 'card' | 'fan_mission' | 'external'
+export type FanEventType = 'announcement' | 'comment' | 'card_drop' | 'card' | 'fan_mission' | 'external'
+export type FanEventRelatedCard = {
+  id: string
+  name: string
+  imageUrl: string
+  artistId: string | null
+  artistName: string | null
+  memberId: string | null
+  memberName: string | null
+  rarity: string | null
+}
 export type FanEvent = {
   id: string
   artistId: string | null
@@ -132,6 +191,8 @@ export type FanEvent = {
   title: string
   summary: string
   description: string
+  noticeItems: string[]
+  relatedCards: FanEventRelatedCard[]
   eventType: FanEventType
   status: FanEventStatus
   startsAt: string
@@ -139,15 +200,37 @@ export type FanEvent = {
   heroUrl: string | null
   ctaLabel: string | null
   ctaTarget: string | null
+  venue?: string | null
+  participantLimit?: number | null
+  participantCount?: number
+  applicationStartsAt?: string | null
+  applicationEndsAt?: string | null
+  applicationStatus?: 'upcoming' | 'available' | 'full' | 'closed' | 'applied'
+  applied?: boolean
 }
 export type EventPagination = { page: number; pageSize: number; total: number; totalPages: number }
 export type EventListResponse = { items: FanEvent[]; pagination: EventPagination }
+export type FanEventApplication = {
+  applicationId: string
+  eventId: string
+  status: string
+  createdAt: string
+  event: Pick<FanEvent, 'id' | 'title' | 'summary' | 'startsAt' | 'endsAt' | 'venue'>
+}
+export type FanEventComment = {
+  id: string
+  body: string
+  authorNickname: string
+  createdAt: string
+}
 export type FanHomeResponse = {
   featuredEvent: FanEvent | null
   upcomingEvents: FanEvent[]
   favoriteArtist: { id: string; name: string; imageUrl: string | null } | null
   newCards: CatalogCard[]
 }
+
+export type NotificationPreferences = { emailEnabled: boolean }
 
 export type NotificationItem = {
   id: string
@@ -163,7 +246,25 @@ export function getFanHome(): Promise<{ ok: true; data: FanHomeResponse }> {
   return apiFetch<{ ok: true; data: FanHomeResponse }>('/home')
 }
 
-export function getFanEvents(params: { status?: FanEventStatus; artistId?: string; page?: number; pageSize?: number } = {}): Promise<{ ok: true; data: EventListResponse }> {
+export function getNotificationPreferences(): Promise<{ ok: true; data: NotificationPreferences }> {
+  return apiFetch<{ ok: true; data: NotificationPreferences }>('/me/notification-preferences')
+}
+
+export function updateNotificationPreferences(emailEnabled: boolean): Promise<{ ok: true; data: NotificationPreferences }> {
+  return apiFetch<{ ok: true; data: NotificationPreferences }>('/me/notification-preferences', {
+    method: 'PATCH',
+    body: JSON.stringify({ emailEnabled }),
+  })
+}
+
+export function changeFanPassword(currentPassword: string, newPassword: string): Promise<{ ok: true; data: { changed: true } }> {
+  return apiFetch<{ ok: true; data: { changed: true } }>('/auth/fan/change-password', {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  })
+}
+
+export function getFanEvents(params: { status?: FanEventStatus | 'all'; artistId?: string; page?: number; pageSize?: number } = {}): Promise<{ ok: true; data: EventListResponse }> {
   const search = new URLSearchParams()
   search.set('status', params.status ?? 'active')
   search.set('page', String(params.page ?? 1))
@@ -176,6 +277,31 @@ export function getFanEvent(eventId: string): Promise<{ ok: true; data: FanEvent
   return apiFetch<{ ok: true; data: FanEvent }>(`/events/${encodeURIComponent(eventId)}`)
 }
 
+export function applyToFanEvent(eventId: string): Promise<{
+  ok: true
+  data: { id: string; eventId: string; status: string; createdAt: string }
+}> {
+  return apiFetch(`/events/${encodeURIComponent(eventId)}/applications`, { method: 'POST' })
+}
+
+export function getFanEventComments(eventId: string): Promise<{ ok: true; data: { items: FanEventComment[] } }> {
+  return apiFetch(`/events/${encodeURIComponent(eventId)}/comments`)
+}
+
+export function postFanEventComment(eventId: string, body: string): Promise<{ ok: true; data: FanEventComment }> {
+  return apiFetch(`/events/${encodeURIComponent(eventId)}/comments`, {
+    method: 'POST',
+    body: JSON.stringify({ body }),
+  })
+}
+
+export function getMyEventApplications(): Promise<{
+  ok: true
+  data: { items: FanEventApplication[] }
+}> {
+  return apiFetch('/me/event-applications')
+}
+
 export type CurrentUser = {
   id: string
   email: string | null
@@ -185,6 +311,10 @@ export type CurrentUser = {
   favoriteArtistIds: string[]
   favoriteMemberIds: string[]
   onboardingCompleted: boolean
+  followingCount: number
+  followerCount: number
+  points: number
+  hasPassword: boolean
 }
 
 export type RewardType = 'badge' | 'title' | 'profile_frame' | 'collection_theme' | 'digital_bonus'
@@ -204,6 +334,7 @@ export type RewardGrant = {
   rewardId: string
   type: RewardType
   name: string
+  metadata?: Record<string, unknown>
   grantedAt: string | null
   claimedAt: string | null
 }
@@ -229,6 +360,7 @@ export type PassTier = {
   rewardId: string | null
   claimed: boolean
   claimable: boolean
+  reward: { id: string; type: RewardType; name: string; metadata: Record<string, unknown> } | null
 }
 
 export type PassSeason = {
@@ -411,8 +543,12 @@ export async function apiFetch<T>(path: string, init?: RequestInit, allowRefresh
   }
 }
 
-export function getProgression(): Promise<{ ok: true, data: FanProgression }> {
-  return apiFetch<{ ok: true, data: FanProgression }>('/me/progression')
+function growthScopeQuery(artistId?: string | null): string {
+  return artistId ? `?artistId=${encodeURIComponent(artistId)}` : '?scope=global'
+}
+
+export function getProgression(artistId?: string | null): Promise<{ ok: true, data: FanProgression }> {
+  return apiFetch<{ ok: true, data: FanProgression }>(`/me/progression${growthScopeQuery(artistId)}`)
 }
 
 export function claimReward(grantId: string): Promise<{ ok: true, data: RewardGrant }> {
@@ -426,8 +562,8 @@ export function updateProfileEquipment(equipment: ProfileEquipment): Promise<{ o
   })
 }
 
-export function getFanPass(): Promise<{ ok: true, data: FanPass }> {
-  return apiFetch<{ ok: true, data: FanPass }>('/me/pass')
+export function getFanPass(artistId?: string | null): Promise<{ ok: true, data: FanPass }> {
+  return apiFetch<{ ok: true, data: FanPass }>(`/me/pass${growthScopeQuery(artistId)}`)
 }
 
 export function claimPassTier(tierId: string): Promise<{ ok: true, data: PassTierClaim }> {

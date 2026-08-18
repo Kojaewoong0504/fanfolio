@@ -9,7 +9,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 import qrcode
 from fastapi import APIRouter, Query, status
 from fastapi.responses import Response, StreamingResponse
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import delete, func, or_, select, update
 
 from app.admin_access import AdminContext
 from app.dependencies import CurrentAdmin, DbSession, RootAdminUser
@@ -244,6 +244,7 @@ async def pass_season_data(session: DbSession, season: PassSeason) -> dict:
     return {
         "id": season.id,
         "title": season.title,
+        "description": season.description,
         "organizationId": season.organization_id,
         "artistId": season.artist_id,
         "status": season.status,
@@ -365,6 +366,8 @@ def ensure_pass_season_visible(context: AdminContext, season: PassSeason) -> Non
 def ensure_engagement_approver_scope(
     context: AdminContext, achievement: AchievementDefinition
 ) -> None:
+    if context.is_root or context.is_platform_operator:
+        return
     if achievement.organization_id is None:
         if "engagement:approve_global" not in context.allowed_actions:
             raise AppError(403, "ADMIN_WRITE_REQUIRED", "이 작업을 수행할 권한이 없습니다.")
@@ -374,6 +377,8 @@ def ensure_engagement_approver_scope(
 
 
 def ensure_pass_season_approver_scope(context: AdminContext, season: PassSeason) -> None:
+    if context.is_root or context.is_platform_operator:
+        return
     if season.organization_id is None:
         if "engagement:approve_global" not in context.allowed_actions:
             raise AppError(403, "ADMIN_WRITE_REQUIRED", "이 작업을 수행할 권한이 없습니다.")
@@ -391,6 +396,23 @@ async def validate_reward_scope(
     if not reward_ids:
         return
     normalized = set(reward_ids)
+    if artist_id is None:
+        artist_scoped_ids = set(
+            (
+                await session.scalars(
+                    select(RewardCatalog.id).where(
+                        RewardCatalog.id.in_(normalized),
+                        RewardCatalog.artist_id.is_not(None),
+                    )
+                )
+            ).all()
+        )
+        if artist_scoped_ids:
+            raise AppError(
+                422,
+                "GLOBAL_REWARD_REQUIRED",
+                "전체 레벨에는 전체 보상만 연결할 수 있습니다.",
+            )
     scope_filters = [
         RewardCatalog.organization_id.is_(None)
         if organization_id is None
@@ -639,7 +661,9 @@ async def create_admin_reward(
         reward_type=payload.reward_type,
         name=payload.name,
         metadata_=payload.metadata,
-        status="draft",
+        # Rewards do not have a separate review transition. They become
+        # fan-facing catalog entries when an authorized admin registers them.
+        status="published",
     )
     session.add(reward)
     await record_audit(
@@ -654,6 +678,27 @@ async def create_admin_reward(
     )
     await session.commit()
     return {"ok": True, "data": reward_data(reward)}
+
+
+@router.get("/engagement/rewards/{reward_id}/image")
+async def admin_reward_image(reward_id: str, context: CurrentAdmin, session: DbSession) -> Response:
+    reward = await session.scalar(
+        select(RewardCatalog).where(
+            RewardCatalog.id == reward_id,
+            *engagement_scope_filters(context, RewardCatalog),
+        )
+    )
+    asset_id = (
+        reward.metadata_.get("imageAssetId")
+        if reward and isinstance(reward.metadata_, dict)
+        else None
+    )
+    asset = await session.get(Asset, asset_id) if asset_id else None
+    if not asset or asset.purpose != "reward_image" or not asset.storage_path:
+        raise AppError(404, "REWARD_IMAGE_NOT_FOUND", "보상 이미지를 찾을 수 없습니다.")
+    return storage_response(
+        configured_asset_storage(), asset.storage_path, media_type=asset.content_type or "image/png"
+    )
 
 
 @router.get("/engagement/pass-seasons")
@@ -686,6 +731,7 @@ async def create_pass_season(
         organization_id=organization_id,
         artist_id=artist_id,
         title=payload.title,
+        description=payload.description,
         status="draft",
         is_paid=False,
         starts_at=payload.starts_at,
@@ -706,6 +752,52 @@ async def create_pass_season(
         session,
         actor_user_id=context.user.id,
         action="pass_season.created",
+        entity_type="pass_season",
+        entity_id=season.id,
+        organization_id=season.organization_id,
+        artist_id=season.artist_id,
+        details={"isPaid": False, "tierCount": len(payload.tiers)},
+    )
+    await session.commit()
+    return {"ok": True, "data": await pass_season_data(session, season)}
+
+
+@router.patch("/engagement/pass-seasons/{season_id}")
+async def update_pass_season(
+    season_id: str,
+    payload: PassSeasonCreate,
+    context: CurrentAdmin,
+    session: DbSession,
+) -> dict:
+    _require_engagement_write(context)
+    season = await scoped_pass_season_or_404(season_id, context, session)
+    organization_id, artist_id = await require_engagement_scope(
+        session, context, payload.organization_id, payload.artist_id
+    )
+    reward_ids = [tier.reward_id for tier in payload.tiers if tier.reward_id]
+    await validate_reward_scope(session, reward_ids, organization_id, artist_id)
+    season.organization_id = organization_id
+    season.artist_id = artist_id
+    season.title = payload.title
+    season.description = payload.description
+    season.starts_at = payload.starts_at
+    season.ends_at = payload.ends_at
+    season.is_paid = False
+    await session.execute(delete(PassTier).where(PassTier.season_id == season.id))
+    for tier in payload.tiers:
+        session.add(
+            PassTier(
+                id=f"pass_tier_{uuid4().hex[:12]}",
+                season_id=season.id,
+                tier=tier.tier,
+                required_xp=tier.required_xp,
+                reward_id=tier.reward_id,
+            )
+        )
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="pass_season.updated",
         entity_type="pass_season",
         entity_id=season.id,
         organization_id=season.organization_id,

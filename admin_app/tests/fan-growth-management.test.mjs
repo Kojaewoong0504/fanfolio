@@ -30,9 +30,9 @@ test('platform approvers can view fan growth review queues without create contro
 
 test('approve-only fan growth users do not see row edit or draft submit controls', () => {
   assert.match(source, /const writeActions = canManageFanGrowth\(\)[\s\S]*edit-achievement/)
-  assert.match(source, /const writeActions = canManageFanGrowth\(\)[\s\S]*edit-fan-pass/)
+  assert.match(source, /class="edit-fan-pass/)
   assert.match(source, /canApproveFanGrowth\(\) && item\.status === "pending_review"[\s\S]*업적 공개 승인/)
-  assert.match(source, /canApproveFanGrowth\(\) && item\.status === "pending_review"[\s\S]*패스 공개 승인/)
+  assert.match(source, /const approvalAction = canApproveFanGrowth\(\) && season\.id[\s\S]*패스 공개 승인/)
 })
 
 test('fan growth loads achievements rewards and pass seasons in one isolated request group', () => {
@@ -78,9 +78,46 @@ test('achievement drawer saves period fields in the achievement payload', () => 
   assert.match(source, /업적 종료 시각은 시작 시각 이후로 선택해 주세요/)
 })
 
+test('reward drawer sends organization and artist scope for scoped rewards', () => {
+  assert.match(source, /function rewardDrawer/)
+  assert.match(source, /name="organizationId"/)
+  assert.match(source, /name="artistId"/)
+  assert.match(source, /organizationId: data\.get\("organizationId"\) \|\| null/)
+  assert.match(source, /artistId: data\.get\("artistId"\) \|\| null/)
+})
+
+test('reward drawer implements the approved image library upload preview and persistence flow', () => {
+  assert.match(source, /rewardImagePresets/)
+  assert.match(source, /reward-ticket\.png/)
+  assert.match(source, /reward-vip\.png/)
+  assert.match(source, /reward-crystal\.png/)
+  assert.match(source, /reward-music\.png/)
+  assert.match(source, /id="reward-image-upload-button"/)
+  assert.match(source, /id="reward-media-library-button"/)
+  assert.match(source, /URL\.createObjectURL\(file\)/)
+  assert.match(source, /uploadAsset\(state\.rewardImageFile, "reward_image"\)/)
+  assert.match(source, /imagePreset:/)
+  assert.match(source, /imageAssetId/)
+  assert.match(css, /\.reward-builder \{ position: relative; width: min\(100%, 500px\)/)
+  assert.match(source, /기본 이미지 선택/)
+  assert.match(source, /is-highlighted/)
+  assert.match(css, /\.reward-image-presets/)
+  assert.match(css, /\.reward-live-preview/)
+})
+
+test('custom select updates only its label and preserves the chevron icon', () => {
+  assert.match(source, /class="admin-select-label"/)
+  assert.match(source, /querySelector\("\.admin-select-label"\)\.textContent = option\.dataset\.label/)
+  assert.doesNotMatch(source, /querySelector\("\.admin-select-trigger span"\)\.textContent = option\.dataset\.label/)
+})
+
+test('reward save explains an expired administrator session instead of a generic scope failure', () => {
+  assert.match(source, /catch \(error\) \{[\s\S]*error\?\.status === 401[\s\S]*관리자 로그인이 만료되었습니다\. 다시 로그인해 주세요\./)
+})
+
 test('free fan pass drawer omits paid fields and validates end after start inline', () => {
   assert.match(source, /function fanPassDrawer/)
-  assert.match(source, /무료 팬 패스/)
+  assert.match(source, /레벨 패스 편집/)
   assert.match(source, /name="startsAt"/)
   assert.match(source, /name="endsAt"/)
   assert.match(source, /maxFanPassTiers/)
@@ -91,10 +128,31 @@ test('free fan pass drawer omits paid fields and validates end after start inlin
   assert.doesNotMatch(source, /name="price"|payment|paid|유료|결제/)
 })
 
+test('season level pass workspace matches the approved sidecar management design', () => {
+  assert.match(source, /레벨 패스 목록/)
+  assert.match(source, /활성 패스/)
+  assert.match(source, /등록 보상/)
+  assert.match(source, /fan-pass-workspace-body/)
+  assert.match(source, /fan-pass-status-filter/)
+  assert.match(source, /fan-pass-artist-filter/)
+  assert.match(source, /method: seasonId \? "PATCH" : "POST"/)
+  assert.match(css, /workspace-sidecar-body/)
+  assert.match(css, /fan-pass-sidecar/)
+  assert.match(css, /fan-pass-table tbody tr\.selected/)
+})
+
 test('fan growth management styles stay responsive without horizontal overflow', () => {
   assertMatches(css, /fan-growth-grid/, 'renders a dedicated responsive fan growth grid')
   assertMatches(css, /achievement-builder/, 'styles the achievement builder drawer')
   assertMatches(css, /pass-tier-list/, 'styles the pass tier list')
   assertMatches(css, /overflow-wrap:\s*anywhere/, 'long Korean labels can wrap inside narrow panels')
   assertMatches(css, /@media\s*\(max-width:\s*767px\)[\s\S]*fan-growth-grid/, 'fan growth view has a mobile breakpoint')
+})
+
+test('fan pass editor offers reusable 15 and 30 level season presets', () => {
+  assert.match(source, /maxFanPassTiers = 30/)
+  assert.match(source, /season-15/)
+  assert.match(source, /season-30/)
+  assert.match(source, /applyFanPassPreset/)
+  assert.match(source, /fan-pass-preset/)
 })

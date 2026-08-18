@@ -220,6 +220,7 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
   }
 
   const previewDemoCard = () => {
+    if (!import.meta.env.DEV) return
     setCode('FANFOLIO-DEMO-CARD')
     setSource('qr')
     setIsDemo(true)
@@ -228,7 +229,7 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
   }
 
   const confirmRegistration = () => {
-    if (isDemo) {
+    if (import.meta.env.DEV && isDemo) {
       onRedeemed('qa-registration-complete')
       return
     }
@@ -294,7 +295,7 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
           </div>
           <div className="redeem-flow-or"><span>또는</span></div>
           <button type="button" className="redeem-flow-secondary" onClick={() => { setSelectedMethod('manual'); setSource('manual'); setScanning(false) }}><RedeemIcon name="code" />인증 코드 직접 입력</button>
-          <button type="button" className="redeem-flow-demo" onClick={previewDemoCard}>샘플 카드로 3단계 미리보기</button>
+          {import.meta.env.DEV && <button type="button" className="redeem-flow-demo" onClick={previewDemoCard}>샘플 카드로 3단계 미리보기</button>}
           <p className="redeem-flow-privacy">촬영 이미지는 기기에 저장되지 않아요.</p>
         </>}
 
@@ -302,13 +303,13 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
           <div className="redeem-flow-intro redeem-flow-scan-intro"><h1>인증 코드를 입력해 주세요</h1><p>카드 뒷면의 12자리 코드를 입력하면 정보를 확인할 수 있어요.</p></div>
           <div className="redeem-code-field redeem-flow-code-field"><label className="field-label" htmlFor="redeem-code">인증 코드</label><input ref={codeInputRef} id="redeem-code" value={code} onChange={event => { setCode(event.target.value); setSource('manual') }} placeholder="12자리 코드를 입력하세요" autoComplete="off" /><small>코드는 대소문자를 구분하지 않습니다.</small></div>
           <button type="button" className="primary redeem-flow-step-button" disabled={!code.trim()} onClick={() => setStep(3)}>다음</button>
-          <button type="button" className="redeem-flow-demo" onClick={previewDemoCard}>샘플 카드로 3단계 미리보기</button>
+          {import.meta.env.DEV && <button type="button" className="redeem-flow-demo" onClick={previewDemoCard}>샘플 카드로 3단계 미리보기</button>}
         </>}
 
         {selectedMethod === 'photo' && <>
           <div className="redeem-flow-intro redeem-flow-scan-intro"><h1>카드 사진을 선택해 주세요</h1><p>QR 코드가 선명하게 보이는 카드 뒷면 사진을 사용해 주세요.</p></div>
           <button type="button" className="redeem-flow-photo-picker" onClick={() => photoInputRef.current?.click()}><RedeemIcon name="photo" /><b>{readingImage ? '사진 확인 중...' : '사진 선택하기'}</b></button>
-          <button type="button" className="redeem-flow-demo" onClick={previewDemoCard}>샘플 카드로 3단계 미리보기</button>
+          {import.meta.env.DEV && <button type="button" className="redeem-flow-demo" onClick={previewDemoCard}>샘플 카드로 3단계 미리보기</button>}
         </>}
         <input ref={photoInputRef} className="redeem-flow-file" type="file" accept="image/*" capture="environment" onChange={onQrImageChange} disabled={readingImage} />
       </section>}

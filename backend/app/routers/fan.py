@@ -20,8 +20,13 @@ from app.models import (
     CollectionBenefitClaim,
     CollectionCampaign,
     Drop,
+    Event,
+    EventApplication,
     Member,
     Notification,
+    RewardCatalog,
+    Role,
+    User,
     UserCard,
 )
 from app.rate_limit import enforce_rate_limit
@@ -98,6 +103,11 @@ def lenticular_storage_path(asset: Asset | None) -> str | None:
 
 @router.get("/me")
 async def me(user: FanUser) -> dict:
+    # Until social follow and spendable-point ledgers are introduced, only
+    # values with a durable source are exposed. Favorites are the current
+    # follow relationship; unknown counters stay zero instead of showing
+    # design-fixture numbers.
+    following_count = len(user.favorite_artist_ids or []) + len(user.favorite_member_ids or [])
     return {
         "ok": True,
         "data": {
@@ -109,6 +119,10 @@ async def me(user: FanUser) -> dict:
             "favoriteArtistIds": user.favorite_artist_ids,
             "favoriteMemberIds": user.favorite_member_ids,
             "onboardingCompleted": user.onboarding_completed,
+            "followingCount": following_count,
+            "followerCount": 0,
+            "points": 0,
+            "hasPassword": bool(user.password_hash),
         },
     }
 
@@ -181,13 +195,33 @@ async def collection(user: FanUser, session: DbSession) -> dict:
 
 
 @router.get("/me/progression")
-async def progression(user: FanUser, session: DbSession) -> dict:
-    return {"ok": True, "data": await fan_progression_data(session, user.id)}
+async def progression(
+    user: FanUser,
+    session: DbSession,
+    artist_id: str | None = Query(default=None, alias="artistId"),
+    scope: str | None = Query(default=None),
+) -> dict:
+    return {
+        "ok": True,
+        "data": await fan_progression_data(
+            session, user.id, artist_id=artist_id, global_scope=scope == "global"
+        ),
+    }
 
 
 @router.get("/me/pass")
-async def fan_pass(user: FanUser, session: DbSession) -> dict:
-    return {"ok": True, "data": await fan_pass_data(session, user_id=user.id)}
+async def fan_pass(
+    user: FanUser,
+    session: DbSession,
+    artist_id: str | None = Query(default=None, alias="artistId"),
+    scope: str | None = Query(default=None),
+) -> dict:
+    return {
+        "ok": True,
+        "data": await fan_pass_data(
+            session, user_id=user.id, artist_id=artist_id, global_scope=scope == "global"
+        ),
+    }
 
 
 @router.post("/me/pass-tiers/{tier_id}/claim")
@@ -471,15 +505,34 @@ async def download_collection_benefit(
 
 @router.patch("/me/profile")
 async def update_profile(payload: ProfileUpdate, user: FanUser, session: DbSession) -> dict:
+    nickname = payload.nickname.strip()
+    if not nickname:
+        raise AppError(422, "INVALID_NICKNAME", "닉네임을 입력해 주세요.")
+    nickname_taken = await session.scalar(
+        select(User.id).where(
+            User.role == Role.FAN,
+            User.id != user.id,
+            func.lower(User.nickname) == nickname.lower(),
+        )
+    )
+    if nickname_taken is not None:
+        raise AppError(409, "NICKNAME_ALREADY_TAKEN", "이미 사용 중인 닉네임입니다.")
     await validate_favorites(
         artist_ids=payload.favorite_artist_ids,
         member_ids=payload.favorite_member_ids,
         session=session,
     )
-    user.nickname, user.favorite_artist_ids, user.favorite_member_ids, user.onboarding_completed = (
-        payload.nickname,
+    (
+        user.nickname,
+        user.favorite_artist_ids,
+        user.favorite_member_ids,
+        user.profile_image_url,
+        user.onboarding_completed,
+    ) = (
+        nickname,
         payload.favorite_artist_ids,
         payload.favorite_member_ids,
+        payload.profile_image_url,
         True,
     )
     await session.commit()
@@ -489,6 +542,7 @@ async def update_profile(payload: ProfileUpdate, user: FanUser, session: DbSessi
             "nickname": user.nickname,
             "favoriteArtistIds": user.favorite_artist_ids,
             "favoriteMemberIds": user.favorite_member_ids,
+            "profileImageUrl": user.profile_image_url,
             "onboardingCompleted": True,
         },
     }
@@ -525,6 +579,40 @@ async def validate_favorites(
 @router.get("/me/notification-preferences")
 async def notification_preferences(user: FanUser) -> dict:
     return {"ok": True, "data": {"emailEnabled": user.notification_email_enabled}}
+
+
+@router.get("/me/event-applications")
+async def my_event_applications(user: FanUser, session: DbSession) -> dict:
+    rows = (
+        await session.execute(
+            select(EventApplication, Event)
+            .join(Event, EventApplication.event_id == Event.id)
+            .where(EventApplication.user_id == user.id)
+            .order_by(EventApplication.created_at.desc(), EventApplication.id.desc())
+        )
+    ).all()
+    return {
+        "ok": True,
+        "data": {
+            "items": [
+                {
+                    "applicationId": application.id,
+                    "eventId": event.id,
+                    "status": application.status,
+                    "createdAt": application.created_at.isoformat(),
+                    "event": {
+                        "id": event.id,
+                        "title": event.title,
+                        "summary": event.summary,
+                        "startsAt": event.starts_at.isoformat(),
+                        "endsAt": event.ends_at.isoformat() if event.ends_at else None,
+                        "venue": event.venue,
+                    },
+                }
+                for application, event in rows
+            ]
+        },
+    }
 
 
 @router.patch("/me/notification-preferences")
@@ -733,6 +821,28 @@ async def card_image(card_id: str, session: DbSession) -> Response:
     asset = await session.get(Asset, card.image_asset_id)
     if not asset or not asset.storage_path:
         raise AppError(404, "CARD_IMAGE_NOT_READY", "카드 이미지가 아직 준비되지 않았습니다.")
+    return storage_response(
+        configured_asset_storage(), asset.storage_path, media_type=asset.content_type or "image/png"
+    )
+
+
+@router.get("/rewards/{reward_id}/image")
+async def reward_image(reward_id: str, session: DbSession) -> Response:
+    reward = await session.get(RewardCatalog, reward_id)
+    asset_id = (
+        reward.metadata_.get("imageAssetId")
+        if reward and isinstance(reward.metadata_, dict)
+        else None
+    )
+    asset = await session.get(Asset, asset_id) if asset_id else None
+    if (
+        not reward
+        or reward.status != "published"
+        or not asset
+        or asset.purpose != "reward_image"
+        or not asset.storage_path
+    ):
+        raise AppError(404, "REWARD_IMAGE_NOT_FOUND", "보상 이미지를 찾을 수 없습니다.")
     return storage_response(
         configured_asset_storage(), asset.storage_path, media_type=asset.content_type or "image/png"
     )

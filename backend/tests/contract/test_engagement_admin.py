@@ -39,6 +39,7 @@ def achievement_payload(**overrides: Any) -> dict[str, Any]:
 def pass_season_payload(**overrides: Any) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "title": "NOVA Free Pass",
+        "description": "앨범 발매 기간에만 참여할 수 있는 시즌 패스입니다.",
         "artistId": "artist_nova3",
         "startsAt": "2026-08-01T00:00:00Z",
         "endsAt": "2026-08-31T00:00:00Z",
@@ -264,15 +265,20 @@ def test_company_manager_can_create_scoped_reward_for_growth_rules(
                 "rewardType": "badge",
                 "organizationId": organization["id"],
                 "artistId": "artist_nova3",
-                "metadata": {"label": "FIRST NOVA", "color": "violet"},
+                "metadata": {
+                    "label": "FIRST NOVA",
+                    "color": "violet",
+                    "imagePreset": "ticket",
+                },
             },
         ),
         201,
     )
-    assert reward["status"] == "draft"
+    assert reward["status"] == "published"
     assert reward["organizationId"] == organization["id"]
     assert reward["artistId"] == "artist_nova3"
     assert reward["metadata"]["label"] == "FIRST NOVA"
+    assert reward["metadata"]["imagePreset"] == "ticket"
 
     listed = assert_success(company_client.get("/api/admin/engagement/rewards"))["items"]
     assert any(item["id"] == reward["id"] for item in listed)
@@ -360,7 +366,41 @@ def test_admin_creates_free_only_pass_season_and_ignores_paid_input(
     assert draft["status"] == "draft"
     assert draft["artistId"] == "artist_nova3"
     assert draft["isPaid"] is False
+    assert draft["description"] == "앨범 발매 기간에만 참여할 수 있는 시즌 패스입니다."
     assert [tier["requiredXp"] for tier in draft["tiers"]] == [30, 60]
+
+
+def test_admin_updates_artist_season_pass_and_replaces_tiers(
+    actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
+) -> None:
+    _, member = create_partner(
+        actors["admin"],
+        email="company-pass-editor@starwave.com",
+        access_level="manager",
+    )
+    company_client = login_partner(app, member)
+    draft = assert_success(
+        company_client.post(
+            "/api/admin/engagement/pass-seasons",
+            json=pass_season_payload(),
+        ),
+        201,
+    )
+
+    updated = assert_success(
+        company_client.patch(
+            f"/api/admin/engagement/pass-seasons/{draft['id']}",
+            json=pass_season_payload(
+                title="NOVA COMEBACK 시즌 2",
+                description="두 번째 앨범 시즌 한정 패스",
+                tiers=[{"tier": 1, "requiredXp": 100, "rewardId": None}],
+            ),
+        )
+    )
+
+    assert updated["title"] == "NOVA COMEBACK 시즌 2"
+    assert updated["description"] == "두 번째 앨범 시즌 한정 패스"
+    assert [tier["requiredXp"] for tier in updated["tiers"]] == [100]
 
 
 def test_pass_season_review_status_transitions_match_achievements(

@@ -34,3 +34,9 @@ test('onboarding actions use a dedicated bottom action rail', () => {
   assert.match(cssSource, /\.onboarding-action\{[^}]*margin-top:auto/)
   assert.match(cssSource, /@media\(max-width:360px\)\{[^}]*\.onboarding-screen/s)
 })
+
+test('onboarding can start without choosing an artist and enters global growth scope', () => {
+  assert.match(appSource, /관심 아티스트 없이 시작하기/)
+  assert.match(appSource, /favoriteArtistIds: group \? \[group\] : \[\]/)
+  assert.match(appSource, /favoriteMemberIds: member \? \[member\] : \[\]/)
+})

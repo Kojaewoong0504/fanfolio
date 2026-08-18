@@ -1,13 +1,14 @@
-import type { FanEvent, FanEventStatus } from '../api/client'
+import type { EventPagination, FanEvent, FanEventStatus } from '../api/client'
 import { EventCard } from './EventCard'
-import { InlineIcon } from '../App'
 
 type Props = {
   events: FanEvent[]
   loading: boolean
   error: string | null
   status: 'all' | FanEventStatus
+  pagination: EventPagination
   onStatusChange: (status: 'all' | FanEventStatus) => void
+  onPageChange: (page: number) => void
   onOpen: (event: FanEvent) => void
 }
 
@@ -18,7 +19,7 @@ const filters: Array<{ value: 'all' | FanEventStatus; label: string }> = [
   { value: 'ended', label: '종료' },
 ]
 
-export function EventList({ events, loading, error, status, onStatusChange, onOpen }: Props) {
+export function EventList({ events, loading, error, status, pagination, onStatusChange, onPageChange, onOpen }: Props) {
   const visibleEvents = status === 'all' ? events : events.filter(event => event.status === status)
   return (
     <div className="events-screen">
@@ -42,9 +43,11 @@ export function EventList({ events, loading, error, status, onStatusChange, onOp
       {!loading && !error && visibleEvents.length > 0 && (
         <>
           <div className="event-list">{visibleEvents.map((event) => <EventCard key={event.id} event={event} onOpen={onOpen} />)}</div>
-          <button type="button" className="fan-event-promo" onClick={() => onOpen(visibleEvents[0])}>
-            <span className="fan-event-promo-icon" aria-hidden="true"><InlineIcon name="gift" /></span><span><small>팬 이벤트</small><strong>드림스케이프 사인 폴라로이드 이벤트</strong><em>참여하고 사인 폴라로이드를 받아보세요!</em></span><b>참여하기</b><span className="fan-event-promo-chevron" aria-hidden="true"><InlineIcon name="chevron" /></span>
-          </button>
+          {pagination.totalPages > 1 && <nav className="event-pagination" aria-label="이벤트 페이지">
+            <button type="button" onClick={() => onPageChange(pagination.page - 1)} disabled={pagination.page <= 1}>이전 페이지</button>
+            <span>{pagination.page} / {pagination.totalPages}</span>
+            <button type="button" onClick={() => onPageChange(pagination.page + 1)} disabled={pagination.page >= pagination.totalPages}>다음 페이지</button>
+          </nav>}
         </>
       )}
     </div>

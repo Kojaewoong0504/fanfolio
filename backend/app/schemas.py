@@ -65,6 +65,12 @@ class FanPasswordCredentials(BaseModel):
     password: str = Field(min_length=8, max_length=200)
 
 
+class FanPasswordChange(BaseModel):
+    current_password: str = Field(alias="currentPassword", min_length=1, max_length=200)
+    new_password: str = Field(alias="newPassword", min_length=8, max_length=200)
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class ArtistPasswordChange(BaseModel):
     current_password: str = Field(alias="currentPassword", min_length=1, max_length=200)
     new_password: str = Field(alias="newPassword", min_length=12, max_length=200)
@@ -85,6 +91,9 @@ class ProfileUpdate(BaseModel):
     nickname: str = Field(min_length=1, max_length=40)
     favorite_artist_ids: list[str] = Field(default_factory=list, alias="favoriteArtistIds")
     favorite_member_ids: list[str] = Field(default_factory=list, alias="favoriteMemberIds")
+    profile_image_url: str | None = Field(
+        default=None, alias="profileImageUrl", max_length=2_000_000
+    )
     model_config = ConfigDict(populate_by_name=True)
 
 
@@ -153,7 +162,7 @@ class DropUpdateRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
-EventType = Literal["announcement", "card_drop", "card", "fan_mission", "external"]
+EventType = Literal["announcement", "comment", "card_drop", "card", "fan_mission", "external"]
 EventWorkflowStatus = Literal[
     "draft",
     "pending_review",
@@ -171,10 +180,16 @@ class EventCreateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=100)
     summary: str = Field(min_length=1, max_length=180)
     description: str = Field(default="", max_length=5000)
+    notice_items: list[str] = Field(default_factory=list, alias="noticeItems", max_length=20)
+    related_card_ids: list[str] = Field(default_factory=list, alias="relatedCardIds", max_length=12)
     hero_asset_id: str = Field(alias="heroAssetId", min_length=1)
     event_type: EventType = Field(default="announcement", alias="eventType")
     starts_at: datetime = Field(alias="startsAt")
     ends_at: datetime | None = Field(default=None, alias="endsAt")
+    venue: str | None = Field(default=None, max_length=200)
+    participant_limit: int | None = Field(default=None, alias="participantLimit", ge=1)
+    application_starts_at: datetime | None = Field(default=None, alias="applicationStartsAt")
+    application_ends_at: datetime | None = Field(default=None, alias="applicationEndsAt")
     featured: bool = False
     priority: int = Field(default=0, ge=0, le=100)
     cta_label: str | None = Field(default=None, alias="ctaLabel", max_length=80)
@@ -200,9 +215,36 @@ class EventReviewRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class EventDrawRequest(BaseModel):
+    winner_count: int = Field(alias="winnerCount", ge=1, le=10_000)
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class EventCommentCreateRequest(BaseModel):
+    body: str = Field(min_length=1, max_length=500)
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class EventCommentReviewRequest(BaseModel):
+    status: Literal["approved", "rejected"]
+    note: str | None = Field(default=None, max_length=500)
+    model_config = ConfigDict(populate_by_name=True)
+
+
 def _validate_event_fields(payload: EventCreateRequest) -> None:
+    payload.notice_items = [item.strip() for item in payload.notice_items if item.strip()]
+    if any(len(item) > 500 for item in payload.notice_items):
+        raise ValueError("noticeItems entries must be 500 characters or fewer")
+    if len(set(payload.related_card_ids)) != len(payload.related_card_ids):
+        raise ValueError("relatedCardIds must not contain duplicates")
     if payload.ends_at is not None and payload.ends_at <= payload.starts_at:
         raise ValueError("endsAt must be later than startsAt")
+    if (
+        payload.application_ends_at is not None
+        and payload.application_starts_at is not None
+        and payload.application_ends_at <= payload.application_starts_at
+    ):
+        raise ValueError("applicationEndsAt must be later than applicationStartsAt")
     links = {
         "card_drop": payload.drop_id,
         "card": payload.card_id,
@@ -219,9 +261,9 @@ def _validate_event_fields(payload: EventCreateRequest) -> None:
         )
         if value
     ]
-    if payload.event_type == "announcement":
+    if payload.event_type in {"announcement", "comment"}:
         if selected:
-            raise ValueError("announcement events cannot have a connection")
+            raise ValueError("announcement and comment events cannot have a connection")
     elif links.get(payload.event_type) is None:
         raise ValueError(f"{payload.event_type} events require exactly one connection")
     elif len(selected) != 1:
@@ -243,6 +285,10 @@ class AdminEventItem(BaseModel):
     )
     starts_at: datetime = Field(alias="startsAt")
     ends_at: datetime | None = Field(default=None, alias="endsAt")
+    venue: str | None = None
+    participant_limit: int | None = Field(default=None, alias="participantLimit")
+    application_starts_at: datetime | None = Field(default=None, alias="applicationStartsAt")
+    application_ends_at: datetime | None = Field(default=None, alias="applicationEndsAt")
     featured: bool
     priority: int
     hero_asset_id: str = Field(alias="heroAssetId")
@@ -258,6 +304,8 @@ class FanEventItem(BaseModel):
     title: str
     summary: str
     description: str
+    notice_items: list[str] = Field(default_factory=list, alias="noticeItems")
+    related_cards: list[dict] = Field(default_factory=list, alias="relatedCards")
     event_type: EventType = Field(alias="eventType")
     status: Literal["upcoming", "active", "ended"]
     starts_at: datetime = Field(alias="startsAt")
@@ -660,15 +708,16 @@ class UploadPresignRequest(BaseModel):
         "collection_benefit",
         "organization_logo",
         "event_banner",
+        "reward_image",
     ]
     model_config = ConfigDict(populate_by_name=True)
 
     @model_validator(mode="after")
     def organization_logo_must_be_an_image(self) -> "UploadPresignRequest":
-        if self.purpose == "organization_logo" and self.content_type not in {
+        if self.purpose in {"organization_logo", "reward_image"} and self.content_type not in {
             "image/png",
             "image/jpeg",
             "image/webp",
         }:
-            raise ValueError("organization_logo uploads must be PNG, JPEG, or WebP")
+            raise ValueError("image uploads must be PNG, JPEG, or WebP")
         return self

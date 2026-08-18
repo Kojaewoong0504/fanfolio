@@ -1,6 +1,6 @@
 """Business rules for managed fan events."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlparse
 
 from sqlalchemy import select
@@ -10,7 +10,7 @@ from app.admin_access import AdminContext
 from app.errors import AppError
 from app.models import AchievementDefinition, Asset, Card, Drop, Event, Notification
 
-EVENT_TYPES = {"announcement", "card_drop", "card", "fan_mission", "external"}
+EVENT_TYPES = {"announcement", "comment", "card_drop", "card", "fan_mission", "external"}
 WORKFLOW_STATUSES = {
     "draft",
     "pending_review",
@@ -52,9 +52,11 @@ def validate_event_links(
     if event_type not in EVENT_TYPES:
         raise AppError(422, "EVENT_TYPE_INVALID", "이벤트 유형이 올바르지 않습니다.")
     values = [drop, card, achievement, external_url]
-    if event_type == "announcement":
+    if event_type in {"announcement", "comment"}:
         if any(values):
-            raise AppError(422, "EVENT_LINK_INVALID", "공지 이벤트는 연결 대상을 가질 수 없습니다.")
+            raise AppError(
+                422, "EVENT_LINK_INVALID", "공지·댓글 이벤트는 연결 대상을 가질 수 없습니다."
+            )
         return
     expected = {
         "card_drop": drop,
@@ -176,6 +178,51 @@ async def reconcile_due_event_notifications(
     count = 0
     for event in events:
         count += await create_event_notification(session, event)
+    from app.models import EventApplication
+
+    deadline_events = await session.scalars(
+        select(Event).where(
+            Event.workflow_status.in_(["scheduled", "published"]),
+            Event.application_ends_at.is_not(None),
+        )
+    )
+    for event in deadline_events:
+        deadline = event.application_ends_at
+        if deadline is None:
+            continue
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=UTC)
+        if not now < deadline <= now + timedelta(hours=24):
+            continue
+        applications = await session.scalars(
+            select(EventApplication).where(
+                EventApplication.event_id == event.id,
+                EventApplication.status == "submitted",
+            )
+        )
+        for application in applications:
+            key = f"event_application_deadline:{event.id}:{application.user_id}"
+            existing = await session.scalar(
+                select(Notification.id).where(
+                    Notification.user_id == application.user_id,
+                    Notification.event_key == key,
+                )
+            )
+            if existing:
+                continue
+            session.add(
+                Notification(
+                    id=f"notification_event_deadline_{event.id}_{application.user_id}",
+                    user_id=application.user_id,
+                    kind="event_application_deadline",
+                    title="이벤트 신청 마감이 임박했어요",
+                    body=event.title,
+                    entity_type="event",
+                    entity_id=event.id,
+                    event_key=key,
+                )
+            )
+            count += 1
     if count:
         await session.commit()
     return count

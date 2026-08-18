@@ -23,4 +23,4 @@ def test_demo_catalog_bootstrap_creates_onboarding_catalog(client) -> None:
             cards = await session.scalars(select(Card).where(Card.status == "published"))
             return len(list(artists)), len(list(members)), len(list(cards))
 
-    assert asyncio.run(read_catalog()) == (1, 3, 1)
+    assert asyncio.run(read_catalog()) == (4, 12, 1)

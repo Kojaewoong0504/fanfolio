@@ -1,0 +1,69 @@
+.fan-pass-shell {
+  min-height: 100vh;
+  padding: 18px 18px 108px;
+  background: #fbfbff;
+  color: #111a38;
+}
+
+.fan-pass-header { display: flex; align-items: center; justify-content: space-between; min-height: 44px; margin-bottom: 18px; }
+.fan-pass-header h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -.04em; }
+.fan-pass-header-spacer { width: 44px; }
+.fan-pass-back { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; background: transparent; color: #111a38; }
+.fan-pass-back .inline-icon { width: 23px; height: 23px; }
+
+.fan-pass-summary { display: grid; grid-template-columns: minmax(0, 1fr) 116px; gap: 4px; overflow: hidden; padding: 20px 14px 18px 0; border: 1px solid #e5e1ff; border-radius: 24px; background: linear-gradient(135deg, #fff 0%, #f5f2ff 100%); }
+.fan-pass-summary-copy { min-width: 0; padding-left: 18px; }
+.fan-pass-summary > img { align-self: center; width: 116px; height: 148px; object-fit: contain; mix-blend-mode: multiply; }
+.fan-pass-eyebrow { display: block; margin-bottom: 14px; color: #5343ef; font-size: 15px; font-weight: 800; }
+.fan-pass-summary h2 { margin: 0 0 18px; font-size: 25px; line-height: 1.12; letter-spacing: -.06em; }
+.fan-pass-summary h2 strong { color: #5343ef; }
+.fan-pass-xp { display: flex; align-items: baseline; gap: 3px; margin-bottom: 8px; color: #64708f; font-size: 15px; }
+.fan-pass-xp strong { color: #503df0; font-size: 24px; }
+.fan-pass-progress { height: 8px; overflow: hidden; border-radius: 99px; background: #ddd9f8; }
+.fan-pass-progress i { display: block; height: 100%; min-width: 8px; border-radius: inherit; background: #5a43f2; }
+.fan-pass-summary p { margin: 14px 0 0; color: #697491; font-size: 12px; line-height: 1.45; }
+
+.season-pass-journey { position: relative; display: grid; gap: 12px; margin-top: 24px; padding-left: 47px; }
+.season-pass-journey-line { position: absolute; top: 27px; bottom: 30px; left: 21px; width: 4px; overflow: hidden; border-radius: 99px; background: #e5e3ef; }
+.season-pass-journey-line i { display: block; width: 100%; border-radius: inherit; background: #5a43f2; }
+.season-pass-tier-card { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; padding: 16px 14px; border: 1px solid #e7e5f0; border-radius: 20px; background: #fff; box-shadow: 0 4px 15px rgba(45, 39, 105, .04); }
+.season-pass-tier-card:focus-visible { outline: 3px solid #9b8cff; outline-offset: 2px; }
+.season-pass-tier-card.is-current { border: 2px solid #654bfa; box-shadow: 0 9px 24px rgba(88, 68, 240, .13); }
+.season-pass-tier-card.is-expanded { border-color: #8e7cff; }
+.season-pass-tier-card.is-locked { background: rgba(255, 255, 255, .76); }
+.season-pass-node { position: absolute; top: 17px; left: -47px; display: grid; place-items: center; width: 43px; height: 43px; border: 4px solid #fff; border-radius: 50%; outline: 1px solid #dfdef0; background: #f6f5fb; color: #77819b; font-size: 13px; font-weight: 800; box-shadow: 0 4px 14px rgba(54, 44, 142, .08); }
+.season-pass-tier-card.is-claimed .season-pass-node, .season-pass-tier-card.is-current .season-pass-node, .season-pass-tier-card.is-claimable .season-pass-node { background: #6348ef; color: #fff; outline-color: #6348ef; }
+.season-pass-tier-card.is-current .season-pass-node { box-shadow: 0 0 0 5px #e1dcff, 0 6px 18px rgba(83, 61, 238, .25); }
+.season-pass-tier-content { min-width: 0; }
+.season-pass-tier-topline { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 9px; }
+.season-pass-tier-type { color: #5a43ef; font-size: 12px; font-weight: 800; }
+.season-pass-tier-status { color: #74809a; font-size: 11px; white-space: nowrap; }
+.is-claimed .season-pass-tier-status { color: #5947e9; }
+.season-pass-tier-main { display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: center; gap: 12px; }
+.season-pass-tier-main img { width: 72px; height: 72px; object-fit: contain; border-radius: 14px; background: #f4f1ff; }
+.season-pass-tier-main h3 { margin: 0; font-size: 17px; line-height: 1.2; letter-spacing: -.05em; }
+.season-pass-tier-main p { margin: 5px 0 0; color: #73809b; font-size: 12px; line-height: 1.35; }
+.season-pass-tier-main small { display: block; margin-top: 8px; color: #707b95; font-size: 12px; }
+.season-pass-tier-main small b { color: #503df0; }
+.season-pass-claim { width: 100%; margin-top: 14px; padding: 11px 14px; border: 0; border-radius: 12px; background: #543cf2; color: #fff; font-size: 14px; font-weight: 800; }
+.season-pass-claim:disabled { cursor: default; opacity: .58; }
+.season-pass-tier-detail { margin-top: 14px; padding-top: 13px; border-top: 1px solid #eeeafd; }
+.season-pass-tier-detail p { margin: 0 0 11px; color: #737d98; font-size: 12px; line-height: 1.45; }
+.season-pass-tier-detail dl { display: grid; gap: 6px; margin: 0; padding: 10px 12px; border-radius: 12px; background: #f8f7ff; }
+.season-pass-tier-detail dl div { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; }
+.season-pass-tier-detail dt { color: #7b849c; }.season-pass-tier-detail dd { margin: 0; color: #394267; font-weight: 750; }
+.fan-pass-more { display: grid; grid-template-columns: 40px minmax(0, 1fr) 18px; align-items: center; gap: 10px; margin-top: 18px; padding: 14px; border: 1px solid #ebe9f5; border-radius: 18px; background: #fff; }
+.fan-pass-more > span { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: #684bf4; color: #fff; }
+.fan-pass-more .inline-icon { width: 19px; height: 19px; }
+.fan-pass-more b, .fan-pass-more small { display: block; }
+.fan-pass-more b { font-size: 14px; }
+.fan-pass-more small { margin-top: 3px; color: #77819a; font-size: 11px; }
+.fan-pass-more > .inline-icon { color: #8b94aa; }
+.fan-pass-empty, .fan-pass-loading, .fan-pass-error { padding: 28px 20px; border: 1px solid #e8e6f2; border-radius: 18px; background: #fff; text-align: center; color: #707b95; }
+.fan-pass-error b { display: block; color: #202843; }
+.fan-pass-error p { margin: 8px 0 16px; font-size: 13px; }
+.fan-pass-error button { padding: 9px 16px; border: 0; border-radius: 10px; background: #543cf2; color: #fff; font-weight: 700; }
+
+@media (min-width: 600px) {
+  .fan-pass-shell { width: min(100%, 430px); margin: 0 auto; padding-inline: 24px; }
+}

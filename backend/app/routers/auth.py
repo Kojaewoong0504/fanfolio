@@ -18,6 +18,7 @@ from app.dependencies import (
     CurrentAdmin,
     CurrentUser,
     DbSession,
+    FanUser,
     refresh_cookie_name,
     session_cookie_name,
 )
@@ -40,6 +41,7 @@ from app.schemas import (
     AdminPasswordLogin,
     ArtistPasswordChange,
     ArtistPasswordLogin,
+    FanPasswordChange,
     FanPasswordCredentials,
     MagicLinkRequest,
     MagicLinkVerify,
@@ -287,6 +289,25 @@ async def fan_password_login(
             "onboardingCompleted": user.onboarding_completed,
         },
     }
+
+
+@router.post("/fan/change-password")
+async def change_fan_password(
+    payload: FanPasswordChange,
+    user: FanUser,
+    session: DbSession,
+) -> dict:
+    if not user.password_hash:
+        raise AppError(
+            409, "PASSWORD_NOT_CONFIGURED", "소셜 로그인 계정은 비밀번호를 변경할 수 없습니다."
+        )
+    if not verify_password(payload.current_password, user.password_hash):
+        raise AppError(401, "INVALID_CREDENTIALS", "현재 비밀번호가 올바르지 않습니다.")
+    if payload.current_password == payload.new_password:
+        raise AppError(422, "PASSWORD_UNCHANGED", "새 비밀번호는 현재 비밀번호와 달라야 합니다.")
+    user.password_hash = hash_password(payload.new_password)
+    await session.commit()
+    return {"ok": True, "data": {"changed": True}}
 
 
 @router.post("/artist/login")

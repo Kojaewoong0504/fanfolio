@@ -40,7 +40,17 @@ class Role(str, enum.Enum):
 
 class User(Base):
     __tablename__ = "users"
-    __table_args__ = (UniqueConstraint("role", "email", name="uq_users_role_email"),)
+    __table_args__ = (
+        UniqueConstraint("role", "email", name="uq_users_role_email"),
+        Index(
+            "uq_users_role_nickname_ci",
+            "role",
+            sa.text("lower(nickname)"),
+            unique=True,
+            sqlite_where=sa.text("nickname IS NOT NULL AND trim(nickname) <> ''"),
+            postgresql_where=sa.text("nickname IS NOT NULL AND btrim(nickname) <> ''"),
+        ),
+    )
     id: Mapped[str] = mapped_column(String, primary_key=True)
     email: Mapped[str | None] = mapped_column(String, nullable=True)
     username: Mapped[str | None] = mapped_column(String, unique=True, nullable=True)
@@ -388,6 +398,7 @@ class Event(Base):
     title: Mapped[str] = mapped_column(String(100), nullable=False)
     summary: Mapped[str] = mapped_column(String(180), nullable=False)
     description: Mapped[str] = mapped_column(String(5000), nullable=False, default="")
+    notice_items: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     hero_asset_id: Mapped[str] = mapped_column(
         ForeignKey("assets.id", ondelete="RESTRICT"), nullable=False
     )
@@ -395,6 +406,14 @@ class Event(Base):
     workflow_status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    venue: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    participant_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    application_starts_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    application_ends_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     featured: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     cta_label: Mapped[str | None] = mapped_column(String(80), nullable=True)
@@ -418,6 +437,60 @@ class Event(Base):
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class EventRelatedCard(Base):
+    __tablename__ = "event_related_cards"
+    __table_args__ = (
+        UniqueConstraint("event_id", "card_id", name="uq_event_related_cards_event_card"),
+        UniqueConstraint("event_id", "position", name="uq_event_related_cards_event_position"),
+        Index("ix_event_related_cards_event_position", "event_id", "position"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    event_id: Mapped[str] = mapped_column(
+        ForeignKey("events.id", ondelete="CASCADE"), nullable=False
+    )
+    card_id: Mapped[str] = mapped_column(ForeignKey("cards.id", ondelete="CASCADE"), nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class EventApplication(Base):
+    __tablename__ = "event_applications"
+    __table_args__ = (
+        UniqueConstraint("event_id", "user_id", name="uq_event_applications_event_user"),
+        Index("ix_event_applications_event_status", "event_id", "status"),
+    )
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    event_id: Mapped[str] = mapped_column(
+        ForeignKey("events.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="submitted")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class EventComment(Base):
+    __tablename__ = "event_comments"
+    __table_args__ = (Index("ix_event_comments_event_created", "event_id", "created_at"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    event_id: Mapped[str] = mapped_column(
+        ForeignKey("events.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    body: Mapped[str] = mapped_column(String(500), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
 
@@ -599,6 +672,7 @@ class PassSeason(Base):
     )
     artist_id: Mapped[str | None] = mapped_column(ForeignKey("artists.id"), nullable=True)
     title: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
     status: Mapped[str] = mapped_column(String, nullable=False, default="draft")
     is_paid: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=sa.false()

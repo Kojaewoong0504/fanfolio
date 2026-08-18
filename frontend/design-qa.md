@@ -19,3 +19,12 @@ final result: verified in the in-app browser
 ## Verification note
 
 The in-app browser preview was reloaded and inspected directly after the CSS/data fixes. Static tests, lint, typecheck/build, and the fresh browser screenshot were used as verification evidence.
+
+## Selected design: Chapter Map season pass
+
+- Reference: `/Users/gojaewoong/.codex/generated_images/01a01424-a309-7ab2-883d-cfd15ded9ce5/exec-d302f25f-90f7-4be3-a7eb-7ff627c60cce.png`
+- Prototype: `http://127.0.0.1:4173/?preview=fan-pass`
+- Verified in the user's in-app browser: dedicated page heading, vertical season journey, 4 preview tiers, real reward artwork, fixed bottom navigation, and zero modal dialogs.
+- Interaction verified: `전체 보기` from the fan-level page navigates to the dedicated fan-pass preview route; back returns to the fan-level page.
+
+final result: passed

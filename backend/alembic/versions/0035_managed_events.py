@@ -1,4 +1,7 @@
-"""Add managed editorial fan events."""
+"""Add managed editorial fan events.
+
+Application-specific scheduling fields are added by the following revision.
+"""
 
 from collections.abc import Sequence
 

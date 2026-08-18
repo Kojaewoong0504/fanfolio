@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from 'react'
 import './App.css'
 import './reference.css'
-import { ApiError, apiFetch, claimPassTier, claimReward, clearAccessToken, getFanEvent, getFanEvents, getFanHome, getFanPass, getProgression, notificationStreamUrl, oauthStartUrl, resolveApiUrl, setAccessToken, updateProfileEquipment, type CardDesignConfig, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionSummary, type CurrentUser, type FanEvent, type FanEventStatus, type FanHomeResponse, type FanProgression, type NotificationItem, type ProfileEquipment, type RewardGrant, type UserCardDetail } from './api/client'
+import { ApiError, apiFetch, applyToFanEvent, claimPassTier, claimReward, clearAccessToken, connectNotificationStream, getFanEvent, getFanEventComments, getFanEvents, getFanHome, getMyEventApplications, getFanPass, getNotificationPreferences, getProgression, oauthStartUrl, postFanEventComment, resolveApiUrl, setAccessToken, updateNotificationPreferences, updateProfileEquipment, type CardDesignConfig, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionSummary, type CurrentUser, type EventPagination, type FanEvent, type FanEventApplication, type FanEventComment, type FanEventStatus, type FanHomeResponse, type FanProgression, type NotificationItem, type ProfileEquipment, type RewardGrant, type UserCardDetail } from './api/client'
 import { QrRedeemModal, RedeemIcon } from './components/QrRedeemModal'
 import { CardDetail } from './components/CardDetail'
 import { InteractiveCollectibleCard } from './components/InteractiveCollectibleCard'
 import { Settings } from './components/Settings'
 import { ProfileAvatar } from './components/ProfileAvatar'
 import { FanGrowth } from './components/FanGrowth'
+import { FanPassPage } from './components/FanPassPage'
 import { EventDetail } from './components/EventDetail'
 import { EventList } from './components/EventList'
+import { AuthenticatedImage } from './components/AuthenticatedImage'
 import type { Card } from './types'
 import { demoCardImage, demoMemberImage, keepCardVisual } from './utils/cardVisual'
 import cardYunaImage from './assets/card-yuna-lavender.jpg'
@@ -19,7 +21,6 @@ import collectionCardHarinGenerated from './assets/collection-card-harin-generat
 import collectionCardDoyunGenerated from './assets/collection-card-doyun-generated.png'
 import collectionCardMinjaeGenerated from './assets/collection-card-minjae-generated.png'
 import collectionCardJayGenerated from './assets/collection-card-jay-generated.png'
-import eventSigningReference from './assets/event-signing-reference.png'
 import dreamscapeHero from './assets/dreamscape-hero-v2.png'
 import fanWeekNightStage from './assets/fan-week-night-stage.png'
 import fanWeekLavenderMeet from './assets/fan-week-lavender-meet.png'
@@ -36,6 +37,51 @@ import fanLevelStar from './assets/fan-level-star-v2.png'
 type Tab = 'home' | 'discover' | 'collection' | 'growth' | 'settings' | 'alerts' | 'events'
 
 const cardRoutePreviewKey = 'fanfolio.card-route-preview'
+
+const fanGrowthPreviewProgression: FanProgression = {
+  level: { level: 1, totalXp: 0, nextLevelXp: 100 },
+  achievements: [{ id: 'preview-mission', title: '미션 1개 진행 중', description: '팬 활동을 계속해 보세요.', conditionType: 'activity', targetValue: 1, currentValue: 0, completedAt: null }],
+  claimableRewards: [],
+  claimedRewards: [],
+  pass: { seasons: [{
+    id: 'preview-season', title: '드림스케이프 팬 레벨', organizationId: null, artistId: 'dreamscape', status: 'active', isPaid: false, startsAt: null, endsAt: null,
+    progress: { currentXp: 0, claimedTierIds: ['preview-tier-1'] },
+    tiers: [
+      { id: 'preview-tier-1', tier: 1, requiredXp: 0, rewardId: 'preview-badge-1', claimed: true, claimable: false, reward: { id: 'preview-badge-1', type: 'badge', name: '팬 시작 배지', metadata: {} } },
+      { id: 'preview-tier-2', tier: 2, requiredXp: 100, rewardId: 'preview-badge-2', claimed: false, claimable: false, reward: { id: 'preview-badge-2', type: 'digital_bonus', name: '미공개 콘텐츠', metadata: { imagePreset: 'ticket' } } },
+      { id: 'preview-tier-3', tier: 3, requiredXp: 200, rewardId: 'preview-badge-3', claimed: false, claimable: false, reward: { id: 'preview-badge-3', type: 'badge', name: '팬 전용 배지', metadata: {} } },
+      { id: 'preview-tier-4', tier: 4, requiredXp: 300, rewardId: 'preview-badge-4', claimed: false, claimable: false, reward: { id: 'preview-badge-4', type: 'digital_bonus', name: '디지털 포토카드', metadata: { imagePreset: 'music' } } },
+    ],
+  }] },
+  equipment: { titleRewardId: null, badgeRewardIds: [], frameRewardId: null, themeRewardId: null, publicProfileEnabled: true },
+}
+
+function FanGrowthPreview() {
+  const previewMode = new URLSearchParams(window.location.search).get('preview')
+  const [showPass, setShowPass] = useState(() => previewMode === 'fan-pass' || previewMode === 'fan-global-pass')
+  const [passScope, setPassScope] = useState<'artist' | 'global'>(() => previewMode === 'fan-global-pass' ? 'global' : 'artist')
+  const [passTargetTierId, setPassTargetTierId] = useState<string | undefined>()
+  if (showPass) return <FanPassPage progression={fanGrowthPreviewProgression} loading={false} error="" onRetry={() => {}} onBack={() => { setShowPass(false); setPassScope('artist'); setPassTargetTierId(undefined); window.history.pushState({}, '', '/?preview=fan-growth') }} onClaimPassTier={async () => ({})} initialTierId={passTargetTierId} isGlobal={passScope === 'global'} />
+  const onViewPass = (tierId?: string) => { setPassTargetTierId(tierId); setShowPass(true); window.history.pushState({}, '', '/?preview=fan-pass') }
+  const onViewGlobalPass = (tierId?: string) => { setPassScope('global'); setPassTargetTierId(tierId); setShowPass(true); window.history.pushState({}, '', '/?preview=fan-global-pass') }
+  const artistScopes = [{ id: 'dreamscape', name: '드림스케이프', imageUrl: loginDreamscapeGroup }]
+  const previewCallbacks = {
+    onRetry: () => {},
+    onClaim: async () => ({ id: 'preview', rewardId: 'preview', type: 'badge' as const, name: '미리보기', grantedAt: null, claimedAt: null }),
+    onClaimPassTier: async () => ({ seasonId: 'preview-season', tierId: 'preview-tier-1', claimedAt: null, rewardGrant: null }),
+    onEquip: async () => {},
+  }
+  return <main className="app-shell growth-shell">
+    <div className="app-header">
+      <div className="app-header-copy"><span className="eyebrow">FANFOLIO</span><h1>팬 레벨</h1><p className="app-header-description">팬 활동을 통해 레벨을 올리고 특별한 혜택을 받아보세요!</p></div>
+      <div className="header-actions"><button className="header-alert-button" aria-label="알림"><NavIcon name="alerts" /></button><button className="header-profile-button" aria-label="프로필 및 설정"><ProfileAvatar imageUrl={null} fallback="테" alt="프로필 이미지" /></button></div>
+    </div>
+    <section className="screen"><FanGrowth progression={fanGrowthPreviewProgression} globalProgression={{ ...fanGrowthPreviewProgression, level: { level: 2, totalXp: 120, nextLevelXp: 300 }, pass: { ...fanGrowthPreviewProgression.pass, seasons: fanGrowthPreviewProgression.pass.seasons.map(season => ({ ...season, id: 'preview-global-season', title: '전체 팬 레벨', artistId: null })) } }} artistScopes={artistScopes} selectedArtistId="dreamscape" onArtistChange={() => {}} loading={false} error="" mode="full" {...previewCallbacks} onViewPass={onViewPass} onViewGlobalPass={onViewGlobalPass} fanGrowthMode="full" /></section>
+    <div className="bottom-nav" aria-label="주요 메뉴">{[
+      ['탐색', 'discover'], ['보관함', 'collection'], ['홈', 'home'], ['팬 레벨', 'growth'], ['마이', 'settings'],
+    ].map(([label, icon]) => <button key={label} type="button" className={`nav-item ${label === '팬 레벨' ? 'active' : ''}`}><NavIcon name={icon as 'discover' | 'collection' | 'home' | 'growth' | 'settings'} /><span>{label}</span></button>)}</div>
+  </main>
+}
 
 const qaRevealDesignConfig = {
   version: 3,
@@ -157,10 +203,16 @@ function App() {
   const [eventId, setEventId] = useState<string | null>(() => eventIdFromPath(window.location.pathname))
   const [selectedCard, setSelectedCard] = useState<Card | null>(() => readCardRoutePreview(window.location.pathname))
   const [showRedeem, setShowRedeem] = useState(() => window.location.pathname === '/redeem')
+  const [showFanPassPage, setShowFanPassPage] = useState(() => window.location.pathname === '/growth/pass' || window.location.pathname === '/growth/global-pass')
+  const [passScope, setPassScope] = useState<'artist' | 'global'>(() => window.location.pathname === '/growth/global-pass' ? 'global' : 'artist')
+  const [passTargetTierId, setPassTargetTierId] = useState<string | undefined>()
   const [signedIn, setSignedIn] = useState(false)
   const [sessionChecking, setSessionChecking] = useState(true)
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
+  const [catalogArtists, setCatalogArtists] = useState<CatalogArtist[]>([])
+  const [growthArtistId, setGrowthArtistId] = useState<string | null>(null)
   const [collectionCards, setCollectionCards] = useState<Card[]>([])
+  const [collectionDataReady, setCollectionDataReady] = useState(false)
   // The MVP contract defines a nine-card collection. Keep the loading
   // fallback aligned with the API so the first paint does not briefly show
   // an incorrect “0 / 80” state while the request is in flight.
@@ -169,6 +221,7 @@ function App() {
   const [collectionError, setCollectionError] = useState('')
   const [collectionBenefits, setCollectionBenefits] = useState<CollectionBenefit[]>([])
   const [fanProgression, setFanProgression] = useState<FanProgression | null>(null)
+  const [globalFanProgression, setGlobalFanProgression] = useState<FanProgression | null>(null)
   const [growthLoading, setGrowthLoading] = useState(false)
   const [growthError, setGrowthError] = useState('')
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
@@ -183,12 +236,33 @@ function App() {
   const [fanEventsLoading, setFanEventsLoading] = useState(false)
   const [fanEventsError, setFanEventsError] = useState('')
   const [fanEventStatus, setFanEventStatus] = useState<'all' | FanEventStatus>('all')
+  const [fanEventPage, setFanEventPage] = useState(1)
+  const [fanEventPagination, setFanEventPagination] = useState<EventPagination>({ page: 1, pageSize: 12, total: 0, totalPages: 1 })
   const [selectedEvent, setSelectedEvent] = useState<FanEvent | null>(null)
   const [eventDetailLoading, setEventDetailLoading] = useState(false)
+  const [eventComments, setEventComments] = useState<FanEventComment[]>([])
+  const [eventCommentsLoading, setEventCommentsLoading] = useState(false)
+  const [eventCommentSubmitting, setEventCommentSubmitting] = useState(false)
   const [showApplicationComplete, setShowApplicationComplete] = useState(false)
+  const [showMyApplications, setShowMyApplications] = useState(false)
+  const [myApplications, setMyApplications] = useState<FanEventApplication[]>([])
+  const [myApplicationsLoading, setMyApplicationsLoading] = useState(false)
+  const [myApplicationsError, setMyApplicationsError] = useState('')
   const [showNotificationSettings, setShowNotificationSettings] = useState(false)
   const savedCardsOwnerRef = useRef<string | null>(null)
   const savedCardIds = savedCards.map(card => card.userCardId ?? card.id)
+
+  useEffect(() => {
+    const favoriteArtistIds = currentUser?.favoriteArtistIds ?? []
+    setGrowthArtistId(current => current && favoriteArtistIds.includes(current) ? current : favoriteArtistIds[0] ?? null)
+  }, [currentUser?.favoriteArtistIds])
+
+  useEffect(() => {
+    if (!signedIn) return
+    void apiFetch<{ ok: true, data: { items: CatalogArtist[] } }>('/catalog/artists')
+      .then(result => setCatalogArtists(result.data.items))
+      .catch(() => setCatalogArtists([]))
+  }, [signedIn])
 
   useEffect(() => {
     const userId = currentUser?.id
@@ -236,10 +310,25 @@ function App() {
   }
 
   const openEvents = () => {
+    setShowMyApplications(false)
     setTab('events')
     setEventId(null)
     setSelectedEvent(null)
     window.history.pushState({}, '', '/events')
+  }
+
+  const openMyApplications = () => {
+    setShowMyApplications(true)
+    setShowApplicationComplete(false)
+    setMyApplicationsLoading(true)
+    setMyApplicationsError('')
+    void getMyEventApplications()
+      .then(result => setMyApplications(result.data.items))
+      .catch(error => {
+        if (error instanceof ApiError && error.status === 401) clearLocalSession()
+        else setMyApplicationsError('신청 내역을 불러오지 못했어요.')
+      })
+      .finally(() => setMyApplicationsLoading(false))
   }
 
   const openEvent = (event: FanEvent) => {
@@ -247,6 +336,54 @@ function App() {
     setSelectedEvent(event)
     setEventId(event.id)
     window.history.pushState({}, '', `/events/${encodeURIComponent(event.id)}`)
+  }
+
+  const handleEventApply = async () => {
+    if (!selectedEvent) return
+    setFanEventsError('')
+    try {
+      await applyToFanEvent(selectedEvent.id)
+      const refreshed = await getFanEvent(selectedEvent.id)
+      setSelectedEvent(refreshed.data)
+      setShowApplicationComplete(true)
+      window.dispatchEvent(new Event('fanfolio:refresh-notifications'))
+      void getFanEvents({ status: fanEventStatus, page: fanEventPage })
+        .then(result => { setFanEvents(result.data.items); setFanEventPagination(result.data.pagination) })
+        .catch(() => undefined)
+    } catch (error) {
+      setFanEventsError(error instanceof ApiError ? error.message : '이벤트 신청에 실패했어요.')
+    }
+  }
+
+  const loadEventComments = async () => {
+    if (!selectedEvent || selectedEvent.eventType !== 'comment') return
+    setEventCommentsLoading(true)
+    try {
+      const result = await getFanEventComments(selectedEvent.id)
+      setEventComments(result.data.items)
+    } catch {
+      setFanEventsError('댓글을 불러오지 못했어요.')
+    } finally {
+      setEventCommentsLoading(false)
+    }
+  }
+
+  const handleEventComment = async (body: string) => {
+    if (!selectedEvent) return
+    setEventCommentSubmitting(true)
+    try {
+      await postFanEventComment(selectedEvent.id, body)
+      await loadEventComments()
+    } catch (error) {
+      setFanEventsError(error instanceof ApiError ? error.message : '댓글 등록에 실패했어요.')
+    } finally {
+      setEventCommentSubmitting(false)
+    }
+  }
+
+  const handleFanEventStatusChange = (status: 'all' | FanEventStatus) => {
+    setFanEventStatus(status)
+    setFanEventPage(1)
   }
 
   const openRedeem = () => {
@@ -286,12 +423,29 @@ function App() {
     if (window.location.pathname.startsWith('/cards/')) window.history.replaceState({}, '', pathForTab(tab))
   }
 
+  const openFanPassPage = (tierId?: string, scope: 'artist' | 'global' = 'artist') => {
+    setPassScope(scope)
+    setPassTargetTierId(tierId)
+    setShowFanPassPage(true)
+    window.history.pushState({}, '', scope === 'global' ? '/growth/global-pass' : '/growth/pass')
+  }
+
+  const closeFanPassPage = () => {
+    setShowFanPassPage(false)
+    setPassScope('artist')
+    setPassTargetTierId(undefined)
+    window.history.replaceState({}, '', '/growth')
+    setTab('growth')
+  }
+
   useEffect(() => {
     const onPopState = () => {
       const path = window.location.pathname
       setTab(tabFromPath(path))
       setEventId(eventIdFromPath(path))
       setShowRedeem(path === '/redeem')
+      setShowFanPassPage(path === '/growth/pass' || path === '/growth/global-pass')
+      setPassScope(path === '/growth/global-pass' ? 'global' : 'artist')
       setRevealedCardId(revealIdFromPath(path))
       setSelectedCard(path.startsWith('/cards/') ? readCardRoutePreview(path) : null)
     }
@@ -310,20 +464,24 @@ function App() {
     if (!signedIn || tab !== 'events' || eventId) return
     setFanEventsLoading(true)
     setFanEventsError('')
-    void getFanEvents({ status: fanEventStatus === 'all' ? undefined : fanEventStatus }).then(result => setFanEvents(result.data.items)).catch(() => setFanEventsError('이벤트를 불러오지 못했어요.')).finally(() => setFanEventsLoading(false))
-  }, [eventId, fanEventStatus, signedIn, tab])
+    void getFanEvents({ status: fanEventStatus, page: fanEventPage }).then(result => { setFanEvents(result.data.items); setFanEventPagination(result.data.pagination) }).catch(() => setFanEventsError('이벤트를 불러오지 못했어요.')).finally(() => setFanEventsLoading(false))
+  }, [eventId, fanEventPage, fanEventStatus, signedIn, tab])
 
   useEffect(() => {
     if (!signedIn || tab !== 'events' || !eventId) return
-    const fallbackEvent = fallbackEventList.find(item => item.id === eventId)
-    if (fallbackEvent) {
-      setSelectedEvent(fallbackEvent)
-      setEventDetailLoading(false)
-      return
-    }
+    setEventComments([])
     setEventDetailLoading(true)
-    void getFanEvent(eventId).then(result => setSelectedEvent(result.data)).catch(() => setSelectedEvent(null)).finally(() => setEventDetailLoading(false))
-  }, [eventId, signedIn, tab])
+    void getFanEvent(eventId)
+      .then(result => {
+        setSelectedEvent(result.data)
+        if (result.data.eventType === 'comment') {
+          setEventCommentsLoading(true)
+          void getFanEventComments(result.data.id).then(comments => setEventComments(comments.data.items)).catch(() => undefined).finally(() => setEventCommentsLoading(false))
+        }
+      })
+      .catch(() => setSelectedEvent(null))
+      .finally(() => setEventDetailLoading(false))
+  }, [eventId, fanEvents, signedIn, tab])
 
   useEffect(() => {
     const match = window.location.pathname.match(/^\/cards\/(.+)$/)
@@ -342,6 +500,7 @@ function App() {
     setShowRedeem(false)
     setRevealedCardId(null)
     setCollectionCards([])
+    setCollectionDataReady(false)
     setCollectionSummary({ ownedCount: 0, totalSlots: 9, completionRate: 0 })
     setCollectionBenefits([])
     setCollectionError('')
@@ -363,6 +522,7 @@ function App() {
         apiFetch<{ ok: true, data: { items: CollectionBenefit[] } }>('/me/collection/benefits'),
       ])
       setCollectionCards(collection.data.cards.map(toCollectionCard))
+      setCollectionDataReady(true)
       setCollectionSummary(collection.data.summary)
       setCollectionBenefits(benefits.data.items)
     } catch (error) {
@@ -377,21 +537,23 @@ function App() {
     setGrowthLoading(true)
     setGrowthError('')
     try {
-      const [progression, pass] = await Promise.all([
-        getProgression(),
-        getFanPass(),
+      const [progression, pass, globalProgression] = await Promise.all([
+        getProgression(growthArtistId),
+        getFanPass(growthArtistId),
+        growthArtistId ? getProgression(null) : Promise.resolve(null),
       ])
       setFanProgression({
         ...progression.data,
         pass: pass.data,
       })
+      setGlobalFanProgression(globalProgression?.data ?? (growthArtistId ? null : { ...progression.data, pass: pass.data }))
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) clearLocalSession()
       else setGrowthError('성장 정보를 불러오지 못했어요.')
     } finally {
       setGrowthLoading(false)
     }
-  }, [clearLocalSession])
+  }, [clearLocalSession, growthArtistId])
 
   const refreshUser = async () => {
     const result = await apiFetch<{ ok: true, data: CurrentUser }>('/me')
@@ -465,27 +627,17 @@ function App() {
     const interval = window.setInterval(() => void refreshNotifications(), 30_000)
     const retryHandler = () => { void refreshNotifications() }
     window.addEventListener('fanfolio:refresh-notifications', retryHandler)
-    let stream: EventSource | null = null
-    try {
-      stream = new EventSource(notificationStreamUrl(), { withCredentials: true })
-      stream.addEventListener('notification', (event: MessageEvent<string>) => {
-        try {
-          const item = JSON.parse(event.data) as NotificationItem
-          setNotifications(items => {
-            if (items.some(existing => existing.id === item.id)) return items
-            setUnreadCount(count => count + 1)
-            return [item, ...items]
-          })
-        } catch {
-          // A malformed push must not stop the regular polling fallback.
-        }
+    const streamController = new AbortController()
+    void connectNotificationStream(item => {
+      setNotifications(items => {
+        if (items.some(existing => existing.id === item.id)) return items
+        setUnreadCount(count => count + 1)
+        return [item, ...items]
       })
-      stream.onerror = () => stream?.close()
-    } catch {
-      // EventSource can be unavailable or rejected by a browser policy. The
-      // 30-second polling loop above remains the source of truth in that case.
-    }
-    return () => { cancelled = true; window.clearInterval(interval); window.removeEventListener('fanfolio:refresh-notifications', retryHandler); stream?.close() }
+    }, streamController.signal).catch(() => {
+      // The 30-second polling loop remains the source of truth if streaming is unavailable.
+    })
+    return () => { cancelled = true; window.clearInterval(interval); window.removeEventListener('fanfolio:refresh-notifications', retryHandler); streamController.abort() }
   }, [clearLocalSession, signedIn])
 
   const logout = async () => {
@@ -552,12 +704,22 @@ function App() {
     return <SessionLoading />
   }
 
+  if (import.meta.env.DEV) {
+    const preview = new URLSearchParams(window.location.search).get('preview')
+    if (preview === 'fan-pass' || preview === 'fan-global-pass') return <FanPassPage progression={fanGrowthPreviewProgression} loading={false} error="" onRetry={() => {}} onBack={() => { window.history.pushState({}, '', '/?preview=fan-growth'); window.dispatchEvent(new PopStateEvent('popstate')) }} onClaimPassTier={async () => ({})} isGlobal={preview === 'fan-global-pass'} />
+    if (preview === 'fan-growth') return <FanGrowthPreview />
+  }
+
   if (!signedIn) {
     return <Login onLogin={completeLogin} />
   }
 
   if (showOnboarding) {
     return <Onboarding userId={currentUser?.id ?? 'fan'} profileImageUrl={currentUser?.profileImageUrl ?? null} onComplete={() => { setShowOnboarding(false); void refreshUser(); void Promise.allSettled([refreshCollection(), refreshGrowth()]) }} onBack={logout} />
+  }
+
+  if (showFanPassPage) {
+    return <FanPassPage progression={passScope === 'global' ? globalFanProgression : fanProgression} loading={growthLoading} error={growthError} onRetry={refreshGrowth} onBack={closeFanPassPage} onClaimPassTier={claimGrowthPassTier} initialTierId={passTargetTierId} isGlobal={passScope === 'global'} />
   }
 
   if (revealedCardId) {
@@ -573,7 +735,11 @@ function App() {
   }
 
   if (showApplicationComplete) {
-    return <EventApplicationComplete onBack={() => setShowApplicationComplete(false)} onEvents={() => { setShowApplicationComplete(false); openEvents() }} onApplications={() => { setShowApplicationComplete(false); navigateTab('settings') }} />
+    return <EventApplicationComplete event={selectedEvent} onBack={() => setShowApplicationComplete(false)} onEvents={() => { setShowApplicationComplete(false); openEvents() }} onApplications={openMyApplications} />
+  }
+
+  if (showMyApplications) {
+    return <MyEventApplications items={myApplications} loading={myApplicationsLoading} error={myApplicationsError} onBack={() => { setShowMyApplications(false); navigateTab('settings') }} onEvents={() => { setShowMyApplications(false); openEvents() }} onRetry={openMyApplications} onOpen={async eventId => { try { const result = await getFanEvent(eventId); setShowMyApplications(false); openEvent(result.data) } catch { setMyApplicationsError('이벤트 상세를 불러오지 못했어요.') } }} />
   }
 
   if (showNotificationSettings) {
@@ -596,14 +762,14 @@ function App() {
 
       <section className="screen">
         {collectionError && <div className="service-notice" role="alert"><span>{collectionError}</span><button onClick={() => void refreshCollection()} disabled={collectionLoading}>{collectionLoading ? '확인 중...' : '다시 시도'}</button></div>}
-        {tab === 'home' && <Home nickname={currentUser?.nickname ?? '팬'} cards={collectionCards} savedCards={savedCards} summary={collectionSummary} loading={collectionLoading} eventHome={fanHome} onSelect={openCard} onDiscover={() => navigateTab('discover')} onCollection={() => navigateTab('collection')} onRedeem={openRedeem} onEvents={openEvents} onEvent={openEvent} />}
-        {tab === 'events' && (eventId ? <EventDetail event={selectedEvent} loading={eventDetailLoading} onBack={openEvents} onApply={() => setShowApplicationComplete(true)} onOpenTarget={target => { if (target.startsWith('/events/')) { const id = decodeURIComponent(target.split('/').pop() ?? ''); const item = [...fanEvents, ...fallbackEventList].find(event => event.id === id); if (item) openEvent(item) } else if (target.startsWith('https://')) window.open(target, '_blank', 'noopener,noreferrer') }} /> : <EventList events={fanEvents.length > 0 ? fanEvents : fallbackEventList} status={fanEventStatus} loading={fanEventsLoading} error={fanEventsError} onStatusChange={setFanEventStatus} onOpen={openEvent} />)}
-        {tab === 'collection' && <Collection cards={collectionCards} summary={collectionSummary} benefits={collectionBenefits} loading={collectionLoading} onSelect={openCard} onRedeem={openRedeem} onDiscover={() => navigateTab('discover')} onClaim={claimBenefit} />}
+        {tab === 'home' && <Home nickname={currentUser?.nickname ?? '팬'} cards={collectionCards} collectionDataReady={collectionDataReady} savedCards={savedCards} summary={collectionSummary} loading={collectionLoading} eventHome={fanHome} onSelect={openCard} onDiscover={() => navigateTab('discover')} onCollection={() => navigateTab('collection')} onRedeem={openRedeem} onEvents={openEvents} onEvent={openEvent} />}
+        {tab === 'events' && (eventId ? <EventDetail event={selectedEvent} loading={eventDetailLoading} onBack={openEvents} onApply={handleEventApply} comments={eventComments} commentsLoading={eventCommentsLoading} commentSubmitting={eventCommentSubmitting} onLoadComments={loadEventComments} onSubmitComment={handleEventComment} onOpenTarget={target => { if (target.startsWith('/events/')) { const id = decodeURIComponent(target.split('/')[1]?.split('#')[0] ?? ''); const item = fanEvents.find(event => event.id === id); if (item) openEvent(item) } else if (target.startsWith('https://')) window.open(target, '_blank', 'noopener,noreferrer') }} /> : <EventList events={fanEvents} status={fanEventStatus} loading={fanEventsLoading} error={fanEventsError} pagination={fanEventPagination} onStatusChange={handleFanEventStatusChange} onPageChange={setFanEventPage} onOpen={openEvent} />)}
+        {tab === 'collection' && <Collection cards={collectionCards} collectionDataReady={collectionDataReady} summary={collectionSummary} benefits={collectionBenefits} loading={collectionLoading} onSelect={openCard} onRedeem={openRedeem} onDiscover={() => navigateTab('discover')} onClaim={claimBenefit} />}
         {tab === 'discover' && <Discover />}
         {tab === 'alerts' && <Alerts items={notifications} error={notificationError} actionError={notificationActionError} onDismissActionError={() => setNotificationActionError('')} onRetry={() => window.dispatchEvent(new Event('fanfolio:refresh-notifications'))} onRead={markNotificationRead} onReadAll={markAllNotificationsRead} onNavigate={navigateTab} />}
         {/* Embedded surfaces stay compact; the dedicated tab uses the full progression view. */}
-        {tab === 'growth' && <FanGrowth progression={fanProgression} loading={growthLoading} error={growthError} mode="full" onRetry={refreshGrowth} onClaim={claimGrowthReward} onClaimPassTier={claimGrowthPassTier} onEquip={saveGrowthEquipment} fanGrowthMode="full" />}
-        {tab === 'settings' && currentUser && <Settings user={currentUser} onUserUpdated={setCurrentUser} onLogout={logout} onEvents={openEvents} onNotificationSettings={() => setShowNotificationSettings(true)} />}
+        {tab === 'growth' && <FanGrowth progression={fanProgression} globalProgression={globalFanProgression} artistScopes={catalogArtists.filter(artist => currentUser?.favoriteArtistIds.includes(artist.id)).map(artist => ({ id: artist.id, name: artist.name, imageUrl: artist.name === '드림스케이프' ? loginDreamscapeGroup : artist.imageUrl }))} selectedArtistId={growthArtistId} onArtistChange={setGrowthArtistId} loading={growthLoading} error={growthError} mode="full" onRetry={refreshGrowth} onClaim={claimGrowthReward} onClaimPassTier={claimGrowthPassTier} onEquip={saveGrowthEquipment} onViewPass={openFanPassPage} onViewGlobalPass={(tierId) => openFanPassPage(tierId, 'global')} fanGrowthMode="full" />}
+        {tab === 'settings' && currentUser && <Settings user={currentUser} progression={fanProgression} onUserUpdated={setCurrentUser} onLogout={logout} onEvents={openMyApplications} onNotificationSettings={() => setShowNotificationSettings(true)} />}
       </section>
 
       <nav className="bottom-nav" aria-label="주요 메뉴">
@@ -628,6 +794,7 @@ function tabFromPath(pathname: string): Tab {
   if (pathname === '/discover') return 'discover'
   if (pathname === '/collection') return 'collection'
   if (pathname === '/growth') return 'growth'
+  if (pathname === '/growth/pass' || pathname === '/growth/global-pass') return 'growth'
   if (pathname === '/notifications') return 'alerts'
   if (pathname === '/events' || pathname.startsWith('/events/')) return 'events'
   if (pathname === '/settings') return 'settings'
@@ -764,6 +931,8 @@ function Onboarding({ userId, profileImageUrl, onComplete, onBack }: { userId: s
   const [group, setGroup] = useState(initialDraft.group ?? '')
   const [member, setMember] = useState(initialDraft.member ?? '')
   const [nickname, setNickname] = useState(initialDraft.nickname ?? '')
+  const [selectedProfileImage, setSelectedProfileImage] = useState(profileImageUrl)
+  const profileImageInputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [backBusy, setBackBusy] = useState(false)
   const [message, setMessage] = useState('')
@@ -831,12 +1000,12 @@ function Onboarding({ userId, profileImageUrl, onComplete, onBack }: { userId: s
   }, [group, memberAttempt])
 
   const save = async () => {
-    if (!group || !member) { setMessage('아티스트와 멤버를 선택해 주세요.'); return }
+    if (group && !member) { setMessage('멤버를 선택해 주세요.'); return }
     if (!nickname.trim()) { setMessage('닉네임을 입력해 주세요.'); return }
     setBusy(true)
     setMessage('')
     try {
-      await apiFetch('/me/profile', { method: 'PATCH', body: JSON.stringify({ nickname: nickname.trim(), favoriteArtistIds: [group], favoriteMemberIds: [member] }) })
+      await apiFetch('/me/profile', { method: 'PATCH', body: JSON.stringify({ nickname: nickname.trim(), favoriteArtistIds: group ? [group] : [], favoriteMemberIds: member ? [member] : [], profileImageUrl: selectedProfileImage }) })
       try { window.sessionStorage.removeItem(onboardingDraftKey(userId)) } catch { /* optional draft cleanup */ }
       onComplete()
     } catch (error) {
@@ -858,6 +1027,34 @@ function Onboarding({ userId, profileImageUrl, onComplete, onBack }: { userId: s
     if (step === 2 && (!member || memberLoading)) { setMessage('좋아하는 멤버를 선택해 주세요.'); return }
     setStep(current => Math.min(3, current + 1))
   }
+  const skipArtist = () => {
+    setGroup('')
+    setMember('')
+    setMessage('')
+    setStep(3)
+  }
+  const handleProfileImageChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      setMessage('PNG, JPG, WEBP 이미지만 등록할 수 있어요.')
+      return
+    }
+    if (file.size > 1_500_000) {
+      setMessage('프로필 이미지는 1.5MB 이하로 등록해 주세요.')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setSelectedProfileImage(reader.result)
+        setMessage('프로필 이미지를 선택했어요. 아래 버튼을 눌러 저장해 주세요.')
+      }
+    }
+    reader.onerror = () => setMessage('프로필 이미지를 읽지 못했어요.')
+    reader.readAsDataURL(file)
+  }
   const filteredArtists = artists.filter(artist => artist.name.toLowerCase().includes(artistQuery.trim().toLowerCase()))
   const selectedArtist = artists.find(artist => artist.id === group)
   const selectedMember = members.find(item => item.id === member)
@@ -872,7 +1069,7 @@ function Onboarding({ userId, profileImageUrl, onComplete, onBack }: { userId: s
       {!artistLoading && <div className="artist-grid">{filteredArtists.map(artist => <button type="button" aria-pressed={group === artist.id} className={group === artist.id ? 'artist-choice selected' : 'artist-choice'} key={artist.id} onClick={() => setGroup(artist.id)}><span className="choice-visual"><img src={demoCardImage(resolveApiUrl(artist.imageUrl), `artist:${artist.id}`)} alt="" onError={event => keepCardVisual(event, `artist:${artist.id}`)} />{group === artist.id && <span className="choice-check" aria-hidden="true"><InlineIcon name="check" /></span>}</span><span className="choice-copy"><b>{artist.name}</b><small>공식 아티스트</small></span></button>)}</div>}
       {artistError && <div className="inline-retry" role="alert"><span>아티스트 목록을 불러오지 못했어요.</span><button type="button" onClick={() => setArtistAttempt(value => value + 1)}>다시 시도</button></div>}
       {!artistLoading && filteredArtists.length === 0 && !artistError && <p className="muted empty-search">검색 결과가 없어요. 다른 이름으로 찾아보세요.</p>}
-      <div className="onboarding-action"><button type="button" className="primary" onClick={next} disabled={artistLoading || !group}>다음: 멤버 선택 <InlineIcon name="chevron" /></button></div>
+      <div className="onboarding-action"><button type="button" className="primary" onClick={next} disabled={artistLoading || !group}>다음: 멤버 선택 <InlineIcon name="chevron" /></button><button type="button" className="onboarding-skip" onClick={skipArtist}>관심 아티스트 없이 시작하기</button></div>
     </section>}
     {step === 2 && <section className="onboarding-step onboarding-member-step">
       <header className="onboarding-step-copy"><span>STEP 2</span><h1>{selectedArtist?.name ?? '아티스트'}의<br />최애 멤버를 선택해 주세요</h1><p>가장 좋아하는 멤버의 카드와 새로운 소식을 먼저 만나보세요.</p></header>
@@ -884,7 +1081,7 @@ function Onboarding({ userId, profileImageUrl, onComplete, onBack }: { userId: s
     </section>}
     {step === 3 && <section className="onboarding-step onboarding-profile-step">
       <header className="onboarding-step-copy"><span>STEP 3</span><h1>팬폴리오에서 사용할<br />닉네임을 정해 주세요</h1><p>나만의 팬 컬렉션에 표시될 프로필을 완성해 주세요.</p></header>
-      <div className="nickname-preview" aria-live="polite"><div className="profile-photo"><ProfileAvatar imageUrl={resolveApiUrl(profileImageUrl)} fallback={nickname || '팬'} alt="내 프로필 이미지" /><button type="button" className="profile-photo-edit" aria-label="프로필 이미지 변경" onClick={() => setMessage('프로필 이미지는 가입 후 마이 페이지에서 변경할 수 있어요.')}><InlineIcon name="camera" /></button></div><div><span>컬렉션 프로필</span><b>{nickname.trim() || '나의 팬 닉네임'}</b><small>{selectedArtist?.name ?? '좋아하는 아티스트'} · {selectedMember?.name ?? '선택한 멤버'}</small></div></div>
+      <div className="nickname-preview" aria-live="polite"><div className="profile-photo"><ProfileAvatar imageUrl={resolveApiUrl(selectedProfileImage)} fallback={nickname || '팬'} alt="내 프로필 이미지" /><button type="button" className="profile-photo-edit" aria-label="프로필 이미지 변경" onClick={() => profileImageInputRef.current?.click()}><InlineIcon name="camera" /></button><input ref={profileImageInputRef} className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" aria-label="프로필 이미지 파일" onChange={handleProfileImageChange} /></div><div><span>컬렉션 프로필</span><b>{nickname.trim() || '나의 팬 닉네임'}</b><small>{selectedArtist?.name ? `${selectedArtist.name} · ${selectedMember?.name ?? '선택한 멤버'}` : '전체 아티스트 팬으로 시작'}</small></div></div>
       <div className="nickname-field-card"><div className="nickname-field-heading"><div><label className="field-label" htmlFor="onboarding-nickname">닉네임</label><p>컬렉션에서 사용할 이름을 정해 주세요.</p></div><span className="nickname-field-icon" aria-hidden="true"><InlineIcon name="users" /></span></div><div className="nickname-input-wrap"><input id="onboarding-nickname" className="nickname-input" value={nickname} onChange={e => setNickname(e.target.value)} placeholder="예: 유나의 작은 우주" maxLength={40} aria-describedby="nickname-help" /><small>{nickname.length}/40</small></div><p id="nickname-help" className="field-help">나중에 마이 페이지에서 언제든 바꿀 수 있어요.</p></div>
       <div className="onboarding-action"><button type="button" className="primary" onClick={() => void save()} disabled={!nickname.trim() || busy || backBusy}>{busy ? '저장 중...' : <>나만의 컬렉션 시작하기 <InlineIcon name="chevron" /></>}</button></div>
     </section>}
@@ -892,7 +1089,7 @@ function Onboarding({ userId, profileImageUrl, onComplete, onBack }: { userId: s
   </main>
 }
 
-type HomeProps = { nickname: string, cards: Card[], savedCards: Card[], summary: CollectionSummary, loading: boolean, eventHome: FanHomeResponse | null, onSelect: (card: Card) => void, onDiscover: () => void, onCollection: () => void, onRedeem: () => void, onEvents: () => void, onEvent: (event: FanEvent) => void }
+type HomeProps = { nickname: string, cards: Card[], collectionDataReady: boolean, savedCards: Card[], summary: CollectionSummary, loading: boolean, eventHome: FanHomeResponse | null, onSelect: (card: Card) => void, onDiscover: () => void, onCollection: () => void, onRedeem: () => void, onEvents: () => void, onEvent: (event: FanEvent) => void }
 
 const fallbackHomeEvent: FanEvent = {
   id: 'demo-fan-week',
@@ -912,14 +1109,9 @@ const fallbackHomeEvent: FanEvent = {
   artistName: '드림스케이프',
   ctaLabel: '이벤트 보기',
   ctaTarget: '/events',
+  noticeItems: [],
+  relatedCards: [],
 }
-
-const fallbackEventList: FanEvent[] = [
-  { ...fallbackHomeEvent, id: 'demo-event-signing', title: '드림스케이프 팬 사인회', summary: '드림스케이프', description: '드림스케이프와 함께하는 특별한 팬 사인회에 참여해 보세요.', eventType: 'external', status: 'active', startsAt: '2026-06-28T17:00:00+09:00', heroUrl: eventSigningReference, ctaLabel: '참여하기', ctaTarget: '/events/demo-event-signing' },
-  { ...fallbackHomeEvent, id: 'demo-event-live', title: 'DREAMSCAPE LIVE in SEOUL', summary: '드림스케이프', description: '드림스케이프의 라이브 무대를 만나보세요.', eventType: 'card', status: 'upcoming', startsAt: '2026-07-12T18:00:00+09:00', heroUrl: fanWeekNightStage, ctaLabel: '자세히 보기', ctaTarget: '/events/demo-event-live' },
-  { ...fallbackHomeEvent, id: 'demo-event-hi-touch', title: '드림스케이프 하이터치 이벤트', summary: '드림스케이프', description: '가까이에서 아티스트를 만나는 하이터치 이벤트입니다.', eventType: 'fan_mission', status: 'active', startsAt: '2026-07-25T15:00:00+09:00', heroUrl: fanWeekLavenderMeet, ctaLabel: '참여하기', ctaTarget: '/events/demo-event-hi-touch' },
-  { ...fallbackHomeEvent, id: 'demo-event-fan-meeting', title: '드림스케이프 스페셜 팬 미팅', summary: '드림스케이프', description: '드림스케이프와 함께한 특별한 팬 미팅 기록입니다.', eventType: 'external', status: 'ended', startsAt: '2026-08-08T14:00:00+09:00', heroUrl: dreamscapeHero, ctaLabel: '기록 보기', ctaTarget: '/events/demo-event-fan-meeting' },
-]
 
 type HomeHeroSlide = {
   event: FanEvent
@@ -1010,28 +1202,29 @@ function HomeRecommendations({ cards, onSelect, onDiscover }: { cards: Card[], o
 
 function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome, onSelect, onDiscover, onCollection, onRedeem, onEvents, onEvent }: HomeProps) {
   const featured = cards[0]
-  const featuredEvent = eventHome?.featuredEvent ?? fallbackHomeEvent
+  const apiHeroEvents = eventHome
+    ? [eventHome.featuredEvent, ...eventHome.upcomingEvents].filter((event): event is FanEvent => Boolean(event)).filter((event, index, events) => events.findIndex(item => item.id === event.id) === index)
+    : []
+  const featuredEvent = eventHome ? eventHome.featuredEvent : import.meta.env.DEV ? fallbackHomeEvent : null
   const [activeHeroIndex, setActiveHeroIndex] = useState(0)
   const [heroInteractionVersion, setHeroInteractionVersion] = useState(0)
   const [artistFavorite, setArtistFavorite] = useState(false)
   const [newCardFavorites, setNewCardFavorites] = useState<Set<string>>(() => new Set())
-  const heroDrag = useRef<{ pointerId: number, startX: number, currentX: number } | null>(null)
-  const heroDidSwipe = useRef(false)
-  const heroSlides: HomeHeroSlide[] = [
-    {
-      event: featuredEvent,
-      eyebrow: '팬 이벤트',
-      titleLines: homeHeroTitleLines(featuredEvent.title),
-      image: resolveApiUrl(featuredEvent.heroUrl) || dreamscapeHero,
-    },
-    ...fallbackHeroSlides.slice(1),
-  ]
-  const artist = eventHome?.favoriteArtist ?? { id: 'dreamscape', name: '드림스케이프', imageUrl: cardYunaImage }
-  const newCards = eventHome?.newCards?.length ? eventHome.newCards.map(toCatalogCard) : fallbackHomeCards
+  const heroEvents = eventHome ? apiHeroEvents : featuredEvent ? [featuredEvent] : []
+  const heroSlides: HomeHeroSlide[] = heroEvents.map(event => ({
+    event,
+    eyebrow: '팬 이벤트',
+    titleLines: homeHeroTitleLines(event.title),
+    image: resolveApiUrl(event.heroUrl) || dreamscapeHero,
+  }))
+  const artist = eventHome?.favoriteArtist ?? null
+  const newCards = eventHome ? eventHome.newCards.map(toCatalogCard) : import.meta.env.DEV ? fallbackHomeCards : []
+  const activeEvent = eventHome ? eventHome.upcomingEvents[0] ?? eventHome.featuredEvent : import.meta.env.DEV ? fallbackHomeEvent : null
   const completionRate = Math.min(100, Math.max(0, summary.completionRate))
-  const artistImage = artist.imageUrl ? (resolveApiUrl(artist.imageUrl) || cardYunaImage) : cardYunaImage
+  const artistImage = artist?.imageUrl ? (resolveApiUrl(artist.imageUrl) || cardYunaImage) : cardYunaImage
 
   useEffect(() => {
+    if (heroSlides.length < 2) return
     const timer = window.setInterval(() => {
       setActiveHeroIndex(current => (current + 1) % heroSlides.length)
     }, 5800)
@@ -1043,40 +1236,8 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
     resetHeroAutoplay()
     setActiveHeroIndex(current => (current + direction + heroSlides.length) % heroSlides.length)
   }
-  const handleHeroPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
-    if (!event.isPrimary) return
-    heroDrag.current = { pointerId: event.pointerId, startX: event.clientX, currentX: event.clientX }
-    heroDidSwipe.current = false
-    resetHeroAutoplay()
-    event.currentTarget.setPointerCapture(event.pointerId)
-  }
-  const handleHeroPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
-    if (!heroDrag.current || heroDrag.current.pointerId !== event.pointerId) return
-    heroDrag.current.currentX = event.clientX
-    if (Math.abs(event.clientX - heroDrag.current.startX) > 8) event.preventDefault()
-  }
-  const finishHeroPointer = (event: ReactPointerEvent<HTMLElement>) => {
-    const drag = heroDrag.current
-    if (!drag || drag.pointerId !== event.pointerId) return
-    const distance = drag.currentX - drag.startX
-    heroDrag.current = null
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
-    if (Math.abs(distance) < 30) return
-    heroDidSwipe.current = true
-    moveHero(distance < 0 ? 1 : -1)
-  }
-  const cancelHeroPointer = (event: ReactPointerEvent<HTMLElement>) => {
-    if (!heroDrag.current || heroDrag.current.pointerId !== event.pointerId) return
-    heroDrag.current = null
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
-  }
   const openHeroEvent = (slide: HomeHeroSlide) => {
-    if (heroDidSwipe.current) {
-      heroDidSwipe.current = false
-      return
-    }
-    if (slide.event.id.startsWith('demo-')) onEvents()
-    else onEvent(slide.event)
+    onEvent(slide.event)
   }
   const toggleNewCardFavorite = (cardId: string) => {
     setNewCardFavorites(current => {
@@ -1094,15 +1255,8 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
       className="home-event-spotlight"
       aria-label="추천 이벤트"
       aria-roledescription="carousel"
-      onPointerDown={handleHeroPointerDown}
-      onPointerMove={handleHeroPointerMove}
-      onPointerUp={finishHeroPointer}
-      onPointerCancel={cancelHeroPointer}
-      onLostPointerCapture={event => {
-        if (heroDrag.current?.pointerId === event.pointerId) heroDrag.current = null
-      }}
     >
-      <div className="home-event-track" style={{ '--hero-index': activeHeroIndex } as CSSProperties}>
+      {heroSlides.length > 0 ? <><div className="home-event-track" style={{ '--hero-index': activeHeroIndex } as CSSProperties}>
         {heroSlides.map((slide, index) => <button
           type="button"
           className="home-event-slide"
@@ -1110,7 +1264,10 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
           aria-label={`${slide.event.title} · ${index + 1}/${heroSlides.length}`}
           aria-hidden={index !== activeHeroIndex}
           tabIndex={index === activeHeroIndex ? 0 : -1}
-          onClick={() => openHeroEvent(slide)}
+          onClick={event => {
+            event.stopPropagation()
+            openHeroEvent(slide)
+          }}
           onKeyDown={event => {
             if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
               event.preventDefault()
@@ -1118,7 +1275,7 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
             }
           }}
         >
-          <img draggable={false} src={slide.image} alt="" onError={event => { event.currentTarget.src = dreamscapeHero }} />
+          <AuthenticatedImage draggable={false} src={slide.event.heroUrl} fallback={slide.image || dreamscapeHero} alt="" />
           <span className="home-event-spotlight-copy">
             <small>{slide.eyebrow}</small>
             <b>{slide.titleLines.map(line => <span key={line}>{line}</span>)}</b>
@@ -1140,9 +1297,9 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
             setActiveHeroIndex(index)
           }}
         />)}
-      </div>
+      </div></> : <div className="home-event-empty"><b>새로운 이벤트를 준비하고 있어요</b><span>공개된 이벤트가 있으면 이곳에서 바로 확인할 수 있어요.</span><button type="button" className="outline" onClick={onEvents}>이벤트 둘러보기</button></div>}
     </section>
-    <section className="home-artist-section" aria-labelledby="home-artist-title">
+    {artist ? <section className="home-artist-section" aria-labelledby="home-artist-title">
       <div className="section-heading"><h2 id="home-artist-title">관심 아티스트</h2><button type="button" onClick={onDiscover}>전체 보기 <InlineIcon name="chevron" /></button></div>
       <article className="home-artist-card">
         <button type="button" className="home-artist-primary" onClick={onDiscover} aria-label={`${artist.name} 아티스트 홈 보기`}>
@@ -1162,10 +1319,10 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
           onClick={() => setArtistFavorite(favorite => !favorite)}
         />
       </article>
-    </section>
+    </section> : <section className="home-artist-section home-artist-empty" aria-labelledby="home-artist-title"><div className="section-heading"><h2 id="home-artist-title">관심 아티스트</h2><button type="button" onClick={onDiscover}>아티스트 찾기 <InlineIcon name="chevron" /></button></div><p>관심 아티스트를 선택하면 맞춤 카드와 이벤트를 보여드려요.</p></section>}
     <section className="home-new-cards" aria-labelledby="home-new-cards-title">
       <div className="section-heading"><h2 id="home-new-cards-title">새로 공개된 카드</h2><button type="button" onClick={onDiscover}>전체 보기 <InlineIcon name="chevron" /></button></div>
-      <div className="home-new-card-row">{newCards.slice(0, 3).map((card, index) => {
+      <div className="home-new-card-row">{newCards.length > 0 ? newCards.slice(0, 3).map((card, index) => {
         const rarity = index === 0 ? 'UR' : 'SR'
         const isFavorite = newCardFavorites.has(card.id)
         return <article className="home-new-card" key={card.id}>
@@ -1182,16 +1339,16 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
             onClick={() => toggleNewCardFavorite(card.id)}
           />
         </article>
-      })}</div>
+      }) : <div className="home-data-empty"><b>공개된 카드가 아직 없어요</b><span>새 카드가 공개되면 이곳에서 확인할 수 있어요.</span><button type="button" className="outline" onClick={onDiscover}>카드 탐색하기</button></div>}</div>
     </section>
-    <section className="home-active-event-section" aria-labelledby="home-active-event-title">
+    {activeEvent && <section className="home-active-event-section" aria-labelledby="home-active-event-title">
       <div className="section-heading"><h2 id="home-active-event-title">진행 중인 이벤트</h2></div>
-      <button type="button" className="home-active-event" onClick={onEvents}>
-        <img src={dreamscapeHero} alt="" />
-        <span><small className="home-active-event-status">참여 중</small><b>드림스케이프 사인 폴라로이드 이벤트</b><em>참여하고 사인 폴라로이드를 받아보세요!</em></span>
-        <strong>D-5</strong><InlineIcon name="chevron" />
+      <button type="button" className="home-active-event" onClick={() => activeEvent.id.startsWith('demo-') ? onEvents() : onEvent(activeEvent)}>
+        <AuthenticatedImage src={activeEvent.heroUrl} fallback={dreamscapeHero} alt="" />
+        <span><small className="home-active-event-status">{activeEvent.applicationStatus === 'applied' ? '참여 중' : activeEvent.status === 'upcoming' ? '곧 시작' : '참여 가능'}</small><b>{activeEvent.title}</b><em>{activeEvent.summary}</em></span>
+        <strong>{activeEvent.endsAt ? `D-${Math.max(0, Math.ceil((new Date(activeEvent.endsAt).getTime() - Date.now()) / 86400000))}` : '자세히'}</strong><InlineIcon name="chevron" />
       </button>
-    </section>
+    </section>}
     {loading && !featured ? <div className="home-loading" role="status" aria-live="polite"><span className="loading-orbit" aria-hidden="true" /><b>컬렉션을 준비하고 있어요</b></div> : featured ? <button className="collection-spotlight" onClick={() => onSelect(featured)} aria-label={`${featured.title} 카드 상세 보기`}>
       <img src={featured.image} alt={`${featured.title} 카드`} onError={event => keepCardVisual(event, featured.id)} />
       <span className="collection-spotlight-copy"><small>FANFOLIO COLLECTION</small><b>{featured.title}</b><em>{featured.artist} · {featured.member}</em><strong>NEW <i>·</i> MY COLLECTION</strong></span>
@@ -1213,7 +1370,7 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
   </div>
 }
 
-function Collection({ cards: collectionCards, summary, benefits, loading, onSelect, onRedeem, onDiscover, onClaim }: { cards: Card[], summary: CollectionSummary, benefits: CollectionBenefit[], loading: boolean, onSelect: (card: Card) => void, onRedeem: () => void, onDiscover: () => void, onClaim: (campaignId: string) => Promise<void> }) {
+function Collection({ cards: collectionCards, collectionDataReady, summary, benefits, loading, onSelect, onRedeem, onDiscover, onClaim }: { cards: Card[], collectionDataReady: boolean, summary: CollectionSummary, benefits: CollectionBenefit[], loading: boolean, onSelect: (card: Card) => void, onRedeem: () => void, onDiscover: () => void, onClaim: (campaignId: string) => Promise<void> }) {
   const [showAll, setShowAll] = useState(false)
   const [showFilter, setShowFilter] = useState(false)
   const [filterKind, setFilterKind] = useState<'all' | 'new' | 'duplicate' | 'rare'>('all')
@@ -1223,7 +1380,7 @@ function Collection({ cards: collectionCards, summary, benefits, loading, onSele
   const [claimMessage, setClaimMessage] = useState('')
   const artists = Array.from(new Set(collectionCards.map(card => card.artist)))
   const filteredCards = artistFilter === '전체' ? collectionCards : collectionCards.filter(card => card.artist === artistFilter)
-  const sourceCards = collectionCards.length > 0 ? collectionCards : fallbackCollectionCards
+  const sourceCards = collectionDataReady ? collectionCards : import.meta.env.DEV ? fallbackCollectionCards : []
   const recentCards = [...sourceCards].sort((a, b) => sortKind === 'rarity' ? b.id.localeCompare(a.id) : sortKind === 'acquired' ? b.title.localeCompare(a.title) : 0).filter((card, index, cards) => {
     if (filterKind === 'all') return true
     const count = cards.filter(item => item.title === card.title).length
@@ -1300,7 +1457,14 @@ function Collection({ cards: collectionCards, summary, benefits, loading, onSele
   </>
 }
 
-function EventApplicationComplete({ onBack, onEvents, onApplications }: { onBack: () => void, onEvents: () => void, onApplications: () => void }) {
+function formatEventDate(value: string): string {
+  return new Intl.DateTimeFormat('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(value)).replace(/\.\s*/g, '.').replace(/\.$/, '')
+}
+
+function EventApplicationComplete({ event, onBack, onEvents, onApplications }: { event: FanEvent | null, onBack: () => void, onEvents: () => void, onApplications: () => void }) {
+  if (!event) {
+    return <main className="event-application-screen"><section className="event-application-content"><h1>신청 정보를 찾을 수 없어요</h1><button type="button" className="event-application-secondary" onClick={onEvents}>이벤트 목록으로</button></section></main>
+  }
   return <main className="event-application-screen">
     <header className="event-application-topbar">
       <button type="button" aria-label="뒤로 가기" onClick={onBack}><InlineIcon name="back" /></button>
@@ -1310,8 +1474,8 @@ function EventApplicationComplete({ onBack, onEvents, onApplications }: { onBack
     <section className="event-application-content">
       <h1>신청 완료</h1>
       <div className="event-application-success"><img src={registrationCompleteCelebration} alt="신청 완료" /><span>신청 완료</span></div>
-      <h2>드림스케이프 팬 사인회</h2>
-      <div className="event-application-meta"><p><InlineIcon name="calendar" />2026.06.28 (일) 17:00</p><p><InlineIcon name="pin" />올림픽공원 올림픽홀</p></div>
+      <h2>{event.title}</h2>
+      <div className="event-application-meta"><p><InlineIcon name="calendar" />{formatEventDate(event.startsAt)}</p><p><InlineIcon name="pin" />{event.venue ?? '장소가 아직 정해지지 않았어요.'}</p></div>
       <section className="event-application-info"><h3>선택한 참여 정보</h3><p><InlineIcon name="users" /><b>일반 참여 (1인)</b></p><p><InlineIcon name="gift" />사인 앨범 1장</p></section>
       <button type="button" className="event-application-primary" onClick={onApplications}>신청 내역 보기</button>
       <button type="button" className="event-application-secondary" onClick={onEvents}>이벤트 목록으로</button>
@@ -1320,21 +1484,60 @@ function EventApplicationComplete({ onBack, onEvents, onApplications }: { onBack
   </main>
 }
 
+function MyEventApplications({ items, loading, error, onBack, onEvents, onRetry, onOpen }: { items: FanEventApplication[]; loading: boolean; error: string; onBack: () => void; onEvents: () => void; onRetry: () => void; onOpen: (eventId: string) => void }) {
+  return <main className="event-application-screen">
+    <header className="event-application-topbar"><button type="button" aria-label="마이로 돌아가기" onClick={onBack}><InlineIcon name="back" /></button><strong>나의 이벤트</strong><span aria-hidden="true" /></header>
+    <section className="event-application-content">
+      <h1>나의 이벤트</h1>
+      {loading && <p role="status">신청 내역을 불러오는 중이에요…</p>}
+      {!loading && error && <div className="event-empty error" role="alert"><p>{error}</p><button type="button" className="outline" onClick={onRetry}>다시 시도</button></div>}
+      {!loading && !error && items.length === 0 && <div className="event-empty"><strong>신청한 이벤트가 없어요</strong><span>이벤트에 신청하면 이곳에서 다시 확인할 수 있어요.</span><button type="button" className="outline" onClick={onEvents}>이벤트 둘러보기</button></div>}
+      {!loading && !error && items.length > 0 && <div className="event-application-list">{items.map(item => <button type="button" className="event-application-row" key={item.applicationId} onClick={() => onOpen(item.eventId)}><span><b>{item.event.title}</b><small>{formatEventDate(item.event.startsAt)} · {item.event.venue ?? '장소 미정'}</small></span><em>{item.status === 'submitted' ? '신청 완료' : item.status}</em><InlineIcon name="chevron" /></button>)}</div>}
+    </section>
+  </main>
+}
+
 function NotificationSettings({ onBack }: { onBack: () => void }) {
-  const [values, setValues] = useState({ events: true, cards: false, levels: true, marketing: false })
-  const rows = [
-    { key: 'events', label: '이벤트 알림', icon: 'calendar' as const },
-    { key: 'cards', label: '카드 등록 알림', icon: 'card' as const },
-    { key: 'levels', label: '팬 레벨 알림', icon: 'star' as const },
-    { key: 'marketing', label: '마케팅 알림', icon: 'gift' as const },
-  ]
+  const [emailEnabled, setEmailEnabled] = useState<boolean | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    void getNotificationPreferences()
+      .then(result => setEmailEnabled(result.data.emailEnabled))
+      .catch(() => setError('알림 설정을 불러오지 못했어요.'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const save = async () => {
+    if (emailEnabled === null) return
+    setSaving(true)
+    setError('')
+    try {
+      const result = await updateNotificationPreferences(emailEnabled)
+      setEmailEnabled(result.data.emailEnabled)
+      onBack()
+    } catch {
+      setError('알림 설정을 저장하지 못했어요.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return <main className="notification-settings-screen">
     <header className="notification-settings-topbar"><button type="button" aria-label="뒤로 가기" onClick={onBack}><InlineIcon name="back" /></button><h1>알림 설정</h1></header>
     <section className="notification-settings-content">
       <div className="notification-settings-hero"><span><InlineIcon name="bell" /></span><p>새로운 소식을 놓치지 않도록<br />알림을 관리해보세요.</p></div>
-      <section className="notification-settings-panel">{rows.map(row => <button type="button" className="notification-setting-row" key={row.key} onClick={() => setValues(current => ({ ...current, [row.key]: !current[row.key as keyof typeof current] }))}><span className="notification-setting-icon"><InlineIcon name={row.icon} /></span><b>{row.label}</b><em>{values[row.key as keyof typeof values] ? '켜짐' : '꺼짐'}</em><span className={`notification-toggle ${values[row.key as keyof typeof values] ? 'is-on' : ''}`} aria-hidden="true"><i /></span></button>)}</section>
-      <p className="notification-settings-note"><InlineIcon name="system" />알림은 푸시 알림으로 제공되며, 서비스 주요 안내 사항은 꺼짐 상태에서도 받을 수 있어요.</p>
-      <button type="button" className="notification-save" onClick={onBack}>변경사항 저장</button>
+      <section className="notification-settings-panel">
+        {loading && <p role="status">알림 설정을 불러오는 중이에요.</p>}
+        {!loading && <button type="button" className="notification-setting-row" onClick={() => setEmailEnabled(value => !value)} disabled={emailEnabled === null}>
+          <span className="notification-setting-icon"><InlineIcon name="bell" /></span><b>이메일 알림</b><em>{emailEnabled ? '켜짐' : '꺼짐'}</em><span className={`notification-toggle ${emailEnabled ? 'is-on' : ''}`} aria-hidden="true"><i /></span>
+        </button>}
+      </section>
+      {error && <p className="notification-settings-note" role="alert">{error}</p>}
+      <p className="notification-settings-note"><InlineIcon name="system" />인앱 알림은 알림함과 실시간 알림으로 제공되며, 이메일 알림 설정과 별도로 동작해요.</p>
+      <button type="button" className="notification-save" onClick={() => void save()} disabled={loading || saving || emailEnabled === null}>{saving ? '저장 중…' : '변경사항 저장'}</button>
     </section>
   </main>
 }
@@ -1446,7 +1649,7 @@ type RevealCardProps = {
 function RevealCard({ userCardId, collectionSummary, fanProgression, onClose, onViewCollection, onRegisterAnother, onStart }: RevealCardProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const revealTimerRef = useRef<number | null>(null)
-  const isRandomReveal = userCardId === 'qa-registration-complete'
+  const isRandomReveal = import.meta.env.DEV && userCardId === 'qa-registration-complete'
   const [phase, setPhase] = useState<'mystery' | 'revealing' | 'revealed' | 'complete'>(() => isRandomReveal ? 'mystery' : 'revealed')
   const [detail, setDetail] = useState<UserCardDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(true)
@@ -1673,7 +1876,7 @@ function RevealCard({ userCardId, collectionSummary, fanProgression, onClose, on
     <button type="button" className="card-reveal-again" onClick={() => setPhase('mystery')}>다시 확인하기</button>
   </main>
 }
-function NavItem({ active, label, icon = label === '탐색' ? 'discover' : label === '알림' ? 'alerts' : label === '팬 레벨' ? 'growth' : label === '설정' ? 'settings' : 'collection', badge, onClick }: { active: boolean, label: string, icon?: 'home' | 'collection' | 'discover' | 'growth' | 'alerts' | 'settings', badge?: number, onClick: () => void }) { return <button className={active ? 'nav-item active' : 'nav-item'} aria-current={active ? 'page' : undefined} onClick={onClick}><NavIcon name={icon} />{label}{badge ? <b className="nav-badge">{badge > 99 ? '99+' : badge}</b> : null}</button> }
+export function NavItem({ active, label, icon = label === '탐색' ? 'discover' : label === '알림' ? 'alerts' : label === '팬 레벨' ? 'growth' : label === '설정' ? 'settings' : 'collection', badge, onClick }: { active: boolean, label: string, icon?: 'home' | 'collection' | 'discover' | 'alerts' | 'growth' | 'settings', badge?: number, onClick: () => void }) { return <button type="button" className={active ? 'nav-item active' : 'nav-item'} aria-current={active ? 'page' : undefined} onClick={onClick}><NavIcon name={icon} />{label}{badge ? <b className="nav-badge">{badge > 99 ? '99+' : badge}</b> : null}</button> }
 
 function NavIcon({ name }: { name: 'home' | 'collection' | 'discover' | 'growth' | 'alerts' | 'settings' }) {
   const paths = { home: 'M3 10.5 12 3l9 7.5M5.5 9v11h13V9M9 20v-6h6v6', collection: 'M6 3h12a2 2 0 0 1 2 2v16l-8-4-8 4V5a2 2 0 0 1 2-2Z', discover: 'm21 21-4.35-4.35M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z', growth: 'M4 19V5M4 19h16M8 15l3-3 3 2 5-7M18 7h1v5', alerts: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4', settings: 'M4 6h16M4 12h16M4 18h16M8 4v4M16 10v4M10 16v4' } as const

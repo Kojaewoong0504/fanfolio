@@ -9,6 +9,9 @@ upload route contract.
 
 import asyncio
 import struct
+from io import BytesIO
+
+from PIL import Image, UnidentifiedImageError
 
 from app.core.config import get_settings
 from app.errors import AppError
@@ -72,10 +75,32 @@ async def _scan_with_clamav(content: bytes) -> None:
 
 async def scan_uploaded_content(*, content_type: str, purpose: str, content: bytes) -> None:
     """Scan an upload before persistence; ``purpose`` is reserved for policy adapters."""
-    del content_type, purpose
     mode = get_settings().asset_scan_mode
     if mode == "disabled":
         return
+
+    if purpose in {"event_banner", "reward_image"} and content_type in {
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+    }:
+        try:
+            with Image.open(BytesIO(content)) as image:
+                if purpose == "event_banner" and (image.width < 320 or image.height < 160):
+                    raise AppError(
+                        422,
+                        "INVALID_IMAGE",
+                        "이벤트 배너는 가로 320px, 세로 160px 이상이어야 합니다.",
+                    )
+                if purpose == "reward_image" and (image.width < 128 or image.height < 128):
+                    raise AppError(
+                        422,
+                        "INVALID_IMAGE",
+                        "보상 이미지는 가로와 세로가 각각 128px 이상이어야 합니다.",
+                    )
+                image.verify()
+        except (UnidentifiedImageError, OSError) as error:
+            raise AppError(422, "INVALID_IMAGE", "이미지 파일을 읽을 수 없습니다.") from error
 
     _reject_obvious_executable(content)
     if mode == "clamav":

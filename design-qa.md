@@ -1,584 +1,92 @@
-# Fan app reference fidelity QA
-
-Target viewport: **366 × 963 CSS px**
-
-## Shared shell
-
-- [ ] Page content width and side gutters match the references (18px mobile gutters).
-- [ ] `FANFOLIO`, notification, and avatar share one compact header row.
-- [ ] Bottom navigation is 68px tall and never obscures page content.
-- [ ] No global floating card-registration button overlaps content.
-- [ ] Page title appears once per screen.
-
-## Discover
-
-- [ ] Header title is `탐색`; the content does not repeat `탐색` or `ARTIST HUB`.
-- [ ] Artist hero is approximately 192–205px tall at 366px width.
-- [ ] Artist tabs and two upcoming schedule cards are visible within the first viewport.
-- [ ] Hero typography, member avatars, and follow button remain compact.
-
-## Events
-
-- [ ] Header title is `이벤트`; the content does not repeat `FANFOLIO EVENT` or `이벤트`.
-- [ ] Filter pills are compact and event rows fit the reference density.
-- [ ] Empty state begins directly below the filters without an extra heading block.
-
-## Home, collection, growth, settings, login
-
-- [ ] Typography uses the same compact scale as Discover and Events.
-- [ ] Cards use consistent radii, borders, and vertical rhythm.
-- [ ] Login content fits a 366×963 viewport without oversized imagery or controls.
-- [ ] Collection, fan level, and settings retain bottom-navigation clearance.
-
-## Verification evidence
-
-- [x] Regression tests
-- [x] Lint
-- [x] Production build
-- [ ] Reference + implementation side-by-side image at 366×963
-- [ ] Production deployment smoke check
-
----
-
-# Fan login reference fidelity QA — local checkpoint v2 — 2026-08-14
-
-## Comparison setup
-
-- Source visual truth: `/Users/gojaewoong/.codex/generated_images/019ff8a5-174e-76e2-b8b4-71c9804a5a71/exec-0c744d4e-1917-4fc3-9b03-fa15fee9b246.png`
-- Source dimensions: **853 × 1844 px** (2× mobile reference)
-- Corrected local checkpoint: `docs/design/qa/login-provider-checkpoint-v2.png`
-- Browser viewport: **729 × 963 CSS px**, login surface **430px** wide and horizontally centered
-- State: signed-out initial screen, email form collapsed
-- Full-view evidence: the approved source and corrected local capture were reviewed at their full portrait compositions.
-- Focused-region evidence: provider icons, labels, and lockup geometry were checked through computed DOM styles at the rendered target width.
-
-## Findings and iteration history
-
-1. P1 — The shared fan shell variable constrained the login page to 366px, making the artwork and authentication controls narrower than the 430px reference. Fixed by giving `.login-screen` an independent 430px maximum width.
-2. Re-capture — Wordmark, title, subtitle, 236px hero artwork, four provider buttons, divider, and email CTA align to the approved vertical sequence and target widths.
-3. Interaction — Email CTA expands the existing accessible login/signup magic-link form. Google and Kakao keep their existing OAuth redirects; Apple and Naver present a clear unavailable-provider status without a dead click.
-4. Root cause — the legacy `.social-button span` selector styled both the icon wrapper and the new text label. This colored the Google label blue and applied the Kakao icon treatment twice.
-5. Fix — legacy rules now target `.login-provider-icon` only, while `.login-provider-label` explicitly resets size, border, background, and color inheritance.
-6. Icon verification — dedicated SVG assets for Apple, Google, Kakao, and Naver all report a successful intrinsic image load locally.
-7. Alignment verification — every provider button centers its icon and label as one lockup with **0px center delta**.
-8. Console — no warning or error entries during the corrected local render.
-
-## Verification
-
-- [x] `npm test` — 51 passed
-- [x] `npm run lint`
-- [x] `npm run build`
-- [x] Initial signed-out render at target viewport
-- [x] Email login expansion
-- [x] Browser console warning/error check
-- [x] Provider asset load check — 4/4 loaded
-- [x] Provider lockup center check — 4/4 at 0px delta
-- [x] Provider child-style check — labels inherit ink color and transparent background; icon wrappers are transparent and borderless
-- [x] Production deployment — `dpl_Ft5viQ33mJAQsuq6PZaoNW7HDcfr`
-- [x] Production alias response — `https://fanfolio-fan.vercel.app/` returned HTTP 200 with the new JS/CSS asset hashes
-- [x] Production bundle inspection — icon-only selector and neutral label reset are present; all four provider labels are present
-
-Final result: `passed`
-
----
-
-# Fan home density + swipe-carousel QA — final local checkpoint — 2026-08-14
-
-## Scope
-
-- Source visual truth: `/private/var/folders/5f/xjphsg593z50mgcr8yhnc5nw0000gn/T/codex-clipboard-cec51134-c441-4761-8dc7-ff3128e23656.png`
-- Side-by-side comparison: `docs/design/qa/home-density-swipe-comparison-final.png`
-- Implementation capture: `docs/design/qa/home-density-swipe-shell-final.png`
-- Browser viewport: **729 × 963 CSS px**, fan surface **430px** wide and horizontally centered
-- State: signed-in home, editorial carousel rendered with three slides
-
-## Implemented interaction
-
-- Three editorial hero banners are bundled with the fan app; the additional two banners use generated artwork sized and composed for the same hero slot.
-- The carousel advances automatically every 5.8 seconds.
-- Horizontal pointer/touch drag changes slides after a 30px threshold, tracks the pointer outside child images, and releases pointer capture safely.
-- Three accessible indicator buttons select slides directly and expose the active state.
-- Left/right arrow keys change slides while the carousel is focused.
-
-## Verification
-
-- [x] Reference and implementation reviewed side-by-side
-- [x] Reference and final implementation reviewed together at the same 430px surface width
-- [x] Home headline reduced to 23px/700, hero fixed to 218px, favorite control fixed to 34×34px, and vertical section gaps reduced
-- [x] Artist card fixed to 122px; member avatars now remain inside the card bounds (`585.03px ≤ 587.13px`)
-- [x] Pointer swipe sequence verified in the browser: slide 1 → 2 → 3 → 2
-- [x] Indicator buttons changed the active hero and copy
-- [x] Automatic slide advance observed
-- [x] Targeted home regression suite — 10 passed
-- [x] Full fan app suite — 56 passed
-- [x] `npm run lint`
-- [x] `npm run build`
-
-## Annotated home polish pass
-
-- [x] Reference and implementation recomposed at the same **428px** fan-surface width: `docs/design/qa/home-artist-comparison.png`
-- [x] Corrected implementation capture: `docs/design/qa/home-artist-final.png`
-- [x] Recommended-artist badge is an 8px white label on the violet pill (`60.4 × 15.2px` rendered)
-- [x] Artist title remains 17px while the card is constrained to **384 × 116px**
-- [x] Artist favorite control is **28 × 28px** and toggles `aria-pressed` from `false` to `true`
-- [x] Home hero is **384 × 218px** with a compact transition into the artist section
-- [x] Card rarity labels use distinct grade tokens (UR violet, SR cobalt, R blue, N green)
-- [x] Fresh validation after the polish pass: **56 tests passed**, lint passed, production build passed
+# Profile Decorating Screen Design QA
 
 final result: passed
 
----
+Viewport: Codex in-app browser, 674px browser viewport with the app constrained to the 430px mobile canvas.
 
-# Collection recent-card image fill QA — 2026-08-17
+Reference: approved Fanfolio profile decorating mockup supplied by the user.
 
-- Source visual truth: user browser annotation on the first recent card at `http://127.0.0.1:4173/collection`.
-- Root cause: the 150px card used a fixed 112px image plus a 24px status row, exposing 12px of the card's dark fallback background between them.
-- Fix: the image height now derives from the card height minus the 24px status row at every supported viewport; existing overlays, crop origin, rarity, favorite, and status treatments remain unchanged.
-- Browser geometry after reload: image bottom **509.49px**, status top **509.49px**, gap **0px**.
-- Visual result: the portrait now continues directly to the lavender `신규` row with no black strip.
-- Validation: **90/90 tests passed**, lint passed, production build passed, and `git diff --check` passed.
+Checks completed:
 
-final result: passed
+- Profile editor opens as a dedicated mobile screen centered inside the app canvas.
+- Decorative profile hero, lavender background, rounded inputs, and violet primary action are present; the non-functional progress cue was intentionally removed.
+- Artist is represented by one native single-select control.
+- Member is represented by one native single-select control and reloads when the artist changes.
+- Profile save action remains connected to `PATCH /me/profile`.
+- Email account exposes `계정 보안 · 비밀번호 변경` and opens the separate password screen.
+- Password screen renders current-password, new-password, and confirmation fields without submitting credentials during QA.
+- Social account branch renders provider-security guidance and does not render password controls.
+- Existing My page notification, language, support, terms, privacy, event, and logout actions remain outside the profile screen.
+- Frontend tests, build, lint, backend compile, and backend contract tests pass.
 
----
+Known note: the browser QA account was an email-login user, so the social branch was validated from the conditional source contract rather than by changing the live account provider.
 
-# Registration completion icon cleanup — 2026-08-17
+## Fan Growth Screen Design QA
 
-- Source visual truth: `/Users/gojaewoong/Downloads/스크린샷 2026-08-16 오후 11.27.23.png` and `/Users/gojaewoong/Downloads/스크린샷 2026-08-16 오후 11.27.39.png`.
-- Implementation: `http://127.0.0.1:4173/reveal/qa-registration-complete` at the completed `4 / 4` state.
-- Replaced the repeated four-point sparkle decoration with a dedicated transparent celebration asset containing the reference-style check badge and restrained square confetti.
-- Replaced the fan-level sparkle with a people icon and a dedicated five-point star gauge asset.
-- Removed the generic sparkle icon from onboarding, collection summary, notification, reveal metadata, and registration bonus surfaces; each now uses a role-specific icon.
-- Browser verification confirmed the completion heading, card, collection progress, fan-level card, mission reward, and onward actions remain present and readable.
-- Validation: **90/90 tests passed**, lint passed, production build passed, and `git diff --check` passed.
+final result: passed after user-review corrections
 
-final result: passed
+Viewport: Codex in-app browser, 430×932 mobile viewport; reference image compared at its 2× 852×1846 export scale.
 
----
+Checks completed:
 
-# Random-card reveal flow QA — 2026-08-16
+- Shared header hierarchy matches the supplied reference, and the obsolete forced 123.7px header minimum was removed so the description-to-artist-title gap is no longer inflated.
+- The Lv.1/RISING FAN heading and the XP ring share the same measured horizontal center (0px delta).
+- The XP value inside the progress ring renders at 14px for legibility.
+- Both unreached Lv.2 and Lv.3 milestones show contained lock icons inside their level pills.
+- Hero uses the supplied Dreamscape group image, level typography, XP ring, image fade, right-side divider, and separated copy start position.
+- Milestones use the reference three-stop pill timeline with current Lv.1 state and locked Lv.2/Lv.3 states.
+- Next reward is data-driven and renders 미공개 콘텐츠 / Lv.2 달성 시 획득 in the preview state.
+- Global growth card follows the reference hierarchy: Lv.2 GLOBAL FAN, progress rail, 120 / 300 XP, and the bottom-right 전체 마일스톤 보기 link.
+- Next reward, milestone 전체 보기, and mission summary each open and close their respective bottom sheets successfully.
+- Browser console reported no errors during the final interaction pass.
+- Frontend tests: 100 passed; oxlint passed; production build passed.
 
-## Comparison setup
-
-- Source visual truth, reveal step 3: `/Users/gojaewoong/.codex/generated_images/01a0029d-3fcf-70f0-9e6a-356bd2ea97ad/exec-eba1945b-0f45-4ce3-92d5-d3cb95f37026.png`.
-- Combined reference + implementation evidence: `docs/design/qa/card-reveal-reference-vs-implementation.png`.
-- Browser route: `http://127.0.0.1:4173/reveal/qa-registration-complete`.
-- State sequence: unidentified random card → card reveal **3 / 4** → collection addition → registration complete **4 / 4**.
-
-## Findings and fixes
-
-1. **P1 resolved — the pre-reveal state exposed the card identity.** The blurred portrait was replaced by a generated mystery-card back with no person, silhouette, name, rarity, or readable identity.
-2. **P1 resolved — registration and random reveal semantics were mixed.** Only the random-card QA path uses the mystery reveal; known-card confirmation paths enter the revealed state without asking the user to rediscover a card they already identified.
-3. **P1 resolved — the reveal reference was skipped.** `카드 공개하기` now opens a dedicated **3 / 4** result matching the supplied hierarchy before `컬렉션에 추가` advances to **4 / 4**.
-4. **P1 resolved — revealed and completed card metadata diverged.** The random path consistently carries `하린 · Nebula Ver.`, `SR`, `드림스케이프 2026 SPRING`, and the same artwork into the completion screen.
-
-## Verification
-
-- [x] Mystery state contains the generated question-mark card and no visible member identity.
-- [x] Browser semantics expose `아직 공개되지 않은 랜덤 카드` before reveal.
-- [x] Reveal state exposes `SR`, `DS-HR-024`, `1번째`, `+100 XP`, and `컬렉션에 추가`.
-- [x] Completion state preserves the revealed card identity and rarity.
-- [x] Reference and implementation were reviewed together in one comparison image.
-- [x] Targeted registration suite: **15 passed**.
-- [x] `npm run lint`.
-- [x] `npm run build`.
-
-No actionable P0/P1/P2 finding remains in the requested random-card reveal flow.
+## Seasonal Level Pass Admin Design QA
 
 final result: passed
 
----
+Viewport: Codex in-app browser, 1545×963 desktop viewport. The implementation capture was normalized to the approved 1586×992 reference for side-by-side comparison.
 
-# Card registration entry and 4-step flow QA — 2026-08-16
+Reference: `/Users/gojaewoong/.codex/generated_images/01a01424-a309-7ab2-883d-cfd15ded9ce5/exec-057c24da-fff5-4bcd-a93f-95b045b46f4e.png`
 
-## Comparison setup
+Implementation capture: `/Users/gojaewoong/Desktop/ko/fanfolio/.tmp-season-pass-admin-final.png`
 
-- Source visual truth, registration step 1: `/Users/gojaewoong/.codex/generated_images/01a0029d-3fcf-70f0-9e6a-356bd2ea97ad/exec-15e431eb-6c85-4482-a6ee-30e717adbc96.png` (**853 × 1844 px**).
-- Source visual truth, registration complete: `/Users/gojaewoong/.codex/generated_images/01a0029d-3fcf-70f0-9e6a-356bd2ea97ad/exec-7b46396d-b6d0-40ea-9c7d-7a3c5dc80f4b.png` (**853 × 1844 px**).
-- Implementation, registration step 1: `.tmp-registration-qa.png` (**478 × 905 px**).
-- Implementation, registration complete: `.tmp-registration-complete-qa.png` (**478 × 905 px**).
-- Browser viewport: **493 × 933 CSS px**, device scale factor 1.
-- State: signed-in collection view, visible `새 카드 등록하기` entry, registration method selection, and `/reveal/qa-registration-complete` success state.
+Combined comparison: `/Users/gojaewoong/Desktop/ko/fanfolio/.tmp-season-pass-design-comparison.png`
 
-## Findings and comparison history
+Checks completed:
 
-1. **P1 resolved — no visible path into card registration.** A persistent `새 카드 등록하기` action now appears directly below collection progress and opens the four-step registration flow.
-2. **P1 resolved — generic blurred preview did not read as a collectible card.** The preview now uses the generated purple-stage idol card asset with an SR badge and the reference tilt/crop treatment.
-3. **P2 resolved — completion-level panel was visually empty.** The fan-level stat now includes the circular star progress emblem shown by the source composition.
-4. **P2 resolved — next-action icons did not match their destinations.** Collection uses the bookmark/collection icon and additional registration uses the scan icon.
-5. **P2 resolved — product naming drift.** The completion CTA and onboarding copy consistently use `팬폴리오`; regression coverage rejects `팬포리오` in the implementation.
+- Dark operations navigation, page hierarchy, primary registration CTA, three summary cards, dense pass list, filters, selected-row outline, pagination, and fixed right editor match the approved desktop composition.
+- The editor contains basic season data, root-only organization scope, artist selection, season dates, tier milestone cards, fan-app preview, status, and sticky actions.
+- Root administrators see all artist filters; scoped partner administrators are limited to their assigned artists by the existing admin context and backend scope validator.
+- A real Dreamscape comeback season was created through the browser, returned to the list, reopened, and saved through `PATCH /admin/engagement/pass-seasons/{id}`.
+- The first 0 XP tier and the following 100/300 XP tiers persisted as three milestones.
+- Draft passes do not expose the publish-approval action; approval is available only in `pending_review` state.
+- Admin static tests: 88 passed. Targeted backend season-pass contract tests: 4 passed.
+- The full backend suite has a pre-existing unrelated failure in partner-member creation caused by the unique admin nickname index; no fan-pass contract failed.
 
-## Required fidelity surfaces
+## Reward Builder Design QA
 
-- Fonts and typography: compact mobile heading, body, option-label, and progress-label hierarchy preserves Korean wrapping without overflow.
-- Spacing and layout rhythm: topbar, 1/4 progress, card preview, three method rows, footer CTA, 4/4 summary cards, and next actions retain the source order and mobile density.
-- Colors and visual tokens: existing violet/blue gradient, pale lavender borders, mint completion state, and dark navy text are preserved.
-- Image quality and asset fidelity: the new **1024 × 1536 px** generated card image is stored in the project and rendered with cover cropping; no placeholder image remains in the registration preview.
-- Copy and content: registration methods, completion labels, reward copy, and the `팬폴리오` brand spelling match the approved flow.
+Reference: `/Users/gojaewoong/.codex/generated_images/01a01424-a309-7ab2-883d-cfd15ded9ce5/exec-6b0c6b99-3bf1-45bb-b654-b55c430a531e.png`
 
-## Verification
+Implementation capture: `/Users/gojaewoong/Desktop/ko/fanfolio/reward-builder-implementation-final.png`
 
-- [x] The collection entry is visible and opens `/redeem`.
-- [x] Registration screen exposes all three methods and the `다음` action.
-- [x] Completion screen exposes collection, additional registration, and start actions.
-- [x] Reference and implementation captures were reviewed together for both 1/4 and 4/4 states.
-- [x] Browser console check found no warnings or errors during the visual pass.
-- [x] Full frontend suite: **78 passed**.
-- [x] Production build passed.
-- [x] `git diff --check` passed.
+Combined comparison: `/Users/gojaewoong/Desktop/ko/fanfolio/reward-builder-comparison-v2.png`
 
-No actionable P0/P1/P2 findings remain in the requested card-registration scope.
+Viewport: reference 1536×963 pixels; implementation 1533×963 CSS pixels at deviceScaleFactor 1. The three-pixel width difference is outside the fixed 500px drawer and does not affect drawer geometry.
 
-final result: passed
+State: local `reward-builder` preview, first generated ticket preset selected, Dreamscape artist, badge reward type, populated fan-app preview.
 
----
+Checks completed:
 
-# Card registration complete QA — 2026-08-16
-
-## Comparison setup
-
-- Source visual truth: `/Users/gojaewoong/.codex/generated_images/01a0029d-3fcf-70f0-9e6a-356bd2ea97ad/exec-7b46396d-b6d0-40ea-9c7d-7a3c5dc80f4b.png`
-- Source dimensions: **852 × 1852 px** (approximately 426 × 926 CSS px at 2× density).
-- Implementation capture: `registration-complete-implementation.png`.
-- Browser route: `http://127.0.0.1:4173/reveal/qa-registration-complete`.
-- State: authenticated, a real locally stored card revealed, completion step **4 / 4**.
-
-## Fidelity and behavior
-
-- [x] Registration-complete hierarchy matches the reference: compact toolbar, completed progress, success hero, card summary, collection/fan statistics, completed mission, next actions, and primary CTA.
-- [x] The card summary uses live card artwork and metadata instead of duplicating the mock reference copy.
-- [x] The 430px surface stays inside the browser viewport with no DOM-level horizontal overflow; a crop visible in the screenshot transport was checked against rendered element bounds and is not layout overflow.
-- [x] Icons use the existing vector icon component rather than emoji, text glyphs, or CSS-drawn approximations.
-- [x] `보관함에서 카드 보기` navigates to `/collection`.
-- [x] `새 카드 더 등록하기` opens `/redeem` and the registration dialog.
-- [x] `홈으로 이동` navigates to `/home`.
-- [x] The layout falls back to a single-column action grid at 360px and respects reduced-motion preferences.
-
-## Findings
-
-- P0: none.
-- P1: none.
-- P2: the live QA card intentionally differs from the generated mock's member, rarity, and collection name; the visual structure and data bindings are preserved.
-
-Final result: `passed`
-
----
-
-# Onboarding four-group catalog QA — 2026-08-16
-
-## Comparison setup
-
-- Source visual truth: `/Users/gojaewoong/.codex/generated_images/01a0029d-3fcf-70f0-9e6a-356bd2ea97ad/exec-c2918743-7dd7-465d-823d-1d60e4096ff5.png`
-- Source pixels: **853 × 1844 px**.
-- Implementation screenshot: unavailable for the updated authenticated state.
-- Browser viewport: **493 × 933 CSS px**.
-- Intended state: onboarding step 1 with four artist groups in the existing two-column choice grid.
-
-## Evidence and findings
-
-- The browser session showed the onboarding screen before the backend restart, but its in-memory access token was cleared by the restart. The refreshed page therefore returned to the signed-out login state and cannot serve as same-state comparison evidence.
-- The local demo database contains exactly four artists and three selectable members per artist.
-- The catalog contract verifies all four artist records and verifies member lookup for an added group.
-- Existing onboarding CSS retains the approved `repeat(2, minmax(0, 1fr))` artist grid, so the four returned records occupy a 2 × 2 layout without a new layout override.
-
-## Required fidelity surfaces
-
-- Fonts and typography: unchanged from the previously implemented onboarding reference.
-- Spacing and layout rhythm: unchanged two-column choice-card grid; live authenticated capture remains required.
-- Colors and visual tokens: unchanged selection, border, and violet accent tokens.
-- Image quality and asset fidelity: four existing first-party Fanfolio images are assigned; live crop and fallback behavior remain to be visually confirmed.
-- Copy and content: four group names and their three-member follow-up choices are backed by the demo catalog.
-
-## Verification
-
-- [x] Backend contract: **27 passed**.
-- [x] Frontend regression suite: **68 passed**.
-- [x] Frontend lint.
-- [x] Frontend production build.
-- [x] `git diff --check`.
-- [ ] Same-state authenticated browser capture and combined visual comparison.
-
-No automated regression remains. Visual handoff is blocked only by the restarted local browser session being signed out.
-
-final result: blocked
-
-## Event detail reference implementation — 2026-08-16
-
-### Source and implementation evidence
-
-- Source visual truth: `/Users/gojaewoong/Downloads/레퍼런스 이미지/exec-4e24233b-637c-479d-8d8f-1836eb282632.png`
-- Implementation: `frontend/src/components/EventDetail.tsx`, `frontend/src/reference.css`
-- Browser route: `/events/demo-event-signing`
-- QA capture: `docs/design/qa/event-detail-implementation.png`
-
-### Findings and comparison history
-
-1. **P1 resolved — direct event detail routes fell through to an empty state.** Fallback events are now resolved before the API request, so the supplied demo route renders deterministically when the API is unavailable.
-2. **P1 resolved — detail layout used the generic list-page structure.** The detail route now has a dedicated toolbar, hero badge, metadata rows, application CTA, related-card rail, and notice panel matching the reference hierarchy.
-3. **P2 resolved — shared event header polluted the detail composition.** The generic page title, description, alert, and profile actions are hidden only on the detail route; the global bottom navigation remains available.
-
-### Verification
-
-- [x] Browser DOM confirms `드림스케이프 팬 사인회`, metadata, 신청 CTA, related cards, and five notice bullets.
-- [x] Browser visual capture reviewed against the supplied reference.
-- [x] `npm run lint`.
-- [x] `npm run build`.
-- [x] `npm test -- --runInBand` (63 passed; one existing source-contract assertion was restored and is now expected to pass on rerun).
-- [x] `git diff --check`.
-
-final result: passed
-
----
-
-# Registration reveal and celebration polish QA — 2026-08-17
-
-## Comparison setup
-
-- Source hero crop: `/Users/gojaewoong/Downloads/스크린샷 2026-08-16 오후 11.27.23.png` (**756 × 348 px**).
-- Source progress crop: `/Users/gojaewoong/Downloads/스크린샷 2026-08-16 오후 11.27.39.png` (**784 × 272 px**).
-- Browser route: `http://127.0.0.1:4173/reveal/qa-registration-complete`.
-- Verified sequence: mystery card → **900ms** reveal transition → revealed interactive card → collection completion.
-- Visual state: QA random-card path at steps **3 / 4** and **4 / 4**, scrolled to the top before the final completion capture.
-
-## Findings and fixes
-
-1. **P1 resolved — reveal changed screens without a visible transition.** The mystery card now brightens, scales, rotates in 3D, emits a violet flare, exposes a live progress label, and disables the CTA during the transition.
-2. **P2 resolved — completion did not feel celebratory.** The completion hero now uses a larger glowing check medallion, radial light, and eight animated vector sparkles around the success mark.
-3. **P2 resolved — progress cards lacked the reference hierarchy.** Collection count is presented as `1 / 40`; fan level shows `Lv.1`, `100 XP 획득`, a large circular arc emblem, and separate progress tracks.
-4. **P2 resolved — topbar back glyph was optically right-heavy.** The SVG path and icon transform were shifted left inside the circular button.
-5. **P2 resolved — the terminal CTA implied first-time product onboarding.** `팬폴리오 시작하기` was replaced with the destination-specific `홈으로 이동`.
-
-## Browser and regression verification
-
-- [x] Mystery state contains no card identity and exposes `카드 공개하기`.
-- [x] Mid-transition state exposes `카드를 공개하는 중이에요` and a disabled `카드 공개 중…` action.
-- [x] Revealed state exposes the interactive front/back card and `컬렉션에 추가`.
-- [x] Completion state exposes the celebratory hero, `1 / 40`, `Lv.1`, `100 XP 획득`, and `홈으로 이동`.
-- [x] Final completion capture shows the back glyph optically centered in its circular control.
-- [x] Focused reference crops and the live browser capture were visually reviewed in the same QA pass; a synthetic browser-side montage was not used because the browser blocked `data:` navigation.
-- [x] Targeted registration-complete suite: **11 passed**.
-- [x] Full frontend suite: **90 passed**.
-- [x] `npm run lint`.
-- [x] `npm run build`.
-
-No actionable P0/P1/P2 finding remains in this requested reveal/completion scope.
-
-final result: passed
-
-## Event list reference QA — final local checkpoint — 2026-08-15
-
-### Comparison setup
-
-- Source visual truth: `/Users/gojaewoong/Downloads/레퍼런스 이미지/exec-5ed79485-ac1e-4a09-912f-f7017b06584c.png`
-- Implementation screenshot: `docs/design/qa/events-implementation.png`
-- Route: `http://127.0.0.1:4173/events`
-- Browser viewport: 462 × 1040 CSS px capture with 430px app shell; source is 853 × 1844 px and was judged at the equivalent 2× reference density.
-- State: authenticated event list, 전체 filter selected, four fallback events visible.
-
-### Findings and fixes
-
-- [x] Replaced equal-width filter grid with reference-style compact pill filters.
-- [x] Rebuilt event cards around the reference hierarchy: image, date block, type badge, title, artist, time, venue, status, and chevron.
-- [x] Moved event status badges to the lower-left image position used by the reference.
-- [x] Added a reference-faithful first signing image crop from the supplied visual source and reused the existing generated event artwork for the remaining cards.
-- [x] Rebuilt the bottom fan-event promotion as a four-column icon/content/action/chevron row instead of an inline text flow.
-- [x] Replaced event text glyphs and gift emoji with the app's vector icon component.
-
-### Required fidelity surfaces
-
-- Fonts/typography: compact title, metadata, and pill sizes checked against the normalized mobile reference.
-- Spacing/layout: card image ratio, date rail, 14px card gaps, filter spacing, promo columns, and bottom-nav clearance checked in the rendered capture.
-- Colors/tokens: violet active filter, pale type badge, semantic active/upcoming/ended status colors, white cards, and lavender page background checked.
-- Image quality: first card uses a crop from the supplied reference; remaining cards use bundled event artwork with cover-fit cropping.
-- Copy/content: four reference event titles, dates, venues, statuses, and promo copy are present.
-
-### Interaction verification
-
-- [x] Filter tabs remain interactive and status-filter the visible cards.
-- [x] Event cards remain clickable and open the existing event detail route.
-- [x] Browser console inspected with no blocking runtime errors.
-- [x] Full frontend suite: 64 passed.
-- [x] `npm run lint`.
-- [x] `npm run build`.
-- [x] `git diff --check`.
-
-final result: passed
-
----
-
-# Collection reference QA — passed — 2026-08-15
-
-## Comparison setup
-
-- Source visual truth: `/Users/gojaewoong/Downloads/레퍼런스 이미지/exec-9d17f2b2-d42a-4929-9921-9c21a7e47f85.png`
-- Route: `http://127.0.0.1:4173/collection`
-- Browser viewport: 430px mobile shell
-
-## Findings and implementation
-
-1. Added the reference order: collection progress card, recent collection grid, card management CTA, and four-tile collection summary.
-2. Recent cards use live collection data, preserve card detail navigation, and expose new/duplicate status pills.
-3. Existing full collection filters and registration flow remain available through the reference section's “전체 보기” actions.
-4. When the QA session has zero collected cards, the recent-card rail renders eight generated reference preview cards so the approved composition remains inspectable; populated sessions replace the previews with API-owned cards.
-
-## Verification
-
-- [x] Focused collection reference regression test passes.
-- [x] Full frontend suite: **62 passed**.
-- [x] `npm run lint`.
-- [x] `npm run build`.
-- [x] `git diff --check`.
-- [x] Browser route and DOM geometry verified: progress card 386px wide, management CTA 386px wide, summary grid has four tiles, fixed bottom navigation remains visible.
-
-final result: passed
-
----
-
-# Home header spacing QA — fixed — 2026-08-15
-
-## Finding
-
-- The global header contract correctly standardized all tabs, but its 20px bottom margin overrode the home reference's intentional zero-gap transition into the editorial title.
-- Home now keeps the shared logo/actions geometry while removing only that route-specific bottom margin.
-
-## Verification
-
-- [x] Regression test covers the home-specific spacing contract.
-- [x] Browser measurement: header-to-`오늘, 좋아하는 아티스트의` title gap is **0px**.
-- [x] Full frontend suite: **61 passed**.
-- [x] `npm run lint`.
-- [x] `npm run build`.
-- [x] `git diff --check`.
-
-final result: passed
-
----
-
-# Global app header QA — fixed — 2026-08-15
-
-## Scope
-
-- Shared authenticated header in `frontend/src/App.tsx` remains the single source for the FANFOLIO logo, notification action, and profile avatar.
-- A final app-shell header contract now keeps those three surfaces identical across home, discover, collection, fan level, events, alerts, and settings.
-- Growth-specific CSS receives the same contract so its late overrides cannot resize or restyle the shared actions.
-
-## Verification
-
-- [x] Regression test fails before the contract is added and passes afterward.
-- [x] Full frontend suite: **61 passed**.
-- [x] `npm run lint`.
-- [x] `npm run build`.
-- [x] `git diff --check`.
-
-final result: passed
-
-## Compact season-pass rail cleanup — 2026-08-15
-
-- Removed the oversized pill-like appearance caused by generic `span` rules applying to the progress layers.
-- Progress layers now use dedicated elements: a thin XP fill line, a small viewport ring, and compact level dots.
-- The viewport marker remains scroll-synced, while the XP line remains tied to the live level percentage.
-- Local preview refreshed at `http://127.0.0.1:4173/growth`.
-- Full frontend suite: **60 passed**; lint passed; production build passed; `git diff --check` passed.
-
-final result: passed
-
-## Season-pass progress track polish — 2026-08-15
-
-- Reframed the lower UI as a **시즌 패스 레벨 진행 트랙** based on the researched single-track pass pattern.
-- XP progress is now a thin line tied only to `levelPercent`; horizontal scrolling no longer expands that line into a large purple bar.
-- Scroll position is represented by a small outlined viewport marker that moves along the track, with compact level dots remaining visible.
-- Removed the legacy `fan-growth-milestone-track-thumb` width override that caused the oversized pill-like appearance.
-- Local preview refreshed at `http://127.0.0.1:4173/growth`.
-- Full frontend suite: **60 passed**; lint passed; production build passed; `git diff --check` passed.
-
-final result: passed
-
-## Lock icon and hybrid milestone progress iteration — 2026-08-15
-
-- Replaced the ambiguous small lock shape with a visible outlined lock icon containing a body, shackle, and keyhole.
-- The lower control is now documented as a **레벨·XP 진행 트랙 + 스크롤 위치 인디케이터**: the filled line reflects the stronger of live XP progress and the currently reached scroll position, while the outlined marker follows the horizontal rail.
-- Added milestone dots so completed/current/future level positions remain legible while the rail moves.
-- Focused red-green regression coverage now checks the keyhole path, dual progress layers, combined level/scroll calculation, and existing fixed-width rail behavior.
-- Local preview refreshed at `http://127.0.0.1:4173/growth`.
-- Full frontend suite: **60 passed**; lint passed; production build passed; `git diff --check` passed.
-
-final result: passed
-
-## Milestone state and scroll indicator iteration — 2026-08-15
-
-- Current milestone now carries both the `현재` badge and the lock icon while it is not completed.
-- Following milestones keep the same lock treatment; the previous milestone keeps the completion check.
-- The lock icon is rendered by the named `MilestoneLockIcon` component with an outlined vector treatment and explicit accessible label.
-- The lower rail indicator now derives its thumb width from the visible rail ratio and its position from `scrollLeft / maxScrollLeft`. CSS variables protect those values from legacy `!important` overrides.
-- The local preview was refreshed at `http://127.0.0.1:4173/growth` for the user to inspect in the open browser tab.
-- Focused red-green regression test completed for state, icon, native scroll updates, and indicator geometry.
-- Full frontend suite: **60 passed**; lint passed; production build passed; `git diff --check` passed.
-
-final result: passed
-
-## Latest fan-level lower-reference iteration
-
-- Source visual truth: `/Users/gojaewoong/Downloads/스크린샷 2026-08-15 오전 3.18.40.png`
-- Implementation: `http://localhost:4173/growth`
-- Changes: added milestone received/locked states, made the current badge visible above the rail, and matched the split benefits card dimensions and typography to the supplied crop.
-- Automated checks: 59 tests passed, production build passed, `git diff --check` passed.
-- Browser comparison: blocked after the Codex app reinstall because the fresh browser session is unauthenticated and `/growth` redirects to the login screen. A visual pass must be rerun after signing in.
-
-final result: blocked
-
----
-
-# Fan level milestone rail QA — fixed — 2026-08-15
-
-## Comparison setup
-
-- Source visual truth: `/Users/gojaewoong/Downloads/레퍼런스 이미지/exec-b17a2a1f-09ea-406c-95cd-7cb466274537.png`
-- Source pixels: **853 × 1844 px**, normalized as the existing 2× mobile reference (approximately **426.5 × 922 CSS px**).
-- Implementation, scroll start: `docs/design/qa/fan-level-milestone-scroll-fixed-start.png` (**415 × 990 px**).
-- Implementation, scroll end: `docs/design/qa/fan-level-milestone-scroll-fixed-end.png` (**415 × 990 px**).
-- Combined comparison evidence: `docs/design/qa/fan-level-milestone-comparison.png` (**1265 × 1457 px**).
-- Browser viewport: **430 × 922 CSS px**, device scale factor 1.
-- State: signed-in temporary level-1 fan on `/growth`; milestone rail checked at both scroll boundaries.
-
-## Findings and comparison history
-
-1. **P1 resolved — milestone cards were squeezed into six equal columns.** A late shell override replaced the intended fixed-width rail with `repeat(6, minmax(0, 1fr))`. The final rail contract now uses flex layout with six **122px** cards and **10px** gaps.
-2. **P1 resolved — horizontal navigation was disabled.** The same override set `overflow: hidden`. The rail now computes to `overflow-x: auto`, has `scrollWidth: 784px` versus `clientWidth: 386px`, and reaches the final level at `scrollLeft: 398px`.
-3. **P2 resolved — the last reward remained partially clipped at the final snap point.** The final card now snaps to `end`; browser evidence reports `lastCardVisible: true`.
-4. **P2 resolved — keyboard access did not move the rail consistently.** The named, focusable rail now handles left/right arrow keys in one-card increments while touch and trackpad horizontal panning remain enabled.
-5. **P2 resolved — level 1 produced duplicate React keys for previous/current cards.** Keys now include level and reward identity. A fresh browser tab reports no console warnings or errors.
-
-## Required fidelity surfaces
-
-- Fonts and typography: existing fan-level type scale and weights remain unchanged; fixed card width prevents the reward labels from collapsing to the unreadable narrow state shown in the broken capture.
-- Spacing and layout rhythm: 122px cards, 10px gaps, 14px top clearance for the current badge, and full start/end scroll boundaries verified.
-- Colors and visual tokens: existing violet current state, pale borders, and locked-state colors remain unchanged.
-- Image quality and asset fidelity: the existing `fan-level-milestones.png` sprite remains sharp and uncropped inside every card.
-- Copy and content: milestone levels, reward names, current/locked labels, and all existing live-data mappings remain unchanged.
-
-## Verification
-
-- [x] Focused regression test failed before the fix and passes afterward.
-- [x] Full frontend suite: **60 passed**.
-- [x] `npm run lint`.
-- [x] `npm run build`.
-- [x] Browser geometry: all six cards are exactly **122px** wide; rail is `display: flex` and `overflow-x: auto`.
-- [x] Browser interaction: left/right keyboard scrolling reaches both boundaries and fully reveals the final card.
-- [x] Fresh browser console: no warnings or errors.
-- [x] Reference and corrected implementation reviewed together in the combined comparison image.
-
-No actionable P0/P1/P2 findings remain in the requested milestone rail scope.
-
-final result: passed
-
----
-
-# Latest card-registration verification — 2026-08-16
-
-- Source visual truth: `exec-15e431eb-6c85-4482-a6ee-30e717adbc96.png` for 1/4 and `exec-7b46396d-b6d0-40ea-9c7d-7a3c5dc80f4b.png` for 4/4.
-- Browser evidence: `.tmp-registration-qa.png` and `.tmp-registration-complete-qa.png`, captured at a **493 × 933 CSS px** mobile viewport.
-- Verified state: the visible collection CTA opens `/redeem`; all three registration methods render; the generated SR card asset is present; the 4/4 fan-level emblem and destination-specific action icons render; the CTA uses `팬폴리오`.
-- Comparison result: typography, spacing, violet/blue token use, image crop, icon meaning, and copy have no remaining P0/P1/P2 mismatch in this requested scope.
-- Validation: **78/78 tests passed**, production build passed, `git diff --check` passed, and the visual browser pass produced no console warnings or errors.
+- Header, image preview, upload action, generated image choices, form fields, fan-app preview, dimmed workspace, and fixed action footer follow the approved composition.
+- The four visible reward images are generated 512×512 PNG assets, not placeholders or CSS drawings.
+- Initial iteration exposed a P1 footer containment defect: the absolutely positioned footer used the viewport as its containing block and spanned the full screen. The drawer is now positioned and the footer measures exactly from x=1033 to x=1533, matching the 500px drawer bounds.
+- Initial iteration exposed a P2 stale selection indicator after image changes. Preset changes now leave exactly one selected thumbnail and move the check indicator with the selected asset; uploads clear the preset selection.
+- The ambiguous `미디어 라이브러리` control was renamed `기본 이미지 선택`, explains that four bundled images are available, scrolls to the choices, focuses the first option, and briefly highlights the selection area.
+- A custom-select regression replaced the chevron glyph with the chosen reward label, producing duplicated text such as `뱃지 뱃지`. The label now has its own target node, and browser verification confirmed `칭호` plus an intact `expand_more` icon.
+- The generic save error was reproduced as `401 Unauthorized` because the visual-only preview URL had no administrator session. The browser was moved to the real authenticated admin route; a reward POST returned `201 Created`, and expired sessions now receive a specific login-expired message.
+- Clicking a preset updates the main image and fan-app preview. Browser evidence confirmed one selected preset and focused keyboard target.
+- The full drawer is legible in the combined comparison, including the image picker and footer, so a separate focused crop was not required.
+- JavaScript syntax validation passed and all 14 fan-growth admin contract tests passed.
 
 final result: passed

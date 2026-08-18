@@ -25,7 +25,7 @@
     <div class="meta"><span class="chip">MVP · v0.2</span><span class="chip">정본: BACKEND_IMPLEMENTATION_CONTRACT.md</span><span class="chip">테스트: backend/tests/contract</span></div>
   </header>
   <main>
-    <div class="notice"><b>현재 상태:</b> 맵의 151개 HTTP 경로는 계약 테스트로 구현·검증됩니다. <code>Health → Fixture → Auth → Fan → Admin → Artist</code> 순서로 테스트를 읽으면 각 기능 경계를 따라갈 수 있습니다.</div>
+    <div class="notice"><b>현재 상태:</b> 맵의 153개 HTTP 경로는 계약 테스트로 구현·검증됩니다. <code>Health → Fixture → Auth → Fan → Admin → Artist</code> 순서로 테스트를 읽으면 각 기능 경계를 따라갈 수 있습니다.</div>
     <h2>구현 순서</h2>
     <div class="steps" id="steps"></div>
     <div class="layout">
@@ -182,6 +182,8 @@
       ,{stage:'Fan', role:'Fan', method:'GET', path:'/api/events', auth:'Fan', request:{status:'active'}, success:'200', response:{items:[],total:0}, errors:['401 AUTH_REQUIRED','422 VALIDATION_ERROR'], test:'tests/contract/test_events.py', note:'공개 가능한 이벤트 목록을 상태별로 조회합니다.'}
       ,{stage:'Fan', role:'Fan', method:'GET', path:'/api/events/{event_id}', auth:'Fan', request:null, success:'200', response:{id:'event_123',status:'published'}, errors:['401 AUTH_REQUIRED','404 EVENT_NOT_FOUND'], test:'tests/contract/test_events.py', note:'공개 이벤트 상세를 조회합니다.'}
       ,{stage:'Fan', role:'Fan', method:'GET', path:'/api/events/{event_id}/hero', auth:'Fan', request:null, success:'200 image/*', response:null, errors:['401 AUTH_REQUIRED','404 EVENT_HERO_NOT_FOUND'], test:'tests/contract/test_events.py', note:'팬 이벤트 대표 이미지를 제공합니다.'}
+      ,{stage:'Fan', role:'Fan', method:'POST', path:'/api/events/{event_id}/applications', auth:'Fan', request:null, success:'201', response:{id:'application_123',status:'submitted'}, errors:['401 AUTH_REQUIRED','404 EVENT_NOT_FOUND','409 EVENT_APPLICATION_CLOSED','409 EVENT_ALREADY_APPLIED','409 EVENT_FULL'], test:'tests/test_event_applications.py', note:'팬의 이벤트 신청을 저장하고 중복 신청을 멱등 처리합니다.'}
+      ,{stage:'Fan', role:'Fan', method:'GET', path:'/api/me/event-applications', auth:'Fan', request:null, success:'200', response:{items:[]}, errors:['401 AUTH_REQUIRED'], test:'tests/test_event_applications.py', note:'팬이 제출한 이벤트 신청 내역을 새로고침 후에도 조회합니다.'}
       ,{stage:'Admin', role:'Admin', method:'GET', path:'/api/admin/events', auth:'Admin', request:{status:'draft',limit:20,offset:0}, success:'200', response:{items:[],total:0}, errors:['401 AUTH_REQUIRED','403 FORBIDDEN'], test:'tests/contract/test_events.py', note:'운영 이벤트 목록을 검색·필터·페이지네이션합니다.'}
       ,{stage:'Admin', role:'Admin', method:'POST', path:'/api/admin/events', auth:'Admin', request:{title:'팬 이벤트',startsAt:'2026-08-20T09:00:00Z'}, success:'201', response:{id:'event_123',status:'draft'}, errors:['401 AUTH_REQUIRED','403 FORBIDDEN','422 VALIDATION_ERROR'], test:'tests/contract/test_events.py', note:'이벤트를 운영 초안으로 등록합니다.'}
       ,{stage:'Admin', role:'Admin', method:'GET', path:'/api/admin/events/{event_id}', auth:'Admin', request:null, success:'200', response:{id:'event_123',status:'draft'}, errors:['401 AUTH_REQUIRED','403 FORBIDDEN','404 EVENT_NOT_FOUND'], test:'tests/contract/test_events.py', note:'이벤트 운영 상세를 조회합니다.'}

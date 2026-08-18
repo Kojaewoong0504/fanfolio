@@ -301,7 +301,7 @@ test('admin brand mark is the actual Fanfolio app icon and missing media has a r
 
 test('admin entrypoint busts stale app script caches after a deployment', async () => {
   const html = await readFile(new URL('../index.html', import.meta.url), 'utf8')
-  assert.match(html, /app\.js\?v=editorial-ops-20260813/)
+  assert.match(html, /app\.js\?v=season-pass-admin-20260818/)
 })
 
 test('partner logo picker is optional and exposes preview replacement and removal controls', () => {
@@ -385,14 +385,14 @@ test('partner logo API paths resolve to the configured API origin during local d
 
   assert.equal(
     harness.resolvePartnerLogoUrl('/api/organizations/org_123/logo'),
-    'http://localhost:8000/api/organizations/org_123/logo',
+    'http://127.0.0.1:8000/api/organizations/org_123/logo',
   )
   assert.match(
     harness.partnerLogoMarkup({
       name: 'Acme',
       logoUrl: '/api/organizations/org_123/logo',
     }),
-    /src="http:\/\/localhost:8000\/api\/organizations\/org_123\/logo"/,
+    /src="http:\/\/127\.0\.0\.1:8000\/api\/organizations\/org_123\/logo"/,
   )
 })
 

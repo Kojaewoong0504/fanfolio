@@ -279,6 +279,12 @@ def test_fan_pass_lists_only_published_free_seasons_and_refreshes_progress(
             "tier": 1,
             "requiredXp": 20,
             "rewardId": "reward_pass_badge",
+            "reward": {
+                "id": "reward_pass_badge",
+                "type": "badge",
+                "name": "Pass Badge",
+                "metadata": {},
+            },
             "claimed": False,
             "claimable": True,
         },
@@ -287,6 +293,7 @@ def test_fan_pass_lists_only_published_free_seasons_and_refreshes_progress(
             "tier": 2,
             "requiredXp": 60,
             "rewardId": None,
+            "reward": None,
             "claimed": False,
             "claimable": False,
         },
@@ -867,3 +874,46 @@ def test_successful_redemption_returns_created_when_enqueue_fails(
     assert len(events) == 1
     assert events[0].source_id == redeemed["userCardId"]
     assert events[0].status == "pending"
+
+
+def test_progression_can_be_read_for_one_artist_without_mixing_other_artist_xp(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    seed_first_card_achievement()
+
+    async def seed_other_artist_xp() -> None:
+        async with SessionLocal() as session:
+            event = EngagementEvent(
+                id="evt_fan_luminous_growth",
+                user_id="fan",
+                kind="card_collected",
+                source_type="test",
+                source_id="source_luminous_growth",
+                payload={"artistId": "artist_luminous"},
+                status="processed",
+                processed_at=now(),
+            )
+            session.add(event)
+            session.add(
+                XpLedger(
+                    id="xp_fan_luminous_growth",
+                    user_id="fan",
+                    event_id=event.id,
+                    rule_key="card_collected",
+                    amount=70,
+                )
+            )
+            await session.commit()
+
+    asyncio.run(seed_other_artist_xp())
+    all_progression = assert_success(actors["fan"].get("/api/me/progression"))
+    nova_progression = assert_success(
+        actors["fan"].get("/api/me/progression?artistId=artist_nova3")
+    )
+    luminous_progression = assert_success(
+        actors["fan"].get("/api/me/progression?artistId=artist_luminous")
+    )
+
+    assert all_progression["level"]["totalXp"] == 70
+    assert nova_progression["level"]["totalXp"] == 0
+    assert luminous_progression["level"]["totalXp"] == 70

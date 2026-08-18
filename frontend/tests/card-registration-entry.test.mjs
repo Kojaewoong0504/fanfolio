@@ -38,6 +38,8 @@ test('the first-step CTA advances to a dedicated QR scan screen', () => {
 })
 
 test('QR-free preview path hands off to the dedicated card reveal route', () => {
+  assert.match(modalSource, /import\.meta\.env\.DEV/)
+  assert.match(modalSource, /selectedMethod === 'photo'[\s\S]*import\.meta\.env\.DEV && <button[^>]*>샘플 카드로 3단계 미리보기/)
   assert.match(modalSource, /샘플 카드로 3단계 미리보기/)
   assert.match(modalSource, /step === 3/)
   assert.match(modalSource, /setStep\(3\)/)

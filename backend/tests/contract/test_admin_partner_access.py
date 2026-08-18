@@ -212,6 +212,9 @@ def test_partner_action_map_includes_company_admin_and_drop_code_scope() -> None
             "codes:write",
             "engagement:write",
             "engagement:approve",
+            "events:read",
+            "events:write",
+            "events:submit",
             "audit:read",
         }
     )

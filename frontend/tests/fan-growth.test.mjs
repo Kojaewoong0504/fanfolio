@@ -9,6 +9,8 @@ const apiSource = await readFile(new URL('../src/api/client.ts', import.meta.url
 const fanGrowthSource = await readFile(new URL('../src/components/FanGrowth.tsx', import.meta.url), 'utf8')
 const fanGrowthCssSource = await readFile(new URL('../src/components/FanGrowth.css', import.meta.url), 'utf8')
 const fanGrowthReferenceCssSource = await readFile(new URL('../src/components/FanGrowthReference.css', import.meta.url), 'utf8')
+const fanPassSource = await readFile(new URL('../src/components/FanPassPage.tsx', import.meta.url), 'utf8')
+const fanPassCssSource = await readFile(new URL('../src/components/FanPassPage.css', import.meta.url), 'utf8')
 
 test('fan growth is a persistent bottom tab instead of settings content', async () => {
   await access(new URL('../src/components/FanGrowth.tsx', import.meta.url))
@@ -36,7 +38,7 @@ test('all authenticated screens use one shared app header contract', () => {
   assert.match(referenceCssSource, /main\.app-shell > header\.app-header \.header-profile-button[\s\S]*?width:\s*32px\s*!important/)
   assert.match(referenceCssSource, /main\.app-shell > header\.app-header \.header-profile-button \.profile-avatar[\s\S]*?height:\s*32px\s*!important/)
   assert.match(referenceCssSource, /main\.app-shell > header\.app-header \.eyebrow[\s\S]*?color:\s*var\(--fan-violet\)\s*!important/)
-  assert.match(fanGrowthReferenceCssSource, /Keep the growth route on the same global app-header contract[\s\S]*?header-alert-button[\s\S]*?width:32px!important/)
+  assert.match(fanGrowthReferenceCssSource, /\.fan-growth-reference[\s\S]*?fan-growth-artist-heading/)
   assert.match(referenceCssSource, /Home header spacing contract[\s\S]*?main\.app-shell\.home-shell > header\.app-header[\s\S]*?margin-bottom:\s*0\s*!important/)
 })
 
@@ -44,14 +46,14 @@ test('fan growth API client exposes typed progression reward equipment and pass 
   assert.match(apiSource, /export type FanProgression =/)
   assert.match(apiSource, /export type RewardGrant =/)
   assert.match(apiSource, /export type ProfileEquipment =/)
-  assert.match(apiSource, /export function getProgression\(\)/)
-  assert.match(apiSource, /apiFetch<\{ ok: true, data: FanProgression \}>\('\/me\/progression'\)/)
+  assert.match(apiSource, /export function getProgression\(artistId\?: string \| null\)/)
+  assert.match(apiSource, /`\/me\/progression\$\{growthScopeQuery\(artistId\)\}`/)
   assert.match(apiSource, /export function claimReward\(grantId: string\)/)
   assert.match(apiSource, /`\/me\/rewards\/\$\{encodeURIComponent\(grantId\)\}\/claim`/)
   assert.match(apiSource, /export function updateProfileEquipment\(equipment: ProfileEquipment\)/)
   assert.match(apiSource, /apiFetch<\{ ok: true, data: ProfileEquipment \}>\('\/me\/profile\/equipment'/)
-  assert.match(apiSource, /export function getFanPass\(\)/)
-  assert.match(apiSource, /apiFetch<\{ ok: true, data: FanPass \}>\('\/me\/pass'\)/)
+  assert.match(apiSource, /export function getFanPass\(artistId\?: string \| null\)/)
+  assert.match(apiSource, /`\/me\/pass\$\{growthScopeQuery\(artistId\)\}`/)
   assert.match(apiSource, /export function claimPassTier\(tierId: string\)/)
 })
 
@@ -76,22 +78,42 @@ test('full fan level view exposes the supplied reference composition while keepi
   const source = fanGrowthSource
   assert.doesNotMatch(source, /팬 활동을 통해 레벨을 올리고 특별한 혜택을 받아보세요!/, 'page subtitle belongs to the shared app header')
   assert.match(source, /fan-growth-hero/, 'reference level hero should be present')
-  assert.match(source, /fan-growth-missions/, 'reference mission section should be present')
+  assert.match(source, /fan-growth-mission-summary/, 'reference mission summary should be present')
   assert.match(source, /fan-growth-milestones/, 'reference milestone section should be present')
-  assert.match(source, /fan-growth-benefits/, 'reference benefits section should be present')
+  assert.match(source, /fan-growth-next-reward/, 'reference next reward section should be present')
   assert.match(source, /progression\.level\.totalXp/, 'level XP must come from live progression')
   assert.match(source, /progression\.achievements/, 'missions must come from live progression')
+  assert.match(source, /progression\.pass\.seasons/, 'milestones must come from the published fan pass')
+  assert.match(source, /tier\.reward\?\.name/, 'milestones must show the admin-published reward name')
+  assert.doesNotMatch(source, /스페셜 포토카드|드림스케이프 전용 콘텐츠 열람|아티스트 콘텐츠 좋아요/, 'growth view must not invent demo missions or benefits')
+  assert.match(source, /visibleBenefits = useMemo/, 'growth benefits should deduplicate grants for the same reward')
   assert.match(source, /completedAt/, 'mission completion must remain data-driven')
   assert.match(source, /currentValue[\s\S]{0,80}targetValue/, 'mission progress must remain data-driven')
+})
+
+test('fan growth renders admin-selected reward artwork for presets and uploaded assets', () => {
+  assert.match(apiSource, /metadata\?: Record<string, unknown>/)
+  assert.match(fanGrowthSource, /function rewardArtworkUrl/)
+  assert.match(fanGrowthSource, /imagePreset/)
+  assert.match(fanGrowthSource, /imageAssetId/)
+  assert.match(fanGrowthSource, /`\/api\/rewards\/\$\{encodeURIComponent\(rewardId\)\}\/image`/)
+  assert.match(fanGrowthSource, /fan-growth-next-reward-icon[\s\S]*?<img src=/)
+  assert.match(fanGrowthSource, /fan-growth-pass-tier[\s\S]{0,420}rewardArtworkUrl\(tier\.reward\)[\s\S]{0,180}<img src=/)
+  assert.match(fanGrowthReferenceCssSource, /fan-growth-next-reward-icon img/)
+})
+
+test('fan growth preview carries reward artwork metadata through the same pass-tier shape as the API', () => {
+  assert.match(appSource, /imagePreset: 'ticket'/, 'preview data should exercise a real reward artwork preset')
+  assert.match(appSource, /name: '미공개 콘텐츠',[\s\S]{0,180}metadata: \{ imagePreset: 'ticket' \}/, 'the preview next reward should use the selected reward artwork path')
 })
 
 test('fan level reference stylesheet defines the mobile geometry and fixed navigation-safe spacing', () => {
   const cssSource = `${fanGrowthCssSource}\n${fanGrowthReferenceCssSource}`
   assert.match(cssSource, /fan-growth-reference/, 'reference styles should be scoped to the feature')
   assert.match(cssSource, /fan-growth-milestones/, 'milestones should have dedicated styles')
-  assert.match(cssSource, /max-width:\s*640px/, 'mobile stacking breakpoint should be present')
-  assert.match(cssSource, /padding:\s*18px 0 112px/, 'content should reserve space for fixed bottom navigation')
-  assert.match(cssSource, /growth-shell\{width:min\(100%,430px\)!important/, 'growth must remain inside the shared mobile app shell')
+  assert.match(cssSource, /@media\(min-width:700px\)/, 'desktop canvas boundary should be explicit')
+  assert.match(cssSource, /padding:0 0 118px!important/, 'content should reserve space for fixed bottom navigation')
+  assert.match(cssSource, /\.fan-growth-hero\{display:grid;grid-template-columns:112px/, 'hero geometry should use the reference proportions')
 })
 
 test('milestone cards keep a readable fixed width inside a keyboard-scrollable horizontal rail', () => {
@@ -112,18 +134,13 @@ test('milestone cards keep a readable fixed width inside a keyboard-scrollable h
   )
   assert.match(
     fanGrowthReferenceCssSource,
-    /Milestone rail scroll contract:[\s\S]*?\.fan-growth-milestones\s*\{[\s\S]*?display:flex!important;[\s\S]*?overflow-x:auto!important;[\s\S]*?scroll-snap-type:x proximity!important;[\s\S]*?\}/,
+    /\.fan-growth-milestones\{display:flex;[\s\S]*?overflow-x:auto;[\s\S]*?scroll-snap-type:x proximity/,
     'the final shell override should preserve horizontal scrolling',
   )
   assert.match(
     fanGrowthReferenceCssSource,
-    /Milestone rail scroll contract:[\s\S]*?\.fan-growth-milestone\s*\{[\s\S]*?flex:0 0 122px!important;[\s\S]*?\}/,
+    /\.fan-growth-milestone\{[\s\S]*?flex:0 0 108px;[\s\S]*?\}/,
     'milestone cards should not shrink below the reference width',
-  )
-  assert.match(
-    fanGrowthReferenceCssSource,
-    /Milestone rail scroll contract:[\s\S]*?\.fan-growth-milestone:last-child\s*\{[\s\S]*?scroll-snap-align:end!important;/,
-    'the final milestone should snap fully into view',
   )
   assert.match(
     fanGrowthSource,
@@ -162,7 +179,7 @@ test('milestone cards keep a readable fixed width inside a keyboard-scrollable h
   )
   assert.match(
     fanGrowthSource,
-    /milestoneProgressPercent = Math\.max\(18, levelPercent\)/,
+    /milestoneProgressPercent = currentSeason[\s\S]*currentSeason\.progress\.currentXp/,
     'the progress line should stay tied to live XP progress',
   )
   assert.match(
@@ -198,6 +215,18 @@ test('fan growth UI has Korean reward pass equipment states and bottom sheet beh
   assert.match(componentSource, /배지 3개까지 장착할 수 있어요/)
   assert.match(componentSource, /role="dialog"/)
   assert.match(componentSource, /aria-modal="true"/)
+})
+
+test('fan pass opens as a dedicated page with a vertical season journey', () => {
+  assert.match(appSource, /FanPassPage/)
+  assert.match(appSource, /\/growth\/pass/)
+  assert.match(fanGrowthSource, /onViewPass/)
+  assert.match(fanGrowthSource, /onViewPass\(\)/)
+  assert.match(fanPassSource, /드림스케이프 팬 레벨|시즌 종료까지/)
+  assert.match(fanPassSource, /season-pass-journey/)
+  assert.match(fanPassSource, /보상 받기/)
+  assert.match(fanPassCssSource, /season-pass-journey/)
+  assert.doesNotMatch(fanGrowthSource, /onClick=\{\(\) => setActiveSheet\('pass'\)\}/)
 })
 
 test('fan growth styles preserve card UI, 360px layout, touch targets, and no horizontal overflow', async () => {

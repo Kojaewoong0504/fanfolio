@@ -499,6 +499,7 @@ def _reward_grant_data(grant: RewardGrant, reward: RewardCatalog) -> dict:
         "rewardId": reward.id,
         "type": reward.reward_type,
         "name": reward.name,
+        "metadata": reward.metadata_,
         "grantedAt": _datetime_data(grant.granted_at),
         "claimedAt": _datetime_data(grant.claimed_at),
     }
@@ -571,12 +572,31 @@ async def _equipment_data(session: AsyncSession, *, user_id: str) -> dict:
     return result
 
 
-async def fan_progression_data(session: AsyncSession, user_id: str) -> dict:
-    level = await session.get(FanLevel, user_id)
+def _event_artist_expression():
+    return EngagementEvent.payload["artistId"].as_string()
+
+
+async def fan_progression_data(
+    session: AsyncSession,
+    user_id: str,
+    artist_id: str | None = None,
+    global_scope: bool = False,
+) -> dict:
+    total_xp = await scoped_user_xp(session, user_id=user_id, artist_id=artist_id)
+    level_number = max(1, total_xp // 100 + 1)
     definitions = list(
         await session.scalars(
             select(AchievementDefinition)
-            .where(AchievementDefinition.status == "published")
+            .where(
+                AchievementDefinition.status == "published",
+                or_(
+                    AchievementDefinition.artist_id.is_(None)
+                    if global_scope
+                    else True
+                    if artist_id is None
+                    else AchievementDefinition.artist_id == artist_id,
+                ),
+            )
             .order_by(AchievementDefinition.title, AchievementDefinition.id)
         )
     )
@@ -609,6 +629,13 @@ async def fan_progression_data(session: AsyncSession, user_id: str) -> dict:
                 RewardGrant.user_id == user_id,
                 RewardGrant.claimed_at.is_(None),
                 RewardCatalog.status == "published",
+                or_(
+                    RewardCatalog.artist_id.is_(None)
+                    if global_scope
+                    else True
+                    if artist_id is None
+                    else RewardCatalog.artist_id == artist_id,
+                ),
             )
             .order_by(RewardGrant.granted_at, RewardGrant.id)
         )
@@ -621,6 +648,13 @@ async def fan_progression_data(session: AsyncSession, user_id: str) -> dict:
                 RewardGrant.user_id == user_id,
                 RewardGrant.claimed_at.is_not(None),
                 RewardCatalog.status == "published",
+                or_(
+                    RewardCatalog.artist_id.is_(None)
+                    if global_scope
+                    else True
+                    if artist_id is None
+                    else RewardCatalog.artist_id == artist_id,
+                ),
             )
             .order_by(RewardGrant.claimed_at, RewardGrant.granted_at, RewardGrant.id)
         )
@@ -634,8 +668,8 @@ async def fan_progression_data(session: AsyncSession, user_id: str) -> dict:
     )
     return {
         "level": {
-            "level": level.level if level else 1,
-            "totalXp": level.total_xp if level else 0,
+            "level": level_number,
+            "totalXp": total_xp,
         },
         "achievements": achievements,
         "claimableRewards": [
@@ -644,7 +678,9 @@ async def fan_progression_data(session: AsyncSession, user_id: str) -> dict:
         "claimedRewards": [
             _reward_grant_data(grant, reward) for grant, reward in claimed_reward_rows
         ],
-        "pass": await fan_pass_data(session, user_id=user_id),
+        "pass": await fan_pass_data(
+            session, user_id=user_id, artist_id=artist_id, global_scope=global_scope
+        ),
         "equipment": await _equipment_data(session, user_id=user_id),
         "debugEvents": [
             {
@@ -833,6 +869,7 @@ async def scoped_user_xp(
     session: AsyncSession,
     *,
     user_id: str,
+    artist_id: str | None = None,
     starts_at: datetime | None = None,
     ends_at: datetime | None = None,
 ) -> int:
@@ -843,14 +880,21 @@ async def scoped_user_xp(
         conditions.append(XpLedger.created_at >= season_starts_at)
     if season_ends_at is not None:
         conditions.append(XpLedger.created_at <= season_ends_at)
-    total = await session.scalar(
-        select(func.coalesce(func.sum(XpLedger.amount), 0)).where(*conditions)
-    )
+    query = select(func.coalesce(func.sum(XpLedger.amount), 0)).where(*conditions)
+    if artist_id is not None:
+        query = query.join(EngagementEvent, EngagementEvent.id == XpLedger.event_id).where(
+            _event_artist_expression() == artist_id
+        )
+    total = await session.scalar(query)
     return int(total or 0)
 
 
 async def refresh_pass_progress(
-    session: AsyncSession, *, user_id: str, season: PassSeason
+    session: AsyncSession,
+    *,
+    user_id: str,
+    season: PassSeason,
+    artist_id: str | None = None,
 ) -> PassProgress:
     progress = await session.scalar(
         select(PassProgress).where(
@@ -882,6 +926,7 @@ async def refresh_pass_progress(
     progress.current_xp = await scoped_user_xp(
         session,
         user_id=user_id,
+        artist_id=season.artist_id if season.artist_id is not None else artist_id,
         starts_at=season.starts_at,
         ends_at=season.ends_at,
     )
@@ -907,10 +952,12 @@ def _season_open_for_claim(season: PassSeason, current_time: datetime) -> bool:
     return current_time <= ends_at + timedelta(days=PASS_CLAIM_GRACE_DAYS)
 
 
-def _pass_tier_data(tier: PassTier, progress: PassProgress) -> dict:
+def _pass_tier_data(
+    tier: PassTier, progress: PassProgress, reward: RewardCatalog | None = None
+) -> dict:
     claimed_tier_ids = set(progress.claimed_tier_ids or [])
     claimed = tier.id in claimed_tier_ids
-    return {
+    data = {
         "id": tier.id,
         "tier": tier.tier,
         "requiredXp": tier.required_xp,
@@ -918,14 +965,40 @@ def _pass_tier_data(tier: PassTier, progress: PassProgress) -> dict:
         "claimed": claimed,
         "claimable": not claimed and progress.current_xp >= tier.required_xp,
     }
+    if reward is not None and reward.status == "published":
+        data["reward"] = {
+            "id": reward.id,
+            "type": reward.reward_type,
+            "name": reward.name,
+            "metadata": reward.metadata_,
+        }
+    else:
+        data["reward"] = None
+    return data
 
 
-async def fan_pass_data(session: AsyncSession, *, user_id: str) -> dict:
+async def fan_pass_data(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    artist_id: str | None = None,
+    global_scope: bool = False,
+) -> dict:
     current_time = now()
     seasons = list(
         await session.scalars(
             select(PassSeason)
-            .where(PassSeason.status == "published", PassSeason.is_paid.is_(False))
+            .where(
+                PassSeason.status == "published",
+                PassSeason.is_paid.is_(False),
+                or_(
+                    PassSeason.artist_id.is_(None)
+                    if global_scope
+                    else True
+                    if artist_id is None
+                    else PassSeason.artist_id == artist_id,
+                ),
+            )
             .order_by(PassSeason.starts_at, PassSeason.id)
         )
     )
@@ -933,14 +1006,17 @@ async def fan_pass_data(session: AsyncSession, *, user_id: str) -> dict:
     for season in seasons:
         if not _season_active_for_pass_view(season, current_time):
             continue
-        progress = await refresh_pass_progress(session, user_id=user_id, season=season)
-        tiers = list(
-            await session.scalars(
-                select(PassTier)
+        progress = await refresh_pass_progress(
+            session, user_id=user_id, season=season, artist_id=artist_id
+        )
+        tier_rows = (
+            await session.execute(
+                select(PassTier, RewardCatalog)
+                .outerjoin(RewardCatalog, RewardCatalog.id == PassTier.reward_id)
                 .where(PassTier.season_id == season.id)
                 .order_by(PassTier.tier, PassTier.id)
             )
-        )
+        ).all()
         items.append(
             {
                 "id": season.id,
@@ -955,7 +1031,7 @@ async def fan_pass_data(session: AsyncSession, *, user_id: str) -> dict:
                     "currentXp": progress.current_xp,
                     "claimedTierIds": list(progress.claimed_tier_ids or []),
                 },
-                "tiers": [_pass_tier_data(tier, progress) for tier in tiers],
+                "tiers": [_pass_tier_data(tier, progress, reward) for tier, reward in tier_rows],
             }
         )
     await session.commit()

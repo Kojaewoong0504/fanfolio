@@ -128,6 +128,53 @@ def test_authenticated_fan_can_complete_onboarding(actors: dict[str, TestClient]
     assert profile["onboardingCompleted"] is True
 
 
+def test_fan_profile_rejects_a_nickname_used_by_another_fan(
+    actors: dict[str, TestClient],
+) -> None:
+    other_fan = actors["otherFan"]
+    assert_success(
+        other_fan.patch(
+            "/api/me/profile",
+            json={
+                "nickname": "중복닉네임",
+                "favoriteArtistIds": ["artist_nova3"],
+                "favoriteMemberIds": ["member_yuna"],
+            },
+        )
+    )
+
+    response = actors["fan"].patch(
+        "/api/me/profile",
+        json={
+            "nickname": " 중복닉네임 ",
+            "favoriteArtistIds": ["artist_nova3"],
+            "favoriteMemberIds": ["member_yuna"],
+        },
+    )
+
+    assert_error(response, 409, "NICKNAME_ALREADY_TAKEN")
+
+
+def test_fan_can_save_and_read_profile_image_during_onboarding(
+    actors: dict[str, TestClient],
+) -> None:
+    profile_image = "data:image/png;base64,aGVsbG8="
+    profile = assert_success(
+        actors["fan"].patch(
+            "/api/me/profile",
+            json={
+                "nickname": "별빛팬",
+                "favoriteArtistIds": ["artist_nova3"],
+                "favoriteMemberIds": ["member_yuna"],
+                "profileImageUrl": profile_image,
+            },
+        )
+    )
+
+    assert profile["profileImageUrl"] == profile_image
+    assert assert_success(actors["fan"].get("/api/me"))["profileImageUrl"] == profile_image
+
+
 def test_onboarding_rejects_an_unknown_member(
     actors: dict[str, TestClient],
 ) -> None:

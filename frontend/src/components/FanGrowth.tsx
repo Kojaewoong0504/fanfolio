@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import type { FanProgression, PassTierClaim, ProfileEquipment, RewardGrant } from '../api/client'
+import { resolveApiUrl, type FanProgression, type PassTierClaim, type ProfileEquipment, type RewardGrant } from '../api/client'
 import './FanGrowth.css'
 import './FanGrowthReference.css'
-import dreamscapeGroup from '../assets/login/dreamscape-group.png'
 import milestoneSprite from '../assets/fan-level-milestones.png'
+import { AuthenticatedImage } from './AuthenticatedImage'
 
 type FanGrowthMode = 'summary' | 'full'
-type FanGrowthSheet = 'achievements' | 'pass' | 'equipment' | null
+type FanGrowthSheet = 'achievements' | 'equipment' | null
 
 type FanGrowthProps = {
   progression: FanProgression | null
+  globalProgression?: FanProgression | null
+  artistScopes?: Array<{ id: string; name: string; imageUrl?: string | null }>
+  selectedArtistId?: string | null
+  onArtistChange?: (artistId: string | null) => void
   loading: boolean
   error: string
   mode: FanGrowthMode
@@ -18,15 +22,25 @@ type FanGrowthProps = {
   onClaim: (grantId: string) => Promise<RewardGrant>
   onClaimPassTier: (tierId: string) => Promise<PassTierClaim>
   onEquip: (equipment: ProfileEquipment) => Promise<void>
+  onViewPass: (tierId?: string) => void
+  onViewGlobalPass?: (tierId?: string) => void
 }
 
-function MissionIcon({ kind }: { kind: 'event' | 'cards' | 'heart' }) {
+function MissionIcon({ kind }: { kind: 'event' | 'cards' | 'heart' | 'flag' }) {
   const paths = {
     event: <><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M8 3v4M16 3v4M4 9h16" /></>,
     cards: <><rect x="5" y="4" width="14" height="16" rx="2" /><path d="M8 8h8M8 12h8M8 16h8" /></>,
     heart: <path d="M12 20S4 15.5 4 9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 8 2.5C20 15.5 12 20 12 20Z" />,
+    flag: <><path d="M6 20V4" /><path d="M7 5h10l-2.5 3L17 11H7" /></>,
   }[kind]
   return <svg className="fan-growth-mission-svg" viewBox="0 0 24 24" aria-hidden="true">{paths}</svg>
+}
+
+function GrowthGlyph({ kind }: { kind: 'ticket' | 'globe' }) {
+  const paths = kind === 'ticket'
+    ? <><path d="M4.5 8.5a2.5 2.5 0 0 0 2.5-2.5h10a2.5 2.5 0 0 0 2.5 2.5v7a2.5 2.5 0 0 0-2.5 2.5H7a2.5 2.5 0 0 0-2.5-2.5Z" fill="currentColor" stroke="none" /><path d="m12 9.2.8 1.7 1.9.2-1.4 1.3.4 1.9-1.7-.9-1.7.9.4-1.9-1.4-1.3 1.9-.2Z" fill="#fff" stroke="none" /></>
+    : <><circle cx="12" cy="12" r="9" /><path d="M3.5 12h17M12 3c2.2 2.4 3.3 5.4 3.3 9s-1.1 6.6-3.3 9M12 3c-2.2 2.4-3.3 5.4-3.3 9s1.1 6.6 3.3 9" /></>
+  return <svg className={`fan-growth-glyph fan-growth-glyph-${kind}`} viewBox="0 0 24 24" aria-hidden="true">{paths}</svg>
 }
 
 const rewardLabels: Record<RewardGrant['type'], string> = {
@@ -50,6 +64,23 @@ function rewardClaimLabel(reward: RewardGrant): string {
   return `${rewardLabel(reward)} 받기`
 }
 
+function rewardTypeLabel(type: string): string {
+  return rewardLabels[type as RewardGrant['type']] ?? '팬 혜택'
+}
+
+function rewardArtworkUrl(reward: { id?: string; rewardId?: string; metadata?: Record<string, unknown> } | null | undefined): string | null {
+  if (!reward?.metadata) return null
+  const preset = typeof reward.metadata.imagePreset === 'string' ? reward.metadata.imagePreset : ''
+  if (['ticket', 'vip', 'crystal', 'music'].includes(preset)) return `/rewards/reward-${preset}.png`
+  if (reward.metadata.imageAssetId) {
+    const rewardId = reward.rewardId || reward.id
+    return rewardId ? resolveApiUrl(`/api/rewards/${encodeURIComponent(rewardId)}/image`) : null
+  }
+  return null
+}
+
+export { rewardArtworkUrl }
+
 function progressPercent(current: number, target: number): number {
   if (target <= 0) return 0
   return Math.max(0, Math.min(100, Math.round(current / target * 100)))
@@ -67,10 +98,9 @@ function MilestoneLockIcon() {
 
 type MilestoneScrollState = { ratio: number; viewportRatio: number }
 
-export function FanGrowth({ progression, loading, error, mode, onRetry, onClaim, onClaimPassTier, onEquip }: FanGrowthProps) {
+export function FanGrowth({ progression, globalProgression = null, artistScopes = [], selectedArtistId = null, onArtistChange, loading, error, mode, onRetry, onClaim, onClaimPassTier: _onClaimPassTier, onEquip, onViewPass, onViewGlobalPass }: FanGrowthProps) {
   const [activeSheet, setActiveSheet] = useState<FanGrowthSheet>(null)
   const [claimingRewardId, setClaimingRewardId] = useState<string | null>(null)
-  const [claimingTierId, setClaimingTierId] = useState<string | null>(null)
   const [equipmentSaving, setEquipmentSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [draftEquipment, setDraftEquipment] = useState<ProfileEquipment | null>(null)
@@ -114,12 +144,23 @@ export function FanGrowth({ progression, loading, error, mode, onRetry, onClaim,
     }
   }, [handleMilestoneScroll, mode, progression?.level.level])
 
-  const claimableRewards = progression?.claimableRewards ?? []
+  const claimableRewards = useMemo(
+    () => progression?.claimableRewards ?? [],
+    [progression?.claimableRewards],
+  )
   const claimedRewards = useMemo(
     () => progression?.claimedRewards.filter(reward => reward.claimedAt) ?? [],
     [progression?.claimedRewards],
   )
-  const currentSeason = progression?.pass.seasons[0] ?? null
+  const visibleBenefits = useMemo(() => {
+    const seen = new Set<string>()
+    return [...claimedRewards, ...claimableRewards].filter(reward => {
+      const key = reward.rewardId || reward.name
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  }, [claimableRewards, claimedRewards])
   const nextXp = progression ? nextLevelXp(progression) : 100
   const levelPercent = progression ? progressPercent(progression.level.totalXp, nextXp) : 0
   const visibleAchievements = (progression?.achievements ?? []).slice(0, mode === 'summary' ? 3 : 5)
@@ -138,19 +179,6 @@ export function FanGrowth({ progression, loading, error, mode, onRetry, onClaim,
       setMessage(err instanceof Error ? err.message : '보상을 수령하지 못했어요.')
     } finally {
       setClaimingRewardId(null)
-    }
-  }
-
-  const claimTier = async (tierId: string) => {
-    setClaimingTierId(tierId)
-    setMessage('')
-    try {
-      await onClaimPassTier(tierId)
-      setMessage('팬 패스 보상을 수령했어요.')
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : '팬 패스 보상을 수령하지 못했어요.')
-    } finally {
-      setClaimingTierId(null)
     }
   }
 
@@ -194,74 +222,119 @@ export function FanGrowth({ progression, loading, error, mode, onRetry, onClaim,
 
   if (!progression) return null
 
+  const currentSeason = progression.pass.seasons[0] ?? null
+
   if (mode === 'full') {
+    const isGlobalScope = selectedArtistId == null
+    const selectedArtist = artistScopes.find(artist => artist.id === selectedArtistId)
+    const scopeName = isGlobalScope ? '전체 팬 레벨' : `${selectedArtist?.name ?? '아티스트'} 팬 레벨`
+    const scopeDescription = isGlobalScope
+      ? '모든 아티스트와 FANFOLIO 활동을 기준으로 성장해요.'
+      : `${selectedArtist?.name ?? '아티스트'}와 함께한 활동만 계산해요.`
     const remainingXp = Math.max(0, nextXp - progression.level.totalXp)
-    const referenceMissions = visibleAchievements.length > 0 ? visibleAchievements : [
-      { id: 'preview-event', title: '이벤트 참여하기', description: '이벤트에 1회 참여하세요.', currentValue: 0, targetValue: 1, completedAt: null },
-      { id: 'preview-card', title: '카드 5장 수집하기', description: '카드를 5장 수집하세요.', currentValue: 3, targetValue: 5, completedAt: null },
-      { id: 'preview-like', title: '아티스트 콘텐츠 좋아요', description: '아티스트 콘텐츠에 좋아요를 10회 눌러보세요.', currentValue: 6, targetValue: 10, completedAt: null },
-    ]
-    const milestoneLevels = [
-      { level: Math.max(1, progression.level.level - 2), label: '스페셜 포토카드', detail: 'SET A', status: 'complete' as const },
-      { level: progression.level.level, label: '단독 디지털', detail: '포스터', status: 'currentLocked' as const },
-      { level: progression.level.level + 2, label: '500', detail: 'FAN POINT', status: 'locked' as const },
-      { level: progression.level.level + 4, label: '아티스트', detail: '메시지 (1회)', status: 'locked' as const },
-      { level: progression.level.level + 6, label: '미공개 셀카', detail: '포토카드', status: 'locked' as const },
-      { level: progression.level.level + 8, label: '프리미엄', detail: '포토북', status: 'locked' as const },
-    ]
-    const milestoneProgressPercent = Math.max(18, levelPercent)
+    const milestoneTiers = currentSeason?.tiers ?? []
+    const firstUnclaimedTierIndex = milestoneTiers.findIndex(tier => !tier.claimed)
+    const milestoneLevels = milestoneTiers.map(tier => ({
+      tier,
+      level: Math.max(1, Math.floor(tier.requiredXp / 100) + 1),
+      label: tier.reward?.name ?? `팬 패스 ${tier.tier}단계`,
+      detail: tier.reward ? rewardTypeLabel(tier.reward.type) : '보상 없음',
+      reward: tier.reward,
+      status: tier.claimed ? 'complete' as const : tier.tier - 1 === firstUnclaimedTierIndex ? 'currentLocked' as const : 'locked' as const,
+    }))
+    const nextPassTier = milestoneTiers.find(tier => !tier.claimed && tier.requiredXp > (currentSeason?.progress.currentXp ?? 0) && tier.reward)
+    const milestoneProgressPercent = currentSeason && milestoneTiers.length > 0
+      ? progressPercent(currentSeason.progress.currentXp, Math.max(...milestoneTiers.map(tier => tier.requiredXp)))
+      : 0
     const visibleMilestoneIndex = Math.round(milestoneScroll.ratio * (milestoneLevels.length - 1))
     return <section className="fan-growth full fan-growth-reference" aria-label="팬 레벨">
+      {artistScopes.length <= 1 && <div className="fan-growth-artist-heading"><strong>{scopeName}</strong></div>}
+      {onArtistChange && (artistScopes.length > 1 || isGlobalScope) && <div className="fan-growth-scope" aria-label="팬 레벨 범위 선택">
+        <div className="fan-growth-scope-heading">
+          <span className={`fan-growth-scope-avatar ${isGlobalScope ? 'fan-growth-scope-avatar-global' : ''}`} aria-hidden="true">{isGlobalScope ? '전체' : selectedArtist?.name?.slice(0, 1) ?? '팬'}</span>
+          <span className="fan-growth-scope-eyebrow">성장 기준</span>
+          <strong>{scopeName}</strong>
+          <p>{scopeDescription}</p>
+        </div>
+        <div className="fan-growth-scope-tabs" role="tablist" aria-label="팬 레벨 범위">
+          {artistScopes.map(artist => <button type="button" role="tab" aria-selected={artist.id === selectedArtistId} className={artist.id === selectedArtistId ? 'is-active' : ''} key={artist.id} onClick={() => onArtistChange(artist.id)}>{artist.name}</button>)}
+          <button type="button" role="tab" aria-selected={isGlobalScope} className={isGlobalScope ? 'is-active' : ''} onClick={() => onArtistChange(null)}>전체 팬</button>
+        </div>
+      </div>}
       <article className="fan-growth-hero">
-        <div className="fan-growth-ring-large" aria-label={`레벨 진행률 ${levelPercent}%`} style={{ '--fan-progress': `${levelPercent * 3.6}deg` } as CSSProperties}>
-          <div><strong>Lv.{progression.level.level}</strong><b>{progression.level.level >= 10 ? 'DREAMER' : 'RISING FAN'}</b><span><em>{progression.level.totalXp.toLocaleString()}</em> / {nextXp.toLocaleString()} XP</span></div>
+        <div className="fan-growth-level-column">
+          <div className="fan-growth-level-heading"><strong>Lv.{progression.level.level}</strong><b>{progression.level.level >= 10 ? 'DREAMER' : 'RISING FAN'}</b></div>
+          <div className="fan-growth-ring-large" aria-label={`레벨 진행률 ${levelPercent}%`} style={{ '--fan-progress': `${levelPercent * 3.6}deg` } as CSSProperties}>
+            <div><span><em>{progression.level.totalXp.toLocaleString()}</em> / {nextXp.toLocaleString()} XP</span></div>
+          </div>
         </div>
         <div className="fan-growth-hero-copy">
-          <span className="fan-growth-pill">현재 레벨</span>
+          {selectedArtist?.imageUrl && <AuthenticatedImage className="fan-growth-artist-art" src={selectedArtist.imageUrl} alt={`${selectedArtist.name} 그룹 이미지`} />}
           <h2>다음 레벨까지 <strong>{remainingXp.toLocaleString()} XP</strong> 남았어요!</h2>
           <p>더 많은 활동으로 다음 레벨에 도전해 보세요.</p>
-          <button type="button" className="fan-growth-benefit-cta" onClick={() => setActiveSheet('equipment')}><span aria-hidden="true">✦</span> 나의 레벨 혜택 보기 <b aria-hidden="true">›</b></button>
         </div>
       </article>
 
-      <section className="fan-growth-reference-section">
-        <div className="fan-growth-reference-title"><h2>미션</h2><button type="button" onClick={() => setActiveSheet('achievements')}>전체 보기 <b aria-hidden="true">›</b></button></div>
-        <div className="fan-growth-missions">
-          {referenceMissions.slice(0, 3).map((item, index) => <article key={item.id} className={item.completedAt ? 'completed' : ''}>
-            <span className={`fan-growth-mission-icon mission-icon-${index}`} aria-hidden="true"><MissionIcon kind={index === 0 ? 'event' : index === 1 ? 'cards' : 'heart'} /></span>
-            <div><b>{item.title}</b><p>{item.description}</p></div>
-            <strong>{item.completedAt ? '완료 ✓' : `${Math.min(item.currentValue, item.targetValue)} / ${item.targetValue} ›`}</strong>
-          </article>)}
-        </div>
+      <section className="fan-growth-reference-section fan-growth-mission-section" aria-label="진행 중 미션">
+        <button type="button" className="fan-growth-mission-summary" onClick={() => setActiveSheet('achievements')}>
+          <span className="fan-growth-mission-summary-icon" aria-hidden="true"><MissionIcon kind="flag" /></span>
+          <strong>{visibleAchievements.length > 0 ? `미션 ${visibleAchievements.length}개 진행 중` : '진행 중인 미션 없음'}</strong>
+          <b aria-hidden="true">›</b>
+        </button>
       </section>
 
-      <section className="fan-growth-reference-section">
-        <div className="fan-growth-reference-title"><h2>레벨 마일스톤</h2><button type="button" onClick={() => setActiveSheet('pass')}>전체 보기 <b aria-hidden="true">›</b></button></div>
-        <div ref={milestoneRailRef} className="fan-growth-milestones" role="list" aria-label="전체 레벨 마일스톤" tabIndex={0} onKeyDown={scrollMilestonesWithKeyboard} onScroll={handleMilestoneScroll}>
-          {milestoneLevels.map(item => <article key={`${item.level}-${item.label}`} className={`fan-growth-milestone ${item.status === 'currentLocked' ? 'is-current is-locked' : ''} ${item.status === 'locked' ? 'is-locked' : ''}`} role="listitem">
-            {item.status === 'currentLocked' && <span className="fan-growth-current-label">현재</span>}
-            <span className={`fan-growth-milestone-state ${item.status === 'complete' ? 'is-complete' : 'is-locked'}`} aria-label={item.status === 'complete' ? '받은 보상' : '잠긴 보상'}>{item.status === 'complete' ? '✓' : <MilestoneLockIcon />}</span>
-            <strong>Lv.{item.level}</strong><span className="fan-growth-milestone-art" style={{ backgroundImage: `url(${milestoneSprite})` }} aria-label={item.label} /><b>{item.label}</b><small>{item.detail}</small>
-          </article>)}
-        </div>
-        <div className="fan-growth-milestone-track" aria-hidden="true">
-          <b className="fan-growth-milestone-track-fill" style={{ '--milestone-fill-width': `${milestoneProgressPercent}%` } as CSSProperties} />
-          <b className="fan-growth-milestone-track-viewport" style={{ '--milestone-viewport-left': `${milestoneScroll.ratio * 100}%` } as CSSProperties} />
-          {milestoneLevels.map((item, index) => <i key={`${item.level}-${item.label}-dot`} className={`fan-growth-milestone-track-dot ${index <= visibleMilestoneIndex ? 'is-active' : ''}`} style={{ left: `${index / (milestoneLevels.length - 1) * 100}%` }} />)}
-        </div>
+      <section className="fan-growth-reference-section fan-growth-milestone-section">
+        <div className="fan-growth-reference-title"><h2>레벨 마일스톤</h2><button type="button" onClick={() => onViewPass()}>전체 보기 <b aria-hidden="true">›</b></button></div>
+        {milestoneLevels.length > 0 ? <>
+          <div ref={milestoneRailRef} className="fan-growth-milestones" role="list" aria-label="전체 레벨 마일스톤" tabIndex={0} onKeyDown={scrollMilestonesWithKeyboard} onScroll={handleMilestoneScroll}>
+            {milestoneLevels.map(({ tier, ...item }) => <article className="fan-growth-pass-tier fan-growth-milestone" key={`${item.level}-${item.label}`} data-tier-id={tier.id} data-state={item.status} role="listitem">
+              {item.status === 'currentLocked' && <span className="fan-growth-current-label">현재</span>}
+              <span className="fan-growth-milestone-art" aria-label={item.label}>{rewardArtworkUrl(tier.reward) && <img src={rewardArtworkUrl(tier.reward) ?? ''} alt="" />}{!rewardArtworkUrl(tier.reward) && <img src={milestoneSprite} alt="" />}{(item.status === 'locked' || (item.status === 'currentLocked' && tier.requiredXp > (currentSeason?.progress.currentXp ?? 0))) && <span className="fan-growth-milestone-lock" aria-label="잠긴 보상"><MilestoneLockIcon /></span>}</span>
+              <strong>Lv.{item.level}</strong><b>{item.label}</b><small>{item.detail}</small>
+            </article>)}
+          </div>
+          <div className="fan-growth-milestone-track" aria-hidden="true">
+            <b className="fan-growth-milestone-track-fill" style={{ '--milestone-fill-width': `${milestoneProgressPercent}%` } as CSSProperties} />
+            <b className="fan-growth-milestone-track-viewport" style={{ '--milestone-viewport-left': `${milestoneScroll.ratio * 100}%` } as CSSProperties} />
+            {milestoneLevels.length > 1 && milestoneLevels.map((item, index) => <i key={`${item.level}-${item.label}-dot`} className={`fan-growth-milestone-track-dot ${index <= visibleMilestoneIndex ? 'is-active' : ''}`} style={{ left: `${index / (milestoneLevels.length - 1) * 100}%` }} />)}
+          </div>
+        </> : <div className="fan-growth-milestone-placeholder" aria-label="관리자가 공개한 레벨 마일스톤 준비 중">
+          <div className="fan-growth-placeholder-milestones" aria-hidden="true">
+            <article className="is-current"><strong>Lv.1</strong><b>팬 시작 배지</b></article>
+            <article><strong>Lv.2</strong><b>미공개 콘텐츠</b></article>
+            <article><strong>Lv.3</strong><b>팬 전용 배지</b><span aria-hidden="true">⌕</span></article>
+          </div>
+          <div className="fan-growth-placeholder-track" aria-hidden="true"><i /><b /><b /><b /></div>
+          <p>관리자가 레벨 마일스톤을 공개하면 보상을 확인할 수 있어요.</p>
+        </div>}
       </section>
 
-      <section className="fan-growth-reference-section">
-        <div className="fan-growth-reference-title"><h2>나의 레벨 혜택</h2></div>
-        <article className="fan-growth-benefits">
-          <img src={dreamscapeGroup} alt="드림스케이프 아티스트" />
-          <div><span className="fan-growth-pill">Lv.{progression.level.level} 혜택</span><ul><li>드림스케이프 전용 콘텐츠 열람</li><li>팬 이벤트 우선 참여 기회</li><li>FAN POINT 적립률 +20%</li></ul><button type="button" onClick={() => setActiveSheet('equipment')}>더 많은 혜택은 다음 레벨에서! <b aria-hidden="true">›</b></button></div>
-        </article>
+      <section className="fan-growth-reference-section fan-growth-next-reward-section">
+        <div className="fan-growth-reference-title"><h2>다음 보상</h2></div>
+        <button type="button" className="fan-growth-next-reward" onClick={() => onViewPass(nextPassTier?.id)}>
+          <span className="fan-growth-next-reward-icon" aria-hidden="true">{rewardArtworkUrl(visibleBenefits[0] ?? nextPassTier?.reward) ? <img src={rewardArtworkUrl(visibleBenefits[0] ?? nextPassTier?.reward) ?? ''} alt="" /> : <GrowthGlyph kind="ticket" />}</span>
+          <span className="fan-growth-next-reward-copy"><b>{visibleBenefits[0]?.name ?? nextPassTier?.reward?.name ?? `${scopeName} 다음 보상`}</b><small>{visibleBenefits[0] ? rewardLabel(visibleBenefits[0]) : nextPassTier ? `Lv.${Math.max(1, Math.floor(nextPassTier.requiredXp / 100) + 1)} 달성 시 획득` : `Lv.${progression.level.level + 1} 달성 시 확인`}</small></span>
+          <b className="fan-growth-next-reward-arrow" aria-hidden="true">›</b>
+        </button>
       </section>
+
+      {selectedArtistId && globalProgression && <section className="fan-growth-global-section" aria-label="계정 전체 성장">
+        <div className="fan-growth-reference-title"><h2>계정 전체 성장</h2><span>아티스트 활동을 아우르는 레벨</span></div>
+        <button type="button" className="fan-growth-global-card" onClick={() => onViewGlobalPass?.()}>
+          <span className="fan-growth-global-icon" aria-hidden="true"><GrowthGlyph kind="globe" /></span>
+          <span className="fan-growth-global-copy">
+            <b>전체 팬 레벨</b>
+            <small>모든 아티스트 활동을 아우르는 계정 성장</small>
+            <span className="fan-growth-global-level"><strong>Lv.{globalProgression.level.level}</strong><small>GLOBAL FAN</small></span>
+            <span className="fan-growth-global-progress"><i style={{ width: `${progressPercent(globalProgression.level.totalXp, nextLevelXp(globalProgression))}%` }} /></span>
+            <span className="fan-growth-global-footer"><em><strong>{globalProgression.level.totalXp.toLocaleString()}</strong> / {nextLevelXp(globalProgression).toLocaleString()} XP</em><b>전체 마일스톤 보기 <span aria-hidden="true">›</span></b></span>
+          </span>
+        </button>
+      </section>}
 
       {error && progression && <div className="fan-growth-inline-error" role="alert"><span>성장 정보를 불러오지 못했어요.</span><button type="button" onClick={onRetry}>다시 시도</button></div>}
       {message && <p className="fan-growth-message" role="status">{message}</p>}
-      {activeSheet && <GrowthSheet activeSheet={activeSheet} progression={progression} draftEquipment={draftEquipment} claimedRewards={claimedRewards} availableTitles={availableTitles} availableBadges={availableBadges} availableFrames={availableFrames} availableThemes={availableThemes} claimTier={claimTier} claimingTierId={claimingTierId} updateDraft={updateDraft} toggleBadge={toggleBadge} saveEquipment={saveEquipment} equipmentSaving={equipmentSaving} setActiveSheet={setActiveSheet} />}
+      {activeSheet && <GrowthSheet activeSheet={activeSheet} progression={progression} draftEquipment={draftEquipment} claimedRewards={claimedRewards} availableTitles={availableTitles} availableBadges={availableBadges} availableFrames={availableFrames} availableThemes={availableThemes} updateDraft={updateDraft} toggleBadge={toggleBadge} saveEquipment={saveEquipment} equipmentSaving={equipmentSaving} setActiveSheet={setActiveSheet} />}
     </section>
   }
 
@@ -299,9 +372,8 @@ export function FanGrowth({ progression, loading, error, mode, onRetry, onClaim,
       {/* bottom sheet */}
       <div className="fan-growth-sheet" role="dialog" aria-modal="true" aria-labelledby="fan-growth-sheet-title">
         <button className="fan-growth-sheet-close" type="button" aria-label="팬 성장 패널 닫기" onClick={() => setActiveSheet(null)}>×</button>
-        <h2 id="fan-growth-sheet-title">{activeSheet === 'achievements' ? '업적 전체 보기' : activeSheet === 'pass' ? '무료 팬 패스' : '장착 패널'}</h2>
+        <h2 id="fan-growth-sheet-title">{activeSheet === 'achievements' ? '업적 전체 보기' : '장착 패널'}</h2>
         {activeSheet === 'achievements' && <div className="fan-growth-sheet-list">{progression.achievements.map(item => <article key={item.id}><div><b>{item.title}</b><p>{item.description}</p></div><span>{item.completedAt ? '완료' : `${Math.min(item.currentValue, item.targetValue)}/${item.targetValue}`}</span></article>)}</div>}
-        {activeSheet === 'pass' && <div className="fan-growth-sheet-list">{progression.pass.seasons.length > 0 ? progression.pass.seasons.map(season => <article key={season.id} className="pass-season"><div><b>{season.title}</b><p>{season.progress.currentXp} XP 진행 중</p></div>{season.tiers.map(tier => <button type="button" key={tier.id} disabled={!tier.claimable || claimingTierId === tier.id} onClick={() => void claimTier(tier.id)}>{tier.claimed ? '수령 완료' : claimingTierId === tier.id ? '수령 중...' : tier.claimable ? `${tier.tier}단계 받기` : `${tier.requiredXp} XP 필요`}</button>)}</article>) : <p className="fan-growth-empty">진행 중인 무료 팬 패스가 없어요.</p>}</div>}
         {activeSheet === 'equipment' && draftEquipment && <div className="fan-growth-equipment">
           <RewardSelect label="칭호" value={draftEquipment.titleRewardId} rewards={availableTitles} onChange={value => updateDraft({ titleRewardId: value })} />
           <div className="fan-growth-badge-picker"><b>배지</b><span>배지 3개까지 장착할 수 있어요.</span>{availableBadges.map(reward => <label key={reward.id}><input type="checkbox" checked={draftEquipment.badgeRewardIds.includes(reward.id)} disabled={!draftEquipment.badgeRewardIds.includes(reward.id) && draftEquipment.badgeRewardIds.length >= 3} onChange={() => toggleBadge(reward.id)} />{reward.name}</label>)}</div>
@@ -316,7 +388,7 @@ export function FanGrowth({ progression, loading, error, mode, onRetry, onClaim,
   </section>
 }
 
-function GrowthSheet({ activeSheet, progression, draftEquipment, claimedRewards, availableTitles, availableBadges, availableFrames, availableThemes, claimTier, claimingTierId, updateDraft, toggleBadge, saveEquipment, equipmentSaving, setActiveSheet }: {
+function GrowthSheet({ activeSheet, progression, draftEquipment, claimedRewards, availableTitles, availableBadges, availableFrames, availableThemes, updateDraft, toggleBadge, saveEquipment, equipmentSaving, setActiveSheet }: {
   activeSheet: Exclude<FanGrowthSheet, null>
   progression: FanProgression
   draftEquipment: ProfileEquipment | null
@@ -325,8 +397,6 @@ function GrowthSheet({ activeSheet, progression, draftEquipment, claimedRewards,
   availableBadges: RewardGrant[]
   availableFrames: RewardGrant[]
   availableThemes: RewardGrant[]
-  claimTier: (tierId: string) => Promise<void>
-  claimingTierId: string | null
   updateDraft: (patch: Partial<ProfileEquipment>) => void
   toggleBadge: (rewardId: string) => void
   saveEquipment: () => Promise<void>
@@ -336,9 +406,8 @@ function GrowthSheet({ activeSheet, progression, draftEquipment, claimedRewards,
   return <div className="fan-growth-sheet-backdrop" role="presentation" onClick={event => { if (event.target === event.currentTarget) setActiveSheet(null) }}>
     <div className="fan-growth-sheet" role="dialog" aria-modal="true" aria-labelledby="fan-growth-sheet-title">
       <button className="fan-growth-sheet-close" type="button" aria-label="팬 성장 패널 닫기" onClick={() => setActiveSheet(null)}>×</button>
-      <h2 id="fan-growth-sheet-title">{activeSheet === 'achievements' ? '미션 전체 보기' : activeSheet === 'pass' ? '무료 팬 패스' : '장착 패널'}</h2>
+      <h2 id="fan-growth-sheet-title">{activeSheet === 'achievements' ? '미션 전체 보기' : '장착 패널'}</h2>
       {activeSheet === 'achievements' && <div className="fan-growth-sheet-list">{progression.achievements.map(item => <article key={item.id}><div><b>{item.title}</b><p>{item.description}</p></div><span>{item.completedAt ? '완료' : `${Math.min(item.currentValue, item.targetValue)}/${item.targetValue}`}</span></article>)}</div>}
-      {activeSheet === 'pass' && <div className="fan-growth-sheet-list">{progression.pass.seasons.length > 0 ? progression.pass.seasons.map(season => <article key={season.id} className="pass-season"><div><b>{season.title}</b><p>{season.progress.currentXp} XP 진행 중</p></div>{season.tiers.map(tier => <button type="button" key={tier.id} disabled={!tier.claimable || claimingTierId === tier.id} onClick={() => void claimTier(tier.id)}>{tier.claimed ? '수령 완료' : tier.claimable ? '받기' : `${tier.requiredXp} XP 필요`}</button>)}</article>) : <p className="fan-growth-empty">진행 중인 무료 팬 패스가 없어요.</p>}</div>}
       {activeSheet === 'equipment' && draftEquipment && <div className="fan-growth-equipment">
         <RewardSelect label="칭호" value={draftEquipment.titleRewardId} rewards={availableTitles} onChange={value => updateDraft({ titleRewardId: value })} />
         <div className="fan-growth-badge-picker"><b>배지</b><span>배지 3개까지 장착할 수 있어요.</span>{availableBadges.map(reward => <label key={reward.id}><input type="checkbox" checked={draftEquipment.badgeRewardIds.includes(reward.id)} disabled={!draftEquipment.badgeRewardIds.includes(reward.id) && draftEquipment.badgeRewardIds.length >= 3} onChange={() => toggleBadge(reward.id)} />{reward.name}</label>)}</div>

@@ -1,8 +1,10 @@
 import asyncio
 import struct
+from io import BytesIO
 from typing import Any
 
 import pytest
+from PIL import Image
 
 from app import upload_safety
 from app.errors import AppError
@@ -76,3 +78,47 @@ def test_clamav_stream_fails_closed_when_connection_is_unavailable(monkeypatch: 
 
     assert raised.value.status_code == 503
     assert raised.value.code == "UPLOAD_SCAN_UNAVAILABLE"
+
+
+def test_event_banner_upload_rejects_bytes_that_are_not_an_image() -> None:
+    with pytest.raises(AppError) as raised:
+        asyncio.run(
+            upload_safety.scan_uploaded_content(
+                content_type="image/png",
+                purpose="event_banner",
+                content=b"event-banner",
+            )
+        )
+
+    assert raised.value.status_code == 422
+    assert raised.value.code == "INVALID_IMAGE"
+
+
+def test_reward_image_upload_accepts_a_valid_square_png() -> None:
+    buffer = BytesIO()
+    Image.new("RGBA", (512, 512), (99, 86, 232, 255)).save(buffer, format="PNG")
+
+    asyncio.run(
+        upload_safety.scan_uploaded_content(
+            content_type="image/png",
+            purpose="reward_image",
+            content=buffer.getvalue(),
+        )
+    )
+
+
+def test_reward_image_upload_rejects_tiny_images() -> None:
+    buffer = BytesIO()
+    Image.new("RGBA", (64, 64), (99, 86, 232, 255)).save(buffer, format="PNG")
+
+    with pytest.raises(AppError) as raised:
+        asyncio.run(
+            upload_safety.scan_uploaded_content(
+                content_type="image/png",
+                purpose="reward_image",
+                content=buffer.getvalue(),
+            )
+        )
+
+    assert raised.value.status_code == 422
+    assert raised.value.code == "INVALID_IMAGE"
