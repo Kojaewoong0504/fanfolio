@@ -158,6 +158,32 @@
 .notification-empty b{color:#1b1b25;font-size:18px;letter-spacing:-.05em}
 .notification-empty small{margin-top:7px;color:#aaaab4;font-size:15px}
 @media(max-width:360px){.alerts-reference-tabs{margin-bottom:44px}.alerts-reference-tabs button{font-size:18px}.notification-copy strong{font-size:15px}.notification-day .alert-card{gap:11px}}
+
+/* Notifications stay a compact utility screen rather than a second feature hero. */
+.alerts-shell{padding-top:12px}
+.alerts-shell .screen{padding-bottom:18px}
+.alerts-reference-topbar{grid-template-columns:36px 1fr 36px;gap:8px;margin-bottom:14px}
+.alerts-reference-topbar h1{font-size:20px}
+.alerts-back-button,.alerts-settings-button{width:36px;height:36px}
+.alerts-back-button .inline-icon,.alerts-settings-button .inline-icon{width:22px;height:22px}
+.alerts-reference-tabs{gap:3px;margin-bottom:26px;padding:4px;border-radius:14px}
+.alerts-reference-tabs button{min-height:42px;border-radius:10px;font-size:15px}
+.notification-day{margin-bottom:16px}
+.notification-day>h2{margin-bottom:10px;font-size:14px}
+.notification-day .alert-card{grid-template-columns:46px minmax(0,1fr) 10px;gap:11px;min-height:72px;padding:10px 0}
+.notification-day .alert-leading-icon{width:46px;height:46px}
+.notification-day .alert-leading-icon .inline-icon{width:25px;height:25px}
+.notification-copy{gap:4px}
+.notification-copy strong{font-size:13px}
+.notification-copy small{font-size:11px}
+.notification-day .unread-dot{width:8px;height:8px}
+.alerts-mark-all{min-height:44px;margin:18px 0 8px;border-radius:12px;font-size:14px}
+.notification-empty{min-height:190px;margin-top:2px}
+.notification-empty-illustration{width:92px;height:92px;margin-bottom:10px}
+.notification-empty-illustration>.nav-icon{width:50px;height:50px}
+.notification-empty-illustration>.inline-icon{right:5px;top:4px;width:21px;height:21px}
+.notification-empty b{font-size:16px}
+.notification-empty small{margin-top:4px;font-size:12px}
 .collection-register{display:inline-flex!important;align-items:center;gap:5px;padding:7px 9px!important;border:1px solid #d7d1f5!important;border-radius:9px;background:#f8f7ff!important;color:var(--violet)!important;font-weight:800;font-size:11px!important;white-space:nowrap}.collection-register .inline-icon{width:13px;height:13px}
 .home-shell .floating-register{display:none}
 .home-heading-actions{display:flex;align-items:center;gap:8px}.home-register{display:inline-flex!important;align-items:center;gap:5px;padding:7px 9px!important;border:1px solid #d7d1f5!important;border-radius:9px;background:#f8f7ff!important;color:var(--violet)!important;font-weight:800;font-size:11px!important;white-space:nowrap}.home-register .inline-icon{width:13px;height:13px}

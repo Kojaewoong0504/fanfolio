@@ -249,6 +249,7 @@ function App() {
   const [myApplicationsLoading, setMyApplicationsLoading] = useState(false)
   const [myApplicationsError, setMyApplicationsError] = useState('')
   const [showNotificationSettings, setShowNotificationSettings] = useState(false)
+  const alertsReturnPathRef = useRef<string | null>(null)
   const savedCardsOwnerRef = useRef<string | null>(null)
   const savedCardIds = savedCards.map(card => card.userCardId ?? card.id)
 
@@ -307,6 +308,23 @@ function App() {
     setEventId(null)
     const nextPath = pathForTab(nextTab)
     if (window.location.pathname !== nextPath) window.history.pushState({}, '', nextPath)
+  }
+
+  const openAlerts = () => {
+    const currentPath = window.location.pathname
+    if (currentPath !== '/notifications') alertsReturnPathRef.current = currentPath
+    navigateTab('alerts')
+  }
+
+  const closeAlerts = () => {
+    const returnPath = alertsReturnPathRef.current
+    alertsReturnPathRef.current = null
+    if (!returnPath || returnPath === '/notifications') {
+      navigateTab('home')
+      return
+    }
+    window.history.pushState({}, '', returnPath)
+    window.dispatchEvent(new PopStateEvent('popstate'))
   }
 
   const openEvents = () => {
@@ -751,7 +769,7 @@ function App() {
       <header className="app-header">
         <div className="app-header-copy"><span className="eyebrow">FANFOLIO</span>{tab !== 'home' && <><h1>{tabTitle(tab)}</h1>{tabDescription(tab) && <p className="app-header-description">{tabDescription(tab)}</p>}</>}</div>
         <div className="header-actions">
-          <button className="header-alert-button" onClick={() => navigateTab('alerts')} aria-label="알림">
+          <button className="header-alert-button" onClick={openAlerts} aria-label="알림">
             <NavIcon name="alerts" />{unreadCount > 0 && <b className="header-alert-badge">{unreadCount > 99 ? '99+' : unreadCount}</b>}
           </button>
           <button className="header-profile-button" onClick={() => navigateTab('settings')} aria-label="프로필 및 설정">
@@ -766,7 +784,7 @@ function App() {
         {tab === 'events' && (eventId ? <EventDetail event={selectedEvent} loading={eventDetailLoading} onBack={openEvents} onApply={handleEventApply} comments={eventComments} commentsLoading={eventCommentsLoading} commentSubmitting={eventCommentSubmitting} onLoadComments={loadEventComments} onSubmitComment={handleEventComment} onOpenTarget={target => { if (target.startsWith('/events/')) { const id = decodeURIComponent(target.split('/')[1]?.split('#')[0] ?? ''); const item = fanEvents.find(event => event.id === id); if (item) openEvent(item) } else if (target.startsWith('https://')) window.open(target, '_blank', 'noopener,noreferrer') }} /> : <EventList events={fanEvents} status={fanEventStatus} loading={fanEventsLoading} error={fanEventsError} pagination={fanEventPagination} onStatusChange={handleFanEventStatusChange} onPageChange={setFanEventPage} onOpen={openEvent} />)}
         {tab === 'collection' && <Collection cards={collectionCards} collectionDataReady={collectionDataReady} summary={collectionSummary} benefits={collectionBenefits} loading={collectionLoading} onSelect={openCard} onRedeem={openRedeem} onDiscover={() => navigateTab('discover')} onClaim={claimBenefit} />}
         {tab === 'discover' && <Discover />}
-        {tab === 'alerts' && <Alerts items={notifications} error={notificationError} actionError={notificationActionError} onDismissActionError={() => setNotificationActionError('')} onRetry={() => window.dispatchEvent(new Event('fanfolio:refresh-notifications'))} onRead={markNotificationRead} onReadAll={markAllNotificationsRead} onNavigate={navigateTab} />}
+        {tab === 'alerts' && <Alerts items={notifications} error={notificationError} actionError={notificationActionError} onDismissActionError={() => setNotificationActionError('')} onRetry={() => window.dispatchEvent(new Event('fanfolio:refresh-notifications'))} onRead={markNotificationRead} onReadAll={markAllNotificationsRead} onBack={closeAlerts} onNavigate={navigateTab} />}
         {/* Embedded surfaces stay compact; the dedicated tab uses the full progression view. */}
         {tab === 'growth' && <FanGrowth progression={fanProgression} globalProgression={globalFanProgression} artistScopes={catalogArtists.filter(artist => currentUser?.favoriteArtistIds.includes(artist.id)).map(artist => ({ id: artist.id, name: artist.name, imageUrl: artist.name === '드림스케이프' ? loginDreamscapeGroup : artist.imageUrl }))} selectedArtistId={growthArtistId} onArtistChange={setGrowthArtistId} loading={growthLoading} error={growthError} mode="full" onRetry={refreshGrowth} onClaim={claimGrowthReward} onClaimPassTier={claimGrowthPassTier} onEquip={saveGrowthEquipment} onViewPass={openFanPassPage} onViewGlobalPass={(tierId) => openFanPassPage(tierId, 'global')} fanGrowthMode="full" />}
         {tab === 'settings' && currentUser && <Settings user={currentUser} progression={fanProgression} onUserUpdated={setCurrentUser} onLogout={logout} onEvents={openMyApplications} onNotificationSettings={() => setShowNotificationSettings(true)} />}
@@ -1577,7 +1595,7 @@ function notificationDestination(kind: string): Tab | null {
   return null
 }
 
-function Alerts({ items, error, actionError, onDismissActionError, onRetry, onRead, onReadAll, onNavigate }: { items: NotificationItem[], error: string, actionError: string, onDismissActionError: () => void, onRetry: () => void, onRead: (id: string) => Promise<void>, onReadAll: () => Promise<void>, onNavigate: (tab: Tab) => void }) {
+function Alerts({ items, error, actionError, onDismissActionError, onRetry, onRead, onReadAll, onBack, onNavigate }: { items: NotificationItem[], error: string, actionError: string, onDismissActionError: () => void, onRetry: () => void, onRead: (id: string) => Promise<void>, onReadAll: () => Promise<void>, onBack: () => void, onNavigate: (tab: Tab) => void }) {
   const [category, setCategory] = useState<'all' | 'activity'>('all')
   const categories = [
     { value: 'all', label: '전체', matches: () => true },
@@ -1622,7 +1640,7 @@ function Alerts({ items, error, actionError, onDismissActionError, onRetry, onRe
 
   return <>
     <div className="alerts-reference-topbar">
-      <button type="button" className="alerts-back-button" aria-label="뒤로가기" onClick={() => onNavigate('home')}><InlineIcon name="back" /></button>
+      <button type="button" className="alerts-back-button" aria-label="뒤로가기" onClick={onBack}><InlineIcon name="back" /></button>
       <h1>알림</h1>
       <button type="button" className="alerts-settings-button" aria-label="알림 설정" onClick={() => onNavigate('settings')}><InlineIcon name="settings" /></button>
     </div>
