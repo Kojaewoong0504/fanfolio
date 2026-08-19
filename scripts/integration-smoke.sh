@@ -110,9 +110,22 @@ raise SystemExit(1)
 PY
 }
 
+wait_for_postgres() {
+  for _ in {1..60}; do
+    if compose exec -T postgres pg_isready -U fanfolio -d fanfolio >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "Timed out waiting for PostgreSQL readiness." >&2
+  compose logs postgres >&2 || true
+  exit 1
+}
+
 echo "[1/5] starting local dependencies"
 compose up -d
 wait_for_tcp 127.0.0.1 "$POSTGRES_HOST_PORT"
+wait_for_postgres
 wait_for_tcp 127.0.0.1 "$SMTP_HOST_PORT"
 wait_for_tcp 127.0.0.1 "$REDIS_HOST_PORT"
 wait_for_url "http://localhost:${MAILPIT_HOST_PORT}/api/v1/info"
@@ -135,7 +148,18 @@ export RATE_LIMIT_BACKEND=redis
 export RATE_LIMIT_REDIS_URL="redis://localhost:${REDIS_HOST_PORT}/1"
 
 echo "[2/5] applying PostgreSQL migrations"
-(cd "$BACKEND_DIR" && .venv/bin/alembic upgrade head)
+for attempt in {1..5}; do
+  if (cd "$BACKEND_DIR" && .venv/bin/alembic upgrade head); then
+    break
+  fi
+  if [[ "$attempt" == "5" ]]; then
+    echo "PostgreSQL migrations failed after $attempt attempts." >&2
+    exit 1
+  fi
+  echo "Migration attempt $attempt failed; waiting for PostgreSQL and retrying." >&2
+  wait_for_postgres
+  sleep 2
+done
 
 echo "[3/5] starting API against PostgreSQL and Mailpit"
 (
