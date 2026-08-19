@@ -28,3 +28,19 @@ The in-app browser preview was reloaded and inspected directly after the CSS/dat
 - Interaction verified: `전체 보기` from the fan-level page navigates to the dedicated fan-pass preview route; back returns to the fan-level page.
 
 final result: passed
+
+## Selected design: Pass reward inventory
+
+- References:
+  - `/Users/gojaewoong/.codex/generated_images/01a01424-a309-7ab2-883d-cfd15ded9ce5/exec-dbdab0af-673e-46af-83d8-8034bd330ceb.png`
+  - `/Users/gojaewoong/.codex/generated_images/01a01424-a309-7ab2-883d-cfd15ded9ce5/exec-4062d911-1762-46b1-83c6-11a9e2379b87.png`
+- Prototypes:
+  - `http://127.0.0.1:4173/?preview=collection-inventory-entry`
+  - `http://127.0.0.1:4173/?preview=reward-inventory`
+- Compared the approved references with a fresh 430 x 963 in-app browser capture at `/private/tmp/fanfolio-reward-inventory-implementation.png`.
+- Verified the collection entry card, dedicated inventory screen, real reward artwork, two-column item grid, category filters, selected-item description, equipped state, and shared bottom navigation.
+- Interaction verified: opening the inventory from Collection, selecting a reward, equipping and unequipping it, and returning to Collection.
+- Real app integration uses claimed progression rewards and persists profile equipment through the existing growth equipment API.
+- Follow-up visual fix: the four inventory category filters now use equal-width columns so labels align consistently across the control.
+
+final result: passed
