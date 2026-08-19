@@ -39,6 +39,29 @@ type Tab = 'home' | 'discover' | 'collection' | 'growth' | 'settings' | 'alerts'
 
 const cardRoutePreviewKey = 'fanfolio.card-route-preview'
 
+function mergeProgressionsForInventory(...progressions: Array<FanProgression | null>): FanProgression | null {
+  const available = progressions.filter((progression): progression is FanProgression => progression !== null)
+  if (available.length === 0) return null
+
+  const mergeById = <T extends { id: string }>(items: T[][]) => {
+    const merged = new Map<string, T>()
+    for (const group of items) {
+      for (const item of group) merged.set(item.id, item)
+    }
+    return [...merged.values()]
+  }
+
+  return {
+    ...available[0],
+    claimableRewards: mergeById(available.map(progression => progression.claimableRewards)),
+    claimedRewards: mergeById(available.map(progression => progression.claimedRewards)),
+    pass: {
+      ...available[0].pass,
+      seasons: mergeById(available.map(progression => progression.pass.seasons)),
+    },
+  }
+}
+
 const fanGrowthPreviewProgression: FanProgression = {
   level: { level: 1, totalXp: 0, nextLevelXp: 100 },
   achievements: [{ id: 'preview-mission', title: '미션 1개 진행 중', description: '팬 활동을 계속해 보세요.', conditionType: 'activity', targetValue: 1, currentValue: 0, completedAt: null }],
@@ -787,6 +810,8 @@ function App() {
     return <Login onLogin={completeLogin} />
   }
 
+  const inventoryProgression = mergeProgressionsForInventory(fanProgression, globalFanProgression)
+
   if (showOnboarding) {
     return <Onboarding userId={currentUser?.id ?? 'fan'} profileImageUrl={currentUser?.profileImageUrl ?? null} onComplete={() => { setShowOnboarding(false); void refreshUser(); void Promise.allSettled([refreshCollection(), refreshGrowth()]) }} onBack={logout} />
   }
@@ -796,7 +821,7 @@ function App() {
   }
 
   if (showRewardInventory) {
-    return <RewardInventory progression={fanProgression} loading={growthLoading} error={growthError} onRetry={refreshGrowth} onBack={closeRewardInventory} onEquip={saveGrowthEquipment} onNavigate={navigateTab} />
+    return <RewardInventory progression={inventoryProgression} loading={growthLoading} error={growthError} onRetry={refreshGrowth} onBack={closeRewardInventory} onEquip={saveGrowthEquipment} onNavigate={navigateTab} />
   }
 
   if (showCardCollection) {
@@ -845,7 +870,7 @@ function App() {
         {collectionError && <div className="service-notice" role="alert"><span>{collectionError}</span><button onClick={() => void refreshCollection()} disabled={collectionLoading}>{collectionLoading ? '확인 중...' : '다시 시도'}</button></div>}
         {tab === 'home' && <Home nickname={currentUser?.nickname ?? '팬'} cards={collectionCards} collectionDataReady={collectionDataReady} savedCards={savedCards} summary={collectionSummary} loading={collectionLoading} eventHome={fanHome} onSelect={openCard} onDiscover={() => navigateTab('discover')} onCollection={() => navigateTab('collection')} onRedeem={openRedeem} onEvents={openEvents} onEvent={openEvent} />}
         {tab === 'events' && (eventId ? <EventDetail event={selectedEvent} loading={eventDetailLoading} onBack={openEvents} onApply={handleEventApply} comments={eventComments} commentsLoading={eventCommentsLoading} commentSubmitting={eventCommentSubmitting} onLoadComments={loadEventComments} onSubmitComment={handleEventComment} onOpenTarget={target => { if (target.startsWith('/events/')) { const id = decodeURIComponent(target.split('/')[1]?.split('#')[0] ?? ''); const item = fanEvents.find(event => event.id === id); if (item) openEvent(item) } else if (target.startsWith('https://')) window.open(target, '_blank', 'noopener,noreferrer') }} /> : <EventList events={fanEvents} status={fanEventStatus} loading={fanEventsLoading} error={fanEventsError} pagination={fanEventPagination} onStatusChange={handleFanEventStatusChange} onPageChange={setFanEventPage} onOpen={openEvent} />)}
-        {tab === 'collection' && <Collection cards={collectionCards} collectionDataReady={collectionDataReady} summary={collectionSummary} benefits={collectionBenefits} rewards={fanProgression?.claimedRewards ?? []} loading={collectionLoading} onSelect={openCard} onRedeem={openRedeem} onDiscover={() => navigateTab('discover')} onRewards={openRewardInventory} onCards={openCardCollection} onClaim={claimBenefit} />}
+        {tab === 'collection' && <Collection cards={collectionCards} collectionDataReady={collectionDataReady} summary={collectionSummary} benefits={collectionBenefits} rewards={inventoryProgression?.claimedRewards ?? []} loading={collectionLoading} onSelect={openCard} onRedeem={openRedeem} onDiscover={() => navigateTab('discover')} onRewards={openRewardInventory} onCards={openCardCollection} onClaim={claimBenefit} />}
         {tab === 'discover' && <Discover />}
         {tab === 'alerts' && <Alerts items={notifications} error={notificationError} actionError={notificationActionError} onDismissActionError={() => setNotificationActionError('')} onRetry={() => window.dispatchEvent(new Event('fanfolio:refresh-notifications'))} onRead={markNotificationRead} onReadAll={markAllNotificationsRead} onBack={closeAlerts} onNavigate={navigateTab} />}
         {/* Embedded surfaces stay compact; the dedicated tab uses the full progression view. */}

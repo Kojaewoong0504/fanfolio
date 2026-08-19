@@ -13,6 +13,14 @@ test('collection exposes a fan collection entry backed by claimed rewards', () =
   assert.match(appSource, /onRewards=\{openRewardInventory\}/)
 })
 
+test('collection inventory merges artist and global progression rewards', () => {
+  assert.match(appSource, /function mergeProgressionsForInventory\(/)
+  assert.match(appSource, /const inventoryProgression = mergeProgressionsForInventory\(fanProgression, globalFanProgression\)/)
+  assert.match(appSource, /<RewardInventory progression=\{inventoryProgression\}/)
+  assert.match(appSource, /rewards=\{inventoryProgression\?\.claimedRewards \?\? \[\]\}/)
+  assert.match(appSource, /seasons: mergeById\(available\.map\(progression => progression\.pass\.seasons\)\)/)
+})
+
 test('reward inventory has a dedicated collection route and returns to the collection', () => {
   assert.match(appSource, /window\.location\.pathname === '\/collection\/rewards'/)
   assert.match(appSource, /window\.history\.pushState\(\{\}, '', '\/collection\/rewards'\)/)
