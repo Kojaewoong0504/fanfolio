@@ -230,6 +230,16 @@ test('fan pass opens as a dedicated page with a vertical season journey', () => 
   assert.doesNotMatch(fanGrowthSource, /onClick=\{\(\) => setActiveSheet\('pass'\)\}/)
 })
 
+test('fan pass bottom navigation delegates to the app tab router', () => {
+  assert.match(fanPassSource, /onNavigate: \(tab: 'discover' \| 'collection' \| 'home' \| 'growth' \| 'settings'\) => void/)
+  assert.match(fanPassSource, /onClick=\{\(\) => onNavigate\('discover'\)\}/)
+  assert.match(fanPassSource, /onClick=\{\(\) => onNavigate\('collection'\)\}/)
+  assert.match(fanPassSource, /onClick=\{\(\) => onNavigate\('home'\)\}/)
+  assert.match(fanPassSource, /onClick=\{\(\) => onNavigate\('settings'\)\}/)
+  assert.match(appSource, /onNavigate=\{navigateTab\}/)
+  assert.match(appSource, /const navigateTab = \(nextTab: Tab\) => \{[\s\S]*?setShowFanPassPage\(false\)/)
+})
+
 test('fan growth styles preserve card UI, 360px layout, touch targets, and no horizontal overflow', async () => {
   const componentCssSource = await readFile(new URL('../src/components/FanGrowth.css', import.meta.url), 'utf8')
   assert.match(appCssSource, /@media\(max-width:360px\)/)

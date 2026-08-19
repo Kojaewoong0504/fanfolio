@@ -12,6 +12,7 @@ type FanPassPageProps = {
   onRetry: () => void
   onBack: () => void
   onClaimPassTier: (tierId: string) => Promise<unknown>
+  onNavigate: (tab: 'discover' | 'collection' | 'home' | 'growth' | 'settings') => void
   initialTierId?: string
   isGlobal?: boolean
 }
@@ -42,7 +43,7 @@ function tierStatus(tier: PassTier, currentXp: number, currentTierId: string | n
   return currentXp >= tier.requiredXp ? 'claimable' : 'locked'
 }
 
-export function FanPassPage({ progression, loading, error, onRetry, onBack, onClaimPassTier, initialTierId, isGlobal = false }: FanPassPageProps) {
+export function FanPassPage({ progression, loading, error, onRetry, onBack, onClaimPassTier, onNavigate, initialTierId, isGlobal = false }: FanPassPageProps) {
   const [expandedTierId, setExpandedTierId] = useState<string | null>(null)
   const season = progression?.pass.seasons[0] ?? null
   const tiers = season?.tiers ?? []
@@ -89,11 +90,11 @@ export function FanPassPage({ progression, loading, error, onRetry, onBack, onCl
     <section className="fan-pass-more" aria-label="팬 패스 안내"><span><InlineIcon name="sparkles" /></span><div><b>더 많은 XP를 모아보세요!</b><small>팬 활동을 통해 XP를 획득하고 다음 챕터로 나아가세요.</small></div><InlineIcon name="chevron" /></section>
 
     <nav className="bottom-nav" aria-label="주요 메뉴">
-      <NavItem active={false} label="탐색" onClick={() => undefined} />
-      <NavItem active={false} label="보관함" icon="collection" onClick={() => undefined} />
-      <NavItem active={false} label="홈" icon="home" onClick={() => undefined} />
-      <NavItem active label="팬 레벨" icon="growth" onClick={() => undefined} />
-      <NavItem active={false} label="마이" icon="settings" onClick={() => undefined} />
+      <NavItem active={false} label="탐색" onClick={() => onNavigate('discover')} />
+      <NavItem active={false} label="보관함" icon="collection" onClick={() => onNavigate('collection')} />
+      <NavItem active={false} label="홈" icon="home" onClick={() => onNavigate('home')} />
+      <NavItem active label="팬 레벨" icon="growth" onClick={() => onNavigate('growth')} />
+      <NavItem active={false} label="마이" icon="settings" onClick={() => onNavigate('settings')} />
     </nav>
   </main>
 }

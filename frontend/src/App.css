@@ -484,3 +484,7 @@ body{font-family:var(--font-ui)}
 .collection-filter-grid button .collection-filter-icon,
 .collection-filter-grid button .collection-filter-check{display:none}
 .collection-filter-grid button{gap:0;min-height:78px}
+
+/* Both collectible faces share the same physical tilt transform. The back
+   intentionally keeps its light coordinates static in the component. */
+.fan-card-collectible.back{transform:perspective(900px) rotateX(var(--tilt-x)) rotateY(var(--tilt-y))}

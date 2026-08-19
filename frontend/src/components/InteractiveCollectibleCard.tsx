@@ -25,6 +25,8 @@ export type InteractiveCollectibleCardProps = {
   presentation?: 'detail' | 'reveal'
   enableDeviceMotion?: boolean
   initialSide?: VisibleSide
+  swipeToFlip?: boolean
+  showControls?: boolean
 }
 
 function resolveVisibleSideAfterCardIdentityChange(current: VisibleSide, previousCardIdentity: string | null, nextCardIdentity: string): VisibleSide {
@@ -79,6 +81,8 @@ export function InteractiveCollectibleCard({
   presentation = 'detail',
   enableDeviceMotion = false,
   initialSide = 'front',
+  swipeToFlip = false,
+  showControls = true,
 }: InteractiveCollectibleCardProps) {
   const [visibleSide, setVisibleSide] = useState<VisibleSide>(initialSide)
   const [effectPreview, setEffectPreview] = useState(false)
@@ -106,8 +110,7 @@ export function InteractiveCollectibleCard({
     enableDeviceMotion &&
     motionStatus === 'idle' &&
     motionSupported &&
-    visibleSide === 'front' &&
-    effects.front.interaction !== 'static',
+    (visibleSide === 'back' || effects.front.interaction !== 'static'),
   )
 
   const collectibleStyle = {
@@ -125,7 +128,6 @@ export function InteractiveCollectibleCard({
   const backClassName = `fan-card-collectible material-${effects.back.material} back edge-foil-${effects.back.edgeFoil} spot-uv-${effects.back.spotUv}`
 
   const handleCollectibleMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (visibleSide !== 'front' || reducedEffects) return
     if (event.pointerType === 'touch' && !event.currentTarget.hasPointerCapture(event.pointerId)) {
       const start = dragStartRef.current
       if (!start || start.pointerId !== event.pointerId) return
@@ -135,21 +137,25 @@ export function InteractiveCollectibleCard({
       if (deltaY > deltaX) return
       event.currentTarget.setPointerCapture(event.pointerId)
     }
+    if (reducedEffects) return
     const element = event.currentTarget
     const box = element.getBoundingClientRect()
     const x = Math.max(0, Math.min(1, (event.clientX - box.left) / box.width))
     const y = Math.max(0, Math.min(1, (event.clientY - box.top) / box.height))
-    if (effects.front.interaction !== 'static') {
+    const canTilt = visibleSide === 'back' || effects.front.interaction !== 'static'
+    if (canTilt) {
       element.style.setProperty('--tilt-x', `${((0.5 - y) * 10).toFixed(2)}deg`)
       element.style.setProperty('--tilt-y', `${((x - 0.5) * 12).toFixed(2)}deg`)
     }
-    element.style.setProperty('--light-x', `${Math.round(x * 100)}%`)
-    element.style.setProperty('--light-y', `${Math.round(y * 100)}%`)
-    if (hasLenticular) element.style.setProperty('--lenticular-reveal', `${Math.round(x * 100)}%`)
+    if (visibleSide === 'front') {
+      element.style.setProperty('--light-x', `${Math.round(x * 100)}%`)
+      element.style.setProperty('--light-y', `${Math.round(y * 100)}%`)
+      if (hasLenticular) element.style.setProperty('--lenticular-reveal', `${Math.round(x * 100)}%`)
+    }
   }
 
   const handleCollectibleStart = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (visibleSide !== 'front' || reducedEffects) return
+    if (reducedEffects) return
     dragStartRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY }
     if (event.pointerType !== 'touch') {
       event.currentTarget.setPointerCapture(event.pointerId)
@@ -158,6 +164,14 @@ export function InteractiveCollectibleCard({
   }
 
   const handleCollectibleEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const start = dragStartRef.current
+    if (swipeToFlip && start?.pointerId === event.pointerId) {
+      const deltaX = event.clientX - start.x
+      const deltaY = event.clientY - start.y
+      if (Math.abs(deltaX) >= 42 && Math.abs(deltaX) > Math.abs(deltaY)) {
+        setVisibleSide(current => current === 'front' ? 'back' : 'front')
+      }
+    }
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
     dragStartRef.current = null
     resetCollectibleVars(event.currentTarget)
@@ -191,7 +205,7 @@ export function InteractiveCollectibleCard({
   }
 
   useEffect(() => {
-    if (!deviceMotionEnabled || visibleSide !== 'front' || reducedEffects || effects.front.interaction === 'static' || !supportsDeviceMotion()) return
+    if (!deviceMotionEnabled || reducedEffects || !supportsDeviceMotion()) return
     const applyDeviceOrientation = (event: DeviceOrientationEvent) => {
       const element = collectibleRef.current
       if (!element) return
@@ -201,9 +215,11 @@ export function InteractiveCollectibleCard({
       const lightY = Math.round(((beta + 15) / 30) * 100)
       element.style.setProperty('--tilt-x', `${(-beta).toFixed(2)}deg`)
       element.style.setProperty('--tilt-y', `${gamma.toFixed(2)}deg`)
-      element.style.setProperty('--light-x', `${lightX}%`)
-      element.style.setProperty('--light-y', `${lightY}%`)
-      if (hasLenticular) element.style.setProperty('--lenticular-reveal', `${lightX}%`)
+      if (visibleSide === 'front') {
+        element.style.setProperty('--light-x', `${lightX}%`)
+        element.style.setProperty('--light-y', `${lightY}%`)
+        if (hasLenticular) element.style.setProperty('--lenticular-reveal', `${lightX}%`)
+      }
     }
     window.addEventListener('deviceorientation', applyDeviceOrientation, { passive: true })
     return () => window.removeEventListener('deviceorientation', applyDeviceOrientation)
@@ -228,7 +244,18 @@ export function InteractiveCollectibleCard({
     <span className="fan-card-material" aria-hidden="true" />
     <span className="fan-card-surface" aria-hidden="true" />
     <span className="official-badge">{badgeLabel}</span>
-  </div> : <div className={backClassName} style={collectibleStyle} role="img" aria-label={`${title} 카드 뒷면`}>
+  </div> : <div
+    ref={collectibleRef}
+    className={backClassName}
+    style={collectibleStyle}
+    role="img"
+    aria-label={`${title} 카드 뒷면`}
+    onPointerDown={handleCollectibleStart}
+    onPointerMove={handleCollectibleMove}
+    onPointerUp={handleCollectibleEnd}
+    onPointerLeave={handleCollectibleEnd}
+    onPointerCancel={handleCollectibleEnd}
+  >
     <div className="fan-card-back-meta">
       <span className="fan-card-official-label">OFFICIAL FAN CARD</span>
       <strong>{title}</strong>
@@ -246,7 +273,7 @@ export function InteractiveCollectibleCard({
 
   return <section className={`interactive-collectible presentation-${presentation}${presentation === 'reveal' ? ' collectible-reveal-enter' : ''}${effectPreview ? ' effect-preview-active' : ''}`} aria-label="인터랙티브 카드 보기">
     {card}
-    {presentation === 'detail' && <div className="detail-interaction-actions" role="group" aria-label="카드 인터랙션">
+    {showControls && presentation === 'detail' && <div className="detail-interaction-actions" role="group" aria-label="카드 인터랙션">
       <button type="button" className="card-flip-action" onClick={() => setVisibleSide(current => current === 'front' ? 'back' : 'front')}>
         <span aria-hidden="true"><InlineIcon name="rotate" /></span>카드 뒤집기
       </button>
@@ -254,10 +281,10 @@ export function InteractiveCollectibleCard({
         <span aria-hidden="true"><InlineIcon name="sparkles" /></span>특수 효과 보기
       </button>
     </div>}
-    <div className="card-side-toggle" role="group" aria-label="카드 면 선택">
+    {showControls && <div className="card-side-toggle" role="group" aria-label="카드 면 선택">
       <button type="button" aria-pressed={visibleSide === 'front'} onClick={() => setVisibleSide('front')}>앞면</button>
       <button type="button" aria-pressed={visibleSide === 'back'} onClick={() => setVisibleSide('back')}>뒷면</button>
-    </div>
+    </div>}
     <div className="fan-card-motion-actions">
       {canRequestDeviceMotion && <button type="button" className="motion-permission-button" onClick={requestDeviceMotion}>기기 움직임으로 보기</button>}
       {motionStatus === 'denied' && <p className="motion-helper">손가락으로 움직여 볼 수 있어요</p>}

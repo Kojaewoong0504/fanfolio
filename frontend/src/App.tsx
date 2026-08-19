@@ -31,6 +31,7 @@ import kakaoLoginIcon from './assets/login/kakao.svg'
 import naverLoginIcon from './assets/login/naver.svg'
 import registrationCardImage from './assets/card-registration-idol-generated.png'
 import mysteryCardImage from './assets/card-reveal-mystery-generated.png'
+import dreamscapeCardPack from './assets/card-pack-dreamscape-generated.png'
 import registrationCompleteCelebration from './assets/registration-complete-celebration-v2.png'
 import fanLevelStar from './assets/fan-level-star-v2.png'
 
@@ -43,10 +44,10 @@ const fanGrowthPreviewProgression: FanProgression = {
   achievements: [{ id: 'preview-mission', title: '미션 1개 진행 중', description: '팬 활동을 계속해 보세요.', conditionType: 'activity', targetValue: 1, currentValue: 0, completedAt: null }],
   claimableRewards: [],
   claimedRewards: [
-    { id: 'preview-grant-1', rewardId: 'preview-badge-1', type: 'badge', name: '팬 시작 배지', metadata: { imagePreset: 'ticket', description: '드림스케이프 팬 패스의 첫 챕터를 완료한 팬에게 주는 배지예요.' }, grantedAt: '2026-08-18T10:00:00Z', claimedAt: '2026-08-18T10:00:00Z' },
-    { id: 'preview-grant-2', rewardId: 'preview-badge-3', type: 'badge', name: '팬 전용 배지', metadata: { imagePreset: 'vip', description: '팬 전용 활동에 참여한 기록을 프로필에 표시해요.' }, grantedAt: '2026-08-18T10:00:00Z', claimedAt: '2026-08-18T10:00:00Z' },
-    { id: 'preview-grant-3', rewardId: 'preview-frame-1', type: 'profile_frame', name: '시즌 크리스탈', metadata: { imagePreset: 'crystal', description: '시즌 한정 프로필 프레임을 꾸밀 수 있어요.' }, grantedAt: '2026-08-18T10:00:00Z', claimedAt: '2026-08-18T10:00:00Z' },
-    { id: 'preview-grant-4', rewardId: 'preview-digital-1', type: 'digital_bonus', name: '디지털 포토카드', metadata: { imagePreset: 'music', description: '드림스케이프의 시즌 한정 디지털 콘텐츠예요.' }, grantedAt: '2026-08-18T10:00:00Z', claimedAt: '2026-08-18T10:00:00Z' },
+    { id: 'preview-grant-1', rewardId: 'preview-badge-1', type: 'badge', name: '드림스케이프 시즌 배지', metadata: { artistName: '드림스케이프', imagePreset: 'vip', description: '드림스케이프 시즌 활동을 완료한 팬에게 주는 배지예요.' }, grantedAt: '2026-08-18T10:00:00Z', claimedAt: '2026-08-18T10:00:00Z' },
+    { id: 'preview-grant-2', rewardId: 'preview-frame-1', type: 'profile_frame', name: '별빛 프로필 프레임', metadata: { artistName: '드림스케이프', imagePreset: 'crystal', durationDays: 30, remainingDays: 12, description: '프로필에 별빛 프레임을 적용할 수 있어요.' }, grantedAt: '2026-08-18T10:00:00Z', claimedAt: '2026-08-18T10:00:00Z' },
+    { id: 'preview-grant-3', rewardId: 'preview-ticket-1', type: 'digital_bonus', name: '랜덤 카드 뽑기권', metadata: { scope: 'global', imagePreset: 'ticket', consumable: true, quantity: 2, unit: '장', description: '전체 팬 레벨에서 받은 랜덤 카드 뽑기권이에요.' }, grantedAt: '2026-08-18T10:00:00Z', claimedAt: '2026-08-18T10:00:00Z' },
+    { id: 'preview-grant-4', rewardId: 'preview-theme-1', type: 'collection_theme', name: '응원 메시지 배경', metadata: { artistName: '드림스케이프', imagePreset: 'music', description: '응원 메시지에 사용할 수 있는 영구 배경이에요.' }, grantedAt: '2026-08-18T10:00:00Z', claimedAt: '2026-08-18T10:00:00Z' },
   ],
   pass: { seasons: [{
     id: 'preview-season', title: '드림스케이프 팬 레벨', organizationId: null, artistId: 'dreamscape', status: 'active', isPaid: false, startsAt: null, endsAt: null,
@@ -66,7 +67,7 @@ function FanGrowthPreview() {
   const [showPass, setShowPass] = useState(() => previewMode === 'fan-pass' || previewMode === 'fan-global-pass')
   const [passScope, setPassScope] = useState<'artist' | 'global'>(() => previewMode === 'fan-global-pass' ? 'global' : 'artist')
   const [passTargetTierId, setPassTargetTierId] = useState<string | undefined>()
-  if (showPass) return <FanPassPage progression={fanGrowthPreviewProgression} loading={false} error="" onRetry={() => {}} onBack={() => { setShowPass(false); setPassScope('artist'); setPassTargetTierId(undefined); window.history.pushState({}, '', '/?preview=fan-growth') }} onClaimPassTier={async () => ({})} initialTierId={passTargetTierId} isGlobal={passScope === 'global'} />
+  if (showPass) return <FanPassPage progression={fanGrowthPreviewProgression} loading={false} error="" onRetry={() => {}} onBack={() => { setShowPass(false); setPassScope('artist'); setPassTargetTierId(undefined); window.history.pushState({}, '', '/?preview=fan-growth') }} onClaimPassTier={async () => ({})} onNavigate={tab => window.location.assign(pathForTab(tab))} initialTierId={passTargetTierId} isGlobal={passScope === 'global'} />
   const onViewPass = (tierId?: string) => { setPassTargetTierId(tierId); setShowPass(true); window.history.pushState({}, '', '/?preview=fan-pass') }
   const onViewGlobalPass = (tierId?: string) => { setPassScope('global'); setPassTargetTierId(tierId); setShowPass(true); window.history.pushState({}, '', '/?preview=fan-global-pass') }
   const artistScopes = [{ id: 'dreamscape', name: '드림스케이프', imageUrl: loginDreamscapeGroup }]
@@ -168,6 +169,7 @@ function cardTypeLabel(cardType: string | null): string {
     template_basic_v1: '기본 디지털 카드',
     special: '스페셜 카드',
     basic: '기본 디지털 카드',
+    photo: '포토카드',
   }
   return labels[cardType] ?? cardType.replaceAll('_', ' ')
 }
@@ -210,6 +212,7 @@ function App() {
   const [showRedeem, setShowRedeem] = useState(() => window.location.pathname === '/redeem')
   const [showFanPassPage, setShowFanPassPage] = useState(() => window.location.pathname === '/growth/pass' || window.location.pathname === '/growth/global-pass')
   const [showRewardInventory, setShowRewardInventory] = useState(() => window.location.pathname === '/collection/rewards')
+  const [showCardCollection, setShowCardCollection] = useState(() => window.location.pathname === '/collection/cards')
   const [passScope, setPassScope] = useState<'artist' | 'global'>(() => window.location.pathname === '/growth/global-pass' ? 'global' : 'artist')
   const [passTargetTierId, setPassTargetTierId] = useState<string | undefined>()
   const [signedIn, setSignedIn] = useState(false)
@@ -256,6 +259,7 @@ function App() {
   const [myApplicationsError, setMyApplicationsError] = useState('')
   const [showNotificationSettings, setShowNotificationSettings] = useState(false)
   const alertsReturnPathRef = useRef<string | null>(null)
+  const cardReturnPathRef = useRef<string | null>(null)
   const savedCardsOwnerRef = useRef<string | null>(null)
   const savedCardIds = savedCards.map(card => card.userCardId ?? card.id)
 
@@ -299,6 +303,8 @@ function App() {
       ? sessionChecking ? 'Fanfolio · 연결 중' : 'Fanfolio · 내 손안의 팬 컬렉션'
       : showOnboarding
         ? 'Fanfolio · 최초 설정'
+        : showCardCollection
+          ? 'Fanfolio · 카드 컬렉션'
         : showRewardInventory
           ? 'Fanfolio · 패스 보상'
         : showRedeem
@@ -306,13 +312,15 @@ function App() {
           : revealedCardId
             ? 'Fanfolio · 카드 공개'
         : `Fanfolio · ${tabTitle(tab)}`
-  }, [revealedCardId, sessionChecking, showOnboarding, showRedeem, showRewardInventory, signedIn, tab])
+  }, [revealedCardId, sessionChecking, showCardCollection, showOnboarding, showRedeem, showRewardInventory, signedIn, tab])
 
   const navigateTab = (nextTab: Tab) => {
     setTab(nextTab)
     setSelectedCard(null)
     setShowRedeem(false)
+    setShowFanPassPage(false)
     setShowRewardInventory(false)
+    setShowCardCollection(false)
     setRevealedCardId(null)
     setEventId(null)
     const nextPath = pathForTab(nextTab)
@@ -435,6 +443,8 @@ function App() {
   }
 
   const openCard = (card: Card) => {
+    cardReturnPathRef.current = window.location.pathname
+    if (window.location.pathname === '/collection/cards') setShowCardCollection(false)
     setSelectedCard(card)
     try {
       if (card.userCardId) window.sessionStorage.removeItem(cardRoutePreviewKey)
@@ -447,7 +457,10 @@ function App() {
   const closeCard = () => {
     setSelectedCard(null)
     try { window.sessionStorage.removeItem(cardRoutePreviewKey) } catch { /* optional route preview cache */ }
-    if (window.location.pathname.startsWith('/cards/')) window.history.replaceState({}, '', pathForTab(tab))
+    const returnPath = cardReturnPathRef.current ?? pathForTab(tab)
+    if (window.location.pathname.startsWith('/cards/')) window.history.replaceState({}, '', returnPath)
+    if (returnPath === '/collection/cards') setShowCardCollection(true)
+    cardReturnPathRef.current = null
   }
 
   const openFanPassPage = (tierId?: string, scope: 'artist' | 'global' = 'artist') => {
@@ -477,6 +490,18 @@ function App() {
     setTab('collection')
   }
 
+  const openCardCollection = () => {
+    setTab('collection')
+    setShowCardCollection(true)
+    window.history.pushState({}, '', '/collection/cards')
+  }
+
+  const closeCardCollection = () => {
+    setShowCardCollection(false)
+    window.history.replaceState({}, '', '/collection')
+    setTab('collection')
+  }
+
   useEffect(() => {
     const onPopState = () => {
       const path = window.location.pathname
@@ -485,6 +510,7 @@ function App() {
       setShowRedeem(path === '/redeem')
       setShowFanPassPage(path === '/growth/pass' || path === '/growth/global-pass')
       setShowRewardInventory(path === '/collection/rewards')
+      setShowCardCollection(path === '/collection/cards')
       setPassScope(path === '/growth/global-pass' ? 'global' : 'artist')
       setRevealedCardId(revealIdFromPath(path))
       setSelectedCard(path.startsWith('/cards/') ? readCardRoutePreview(path) : null)
@@ -750,10 +776,11 @@ function App() {
 
   if (import.meta.env.DEV) {
     const preview = new URLSearchParams(window.location.search).get('preview')
-    if (preview === 'fan-pass' || preview === 'fan-global-pass') return <FanPassPage progression={fanGrowthPreviewProgression} loading={false} error="" onRetry={() => {}} onBack={() => { window.history.pushState({}, '', '/?preview=fan-growth'); window.dispatchEvent(new PopStateEvent('popstate')) }} onClaimPassTier={async () => ({})} isGlobal={preview === 'fan-global-pass'} />
+    if (preview === 'fan-pass' || preview === 'fan-global-pass') return <FanPassPage progression={fanGrowthPreviewProgression} loading={false} error="" onRetry={() => {}} onBack={() => { window.history.pushState({}, '', '/?preview=fan-growth'); window.dispatchEvent(new PopStateEvent('popstate')) }} onClaimPassTier={async () => ({})} onNavigate={tab => window.location.assign(pathForTab(tab))} isGlobal={preview === 'fan-global-pass'} />
     if (preview === 'fan-growth') return <FanGrowthPreview />
     if (preview === 'reward-inventory') return <RewardInventoryPreview />
-    if (preview === 'collection-inventory-entry') return <main className="app-shell collection-shell"><header className={'app-header'}><div className="app-header-copy"><span className="eyebrow">FANFOLIO</span><h1>보관함</h1><p className="app-header-description">내가 수집한 모든 카드와 컬렉션을 관리해요.</p></div><div className="header-actions"><button className="header-alert-button" aria-label="알림"><NavIcon name="alerts" /></button><button className="header-profile-button" aria-label="프로필 및 설정"><ProfileAvatar imageUrl={null} fallback="테" alt="프로필 이미지" /></button></div></header><section className="screen"><Collection cards={fallbackCollectionCards} collectionDataReady summary={{ ownedCount: 5, totalSlots: 9, completionRate: 56 }} benefits={[]} rewards={fanGrowthPreviewProgression.claimedRewards} loading={false} onSelect={() => {}} onRedeem={() => {}} onDiscover={() => {}} onRewards={() => window.location.assign('/?preview=reward-inventory')} onClaim={async () => {}} /></section><BottomNavigation active="collection" onNavigate={() => {}} /></main>
+    if (preview === 'card-collection') return <CardCollectionRepository onBack={() => window.location.assign('/?preview=collection-inventory-entry')} onNavigate={tab => window.location.assign(pathForTab(tab))} />
+    if (preview === 'collection-inventory-entry') return <main className="app-shell collection-shell"><header className={'app-header'}><div className="app-header-copy"><span className="eyebrow">FANFOLIO</span><h1>보관함</h1><p className="app-header-description">내가 수집한 모든 카드와 컬렉션을 관리해요.</p></div><div className="header-actions"><button className="header-alert-button" aria-label="알림"><NavIcon name="alerts" /></button><button className="header-profile-button" aria-label="프로필 및 설정"><ProfileAvatar imageUrl={null} fallback="테" alt="프로필 이미지" /></button></div></header><section className="screen"><Collection cards={fallbackCollectionCards} collectionDataReady summary={{ ownedCount: 5, totalSlots: 9, completionRate: 56 }} benefits={[]} rewards={fanGrowthPreviewProgression.claimedRewards} loading={false} onSelect={() => {}} onRedeem={() => {}} onDiscover={() => {}} onRewards={() => window.location.assign('/?preview=reward-inventory')} onCards={() => window.location.assign('/?preview=card-collection')} onClaim={async () => {}} /></section><BottomNavigation active="collection" onNavigate={() => {}} /></main>
   }
 
   if (!signedIn) {
@@ -765,11 +792,15 @@ function App() {
   }
 
   if (showFanPassPage) {
-    return <FanPassPage progression={passScope === 'global' ? globalFanProgression : fanProgression} loading={growthLoading} error={growthError} onRetry={refreshGrowth} onBack={closeFanPassPage} onClaimPassTier={claimGrowthPassTier} initialTierId={passTargetTierId} isGlobal={passScope === 'global'} />
+    return <FanPassPage progression={passScope === 'global' ? globalFanProgression : fanProgression} loading={growthLoading} error={growthError} onRetry={refreshGrowth} onBack={closeFanPassPage} onClaimPassTier={claimGrowthPassTier} onNavigate={navigateTab} initialTierId={passTargetTierId} isGlobal={passScope === 'global'} />
   }
 
   if (showRewardInventory) {
     return <RewardInventory progression={fanProgression} loading={growthLoading} error={growthError} onRetry={refreshGrowth} onBack={closeRewardInventory} onEquip={saveGrowthEquipment} onNavigate={navigateTab} />
+  }
+
+  if (showCardCollection) {
+    return <CardCollectionRepository onBack={closeCardCollection} onNavigate={navigateTab} />
   }
 
   if (revealedCardId) {
@@ -814,7 +845,7 @@ function App() {
         {collectionError && <div className="service-notice" role="alert"><span>{collectionError}</span><button onClick={() => void refreshCollection()} disabled={collectionLoading}>{collectionLoading ? '확인 중...' : '다시 시도'}</button></div>}
         {tab === 'home' && <Home nickname={currentUser?.nickname ?? '팬'} cards={collectionCards} collectionDataReady={collectionDataReady} savedCards={savedCards} summary={collectionSummary} loading={collectionLoading} eventHome={fanHome} onSelect={openCard} onDiscover={() => navigateTab('discover')} onCollection={() => navigateTab('collection')} onRedeem={openRedeem} onEvents={openEvents} onEvent={openEvent} />}
         {tab === 'events' && (eventId ? <EventDetail event={selectedEvent} loading={eventDetailLoading} onBack={openEvents} onApply={handleEventApply} comments={eventComments} commentsLoading={eventCommentsLoading} commentSubmitting={eventCommentSubmitting} onLoadComments={loadEventComments} onSubmitComment={handleEventComment} onOpenTarget={target => { if (target.startsWith('/events/')) { const id = decodeURIComponent(target.split('/')[1]?.split('#')[0] ?? ''); const item = fanEvents.find(event => event.id === id); if (item) openEvent(item) } else if (target.startsWith('https://')) window.open(target, '_blank', 'noopener,noreferrer') }} /> : <EventList events={fanEvents} status={fanEventStatus} loading={fanEventsLoading} error={fanEventsError} pagination={fanEventPagination} onStatusChange={handleFanEventStatusChange} onPageChange={setFanEventPage} onOpen={openEvent} />)}
-        {tab === 'collection' && <Collection cards={collectionCards} collectionDataReady={collectionDataReady} summary={collectionSummary} benefits={collectionBenefits} rewards={fanProgression?.claimedRewards ?? []} loading={collectionLoading} onSelect={openCard} onRedeem={openRedeem} onDiscover={() => navigateTab('discover')} onRewards={openRewardInventory} onClaim={claimBenefit} />}
+        {tab === 'collection' && <Collection cards={collectionCards} collectionDataReady={collectionDataReady} summary={collectionSummary} benefits={collectionBenefits} rewards={fanProgression?.claimedRewards ?? []} loading={collectionLoading} onSelect={openCard} onRedeem={openRedeem} onDiscover={() => navigateTab('discover')} onRewards={openRewardInventory} onCards={openCardCollection} onClaim={claimBenefit} />}
         {tab === 'discover' && <Discover />}
         {tab === 'alerts' && <Alerts items={notifications} error={notificationError} actionError={notificationActionError} onDismissActionError={() => setNotificationActionError('')} onRetry={() => window.dispatchEvent(new Event('fanfolio:refresh-notifications'))} onRead={markNotificationRead} onReadAll={markAllNotificationsRead} onBack={closeAlerts} onNavigate={navigateTab} />}
         {/* Embedded surfaces stay compact; the dedicated tab uses the full progression view. */}
@@ -838,6 +869,7 @@ function tabFromPath(pathname: string): Tab {
   if (pathname === '/discover') return 'discover'
   if (pathname === '/collection') return 'collection'
   if (pathname === '/collection/rewards') return 'collection'
+  if (pathname === '/collection/cards') return 'collection'
   if (pathname === '/growth') return 'growth'
   if (pathname === '/growth/pass' || pathname === '/growth/global-pass') return 'growth'
   if (pathname === '/notifications') return 'alerts'
@@ -1223,6 +1255,110 @@ const fallbackCollectionCards: Card[] = [
   { id: 'collection-generated-minjae-starlight', title: 'Starlight Ver.', artist: '드림스케이프', member: '민재', image: collectionCardMinjaeGenerated },
   { id: 'collection-generated-jay-starlight', title: 'Starlight Ver.', artist: '드림스케이프', member: '제이', image: collectionCardJayGenerated },
 ]
+
+type CardCollectionSlot = {
+  number: number
+  sourcePrefix?: string
+  rarity: 'UR' | 'SR' | 'R' | 'N'
+  copies: number
+  card?: Card
+}
+
+type CardCollectionPack = {
+  id: string
+  name: string
+  prefix: string
+  owned: number
+  total: number
+  slots: CardCollectionSlot[]
+}
+
+type CardCollectionGroup = {
+  id: string
+  displayName: string
+  owned: number
+  total: number
+  packs: CardCollectionPack[]
+}
+
+type CardCollectionDetailItem = {
+  card: Card
+  code: string
+  rarity: CardCollectionSlot['rarity']
+  copies: number
+  packName: string
+  groupName: string
+  artistMessage?: string
+  acquiredAt?: string
+  cardType?: string
+  acquisitionSource?: string
+  futureBenefitPreview?: string
+}
+
+const collectionPortraits = [collectionCardHarinGenerated, collectionCardDoyunGenerated, collectionCardMinjaeGenerated, collectionCardJayGenerated]
+const collectionMembers = ['하린', '도윤', '민재', '제이']
+const collectionArtistMessages: Record<string, string> = {
+  하린: '우리의 첫 번째 꿈을 함께 기억해 줘서 고마워요.',
+  도윤: '이 카드를 볼 때마다 오늘의 무대를 떠올려 주세요.',
+  민재: '늘 같은 자리에서 응원해 주는 마음, 잊지 않을게요.',
+  제이: '다음 장면에서도 우리 함께 반짝여요.',
+}
+
+function formatCardCopies(copies: number) {
+  return copies > 99 ? '99+' : String(Math.max(0, copies))
+}
+
+function makeCollectionPack(id: string, name: string, prefix: string, owned: number, total: number, offset = 0): CardCollectionPack {
+  return {
+    id,
+    name,
+    prefix,
+    owned,
+    total,
+    slots: Array.from({ length: 16 }, (_, index) => {
+      const number = index + 1
+      const acquired = number <= owned + (id === 'nebula' ? 1 : 0)
+      const memberIndex = (index + offset) % collectionMembers.length
+      const rarity = number <= 2 ? 'UR' : number <= 5 ? 'SR' : number <= 8 ? 'R' : 'N'
+      return {
+        number,
+        rarity,
+        copies: acquired ? [1, 1, 12, 1, 1, 128, 2, 1, 1, 2, 1][index] ?? 1 : 0,
+        card: acquired ? {
+          id: `collection-${id}-${number}`,
+          title: name,
+          artist: '드림스케이프',
+          member: collectionMembers[memberIndex],
+          image: collectionPortraits[memberIndex],
+        } : undefined,
+      }
+    }),
+  }
+}
+
+const cardCollectionGroups: CardCollectionGroup[] = [
+  {
+    id: 'dreamscape-first-album',
+    displayName: '정규 1집 · DREAMSCAPE',
+    owned: 28,
+    total: 40,
+    packs: [
+      makeCollectionPack('nebula', 'Nebula Ver.', 'N', 10, 14),
+      makeCollectionPack('starlight', 'Starlight Ver.', 'S', 8, 12, 1),
+      makeCollectionPack('midnight', 'Midnight Ver.', 'M', 10, 14, 2),
+    ],
+  },
+  {
+    id: 'dreamscape-anniversary',
+    displayName: '데뷔 3주년 · STARLIGHT',
+    owned: 11,
+    total: 24,
+    packs: [
+      makeCollectionPack('anniversary-day', 'Daylight Ver.', 'D', 6, 12, 1),
+      makeCollectionPack('anniversary-night', 'Nightfall Ver.', 'F', 5, 12, 3),
+    ],
+  },
+]
 function Home(props: HomeProps) {
   const [recommendations, setRecommendations] = useState<Card[]>([])
 
@@ -1415,14 +1551,6 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
   </div>
 }
 
-const inventoryRewardLabels: Record<RewardGrant['type'], string> = {
-  badge: '배지',
-  title: '칭호',
-  profile_frame: '프로필 프레임',
-  collection_theme: '컬렉션 테마',
-  digital_bonus: '디지털 보너스',
-}
-
 const inventoryRewardFallbacks: Record<RewardGrant['type'], string> = {
   badge: '/rewards/reward-ticket.png',
   title: '/rewards/reward-vip.png',
@@ -1464,6 +1592,64 @@ function nextRewardEquipment(reward: RewardGrant, equipment: ProfileEquipment): 
   return equipment
 }
 
+type InventoryLifecycle = 'timed' | 'consumable' | 'owned'
+type InventoryFilter = 'all' | 'equipped' | 'timed' | 'consumable'
+type InventorySourceKind = 'artist' | 'global' | 'activity'
+type InventorySourceIdentity = { id: string; label: string; kind: InventorySourceKind; logoUrl: string | null }
+type InventorySource = InventorySourceIdentity & { count: number }
+
+function inventoryMetadataString(reward: RewardGrant, key: string): string | null {
+  const value = reward.metadata?.[key]
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function inventoryMetadataNumber(reward: RewardGrant, key: string): number | null {
+  const value = reward.metadata?.[key]
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function inventoryRewardSource(reward: RewardGrant, progression: FanProgression | null): InventorySourceIdentity {
+  if (reward.metadata?.scope === 'global') return { id: 'global', label: '전체 레벨', kind: 'global', logoUrl: null }
+
+  const metadataLabel = inventoryMetadataString(reward, 'artistName') ?? inventoryMetadataString(reward, 'sourceName')
+  const metadataId = inventoryMetadataString(reward, 'artistId') ?? inventoryMetadataString(reward, 'sourceId')
+  const logoUrl = inventoryMetadataString(reward, 'artistLogoUrl')
+  if (metadataLabel) return { id: metadataId ?? `source:${metadataLabel}`, label: metadataLabel, kind: 'artist', logoUrl }
+
+  const season = progression?.pass.seasons.find(candidate => candidate.tiers.some(tier => tier.rewardId === reward.rewardId))
+  if (!season) return { id: 'fan-activity', label: '팬 활동', kind: 'activity', logoUrl: null }
+  if (!season.artistId) return { id: 'global', label: '전체 레벨', kind: 'global', logoUrl: null }
+  const label = season.title.replace(/\s*(팬\s*레벨|팬\s*패스)$/u, '').trim() || season.artistId
+  return { id: season.artistId, label, kind: 'artist', logoUrl }
+}
+
+function inventoryRewardLifecycle(reward: RewardGrant): InventoryLifecycle {
+  if (inventoryMetadataString(reward, 'expiresAt') || inventoryMetadataNumber(reward, 'durationDays') !== null) return 'timed'
+  if (reward.metadata?.consumable === true || inventoryMetadataNumber(reward, 'quantity') !== null) return 'consumable'
+  return 'owned'
+}
+
+function inventoryRewardStatus(reward: RewardGrant, equipment: ProfileEquipment | null): string {
+  const equipped = Boolean(equipment && isRewardEquipped(reward, equipment))
+  const lifecycle = inventoryRewardLifecycle(reward)
+  if (lifecycle === 'timed') {
+    const remainingDays = inventoryMetadataNumber(reward, 'remainingDays')
+    const timeLabel = remainingDays === null ? '기간제' : `${Math.max(0, Math.round(remainingDays))}일 남음`
+    return equipped ? `적용 중 · ${timeLabel}` : `기간제 · ${timeLabel}`
+  }
+  if (equipped) return '현재 적용 중'
+  if (lifecycle === 'consumable') {
+    const quantity = inventoryMetadataNumber(reward, 'quantity') ?? 1
+    const unit = inventoryMetadataString(reward, 'unit') ?? '개'
+    return `1회성 · ${quantity}${unit}`
+  }
+  return '영구 보유'
+}
+
+function isInventoryRewardEquipable(reward: RewardGrant): boolean {
+  return reward.type === 'badge' || reward.type === 'title' || reward.type === 'profile_frame' || reward.type === 'collection_theme'
+}
+
 function RewardInventoryPreview() {
   const [progression, setProgression] = useState(fanGrowthPreviewProgression)
   return <RewardInventory
@@ -1486,108 +1672,276 @@ function RewardInventory({ progression, loading, error, onRetry, onBack, onEquip
   onEquip: (equipment: ProfileEquipment) => Promise<void>
   onNavigate: (tab: Tab) => void
 }) {
-  const [filter, setFilter] = useState<'all' | 'badge' | 'digital_bonus' | 'profile'>('all')
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  const [filter, setFilter] = useState<InventoryFilter>('all')
+  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null)
+  const [savingId, setSavingId] = useState<string | null>(null)
   const [message, setMessage] = useState('')
   const claimedRewards = progression?.claimedRewards.filter(reward => reward.claimedAt) ?? []
   const equipment = progression?.equipment ?? null
-  const visibleRewards = claimedRewards.filter(reward => {
+  const sources = claimedRewards.reduce<InventorySource[]>((items, reward) => {
+    const source = inventoryRewardSource(reward, progression)
+    const existing = items.find(item => item.id === source.id)
+    if (existing) {
+      existing.count += 1
+      if (!existing.logoUrl && source.logoUrl) existing.logoUrl = source.logoUrl
+    } else items.push({ ...source, count: 1 })
+    return items
+  }, [])
+  const activeSourceId = selectedSourceId && sources.some(source => source.id === selectedSourceId) ? selectedSourceId : sources[0]?.id ?? null
+  const activeSource = sources.find(source => source.id === activeSourceId) ?? null
+  const sourceRewards = claimedRewards.filter(reward => inventoryRewardSource(reward, progression).id === activeSourceId)
+  const visibleRewards = sourceRewards.filter(reward => {
     if (filter === 'all') return true
-    if (filter === 'profile') return reward.type === 'title' || reward.type === 'profile_frame' || reward.type === 'collection_theme'
-    return reward.type === filter
+    if (filter === 'equipped') return Boolean(equipment && isRewardEquipped(reward, equipment))
+    return inventoryRewardLifecycle(reward) === filter
   })
-  const selectedReward = claimedRewards.find(reward => reward.id === selectedId) ?? visibleRewards[0] ?? null
-  const equippedRewards = equipment ? claimedRewards.filter(reward => isRewardEquipped(reward, equipment)) : []
-  const equipped = Boolean(selectedReward && equipment && isRewardEquipped(selectedReward, equipment))
-  const equipSelected = async () => {
-    if (!selectedReward || !equipment) return
-    if (selectedReward.type === 'digital_bonus') {
-      setMessage(inventoryRewardDescription(selectedReward))
+
+  const actOnReward = async (reward: RewardGrant) => {
+    if (!equipment) return
+    const lifecycle = inventoryRewardLifecycle(reward)
+    if (!isInventoryRewardEquipable(reward) || lifecycle === 'consumable') {
+      setMessage(inventoryRewardDescription(reward))
       return
     }
-    setSaving(true)
+    const equipped = isRewardEquipped(reward, equipment)
+    setSavingId(reward.id)
     setMessage('')
     try {
-      await onEquip(nextRewardEquipment(selectedReward, equipment))
+      await onEquip(nextRewardEquipment(reward, equipment))
       setMessage(equipped ? '장착을 해제했어요.' : '프로필에 장착했어요.')
     } catch (equipError) {
       setMessage(equipError instanceof Error ? equipError.message : '장착 정보를 저장하지 못했어요.')
     } finally {
-      setSaving(false)
+      setSavingId(null)
     }
   }
+
   return <main className="app-shell reward-inventory-shell">
     <header className="reward-inventory-header">
       <button type="button" aria-label="보관함으로 돌아가기" onClick={onBack}><InlineIcon name="back" /></button>
-      <div><h1>패스 보상</h1></div>
+      <div><h1>팬 컬렉션</h1></div>
       <span aria-hidden="true" />
     </header>
     <section className="reward-inventory-screen">
-      <section className="reward-inventory-summary" aria-label="패스 보상 요약">
-        <div><span className="reward-inventory-summary-icon"><InlineIcon name="gift" /></span><span><small>MY REWARD ARCHIVE</small><b>나만의 팬 활동 보상</b></span></div>
-        <strong><em>{claimedRewards.length}</em>개</strong>
-        <p>팬 패스와 전체 레벨에서 받은 아이템을 한곳에서 관리해요.</p>
-      </section>
-      <div className="reward-inventory-tabs" role="tablist" aria-label="보상 종류">
-        {([['all', '전체'], ['badge', '배지'], ['digital_bonus', '디지털 보너스'], ['profile', '프로필']] as const).map(([value, label]) => <button type="button" role="tab" aria-selected={filter === value} className={filter === value ? 'active' : ''} key={value} onClick={() => { setFilter(value); setSelectedId(null); setMessage('') }}>{label}</button>)}
-      </div>
+      <div className="reward-inventory-kicker"><span>팬 활동으로 모은 아이템</span><strong>총 {claimedRewards.length}개</strong></div>
       {loading && !progression && <div className="reward-inventory-state" role="status"><span className="loading-orbit" /><b>보상 인벤토리를 불러오는 중이에요</b></div>}
       {!loading && error && <div className="reward-inventory-state error" role="alert"><b>보상을 불러오지 못했어요.</b><span>{error}</span><button type="button" className="outline" onClick={onRetry}>다시 시도</button></div>}
-      {!loading && !error && claimedRewards.length === 0 && <div className="reward-inventory-state"><span className="reward-inventory-empty-icon"><InlineIcon name="gift" /></span><b>아직 받은 패스 보상이 없어요</b><span>팬 활동으로 레벨을 올리고 첫 보상을 받아보세요.</span><button type="button" className="outline" onClick={() => onNavigate('growth')}>팬 레벨 보기</button></div>}
+      {!loading && !error && claimedRewards.length === 0 && <div className="reward-inventory-state"><span className="reward-inventory-empty-icon"><InlineIcon name="gift" /></span><b>아직 보유한 팬 아이템이 없어요</b><span>팬 활동으로 아이템을 모아 컬렉션을 채워보세요.</span><button type="button" className="outline" onClick={() => onNavigate('growth')}>팬 레벨 보기</button></div>}
       {!loading && !error && claimedRewards.length > 0 && <>
-        <section className="reward-inventory-equipped" aria-labelledby="reward-equipped-title">
-          <div className="reward-inventory-section-heading"><h2 id="reward-equipped-title">현재 장착 중</h2><span>{equippedRewards.length}개 장착</span></div>
-          {equippedRewards.length > 0 ? <div className="reward-inventory-equipped-row">{equippedRewards.slice(0, 3).map(reward => <button type="button" key={reward.id} className={selectedReward?.id === reward.id ? 'active' : ''} onClick={() => { setSelectedId(reward.id); setMessage('') }}><AuthenticatedImage src={inventoryRewardArtwork(reward)} fallback={inventoryRewardFallbacks[reward.type]} alt="" /><span><small>{inventoryRewardLabels[reward.type]}</small><b>{reward.name}</b></span><em>장착됨</em></button>)}</div> : <p className="reward-inventory-none">아이템을 선택해 프로필에 장착해 보세요.</p>}
-        </section>
+        <div className="reward-inventory-sources" role="tablist" aria-label="아이템 출처">
+          {sources.map(source => <button type="button" role="tab" aria-selected={activeSourceId === source.id} className={`${activeSourceId === source.id ? 'active' : ''}${source.kind === 'global' ? ' global-source' : ''}`} key={source.id} onClick={() => { setSelectedSourceId(source.id); setFilter('all'); setMessage('') }}>
+            {source.kind !== 'global' && <ProfileAvatar className="reward-inventory-source-logo" imageUrl={source.logoUrl} fallback={source.label.slice(0, 1)} alt={`${source.label} 로고`} />}
+            <b>{source.label}</b>
+            <em className="reward-inventory-source-count">{source.count}</em>
+          </button>)}
+        </div>
         <section className="reward-inventory-list" aria-labelledby="reward-inventory-title">
-          <div className="reward-inventory-section-heading"><h2 id="reward-inventory-title">보유 보상</h2><span>{visibleRewards.length}개</span></div>
+          <div className="reward-inventory-section-heading"><h2 id="reward-inventory-title">{activeSource?.label ?? '팬'} 컬렉션</h2><span>보유 아이템 <b>{sourceRewards.length}개</b></span></div>
+          <div className="reward-inventory-tabs" role="tablist" aria-label="아이템 상태">
+            {([['all', '전체'], ['equipped', '적용 중'], ['timed', '기간제'], ['consumable', '1회성']] as const).map(([value, label]) => <button type="button" role="tab" aria-selected={filter === value} className={filter === value ? 'active' : ''} key={value} onClick={() => { setFilter(value); setMessage('') }}>{label}</button>)}
+          </div>
+          {message && <p className="reward-inventory-message" role="status">{message}</p>}
           {visibleRewards.length > 0 ? <div className="reward-inventory-grid">{visibleRewards.map(reward => {
-            const isSelected = selectedReward?.id === reward.id
             const isEquipped = equipment ? isRewardEquipped(reward, equipment) : false
-            return <button type="button" className={`reward-inventory-card${isSelected ? ' selected' : ''}${isEquipped ? ' equipped' : ''}`} key={reward.id} onClick={() => { setSelectedId(reward.id); setMessage('') }} aria-pressed={isSelected}>
-              <span className="reward-inventory-art"><AuthenticatedImage src={inventoryRewardArtwork(reward)} fallback={inventoryRewardFallbacks[reward.type]} alt="" />{isEquipped && <i><InlineIcon name="check" /></i>}</span>
-              <small>{inventoryRewardLabels[reward.type]}</small><b>{reward.name}</b><em>{reward.claimedAt ? '획득 완료' : '보관 중'}</em>
-              {isSelected && <p>{inventoryRewardDescription(reward)}</p>}
-            </button>
+            const lifecycle = inventoryRewardLifecycle(reward)
+            const statusClass = isEquipped ? 'equipped' : lifecycle
+            const actionLabel = savingId === reward.id ? '저장 중...' : isEquipped ? '해제' : lifecycle === 'consumable' ? '사용' : isInventoryRewardEquipable(reward) ? '적용' : '확인'
+            return <article className="reward-inventory-card" key={reward.id}>
+              <span className="reward-inventory-art"><AuthenticatedImage src={inventoryRewardArtwork(reward)} fallback={inventoryRewardFallbacks[reward.type]} alt="" /></span>
+              <b>{reward.name}</b>
+              <em className={`reward-inventory-status ${statusClass}`}>{isEquipped && <InlineIcon name="check" />}{inventoryRewardStatus(reward, equipment)}</em>
+              <button type="button" className="reward-inventory-card-action" onClick={() => void actOnReward(reward)} disabled={savingId === reward.id}>{actionLabel}</button>
+            </article>
           })}</div> : <div className="reward-inventory-filter-empty">이 종류의 보상이 아직 없어요.</div>}
         </section>
       </>}
     </section>
-    {selectedReward && equipment && <div className="reward-inventory-action-bar">
-      <div><AuthenticatedImage src={inventoryRewardArtwork(selectedReward)} fallback={inventoryRewardFallbacks[selectedReward.type]} alt="" /><span><small>{inventoryRewardLabels[selectedReward.type]}</small><b>{selectedReward.name}</b></span></div>
-      <button type="button" onClick={() => void equipSelected()} disabled={saving}>{saving ? '저장 중...' : selectedReward.type === 'digital_bonus' ? '상세 보기' : equipped ? '장착 해제' : '장착하기'}</button>
-      {message && <p role="status">{message}</p>}
-    </div>}
     <BottomNavigation active="collection" onNavigate={onNavigate} />
   </main>
 }
 
-function Collection({ cards: collectionCards, collectionDataReady, summary, benefits, rewards, loading, onSelect, onRedeem, onDiscover, onRewards, onClaim }: { cards: Card[], collectionDataReady: boolean, summary: CollectionSummary, benefits: CollectionBenefit[], rewards: RewardGrant[], loading: boolean, onSelect: (card: Card) => void, onRedeem: () => void, onDiscover: () => void, onRewards: () => void, onClaim: (campaignId: string) => Promise<void> }) {
-  const [showAll, setShowAll] = useState(false)
-  const [showFilter, setShowFilter] = useState(false)
-  const [filterKind, setFilterKind] = useState<'all' | 'new' | 'duplicate' | 'rare'>('all')
-  const [sortKind, setSortKind] = useState<'latest' | 'rarity' | 'acquired'>('latest')
-  const [artistFilter, setArtistFilter] = useState('전체')
+function CardCollectionDetail({ item, onBack }: { item: CardCollectionDetailItem, onBack: () => void }) {
+  const [favorite, setFavorite] = useState(false)
+  const [detail, setDetail] = useState<UserCardDetail | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState(false)
+  const [detailAttempt, setDetailAttempt] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    setDetail(null)
+    setDetailError(false)
+    const hasRemoteDetail = Boolean(item.card.userCardId && !item.card.userCardId.startsWith('user-card-'))
+    setDetailLoading(hasRemoteDetail)
+    if (!hasRemoteDetail || !item.card.userCardId) return
+    void apiFetch<{ ok: true, data: UserCardDetail }>(`/me/cards/${item.card.userCardId}`)
+      .then(result => { if (!cancelled) { setDetail(result.data); setDetailLoading(false) } })
+      .catch(() => { if (!cancelled) { setDetailError(true); setDetailLoading(false) } })
+    return () => { cancelled = true }
+  }, [item.card.userCardId, detailAttempt])
+
+  const artistName = detail?.card.artistName ?? item.card.artist
+  const memberName = detail?.card.memberName ?? item.card.member
+  const cardName = detail?.card.name ?? item.packName
+  const cardCode = detail ? `#${String(detail.serialNumber).padStart(3, '0')}` : item.code
+  const acquiredAt = detail?.acquiredAt ?? item.acquiredAt
+  const cardType = detail?.card.cardType ?? item.cardType
+  const acquisitionSource = detail?.acquisitionSource ?? item.acquisitionSource
+  const artistMessage = detail?.card.signatureText ?? item.artistMessage
+  const futureBenefitPreview = detail?.futureBenefitPreview ?? item.futureBenefitPreview
+  const handwritingImageUrl = detail?.card.handwritingImageUrl ? resolveApiUrl(detail.card.handwritingImageUrl) : ''
+  const voiceAudioUrl = detail?.card.hasVoice && detail.card.voiceAudioUrl ? resolveApiUrl(detail.card.voiceAudioUrl) : ''
+  const videoUrl = detail?.card.hasVideo && detail.card.videoUrl ? resolveApiUrl(detail.card.videoUrl) : ''
+  const acquisitionSourceLabel = acquisitionSource === 'qr' ? 'QR 스캔' : acquisitionSource === 'manual' ? '코드 직접 입력' : acquisitionSource === 'card_pack' ? '카드팩' : acquisitionSource || ''
+
+  return <main className="app-shell card-collection-detail-shell">
+    <header className="card-collection-detail-topbar">
+      <button type="button" onClick={onBack} aria-label="카드 컬렉션으로 돌아가기"><InlineIcon name="back" /></button>
+      <h1>카드 상세</h1>
+      <button type="button" className={favorite ? 'active' : ''} aria-label={favorite ? '관심 카드에서 제거' : '관심 카드에 추가'} aria-pressed={favorite} onClick={() => setFavorite(value => !value)}><InlineIcon name="heart" /></button>
+    </header>
+    <section className="card-collection-detail-body">
+      {detailLoading && <p className="card-collection-detail-loading" role="status">카드 정보를 불러오는 중이에요…</p>}
+      <InteractiveCollectibleCard
+        imageUrl={detail?.card.imageUrl ? resolveApiUrl(detail.card.imageUrl) : item.card.image}
+        imageAlt={`${memberName} ${cardName} 카드 앞면`}
+        identity={detail?.userCardId ?? item.card.id}
+        title={cardName}
+        artist={artistName}
+        member={memberName}
+        serialLabel={cardCode}
+        limitLabel={detail?.card.issueLimit ? `${detail.card.issueLimit.toLocaleString()}장` : `${item.copies}장 보유`}
+        sealLabel={detail?.card.id.slice(-8).toUpperCase() ?? 'FANFOLIO'}
+        designConfig={detail?.card.designConfig ?? qaRevealDesignConfig}
+        lenticularImageUrl={detail?.card.lenticularImageUrl ? resolveApiUrl(detail.card.lenticularImageUrl) : null}
+        hiddenMessage={detail?.card.designConfig?.back?.hiddenMessage ?? `${artistName} 공식 컬렉션 카드`}
+        badgeLabel={detail?.card.rarity ?? item.rarity}
+        onImageError={event => keepCardVisual(event, item.card.id)}
+        presentation="detail"
+        enableDeviceMotion
+        swipeToFlip
+        showControls={false}
+      />
+      <span className="card-collection-swipe-hint"><InlineIcon name="motion" />카드를 좌우로 밀어 뒷면을 확인해 보세요</span>
+      {artistMessage && <section className="card-collection-detail-message" aria-label="아티스트 메시지"><span><InlineIcon name="heart" /></span><div><h2>아티스트 메시지</h2><p>“{artistMessage}”</p></div></section>}
+      <section className="card-collection-detail-info" aria-label="카드 정보">
+        <div className="card-collection-detail-title">
+          <span><strong>{memberName} · {cardName}</strong><small>{detail?.card.rarity ?? item.rarity} · {cardCode}</small></span>
+          <em>보유 {item.copies}장</em>
+        </div>
+        <dl>
+          <div><dt>컬렉션</dt><dd>{item.groupName}</dd></div>
+          <div><dt>카드팩</dt><dd>{item.packName}</dd></div>
+          <div><dt>아티스트</dt><dd>{artistName}</dd></div>
+          <div><dt>멤버</dt><dd>{memberName}</dd></div>
+          {acquiredAt && <div><dt>획득일</dt><dd>{new Date(acquiredAt).toLocaleDateString('ko-KR')}</dd></div>}
+          {cardType && <div><dt>카드 유형</dt><dd>{cardTypeLabel(cardType)}</dd></div>}
+          {acquisitionSourceLabel && <div><dt>획득 경로</dt><dd>{acquisitionSourceLabel}</dd></div>}
+          {detail?.card.issueLimit && <div><dt>발행 수량</dt><dd>{detail.card.issueLimit.toLocaleString()}장</dd></div>}
+        </dl>
+      </section>
+      {futureBenefitPreview && <p className="card-collection-detail-benefit"><InlineIcon name="sparkles" />{futureBenefitPreview}</p>}
+      {handwritingImageUrl && <section className="card-collection-detail-special"><h2>손글씨 특전</h2><img src={handwritingImageUrl} alt={`${memberName} 손글씨 메시지`} /></section>}
+      {(voiceAudioUrl || videoUrl) && <section className="card-collection-detail-special" aria-labelledby="collection-special-media-title">
+        <h2 id="collection-special-media-title">스페셜 미디어</h2>
+        {voiceAudioUrl && <div className="card-collection-detail-player"><b>보이스 메시지</b><audio controls preload="metadata" src={voiceAudioUrl} /></div>}
+        {videoUrl && <div className="card-collection-detail-player"><b>스페셜 비디오</b><video controls muted playsInline preload="metadata" src={videoUrl} /></div>}
+      </section>}
+      {detailError && <div className="card-collection-detail-error"><p>일부 카드 정보를 불러오지 못했어요.</p><button type="button" onClick={() => setDetailAttempt(value => value + 1)}>다시 시도</button></div>}
+    </section>
+  </main>
+}
+
+function CardCollectionRepository({ onBack, onNavigate }: { onBack: () => void, onNavigate: (tab: Tab) => void }) {
+  const [groupId, setGroupId] = useState(cardCollectionGroups[0].id)
+  const [packId, setPackId] = useState(cardCollectionGroups[0].packs[0].id)
+  const [groupMenuOpen, setGroupMenuOpen] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [filter, setFilter] = useState<'all' | 'owned' | 'missing' | 'duplicate'>('all')
+  const [sort, setSort] = useState<'number' | 'rarity' | 'copies'>('number')
+  const [selectedItem, setSelectedItem] = useState<CardCollectionDetailItem | null>(null)
+  const group = cardCollectionGroups.find(item => item.id === groupId) ?? cardCollectionGroups[0]
+  const allPack: CardCollectionPack = {
+    id: 'all',
+    name: '전체 팩',
+    prefix: '',
+    owned: group.owned,
+    total: group.total,
+    slots: group.packs.flatMap(pack => pack.slots.slice(0, pack.total).map(slot => ({ ...slot, sourcePrefix: pack.prefix }))),
+  }
+  const activePack = packId === 'all' ? allPack : group.packs.find(item => item.id === packId) ?? group.packs[0]
+  const rarityOrder = { UR: 4, SR: 3, R: 2, N: 1 }
+  const visibleSlots = [...activePack.slots]
+    .filter(slot => filter === 'all' ? true : filter === 'owned' ? Boolean(slot.card) : filter === 'missing' ? !slot.card : slot.copies > 1)
+    .sort((a, b) => sort === 'rarity' ? rarityOrder[b.rarity] - rarityOrder[a.rarity] || a.number - b.number : sort === 'copies' ? b.copies - a.copies || a.number - b.number : a.number - b.number)
+  const selectGroup = (nextGroup: CardCollectionGroup) => {
+    setGroupId(nextGroup.id)
+    setPackId(nextGroup.packs[0].id)
+    setGroupMenuOpen(false)
+  }
+  if (selectedItem) return <CardCollectionDetail item={selectedItem} onBack={() => setSelectedItem(null)} />
+  return <main className="app-shell card-collection-shell">
+    <header className="card-collection-topbar">
+      <button type="button" onClick={onBack} aria-label="보관함으로 돌아가기"><InlineIcon name="back" /></button>
+      <h1>카드 컬렉션</h1>
+      <span aria-hidden="true" />
+    </header>
+
+    <section className="card-collection-identity">
+      <div className="card-collection-artist"><img src={loginDreamscapeGroup} alt="드림스케이프 로고" /><strong>드림스케이프</strong></div>
+      <div className="card-collection-group-select">
+        <button type="button" aria-haspopup="listbox" aria-expanded={groupMenuOpen} onClick={() => setGroupMenuOpen(open => !open)}>
+          <span><b>{group.displayName}</b><i><em style={{ width: `${group.owned / group.total * 100}%` }} /><small>{group.owned} / {group.total}</small></i></span>
+          <InlineIcon name="chevron" />
+        </button>
+        {groupMenuOpen && <div className="card-collection-group-menu" role="listbox" aria-label="컬렉션 그룹">{cardCollectionGroups.map(item => <button type="button" role="option" aria-selected={item.id === group.id} key={item.id} onClick={() => selectGroup(item)}><b>{item.displayName}</b><small>{item.owned} / {item.total}</small></button>)}</div>}
+      </div>
+    </section>
+
+    <nav className="card-collection-pack-rail" aria-label="카드팩">
+      <button type="button" className={`card-collection-all-packs ${activePack.id === 'all' ? 'active' : ''}`} aria-current={activePack.id === 'all' ? 'true' : undefined} onClick={() => setPackId('all')}><span><InlineIcon name="grid" /></span><b>전체 팩</b></button>
+      {group.packs.map((pack, index) => <button type="button" className={pack.id === activePack.id ? 'active' : ''} aria-current={pack.id === activePack.id ? 'true' : undefined} key={pack.id} onClick={() => setPackId(pack.id)}>
+        <img className={`pack-tone-${index + 1}`} src={dreamscapeCardPack} alt="" />
+        <span><b>{pack.name}</b><small><strong>{pack.owned}</strong> / {pack.total}</small></span>
+      </button>)}
+    </nav>
+
+    <section className="card-collection-catalog">
+      <div className="card-collection-heading">
+        <h2>{activePack.name} 카드 <small>· <strong>{activePack.owned}</strong> / {activePack.total}</small></h2>
+        <div>
+          <label><span className="sr-only">카드 정렬</span><select aria-label="카드 정렬" value={sort} onChange={event => setSort(event.target.value as typeof sort)}><option value="number">카드 번호순</option><option value="rarity">희귀도순</option><option value="copies">보유 수량순</option></select></label>
+          <button type="button" className={filtersOpen || filter !== 'all' ? 'active' : ''} aria-label="카드 필터" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(open => !open)}><NavIcon name="settings" /></button>
+        </div>
+      </div>
+      {filtersOpen && <div className="card-collection-filters" role="group" aria-label="보유 상태 필터">{[
+        ['all', '전체'], ['owned', '보유'], ['missing', '미획득'], ['duplicate', '중복'],
+      ].map(([value, label]) => <button type="button" className={filter === value ? 'active' : ''} aria-pressed={filter === value} key={value} onClick={() => setFilter(value as typeof filter)}>{label}</button>)}</div>}
+      <div className="card-collection-grid">{visibleSlots.map(slot => {
+        const code = `${slot.sourcePrefix ?? activePack.prefix}-${String(slot.number).padStart(2, '0')}`
+        if (!slot.card) return <article className="card-collection-slot missing" key={code} aria-label={`${code} 미획득 카드`}><span className={`card-collection-rarity rarity-${slot.rarity.toLowerCase()}`}>{slot.rarity}</span><img src={mysteryCardImage} alt="" /><b>{code}</b></article>
+        const sourcePack = group.packs.find(pack => pack.prefix === (slot.sourcePrefix ?? activePack.prefix)) ?? activePack
+        return <button type="button" className="card-collection-slot owned" key={code} onClick={() => setSelectedItem({ card: slot.card!, code, rarity: slot.rarity, copies: slot.copies, packName: sourcePack.name, groupName: group.displayName, artistMessage: collectionArtistMessages[slot.card!.member], acquiredAt: '2026-08-19T04:20:00Z', cardType: 'photo', acquisitionSource: 'card_pack', futureBenefitPreview: '이 카드는 추후 컬렉션 특전 해금 조건에 사용될 수 있어요.' })} aria-label={`${code} ${slot.card.member} 카드 상세 보기`}>
+          <span className={`card-collection-rarity rarity-${slot.rarity.toLowerCase()}`}>{slot.rarity}</span>
+          <img src={slot.card.image} alt={`${slot.card.member} ${activePack.name} 카드`} />
+          <em aria-label={`${slot.copies}장 보유`}>{formatCardCopies(slot.copies)}</em><b>{code}</b>
+        </button>
+      })}</div>
+      {visibleSlots.length === 0 && <p className="card-collection-empty">선택한 조건에 맞는 카드가 없어요.</p>}
+    </section>
+    <BottomNavigation active="collection" onNavigate={onNavigate} />
+  </main>
+}
+
+function Collection({ cards: collectionCards, collectionDataReady, summary, benefits, rewards, loading, onSelect, onRedeem, onDiscover, onRewards, onCards, onClaim }: { cards: Card[], collectionDataReady: boolean, summary: CollectionSummary, benefits: CollectionBenefit[], rewards: RewardGrant[], loading: boolean, onSelect: (card: Card) => void, onRedeem: () => void, onDiscover: () => void, onRewards: () => void, onCards: () => void, onClaim: (campaignId: string) => Promise<void> }) {
   const [claimingId, setClaimingId] = useState<string | null>(null)
   const [claimMessage, setClaimMessage] = useState('')
-  const artists = Array.from(new Set(collectionCards.map(card => card.artist)))
-  const filteredCards = artistFilter === '전체' ? collectionCards : collectionCards.filter(card => card.artist === artistFilter)
   const sourceCards = collectionDataReady ? collectionCards : import.meta.env.DEV ? fallbackCollectionCards : []
-  const recentCards = [...sourceCards].sort((a, b) => sortKind === 'rarity' ? b.id.localeCompare(a.id) : sortKind === 'acquired' ? b.title.localeCompare(a.title) : 0).filter((card, index, cards) => {
-    if (filterKind === 'all') return true
-    const count = cards.filter(item => item.title === card.title).length
-    if (filterKind === 'duplicate') return count > 1
-    if (filterKind === 'rare') return /ur|rare|special/i.test(`${card.id} ${card.title}`)
-    return index === 0
-  }).slice(0, 8)
+  const recentCards = sourceCards.slice(0, 4)
   const duplicateCounts = recentCards.reduce<Record<string, number>>((counts, card) => {
     counts[card.title] = (counts[card.title] ?? 0) + 1
     return counts
   }, {})
-  const completedCollections = benefits.filter(benefit => benefit.status === 'unlocked').length
-  const inProgressCollections = benefits.filter(benefit => benefit.status === 'locked').length
-  const rareCards = collectionCards.filter(card => /ur|rare/i.test(`${card.id} ${card.title}`)).length
   const claimedRewards = rewards.filter(reward => reward.claimedAt)
   const claim = async (benefit: CollectionBenefit) => {
     if (!benefit.campaignId) return
@@ -1617,11 +1971,11 @@ function Collection({ cards: collectionCards, collectionDataReady, summary, bene
       </button>
       <button type="button" className="collection-reward-inventory-entry" onClick={onRewards}>
         <span className="collection-reward-thumbnails" aria-hidden="true">{claimedRewards.length > 0 ? claimedRewards.slice(0, 4).map(reward => <AuthenticatedImage key={reward.id} src={inventoryRewardArtwork(reward)} fallback={inventoryRewardFallbacks[reward.type]} alt="" />) : <span className="collection-reward-empty"><InlineIcon name="gift" /></span>}</span>
-        <span className="collection-reward-entry-copy"><small>보유 보상 {claimedRewards.length}개</small><b>패스 보상 인벤토리</b><em>팬 패스에서 받은 아이템을 장착하고 사용해요.</em></span>
+        <span className="collection-reward-entry-copy"><small>보유 아이템 {claimedRewards.length}개</small><b>팬 컬렉션</b><em>팬 활동으로 모은 아이템을 한곳에서 관리해요.</em></span>
         <InlineIcon name="chevron" />
       </button>
       <section className="collection-recent-section" aria-labelledby="collection-recent-title">
-        <div className="section-heading"><h2 id="collection-recent-title">최근 수집 카드</h2><div className="collection-recent-actions"><button type="button" className="collection-filter-trigger" onClick={() => setShowFilter(true)}><InlineIcon name="settings" />정렬 및 필터</button><button type="button" onClick={() => setShowAll(true)}>전체 보기 <InlineIcon name="chevron" /></button></div></div>
+        <div className="section-heading"><h2 id="collection-recent-title">최근 수집 카드</h2><button type="button" onClick={onCards}>전체 보기 <InlineIcon name="chevron" /></button></div>
         <div className="collection-recent-grid">{recentCards.map((card, index) => {
           const copies = duplicateCounts[card.title] ?? 1
           const previousCopies = recentCards.slice(0, index).filter(item => item.title === card.title).length
@@ -1635,24 +1989,9 @@ function Collection({ cards: collectionCards, collectionDataReady, summary, bene
           </button>
         })}</div>
       </section>
-      <button type="button" className="collection-manage-card" onClick={onRedeem}><span className="collection-manage-icon"><InlineIcon name="card" /></span><span><b>카드 상세 관리</b><small>보유 카드 정렬, 잠금, 판매 설정</small></span><InlineIcon name="chevron" /></button>
-      <section className="collection-summary-section" aria-labelledby="collection-summary-title">
-        <div className="section-heading"><h2 id="collection-summary-title">컬렉션 요약</h2><button type="button" onClick={() => setShowAll(true)}>전체 보기 <InlineIcon name="chevron" /></button></div>
-        <div className="collection-summary-grid">
-          <article><InlineIcon name="card" /><span>총 카드</span><strong>{summary.ownedCount}장</strong></article>
-          <article><InlineIcon name="check" /><span>완료 컬렉션</span><strong>{completedCollections}개</strong></article>
-          <article><InlineIcon name="dot" /><span>진행 중</span><strong>{inProgressCollections}개</strong></article>
-          <article><InlineIcon name="gift" /><span>희귀 카드</span><strong>{rareCards}장</strong></article>
-        </div>
-      </section>
     </section>
-    {showAll && <section className="collection-details" aria-label="전체 컬렉션">
-      <div className="section-heading collection-heading"><h2>내 컬렉션</h2><div className="collection-heading-actions">{filteredCards.length > 0 && <button type="button" className="collection-register" onClick={onRedeem}><InlineIcon name="plus" />카드 등록</button>}{filteredCards.length > 4 && <button type="button" onClick={() => setShowAll(false)}>최근 카드만 보기</button>}</div></div>
-      {artists.length > 0 && <div className="collection-filters" role="tablist" aria-label="컬렉션 아티스트 필터"><button role="tab" aria-selected={artistFilter === '전체'} className={artistFilter === '전체' ? 'active' : ''} onClick={() => setArtistFilter('전체')}>전체</button>{artists.map(artist => <button role="tab" aria-selected={artistFilter === artist} className={artistFilter === artist ? 'active' : ''} key={artist} onClick={() => setArtistFilter(artist)}>{artist}</button>)}</div>}
-      {filteredCards.length > 0 ? <div className="card-grid collection-grid">{filteredCards.map(card => <button className="card-tile" key={card.id} aria-label={`카드 이미지 ${card.id} ${card.member}`} onClick={() => onSelect(card)}><img src={card.image} alt={`${card.title} 카드 · ${card.member}`} onError={event => keepCardVisual(event, card.id)} /><span>{card.id}</span><b>{card.member}</b></button>)}</div> : <div className="empty-collection"><div className="empty-collection-copy"><InlineIcon name="plus" /><b>아직 카드가 없어요</b><small>카드를 등록하거나 탐색해서 컬렉션을 시작해 보세요.</small></div><div className="empty-collection-actions"><button type="button" className="primary" onClick={onRedeem}>카드 등록하기</button><button type="button" className="outline" onClick={onDiscover}>카드 탐색하기</button></div></div>}
-    </section>}
+    {sourceCards.length === 0 && <div className="empty-collection"><div className="empty-collection-copy"><InlineIcon name="plus" /><b>아직 카드가 없어요</b><small>카드를 등록하거나 탐색해서 컬렉션을 시작해 보세요.</small></div><div className="empty-collection-actions"><button type="button" className="primary" onClick={onRedeem}>카드 등록하기</button><button type="button" className="outline" onClick={onDiscover}>카드 탐색하기</button></div></div>}
     {benefits.length > 0 && <section className="benefit-section"><div className="section-heading"><h2>컬렉션 완성 특전</h2></div><div className="benefit-list">{benefits.map(benefit => <article className={`benefit-card ${benefit.status}`} key={`${benefit.campaignId ?? benefit.artistId ?? 'fanfolio'}-${benefit.seasonName}`}><div><span className="detail-badge">{benefit.claimed ? '수령 완료' : benefit.status === 'unlocked' ? '해금 완료' : '진행 중'}</span><h3>{benefit.benefit.title}</h3><p>{benefit.benefit.description}</p></div><div><strong>{benefit.ownedCount}/{benefit.requiredCount}</strong>{benefit.claimable && benefit.campaignId && <button className="outline" onClick={() => void claim(benefit)} disabled={claimingId === benefit.campaignId}>{claimingId === benefit.campaignId ? '수령 중...' : '특전 받기'}</button>}{benefit.claimed && benefit.downloadUrl && <a className="outline benefit-download" href={resolveApiUrl(benefit.downloadUrl)} download>특전 다운로드</a>}</div></article>)}</div>{claimMessage && <p className="form-message">{claimMessage}</p>}</section>}
-    {showFilter && <CollectionFilterSheet filterKind={filterKind} sortKind={sortKind} onFilter={setFilterKind} onSort={setSortKind} onClose={() => setShowFilter(false)} />}
   </>
 }
 
@@ -1739,19 +2078,6 @@ function NotificationSettings({ onBack }: { onBack: () => void }) {
       <button type="button" className="notification-save" onClick={() => void save()} disabled={loading || saving || emailEnabled === null}>{saving ? '저장 중…' : '변경사항 저장'}</button>
     </section>
   </main>
-}
-
-function CollectionFilterSheet({ filterKind, sortKind, onFilter, onSort, onClose }: { filterKind: 'all' | 'new' | 'duplicate' | 'rare', sortKind: 'latest' | 'rarity' | 'acquired', onFilter: (value: 'all' | 'new' | 'duplicate' | 'rare') => void, onSort: (value: 'latest' | 'rarity' | 'acquired') => void, onClose: () => void }) {
-  const filters = [{ value: 'all', label: '전체', icon: 'card' as const }, { value: 'new', label: '신규', icon: 'sparkles' as const }, { value: 'duplicate', label: '중복', icon: 'grid' as const }, { value: 'rare', label: '희귀', icon: 'star' as const }]
-  const sorts = [{ value: 'latest', label: '최신순' }, { value: 'rarity', label: '등급순' }, { value: 'acquired', label: '획득일순' }]
-  return <div className="collection-filter-backdrop" onClick={onClose}>
-    <section className="collection-filter-sheet" role="dialog" aria-modal="true" aria-labelledby="collection-filter-title" onClick={event => event.stopPropagation()}>
-      <span className="collection-filter-handle" aria-hidden="true" /><header><h2 id="collection-filter-title">카드 정렬 및 필터</h2><button type="button" aria-label="닫기" onClick={onClose}>×</button></header>
-      <div className="collection-filter-grid">{filters.map(item => <button type="button" key={item.value} className={filterKind === item.value ? 'is-selected' : ''} aria-pressed={filterKind === item.value} onClick={() => onFilter(item.value as typeof filterKind)}>{filterKind === item.value && <span className="collection-filter-check" aria-hidden="true"><InlineIcon name="check" /></span>}<span className="collection-filter-icon" aria-hidden="true"><InlineIcon name={item.icon} /></span><span>{item.label}</span></button>)}</div>
-      <h3>정렬 기준</h3><div className="collection-sort-grid">{sorts.map(item => <button type="button" key={item.value} className={sortKind === item.value ? 'is-selected' : ''} aria-pressed={sortKind === item.value} onClick={() => onSort(item.value as typeof sortKind)}>{sortKind === item.value && <span className="collection-filter-check" aria-hidden="true"><InlineIcon name="check" /></span>}<span>{item.label}</span></button>)}</div>
-      <button type="button" className="collection-filter-apply" onClick={onClose}>적용하기</button>
-    </section>
-  </div>
 }
 
 function Discover() {

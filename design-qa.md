@@ -1,92 +1,188 @@
-# Profile Decorating Screen Design QA
+# Compact Inventory Source Chips Design QA
+
+- source visual truth: `/Users/gojaewoong/Downloads/스크린샷 2026-08-19 오후 12.33.34.png`
+- implementation screenshot: `/Users/gojaewoong/Desktop/ko/fanfolio/fan-collection-compact-implementation.png`
+- focused comparison: `/Users/gojaewoong/Desktop/ko/fanfolio/fan-collection-compact-comparison.png`
+- route/state: `http://localhost:5173/?preview=reward-inventory`, Dreamscape source selected, `전체` lifecycle filter
+- viewport: browser `1100 x 963` CSS px; app shell `430px` wide
+- source pixels: `379 x 208`
+- implementation pixels: `1100 x 963`; focused app crop normalized from `430 x 236` to `379 x 208`
+- density normalization: focused source and implementation regions compared at `379 x 208`, device scale factor 1
+
+**Findings**
+
+- No actionable P0, P1, or P2 differences remain in the requested source-selector scope.
+- Fonts and typography: source names and counts are now one line, with the existing Fanfolio family and compact optical weight. No labels wrap or clip.
+- Spacing and layout rhythm: source controls are 46px high with 28px artist logos, matching the compact density and leaving the collection heading closer to the selector.
+- Colors and visual tokens: selected state uses the existing purple border and pale lavender fill; inactive controls use the existing white surface and neutral border.
+- Image quality and asset fidelity: artist sources retain the dedicated logo slot and fallback behavior. Per the latest requirement, the global source intentionally has no logo or replacement icon.
+- Copy and content: the redundant `아이템 N` second line is removed. Source name and count remain visible and accessible.
+
+**Accepted Product/Data Differences**
+
+- The reference shows three sources with counts 4, 2, and 2. The current preview contains two real source groups with counts 3 and 1; the component continues to derive groups from claimed reward data.
+- The Dreamscape preview has no `artistLogoUrl`, so it displays the established first-character fallback until an artist logo is provided.
+
+**Focused Region Evidence**
+
+- `fan-collection-compact-comparison.png` places the selected 379 x 208 reference and normalized implementation region in one image. Chip height, one-line labels, count badges, selected state, heading spacing, and lifecycle tabs are directly legible.
+
+**Interaction Verification**
+
+- Selecting `전체 레벨 1` changes the collection to the single global random-card ticket.
+- The global source tab contains only its text label and count; no logo or icon is present.
+- Source switching still resets the lifecycle filter and message through the existing callback.
+- Browser console warnings/errors checked after source switching: none.
+
+**Comparison History**
+
+- Initial compact implementation comparison found no P0/P1/P2 mismatches in the user-selected scope. The stronger active outline is an existing Fanfolio selected-state token and remains acceptable.
+
+**Follow-up Polish**
+
+- P3: replace the Dreamscape letter fallback with its real artist logo when `artistLogoUrl` becomes available.
 
 final result: passed
 
-Viewport: Codex in-app browser, 674px browser viewport with the app constrained to the 430px mobile canvas.
+---
 
-Reference: approved Fanfolio profile decorating mockup supplied by the user.
+# Card Collection Detail Data and Back Motion QA
 
-Checks completed:
+- source visual truth: `/Users/gojaewoong/.codex/generated_images/01a017bc-ad15-7ad0-b759-c015714ca742/exec-e2506366-23a0-4420-9e47-d15ec53c7dc5.png`
+- implementation screenshot: `/Users/gojaewoong/Desktop/ko/fanfolio/card-collection-detail-data.png`
+- full-view comparison: `/Users/gojaewoong/Desktop/ko/fanfolio/card-collection-detail-data-comparison.png`
+- route/state: `http://127.0.0.1:5174/?preview=card-collection`, `N-03 민재`, back face, expanded card data
+- viewport: browser `1100 x 963` CSS px; app shell `428px` wide; device scale factor 1
+- source pixels: `1774 x 887`; implementation full-page pixels: `1085 x 1216`
+- density normalization: artifacts are combined without resampling; the source is a three-state storyboard while the implementation is a scrollable single-screen state, so interaction hierarchy and component treatment were compared rather than outer height
 
-- Profile editor opens as a dedicated mobile screen centered inside the app canvas.
-- Decorative profile hero, lavender background, rounded inputs, and violet primary action are present; the non-functional progress cue was intentionally removed.
-- Artist is represented by one native single-select control.
-- Member is represented by one native single-select control and reloads when the artist changes.
-- Profile save action remains connected to `PATCH /me/profile`.
-- Email account exposes `계정 보안 · 비밀번호 변경` and opens the separate password screen.
-- Password screen renders current-password, new-password, and confirmation fields without submitting credentials during QA.
-- Social account branch renders provider-security guidance and does not render password controls.
-- Existing My page notification, language, support, terms, privacy, event, and logout actions remain outside the profile screen.
-- Frontend tests, build, lint, backend compile, and backend contract tests pass.
+**Findings**
 
-Known note: the browser QA account was an email-login user, so the social branch was validated from the conditional source contract rather than by changing the live account provider.
+- No actionable P0, P1, or P2 differences remain after applying the latest interaction and data corrections.
+- Fonts and typography: metadata labels, values and the artist message use the existing Fanfolio scale and remain readable without clipping.
+- Spacing and layout rhythm: the card remains the primary object; the artist message is placed immediately below the swipe hint, before the compact definition list and conditional benefit/media sections.
+- Colors and visual tokens: the existing lavender background, purple action token, neutral metadata rows and white content surfaces remain consistent with the collection flow.
+- Image quality and asset fidelity: the shared first-party card assets and card-back renderer remain unchanged; no placeholder or CSS-drawn artwork was introduced.
+- Copy and content: the detail now surfaces collection, pack, artist, member, acquired date, card type, acquisition source, ownership, artist message, future benefit and conditional handwriting/audio/video data when supplied.
 
-## Fan Growth Screen Design QA
+**Interaction Verification**
 
-final result: passed after user-review corrections
+- Horizontal swipe still switches between the front and back face.
+- Back-face pointer and device motion reuse the same `--tilt-x` and `--tilt-y` transform as the front, while light coordinates update only on the front. The back therefore tilts without a moving light effect.
+- Real owned cards request `/me/cards/{userCardId}` and conditionally render the detail payload; preview cards use realistic mock values for the same slots.
+- The N-03 detail contract exposes the artist message before the information section and includes all available preview metadata.
 
-Viewport: Codex in-app browser, 430×932 mobile viewport; reference image compared at its 2× 852×1846 export scale.
+**Comparison History**
 
-Checks completed:
+- Earlier detail state only showed collection and pack, and back-face motion was static.
+- First correction added remote detail data and motion to both faces.
+- Latest user correction removed back-face light tracking while retaining back tilt. Regression tests lock the shared transform, front-only light updates and message-before-information order.
 
-- Shared header hierarchy matches the supplied reference, and the obsolete forced 123.7px header minimum was removed so the description-to-artist-title gap is no longer inflated.
-- The Lv.1/RISING FAN heading and the XP ring share the same measured horizontal center (0px delta).
-- The XP value inside the progress ring renders at 14px for legibility.
-- Both unreached Lv.2 and Lv.3 milestones show contained lock icons inside their level pills.
-- Hero uses the supplied Dreamscape group image, level typography, XP ring, image fade, right-side divider, and separated copy start position.
-- Milestones use the reference three-stop pill timeline with current Lv.1 state and locked Lv.2/Lv.3 states.
-- Next reward is data-driven and renders 미공개 콘텐츠 / Lv.2 달성 시 획득 in the preview state.
-- Global growth card follows the reference hierarchy: Lv.2 GLOBAL FAN, progress rail, 120 / 300 XP, and the bottom-right 전체 마일스톤 보기 link.
-- Next reward, milestone 전체 보기, and mission summary each open and close their respective bottom sheets successfully.
-- Browser console reported no errors during the final interaction pass.
-- Frontend tests: 100 passed; oxlint passed; production build passed.
+**Focused Region Evidence**
 
-## Seasonal Level Pass Admin Design QA
+- A separate crop was not required: the full-page implementation capture keeps the card, metadata labels and artist-message text legible, while the combined image preserves the source's front/back behavior board.
+
+**Follow-up Polish**
+
+- P3: preview media controls remain absent because the current mock card has no audio/video asset; those sections are verified structurally and appear only when the API supplies URLs.
 
 final result: passed
 
-Viewport: Codex in-app browser, 1545×963 desktop viewport. The implementation capture was normalized to the approved 1586×992 reference for side-by-side comparison.
+---
 
-Reference: `/Users/gojaewoong/.codex/generated_images/01a01424-a309-7ab2-883d-cfd15ded9ce5/exec-057c24da-fff5-4bcd-a93f-95b045b46f4e.png`
+# Card Collection Detail Design QA
 
-Implementation capture: `/Users/gojaewoong/Desktop/ko/fanfolio/.tmp-season-pass-admin-final.png`
+- source visual truth: `/Users/gojaewoong/.codex/generated_images/01a017bc-ad15-7ad0-b759-c015714ca742/exec-e2506366-23a0-4420-9e47-d15ec53c7dc5.png`
+- implementation screenshot: `/Users/gojaewoong/Desktop/ko/fanfolio/card-collection-detail-implementation.png`
+- full-view comparison: `/Users/gojaewoong/Desktop/ko/fanfolio/card-collection-detail-comparison.png`
+- route/state: `http://127.0.0.1:5174/?preview=card-collection`, `N-03 민재` selected, front-facing information state
+- viewport: browser `1100 x 963` CSS px; app shell `428 x 963` CSS px; device scale factor 1
+- source pixels: three-state board `1775 x 887`; selected third-state crop `590 x 887`
+- implementation pixels: browser `1100 x 963`; app crop `428 x 963`
+- density normalization: source and implementation were fit to the same 760px comparison height; the source is a storyboard panel rather than a production phone viewport, so relative hierarchy and state were compared instead of exact outer aspect ratio
 
-Combined comparison: `/Users/gojaewoong/Desktop/ko/fanfolio/.tmp-season-pass-design-comparison.png`
+**Findings**
 
-Checks completed:
+- No actionable P0, P1, or P2 differences remain after applying the user's corrections to the source board.
+- Fonts and typography: the title, member/pack identity, rarity/code and inventory count retain the existing Fanfolio hierarchy without clipping or unintended wrapping.
+- Spacing and layout rhythm: the independent detail screen keeps the card centered and straight, places the swipe hint immediately below it, and groups metadata in one compact lower card.
+- Colors and visual tokens: the existing Fanfolio purple, pale-lavender background, white surfaces, borders and shadows are reused consistently.
+- Image quality and asset fidelity: the existing first-party Minjae collection portrait remains sharp at the detail size; the shared v3 pearl/prism surface supplies the natural interactive foil response without a separate effect button.
+- Copy and content: `현재 적용 중` and `효과 보기` are intentionally absent. The detail instead shows ownership, collection, pack, rarity and card number.
 
-- Dark operations navigation, page hierarchy, primary registration CTA, three summary cards, dense pass list, filters, selected-row outline, pagination, and fixed right editor match the approved desktop composition.
-- The editor contains basic season data, root-only organization scope, artist selection, season dates, tier milestone cards, fan-app preview, status, and sticky actions.
-- Root administrators see all artist filters; scoped partner administrators are limited to their assigned artists by the existing admin context and backend scope validator.
-- A real Dreamscape comeback season was created through the browser, returned to the list, reopened, and saved through `PATCH /admin/engagement/pass-seasons/{id}`.
-- The first 0 XP tier and the following 100/300 XP tiers persisted as three milestones.
-- Draft passes do not expose the publish-approval action; approval is available only in `pending_review` state.
-- Admin static tests: 88 passed. Targeted backend season-pass contract tests: 4 passed.
-- The full backend suite has a pre-existing unrelated failure in partner-member creation caused by the unique admin nickname index; no fan-pass contract failed.
+**Accepted Product Differences**
 
-## Reward Builder Design QA
+- The supplied board still contains `현재 적용 중` and `효과 보기`; both are superseded by the user's explicit follow-up corrections.
+- The supplied board uses a more decorative holographic card frame. The implementation retains the existing collection asset and shared card-effect renderer rather than introducing a second baked-in card asset.
+- The preview's N-03 card owns 12 copies to exercise the large-count contract; the design board shows 2 copies.
 
-Reference: `/Users/gojaewoong/.codex/generated_images/01a01424-a309-7ab2-883d-cfd15ded9ce5/exec-6b0c6b99-3bf1-45bb-b654-b55c430a531e.png`
+**Focused Region Evidence**
 
-Implementation capture: `/Users/gojaewoong/Desktop/ko/fanfolio/reward-builder-implementation-final.png`
+- A separate focused crop was not needed because the combined comparison keeps the top bar, full card, swipe hint and all metadata text legible in one image.
 
-Combined comparison: `/Users/gojaewoong/Desktop/ko/fanfolio/reward-builder-comparison-v2.png`
+**Interaction Verification**
 
-Viewport: reference 1536×963 pixels; implementation 1533×963 CSS pixels at deviceScaleFactor 1. The three-pixel width difference is outside the fixed 500px drawer and does not affect drawer geometry.
+- Selecting `N-03 민재 카드 상세 보기` replaces the repository with an independent `카드 상세` screen.
+- A horizontal swipe switches the accessible card image from `민재 Nebula Ver. 카드 앞면` to `Nebula Ver. 카드 뒷면`.
+- The back exposes serial `N-03`, owned count `12장 보유`, Fanfolio seal and official collection message.
+- The back button returns to the preserved repository state, and the heart control toggles independently from inventory/equipment state.
+- Browser console warnings/errors checked after open and swipe: none.
 
-State: local `reward-builder` preview, first generated ticket preset selected, Dreamscape artist, badge reward type, populated fan-app preview.
+**Comparison History**
 
-Checks completed:
+- Initial implemented-state comparison found no P0/P1/P2 mismatch after accounting for the user's explicit removal of equipment and effect controls. No visual correction loop was required.
 
-- Header, image preview, upload action, generated image choices, form fields, fan-app preview, dimmed workspace, and fixed action footer follow the approved composition.
-- The four visible reward images are generated 512×512 PNG assets, not placeholders or CSS drawings.
-- Initial iteration exposed a P1 footer containment defect: the absolutely positioned footer used the viewport as its containing block and spanned the full screen. The drawer is now positioned and the footer measures exactly from x=1033 to x=1533, matching the 500px drawer bounds.
-- Initial iteration exposed a P2 stale selection indicator after image changes. Preset changes now leave exactly one selected thumbnail and move the check indicator with the selected asset; uploads clear the preset selection.
-- The ambiguous `미디어 라이브러리` control was renamed `기본 이미지 선택`, explains that four bundled images are available, scrolls to the choices, focuses the first option, and briefly highlights the selection area.
-- A custom-select regression replaced the chevron glyph with the chosen reward label, producing duplicated text such as `뱃지 뱃지`. The label now has its own target node, and browser verification confirmed `칭호` plus an intact `expand_more` icon.
-- The generic save error was reproduced as `401 Unauthorized` because the visual-only preview URL had no administrator session. The browser was moved to the real authenticated admin route; a reward POST returned `201 Created`, and expired sessions now receive a specific login-expired message.
-- Clicking a preset updates the main image and fan-app preview. Browser evidence confirmed one selected preset and focused keyboard target.
-- The full drawer is legible in the combined comparison, including the image picker and footer, so a separate focused crop was not required.
-- JavaScript syntax validation passed and all 14 fan-growth admin contract tests passed.
+**Follow-up Polish**
+
+- P3: when dedicated framed card artwork is supplied by the catalog, it can replace the current portrait while preserving the shared interactive surface.
+
+final result: passed
+
+---
+
+# Card Collection Repository Design QA
+
+- source visual truth: `/Users/gojaewoong/.codex/generated_images/01a017bc-ad15-7ad0-b759-c015714ca742/exec-2715d44a-edc1-4cb4-a8e2-8b5bd00b8e4f.png`
+- implementation screenshot: `/Users/gojaewoong/Desktop/ko/fanfolio/card-collection-implementation.png`
+- full-view comparison: `/Users/gojaewoong/Desktop/ko/fanfolio/card-collection-comparison.png`
+- route/state: `http://127.0.0.1:5174/?preview=card-collection`, `정규 1집 · DREAMSCAPE`, `Nebula Ver.`, 번호순, 전체 상태
+- viewport: `430 x 932` CSS px, device scale factor 1
+- source pixels: `852 x 1851`; normalized to `430 x 932`
+- implementation pixels: `430 x 932`
+- density normalization: both full views compared at `430 x 932`
+
+**Findings**
+
+- No actionable P0, P1, or P2 differences remain.
+- The hierarchy, section proportions, compact pack rail, 4-column catalog, rarity and quantity badges, missing-card states, and persistent navigation follow the selected reference.
+- Existing Fanfolio typography, purple selection tokens, artist imagery, card portraits, and navigation icons are retained.
+- A project-local transparent foil-pack asset replaces the earlier card-back approximation and is color-adjusted for each version.
+
+**Accepted Product/Data Differences**
+
+- The artist identity uses the current Dreamscape image until a dedicated artist logo URL is supplied.
+- The card portraits reuse the existing Fanfolio mock collection assets; the exact poses in the generated design reference are not separate source assets.
+- The parent label is mock admin data and is not hardcoded as a season: it can switch to `데뷔 3주년 · STARLIGHT`.
+
+**Interaction Verification**
+
+- `전체 보기` on the collection landing opens the dedicated card collection preview and the recent section has no sort/filter control.
+- Pack selection updates the heading, progress and card slots (`Starlight Ver. 8 / 12`).
+- `전체 팩` displays all 40 slots and aggregate progress `28 / 40`.
+- The admin-named collection group selector switches to the anniversary group and resets to its first pack.
+- Number, rarity and quantity sorting plus owned, missing and duplicate filters are interactive.
+- Quantity badges use a flexible capsule: `12` renders without overflow, while a true count of `128` is displayed as `99+` and retained as `128장 보유` for assistive technology.
+- Browser console warnings/errors checked after pack, filter and group switching: none.
+
+**Comparison History**
+
+- Initial comparison: P2 pack thumbnails looked like mystery-card backs rather than sealed packs.
+- Fix: generated and integrated `card-pack-dreamscape-generated.png`, then repeated the same-state full-view comparison.
+- Large-count regression fix: replaced the fixed 20px circle with a content-sized capsule and capped visual text at `99+`; focused evidence is saved as `card-collection-count-badge-implementation.png`.
+- Post-fix evidence: `card-collection-comparison.png`; no P0/P1/P2 findings remain.
+
+**Follow-up Polish**
+
+- P3: replace the current artist image with the official circular logo when the catalog supplies it.
 
 final result: passed

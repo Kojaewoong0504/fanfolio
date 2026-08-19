@@ -6,6 +6,7 @@ const appSource = await readFile(new URL('../src/App.tsx', import.meta.url), 'ut
 const appCssSource = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
 const referenceCssSource = await readFile(new URL('../src/reference.css', import.meta.url), 'utf8')
 const cardVisualSource = await readFile(new URL('../src/utils/cardVisual.ts', import.meta.url), 'utf8')
+const interactiveCardSource = await readFile(new URL('../src/components/InteractiveCollectibleCard.tsx', import.meta.url), 'utf8')
 
 test('home foregrounds the signed-in fan collection and keeps its primary actions working', () => {
   assert.match(appSource, /`member:\$\{card\.memberName/)
@@ -62,27 +63,98 @@ test('collection spotlight styles create the selected editorial hierarchy and mo
   assert.match(appCssSource, /@media\(max-width:360px\)/)
 })
 
-test('collection reference composition exposes progress, recent cards, management, and summary sections', () => {
+test('collection landing keeps recent cards concise and opens the dedicated card repository', () => {
   assert.match(appSource, /className="collection-reference"/)
   assert.match(appSource, /className="collection-progress-card"/)
   assert.match(appSource, /className="app-header-description"/)
   assert.match(appSource, /className="collection-recent-grid"/)
-  assert.match(appSource, /className="collection-manage-card"/)
-  assert.match(appSource, /className="collection-summary-grid"/)
   assert.match(appSource, /컬렉션 진행률/)
-  assert.match(appSource, /카드 상세 관리/)
-  assert.match(appSource, /총 카드/)
-  assert.match(appSource, /완료 컬렉션/)
-  assert.match(appSource, /진행 중/)
-  assert.match(appSource, /희귀 카드/)
-  assert.match(appSource, /dot: 'M12 3\.5a8\.5 8\.5/)
-  assert.match(appSource, /onClick=\{\(\) => setShowAll\(true\)\}>전체 보기/)
+  assert.match(appSource, /onClick=\{onCards\}>전체 보기/)
+  assert.doesNotMatch(appSource, /className="collection-filter-trigger"/)
+  assert.doesNotMatch(appSource, /className="collection-manage-card"/)
+  assert.doesNotMatch(appSource, /className="collection-summary-grid"/)
   assert.match(appSource, /const sourceCards = collectionDataReady \? collectionCards : import\.meta\.env\.DEV \? fallbackCollectionCards : \[\]/)
+  assert.match(appSource, /const recentCards = sourceCards\.slice\(0, 4\)/)
   assert.match(referenceCssSource, /Collection reference contract[\s\S]*?\.collection-recent-grid[\s\S]*?grid-template-columns:\s*repeat\(4/)
   assert.match(referenceCssSource, /main\.collection-shell \.collection-reference-card img \{[^}]*height:calc\(100% - 24px\)!important;/)
   assert.doesNotMatch(referenceCssSource, /main\.collection-shell \.collection-reference-card img \{[^}]*height:(?:112|106)px!important;/)
-  assert.match(referenceCssSource, /Collection reference contract[\s\S]*?\.collection-summary-grid[\s\S]*?grid-template-columns:\s*repeat\(4/)
   assert.match(referenceCssSource, /main\.collection-shell \.app-header \{ min-height:0!important; margin-bottom:0!important; \}/)
+})
+
+test('card collection repository supports admin-named groups, version packs, and a four-column catalog', () => {
+  assert.match(appSource, /window\.location\.pathname === '\/collection\/cards'/)
+  assert.match(appSource, /preview === 'card-collection'/)
+  assert.match(appSource, /function CardCollectionRepository\(/)
+  assert.match(appSource, /정규 1집 · DREAMSCAPE/)
+  assert.match(appSource, /Nebula Ver\./)
+  assert.match(appSource, /Starlight Ver\./)
+  assert.match(appSource, /Midnight Ver\./)
+  assert.match(appSource, /className="card-collection-pack-rail"/)
+  assert.match(appSource, /className="card-collection-grid"/)
+  assert.match(appSource, /aria-label="카드 정렬"/)
+  assert.match(appSource, /aria-label="카드 필터"/)
+  assert.match(referenceCssSource, /\.card-collection-grid\s*\{[^}]*grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/s)
+  assert.match(referenceCssSource, /\.card-collection-slot\.missing/)
+  assert.match(appSource, /if \(pathname === '\/collection\/cards'\) return 'collection'/)
+})
+
+test('card collection copy badges remain readable for large quantities', () => {
+  assert.match(appSource, /function formatCardCopies\(copies: number\)/)
+  assert.match(appSource, /copies > 99 \? '99\+' : String\(Math\.max\(0, copies\)\)/)
+  assert.match(appSource, /copies: acquired \? \[1, 1, 12, 1, 1, 128/)
+  assert.match(appSource, /<em aria-label=\{`\$\{slot\.copies\}장 보유`\}>\{formatCardCopies\(slot\.copies\)\}<\/em>/)
+  assert.match(referenceCssSource, /\.card-collection-slot > em \{[^}]*width:auto;[^}]*min-width:20px;[^}]*padding:0 5px;[^}]*white-space:nowrap;/s)
+})
+
+test('owned collection cards open a dedicated detail screen with collection context', () => {
+  assert.match(appSource, /type CardCollectionDetailItem =/)
+  assert.match(appSource, /function CardCollectionDetail\(/)
+  assert.match(appSource, /if \(selectedItem\) return <CardCollectionDetail/)
+  assert.match(appSource, /groupName:\s*group\.displayName/)
+  assert.match(appSource, /packName:\s*sourcePack\.name/)
+  assert.match(appSource, /copies:\s*slot\.copies/)
+  assert.match(appSource, /<strong>\{memberName\} · \{cardName\}<\/strong>/)
+  assert.match(appSource, /<dt>컬렉션<\/dt><dd>\{item\.groupName\}<\/dd>/)
+  assert.doesNotMatch(appSource, /card-collection-detail[\s\S]{0,1200}현재 적용 중/)
+})
+
+test('collection card detail flips by horizontal swipe and hides manual effect controls', () => {
+  assert.match(appSource, /swipeToFlip/)
+  assert.match(appSource, /showControls=\{false\}/)
+  assert.match(appSource, /카드를 좌우로 밀어 뒷면을 확인해 보세요/)
+  assert.match(interactiveCardSource, /Math\.abs\(deltaX\) >= 42/)
+  assert.match(interactiveCardSource, /setVisibleSide\(current => current === 'front' \? 'back' : 'front'\)/)
+  assert.match(interactiveCardSource, /showControls = true/)
+  assert.match(interactiveCardSource, /\{showControls && presentation === 'detail'/)
+})
+
+test('both collectible card faces respond to pointer and device motion', () => {
+  assert.match(interactiveCardSource, /const canTilt = visibleSide === 'back' \|\| effects\.front\.interaction !== 'static'/)
+  assert.match(interactiveCardSource, /if \(canTilt\) \{[\s\S]*?--tilt-x[\s\S]*?--tilt-y/)
+  assert.match(interactiveCardSource, /if \(visibleSide === 'front'\) \{[\s\S]*?--light-x[\s\S]*?--light-y/)
+  assert.match(interactiveCardSource, /if \(!deviceMotionEnabled \|\| reducedEffects \|\| !supportsDeviceMotion\(\)\) return/)
+  assert.doesNotMatch(interactiveCardSource, /visibleSide !== 'front' \|\| reducedEffects/)
+  assert.match(appCssSource, /\.fan-card-collectible\.back\{[^}]*transform:perspective\(900px\) rotateX\(var\(--tilt-x\)\) rotateY\(var\(--tilt-y\)\)/)
+})
+
+test('collection detail renders the data supplied by an owned card', () => {
+  assert.match(appSource, /apiFetch<\{ ok: true, data: UserCardDetail \}>\(`\/me\/cards\/\$\{item\.card\.userCardId\}`\)/)
+  assert.match(appSource, /<h2>아티스트 메시지<\/h2>/)
+  assert.match(appSource, /detail\?\.card\.signatureText \?\? item\.artistMessage/)
+  assert.match(appSource, /<dt>획득일<\/dt>/)
+  assert.match(appSource, /<dt>카드 유형<\/dt>/)
+  assert.match(appSource, /<dt>획득 경로<\/dt>/)
+  assert.match(appSource, /detail\?\.card\.handwritingImageUrl/)
+  assert.match(appSource, /detail\?\.card\.hasVoice && detail\.card\.voiceAudioUrl/)
+  assert.match(appSource, /detail\?\.card\.hasVideo && detail\.card\.videoUrl/)
+  assert.match(appSource, /card-collection-swipe-hint[\s\S]*?card-collection-detail-message[\s\S]*?card-collection-detail-info/)
+})
+
+test('collection inventory thumbnails stay inside their assigned grid track', () => {
+  assert.match(referenceCssSource, /\.collection-reward-thumbnails img \{[^}]*width:42px!important;[^}]*height:42px!important;/)
+  assert.match(referenceCssSource, /\.collection-reward-thumbnails img:nth-child\(4\) \{[^}]*left:42px!important;/)
+  assert.match(referenceCssSource, /@media\(max-width:360px\)[\s\S]*?\.collection-reward-thumbnails img \{[^}]*width:38px!important;[^}]*height:38px!important;/)
+  assert.match(referenceCssSource, /@media\(max-width:360px\)[\s\S]*?\.collection-reward-thumbnails img:nth-child\(4\) \{[^}]*left:33px!important;/)
 })
 
 test('home surfaces the editorial artist, new cards, and upcoming drop sections', () => {
