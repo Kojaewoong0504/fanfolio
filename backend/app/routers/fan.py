@@ -42,6 +42,7 @@ from app.services import (
     claim_reward_grant,
     fan_pass_data,
     fan_progression_data,
+    reconcile_claimed_global_pass_reward_grants,
     record_audit,
     redeem,
     update_profile_equipment,
@@ -234,6 +235,18 @@ async def claim_reward(grant_id: str, user: FanUser, session: DbSession) -> dict
     return {
         "ok": True,
         "data": await claim_reward_grant(session, user_id=user.id, grant_id=grant_id),
+    }
+
+
+@router.post("/me/rewards/reconcile-pass")
+async def reconcile_pass_rewards(user: FanUser, session: DbSession) -> dict:
+    return {
+        "ok": True,
+        "data": {
+            "repairedCount": await reconcile_claimed_global_pass_reward_grants(
+                session, user_id=user.id
+            )
+        },
     }
 
 

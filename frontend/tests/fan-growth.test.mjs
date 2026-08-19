@@ -55,6 +55,8 @@ test('fan growth API client exposes typed progression reward equipment and pass 
   assert.match(apiSource, /export function getFanPass\(artistId\?: string \| null\)/)
   assert.match(apiSource, /`\/me\/pass\$\{growthScopeQuery\(artistId\)\}`/)
   assert.match(apiSource, /export function claimPassTier\(tierId: string\)/)
+  assert.match(apiSource, /export function reconcilePassRewards\(\)/)
+  assert.match(apiSource, /'\/me\/rewards\/reconcile-pass'/)
 })
 
 test('progression claimed rewards are server-owned inventory, not local invented state', () => {

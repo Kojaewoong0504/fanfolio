@@ -441,6 +441,61 @@ def test_global_progression_includes_grants_from_global_pass_events(
     ]
 
 
+def test_reconcile_pass_rewards_restores_missing_grant_for_authenticated_fan(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    async def seed_missing_grant() -> None:
+        async with SessionLocal() as session:
+            session.add_all(
+                [
+                    RewardCatalog(
+                        id="reward_global_pass_missing_grant",
+                        artist_id="artist_nova3",
+                        reward_type="badge",
+                        name="Recovered Global Pass Badge",
+                        status="published",
+                    ),
+                    PassSeason(
+                        id="pass_global_missing_grant",
+                        artist_id=None,
+                        title="Global Pass With Missing Grant",
+                        status="published",
+                        starts_at=now() - timedelta(days=1),
+                        ends_at=now() + timedelta(days=7),
+                        is_paid=False,
+                    ),
+                    PassTier(
+                        id="pass_global_missing_grant_tier",
+                        season_id="pass_global_missing_grant",
+                        tier=1,
+                        required_xp=0,
+                        reward_id="reward_global_pass_missing_grant",
+                    ),
+                    PassProgress(
+                        id="pass_progress_fan_global_missing_grant",
+                        user_id="fan",
+                        season_id="pass_global_missing_grant",
+                        current_xp=0,
+                        claimed_tier_ids=["pass_global_missing_grant_tier"],
+                    ),
+                ]
+            )
+            await session.commit()
+
+    asyncio.run(seed_missing_grant())
+
+    repaired = assert_success(actors["fan"].post("/api/me/rewards/reconcile-pass"))
+    assert repaired == {"repairedCount": 1}
+    assert assert_success(actors["fan"].post("/api/me/rewards/reconcile-pass")) == {
+        "repairedCount": 0
+    }
+
+    progression = assert_success(actors["fan"].get("/api/me/progression?scope=global"))
+    assert [item["rewardId"] for item in progression["claimedRewards"]] == [
+        "reward_global_pass_missing_grant"
+    ]
+
+
 def test_pass_tier_claim_requires_owner_progress_and_required_xp(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:

@@ -594,6 +594,10 @@ export function claimReward(grantId: string): Promise<{ ok: true, data: RewardGr
   return apiFetch<{ ok: true, data: RewardGrant }>(`/me/rewards/${encodeURIComponent(grantId)}/claim`, { method: 'POST' })
 }
 
+export function reconcilePassRewards(): Promise<{ ok: true, data: { repairedCount: number } }> {
+  return apiFetch<{ ok: true, data: { repairedCount: number } }>('/me/rewards/reconcile-pass', { method: 'POST' })
+}
+
 export function updateProfileEquipment(equipment: ProfileEquipment): Promise<{ ok: true, data: ProfileEquipment }> {
   return apiFetch<{ ok: true, data: ProfileEquipment }>('/me/profile/equipment', {
     method: 'PUT',

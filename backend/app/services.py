@@ -1151,6 +1151,59 @@ async def claim_pass_tier(session: AsyncSession, *, user_id: str, tier_id: str) 
     }
 
 
+async def reconcile_claimed_global_pass_reward_grants(
+    session: AsyncSession, *, user_id: str
+) -> int:
+    """Repair missing grants for claimed tiers in this fan's global passes only."""
+    progress_rows = list(
+        await session.scalars(select(PassProgress).where(PassProgress.user_id == user_id))
+    )
+    claimed_tier_ids = {
+        tier_id for progress in progress_rows for tier_id in (progress.claimed_tier_ids or [])
+    }
+    if not claimed_tier_ids:
+        return 0
+
+    tier_rows = (
+        await session.execute(
+            select(PassTier, PassSeason, RewardCatalog)
+            .join(PassSeason, PassSeason.id == PassTier.season_id)
+            .join(RewardCatalog, RewardCatalog.id == PassTier.reward_id)
+            .where(
+                PassTier.id.in_(claimed_tier_ids),
+                PassSeason.artist_id.is_(None),
+                RewardCatalog.status == "published",
+            )
+        )
+    ).all()
+
+    repaired_count = 0
+    for tier, season, reward in tier_rows:
+        event = await record_engagement_event(
+            session,
+            user_id=user_id,
+            kind="pass_tier_claimed",
+            source_type="pass_tier",
+            source_id=tier.id,
+            payload={"seasonId": season.id, "requiredXp": tier.required_xp},
+        )
+        event.status = "processed"
+        event.processed_at = event.processed_at or now()
+        grant = await grant_reward(
+            session,
+            user_id=user_id,
+            reward_id=reward.id,
+            source_event_id=event.id,
+            rule_key=f"pass_tier:{tier.id}",
+        )
+        if grant.claimed_at is None:
+            grant.claimed_at = now()
+            repaired_count += 1
+
+    await session.commit()
+    return repaired_count
+
+
 async def process_engagement_event(event_id: str) -> None:
     """Shared task entry point for idempotent growth event consumption."""
     async with SessionLocal() as session:
