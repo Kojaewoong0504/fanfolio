@@ -27,6 +27,7 @@ jobs:
         env:
           APP_ENV: production
           AUTO_CREATE_SCHEMA: "false"
+          DATABASE_URL: postgresql+asyncpg://fanfolio:ci-only@localhost:5432/fanfolio
           FRONTEND_URL: https://app.fanfolio.example
           FRONTEND_ORIGINS: https://app.fanfolio.example
           MAIL_DELIVERY_MODE: smtp
@@ -34,6 +35,15 @@ jobs:
           SMTP_HOST: smtp.fanfolio.example
           RATE_LIMIT_BACKEND: redis
           RATE_LIMIT_REDIS_URL: redis://localhost:6379/1
+          DATA_PROTECTION_KEY: ci-only-production-preflight-key-32-characters-minimum
+          DOWNLOAD_SIGNING_SECRET: ci-only-download-signing-secret
+          JWT_ACCESS_SECRET: ci-only-jwt-access-secret
+          JWT_REFRESH_SECRET: ci-only-jwt-refresh-secret
+          ASSET_SCAN_MODE: clamav
+          CLAMAV_HOST: clamav.internal
+          OAUTH_FRONTEND_CALLBACK_URL: https://app.fanfolio.example/oauth/callback
+          GOOGLE_REDIRECT_URI: https://app.fanfolio.example/oauth/google/callback
+          KAKAO_REDIRECT_URI: https://app.fanfolio.example/oauth/kakao/callback
         run: ../scripts/production-preflight.sh
 
   frontend:

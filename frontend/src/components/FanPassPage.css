@@ -47,6 +47,8 @@
 .season-pass-tier-main small b { color: #503df0; }
 .season-pass-claim { width: 100%; margin-top: 14px; padding: 11px 14px; border: 0; border-radius: 12px; background: #543cf2; color: #fff; font-size: 14px; font-weight: 800; }
 .season-pass-claim:disabled { cursor: default; opacity: .58; }
+.season-pass-claim-message { margin: 9px 0 0; color: #4e3be8; font-size: 12px; font-weight: 750; line-height: 1.35; }
+.season-pass-claim-message.is-error { color: #c24d67; }
 .season-pass-tier-detail { margin-top: 14px; padding-top: 13px; border-top: 1px solid #eeeafd; }
 .season-pass-tier-detail p { margin: 0 0 11px; color: #737d98; font-size: 12px; line-height: 1.45; }
 .season-pass-tier-detail dl { display: grid; gap: 6px; margin: 0; padding: 10px 12px; border-radius: 12px; background: #f8f7ff; }

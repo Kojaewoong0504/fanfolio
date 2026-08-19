@@ -100,9 +100,16 @@ export function FanPassPage({ progression, loading, error, onRetry, onBack, onCl
 
 function SeasonTierCard({ tier, status, expanded, onToggle, onClaim }: { tier: PassTier; status: ReturnType<typeof tierStatus>; expanded: boolean; onToggle: () => void; onClaim: (tierId: string) => Promise<unknown> }) {
   const [busy, setBusy] = useState(false)
+  const [claimMessage, setClaimMessage] = useState('')
   const claim = async () => {
     setBusy(true)
-    try { await onClaim(tier.id) } finally { setBusy(false) }
+    setClaimMessage('')
+    try {
+      await onClaim(tier.id)
+      setClaimMessage('보상을 받았어요. 보관함에서 확인할 수 있어요.')
+    } catch {
+      setClaimMessage('보상 수령에 실패했어요. 잠시 후 다시 시도해 주세요.')
+    } finally { setBusy(false) }
   }
   return <article data-pass-tier-id={tier.id} className={`season-pass-tier-card is-${status}${expanded ? ' is-expanded' : ''}`} role="button" tabIndex={0} aria-expanded={expanded} aria-label={`Lv.${tier.tier} ${tier.reward?.name ?? '보상'} 상세 보기`} onClick={onToggle} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onToggle() } }}>
     <span className="season-pass-node" aria-label={`Lv.${tier.tier}`}><strong>Lv.{tier.tier}</strong></span>
@@ -110,6 +117,7 @@ function SeasonTierCard({ tier, status, expanded, onToggle, onClaim }: { tier: P
       <div className="season-pass-tier-topline"><span className="season-pass-tier-type">{status === 'current' ? '현재 챕터' : tier.reward?.type === 'digital_bonus' ? '팬 전용 콘텐츠' : '팬 보상'}</span><span className="season-pass-tier-status">{status === 'claimed' ? '획득 완료' : status === 'claimable' ? '받을 수 있어요' : status === 'current' ? `${tier.requiredXp.toLocaleString()} XP 필요` : '잠금'}</span></div>
       <div className="season-pass-tier-main"><img src={artworkForTier(tier)} alt="" /><div><h3>{tier.reward?.name ?? `팬 패스 ${tier.tier}단계`}</h3><p>팬 레벨 Lv.{Math.max(1, Math.floor(tier.requiredXp / 100) + 1)} 달성 시 획득</p>{status === 'current' && <small>필요 XP <b>{tier.requiredXp.toLocaleString()} XP</b></small>}</div></div>
       {(status === 'claimable' || status === 'current') && <button type="button" className="season-pass-claim" onClick={event => { event.stopPropagation(); void claim() }} disabled={busy || status === 'current'}>{status === 'current' ? '잠금' : busy ? '수령 중...' : '보상 받기'}</button>}
+      {claimMessage && <p className={`season-pass-claim-message${claimMessage.startsWith('보상 수령') ? ' is-error' : ''}`} role="status">{claimMessage}</p>}
       {expanded && <div className="season-pass-tier-detail"><p>{rewardDescription(tier)}</p><dl><div><dt>필요 경험치</dt><dd>{tier.requiredXp.toLocaleString()} XP</dd></div><div><dt>상태</dt><dd>{tier.claimed ? '획득 완료' : tier.claimable ? '수령 가능' : '잠금'}</dd></div></dl></div>}
     </div>
   </article>

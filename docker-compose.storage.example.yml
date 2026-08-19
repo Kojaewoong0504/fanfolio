@@ -5,6 +5,9 @@ services:
     environment:
       MINIO_ROOT_USER: fanfolio-local
       MINIO_ROOT_PASSWORD: fanfolio-local-secret
+      # Community MinIO exposes CORS at the cluster level. Bucket-level
+      # `mc cors set` is an AiStor-only API and fails in the open-source image.
+      MINIO_API_CORS_ALLOW_ORIGIN: http://localhost:5173,http://localhost:4174,http://localhost:4175
     ports:
       - "${MINIO_API_HOST_PORT:-9000}:9000"
       - "${MINIO_CONSOLE_HOST_PORT:-9001}:9001"
@@ -24,13 +27,10 @@ services:
     environment:
       MINIO_ROOT_USER: fanfolio-local
       MINIO_ROOT_PASSWORD: fanfolio-local-secret
-    volumes:
-      - ./docker/minio/cors.xml:/etc/minio/cors.xml:ro
     entrypoint: ["/bin/sh", "-c"]
     command: >-
       "mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" &&
-      mc mb --ignore-existing local/fanfolio-test &&
-      mc cors set local/fanfolio-test /etc/minio/cors.xml"
+      mc mb --ignore-existing local/fanfolio-test"
 
   clamav:
     # Pin a current official multi-architecture Debian image. The floating

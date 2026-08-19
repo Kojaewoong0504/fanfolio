@@ -85,7 +85,10 @@ def create_partner(
             f"/api/admin/organizations/{organization['id']}/members",
             json={
                 "email": email,
-                "displayName": "스타웨이브 운영자",
+                # Partner members share the same role-scoped nickname index as
+                # fan accounts, so each fixture member needs a stable unique
+                # display name when a test creates multiple organizations.
+                "displayName": f"{slug} 운영자",
                 "accessLevel": access_level,
                 "artistIds": assigned,
             },

@@ -25,7 +25,7 @@
     <div class="meta"><span class="chip">MVP · v0.2</span><span class="chip">정본: BACKEND_IMPLEMENTATION_CONTRACT.md</span><span class="chip">테스트: backend/tests/contract</span></div>
   </header>
   <main>
-    <div class="notice"><b>현재 상태:</b> 맵의 153개 HTTP 경로는 계약 테스트로 구현·검증됩니다. <code>Health → Fixture → Auth → Fan → Admin → Artist</code> 순서로 테스트를 읽으면 각 기능 경계를 따라갈 수 있습니다.</div>
+    <div class="notice"><b>현재 상태:</b> 맵의 163개 HTTP 경로는 계약 테스트로 구현·검증됩니다. <code>Health → Fixture → Auth → Fan → Admin → Artist</code> 순서로 테스트를 읽으면 각 기능 경계를 따라갈 수 있습니다.</div>
     <h2>구현 순서</h2>
     <div class="steps" id="steps"></div>
     <div class="layout">
@@ -196,6 +196,18 @@
       ,{stage:'Admin', role:'Admin', method:'GET', path:'/api/admin/events/{event_id}/hero', auth:'Admin', request:null, success:'200 image/*', response:null, errors:['401 AUTH_REQUIRED','403 FORBIDDEN','404 EVENT_HERO_NOT_FOUND'], test:'tests/contract/test_events.py', note:'이벤트 검수 화면에 대표 이미지를 제공합니다.'}
       ,{stage:'Admin', role:'Admin', method:'POST', path:'/api/admin/engagement/rewards', auth:'Root · Platform Operator', request:{name:'팬 이벤트 보상',type:'badge'}, success:'201', response:{id:'reward_123'}, errors:['401 AUTH_REQUIRED','403 FORBIDDEN','422 VALIDATION_ERROR'], test:'tests/contract/test_engagement_admin.py', note:'운영 보상 카탈로그에 새 보상을 등록합니다.'}
       ,{stage:'Admin', role:'Admin', method:'GET', path:'/api/admin/cards/{card_id}/back-image', auth:'Admin', request:null, success:'200 image/*', response:null, errors:['401 AUTH_REQUIRED','403 FORBIDDEN','404 CARD_IMAGE_NOT_FOUND'], test:'tests/contract/test_missing_admin_contracts.py', note:'검수 화면에서 카드 뒷면 원본 이미지를 확인합니다.'}
+      ,{stage:'Fan', role:'Fan', method:'GET', path:'/api/events/{event_id}/comments', auth:'Fan', request:null, success:'200', response:{items:[]}, errors:['401 AUTH_REQUIRED','404 EVENT_NOT_FOUND'], test:'tests/test_event_comments.py', note:'공개 이벤트의 댓글 목록을 조회합니다.'}
+      ,{stage:'Fan', role:'Fan', method:'POST', path:'/api/events/{event_id}/comments', auth:'Fan', request:{body:'응원해요'}, success:'201', response:{id:'comment_123'}, errors:['401 AUTH_REQUIRED','404 EVENT_NOT_FOUND','422 VALIDATION_ERROR'], test:'tests/test_event_comments.py', note:'팬의 이벤트 댓글을 등록합니다.'}
+      ,{stage:'Fan', role:'Fan', method:'GET', path:'/api/rewards/{reward_id}/image', auth:'Fan', request:null, success:'200 image/*', response:null, errors:['404 REWARD_NOT_FOUND','404 REWARD_IMAGE_NOT_FOUND'], test:'tests/contract/test_engagement_admin.py', note:'팬에게 공개된 보상 이미지를 제공합니다.'}
+      ,{stage:'Admin', role:'Admin', method:'GET', path:'/api/admin/events/{event_id}/applications', auth:'Admin', request:null, success:'200', response:{items:[]}, errors:['401 AUTH_REQUIRED','403 FORBIDDEN','404 EVENT_NOT_FOUND'], test:'tests/test_event_applications.py', note:'운영자가 이벤트 신청자를 조회합니다.'}
+      ,{stage:'Admin', role:'Admin', method:'GET', path:'/api/admin/events/{event_id}/comments', auth:'Admin', request:null, success:'200', response:{items:[]}, errors:['401 AUTH_REQUIRED','403 FORBIDDEN','404 EVENT_NOT_FOUND'], test:'tests/test_event_comments.py', note:'운영자가 이벤트 댓글을 조회합니다.'}
+      ,{stage:'Admin', role:'Admin', method:'PATCH', path:'/api/admin/events/{event_id}/comments/{comment_id}', auth:'Admin', request:{status:'hidden'}, success:'200', response:{id:'comment_123',status:'hidden'}, errors:['401 AUTH_REQUIRED','403 FORBIDDEN','404 COMMENT_NOT_FOUND'], test:'tests/test_event_comments.py', note:'운영자가 댓글 공개 상태를 관리합니다.'}
+      ,{stage:'Admin', role:'Admin', method:'POST', path:'/api/admin/events/{event_id}/draw', auth:'Admin', request:null, success:'200', response:{winnerIds:[]}, errors:['401 AUTH_REQUIRED','403 FORBIDDEN','404 EVENT_NOT_FOUND','409 INVALID_EVENT_STATUS'], test:'tests/test_event_applications.py', note:'운영자가 이벤트 당첨자를 추첨합니다.'}
+      ,{stage:'Admin', role:'Admin', method:'PATCH', path:'/api/admin/engagement/pass-seasons/{season_id}', auth:'Admin', request:{title:'수정 시즌'}, success:'200', response:{id:'season_123'}, errors:['401 AUTH_REQUIRED','403 FORBIDDEN','404 PASS_SEASON_NOT_FOUND'], test:'tests/contract/test_engagement_admin.py', note:'운영자가 패스 시즌 정보를 수정합니다.'}
+      ,{stage:'Admin', role:'Admin', method:'GET', path:'/api/admin/engagement/rewards/{reward_id}/image', auth:'Admin', request:null, success:'200 image/*', response:null, errors:['401 AUTH_REQUIRED','403 FORBIDDEN','404 REWARD_IMAGE_NOT_FOUND'], test:'tests/contract/test_engagement_admin.py', note:'운영자에게 보상 원본 이미지를 제공합니다.'}
+      ,{stage:'Fan', role:'Fan', method:'POST', path:'/api/auth/fan/change-password', auth:'Fan Bearer access token', request:{currentPassword:'old-password',newPassword:'new-password-12'}, success:'200', response:{mustChangePassword:false}, errors:['401 AUTH_REQUIRED','401 INVALID_CREDENTIALS','422 PASSWORD_UNCHANGED'], test:'tests/contract/test_auth.py', note:'팬의 비밀번호를 변경합니다.'}
+      ,{stage:'Fixture', role:'Test', method:'POST', path:'/api/test/reset', auth:'APP_ENV=test', request:null, success:'204', response:null, errors:[], test:'tests/conftest.py', note:'계약 테스트용 상태 초기화 경로입니다.'}
+      ,{stage:'Fixture', role:'Test', method:'POST', path:'/api/test/seed', auth:'APP_ENV=test', request:{scenario:'core'}, success:'201', response:{scenario:'core'}, errors:['422 VALIDATION_ERROR'], test:'tests/conftest.py', note:'계약 테스트용 상태 시드 경로입니다.'}
     ];
     const stages=['Health','Fixture','Auth','Fan','Admin','Artist']; const labels={all:'전체',Public:'Public',Fan:'Fan',Admin:'Admin',Artist:'Artist',Test:'Test fixture'};
     let role='all', stage='all', selected=endpoints[0];

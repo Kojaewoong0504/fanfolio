@@ -347,7 +347,23 @@ def test_fan_can_claim_unlocked_pass_tier_once(
     assert claimed["tierId"] == seeded_pass["tierId"]
     assert claimed["seasonId"] == seeded_pass["seasonId"]
     assert claimed["rewardGrant"]["rewardId"] == "reward_pass_badge"
+    assert claimed["rewardGrant"]["claimedAt"] is not None
     assert claimed["claimedAt"] is not None
+
+    async def load_reward_notifications() -> list[Notification]:
+        async with SessionLocal() as session:
+            return list(
+                await session.scalars(
+                    select(Notification).where(
+                        Notification.user_id == "fan",
+                        Notification.event_key == f"reward:{claimed['rewardGrant']['id']}:claimed",
+                    )
+                )
+            )
+
+    notifications = asyncio.run(load_reward_notifications())
+    assert len(notifications) == 1
+    assert notifications[0].kind == "reward_claimed"
 
     assert_error(
         actors["fan"].post(f"/api/me/pass-tiers/{seeded_pass['tierId']}/claim"),
@@ -610,6 +626,9 @@ def test_claim_reward_locks_only_the_owner_grant_row() -> None:
 
         async def commit(self) -> None:
             return None
+
+        def add(self, entity: Any) -> None:
+            assert isinstance(entity, Notification)
 
     session = SpySession()
 

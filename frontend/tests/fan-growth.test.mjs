@@ -225,6 +225,7 @@ test('fan pass opens as a dedicated page with a vertical season journey', () => 
   assert.match(fanPassSource, /드림스케이프 팬 레벨|시즌 종료까지/)
   assert.match(fanPassSource, /season-pass-journey/)
   assert.match(fanPassSource, /보상 받기/)
+  assert.match(fanPassSource, /보상을 받았어요\. 보관함에서 확인할 수 있어요\./)
   assert.match(fanPassCssSource, /season-pass-journey/)
   assert.doesNotMatch(fanGrowthSource, /onClick=\{\(\) => setActiveSheet\('pass'\)\}/)
 })
