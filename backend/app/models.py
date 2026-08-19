@@ -378,6 +378,70 @@ class Drop(Base):
     ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class CardPack(Base):
+    """A versioned, fan-visible pack whose published odds are immutable."""
+
+    __tablename__ = "card_packs"
+    __table_args__ = (
+        UniqueConstraint("artist_id", "name", "version", name="uq_card_packs_artist_name_version"),
+        Index("ix_card_packs_status_artist", "status", "artist_id"),
+    )
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    season_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    version: Mapped[str] = mapped_column(String(32), nullable=False, default="v1.0")
+    image_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class CardPackCard(Base):
+    """Card membership and the public probability for one pack version."""
+
+    __tablename__ = "card_pack_cards"
+    __table_args__ = (
+        UniqueConstraint("pack_id", "card_id", name="uq_card_pack_cards_pack_card"),
+        Index("ix_card_pack_cards_pack_position", "pack_id", "position"),
+    )
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    pack_id: Mapped[str] = mapped_column(
+        ForeignKey("card_packs.id", ondelete="CASCADE"), nullable=False
+    )
+    card_id: Mapped[str] = mapped_column(
+        ForeignKey("cards.id", ondelete="RESTRICT"), nullable=False
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    probability: Mapped[float] = mapped_column(sa.Float, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class CardPackOpening(Base):
+    """One immutable pack result with a globally unique issuance code."""
+
+    __tablename__ = "card_pack_openings"
+    __table_args__ = (
+        UniqueConstraint("issuance_code", name="uq_card_pack_openings_issuance_code"),
+        Index("ix_card_pack_openings_user_created", "user_id", "created_at"),
+    )
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    pack_id: Mapped[str] = mapped_column(
+        ForeignKey("card_packs.id", ondelete="RESTRICT"), nullable=False
+    )
+    card_id: Mapped[str] = mapped_column(
+        ForeignKey("cards.id", ondelete="RESTRICT"), nullable=False
+    )
+    issuance_code: Mapped[str] = mapped_column(String(80), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
 class Event(Base):
     """Editorial fan-facing event, independent from card release mechanics."""
 

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import secrets
 from datetime import UTC, datetime
 from typing import Literal
 from uuid import uuid4
@@ -17,6 +18,9 @@ from app.models import (
     Artist,
     Asset,
     Card,
+    CardPack,
+    CardPackCard,
+    CardPackOpening,
     CollectionBenefitClaim,
     CollectionCampaign,
     Drop,
@@ -44,6 +48,7 @@ from app.services import (
     fan_progression_data,
     reconcile_claimed_global_pass_reward_grants,
     record_audit,
+    record_engagement_event,
     redeem,
     update_profile_equipment,
 )
@@ -52,6 +57,33 @@ from app.tasks import enqueue_engagement_event
 
 router = APIRouter(prefix="/api", tags=["fan"])
 logger = logging.getLogger(__name__)
+
+
+def public_card_pack_data(pack: CardPack, items: list[dict]) -> dict:
+    return {
+        "id": pack.id,
+        "artistId": pack.artist_id,
+        "name": pack.name,
+        "seasonName": pack.season_name,
+        "version": pack.version,
+        "imageUrl": pack.image_url,
+        "description": pack.description,
+        "status": pack.status,
+        "publishedAt": pack.published_at.isoformat() if pack.published_at else None,
+        "cards": items,
+    }
+
+
+def public_pack_card_data(link: CardPackCard, card: Card) -> dict:
+    return {
+        "cardId": card.id,
+        "name": card.name,
+        "rarity": card.rarity,
+        "imageUrl": card_image_url(card),
+        "memberId": card.member_id,
+        "probability": link.probability,
+        "position": link.position,
+    }
 
 
 def catalog_release_visible() -> object:
@@ -177,6 +209,12 @@ async def collection(user: FanUser, session: DbSession) -> dict:
             "artistName": artist.name if artist else None,
             "memberId": member.id if member else card.member_id,
             "memberName": member.name if member else None,
+            "rarity": card.rarity,
+            "seasonName": card.season_name,
+            "cardType": getattr(card, "card_type", None),
+            "signatureText": card.signature_text,
+            "issueLimit": card.issue_limit,
+            "acquisitionSource": uc.acquisition_source,
             "serialNumber": uc.serial_number,
             "acquiredAt": uc.acquired_at.isoformat(),
         }
@@ -191,6 +229,177 @@ async def collection(user: FanUser, session: DbSession) -> dict:
                 "completionRate": round(len(cards) / 9 * 100),
             },
             "cards": cards,
+        },
+    }
+
+
+@router.get("/catalog/card-packs")
+async def catalog_card_packs(
+    session: DbSession,
+    artist_id: str | None = Query(default=None, alias="artistId"),
+) -> dict:
+    filters = [CardPack.status == "published"]
+    if artist_id:
+        filters.append(CardPack.artist_id == artist_id)
+    packs = list(
+        await session.scalars(
+            select(CardPack).where(*filters).order_by(CardPack.published_at.desc(), CardPack.id)
+        )
+    )
+    items = []
+    for pack in packs:
+        rows = list(
+            await session.execute(
+                select(CardPackCard, Card)
+                .join(Card, CardPackCard.card_id == Card.id)
+                .outerjoin(Drop, Card.drop_id == Drop.id)
+                .where(
+                    CardPackCard.pack_id == pack.id,
+                    CardPackCard.enabled.is_(True),
+                    catalog_release_visible(),
+                )
+                .order_by(CardPackCard.position, CardPackCard.id)
+            )
+        )
+        items.append(
+            public_card_pack_data(pack, [public_pack_card_data(link, card) for link, card in rows])
+        )
+    return {"ok": True, "data": {"items": items}}
+
+
+@router.get("/catalog/card-packs/{pack_id}/odds")
+async def catalog_card_pack_odds(pack_id: str, session: DbSession) -> dict:
+    pack = await session.get(CardPack, pack_id)
+    if pack is None or pack.status != "published":
+        raise AppError(404, "CARD_PACK_NOT_FOUND", "공개된 카드팩을 찾을 수 없습니다.")
+    rows = list(
+        await session.execute(
+            select(CardPackCard, Card)
+            .join(Card, CardPackCard.card_id == Card.id)
+            .outerjoin(Drop, Card.drop_id == Drop.id)
+            .where(
+                CardPackCard.pack_id == pack.id,
+                CardPackCard.enabled.is_(True),
+                catalog_release_visible(),
+            )
+            .order_by(CardPackCard.position, CardPackCard.id)
+        )
+    )
+    return {
+        "ok": True,
+        "data": {
+            "pack": public_card_pack_data(pack, []),
+            "items": [public_pack_card_data(link, card) for link, card in rows],
+            "totalProbability": round(sum(link.probability for link, _ in rows), 6),
+        },
+    }
+
+
+@router.post("/me/card-packs/{pack_id}/open", status_code=status.HTTP_201_CREATED)
+async def open_card_pack(pack_id: str, user: FanUser, session: DbSession) -> dict:
+    user_id = user.id
+    if session.in_transaction():
+        await session.rollback()
+    async with session.begin():
+        pack = await session.scalar(
+            select(CardPack)
+            .where(CardPack.id == pack_id, CardPack.status == "published")
+            .with_for_update()
+        )
+        if pack is None:
+            raise AppError(404, "CARD_PACK_NOT_FOUND", "공개된 카드팩을 찾을 수 없습니다.")
+        rows = list(
+            await session.execute(
+                select(CardPackCard, Card)
+                .join(Card, CardPackCard.card_id == Card.id)
+                .outerjoin(Drop, Card.drop_id == Drop.id)
+                .where(
+                    CardPackCard.pack_id == pack.id,
+                    CardPackCard.enabled.is_(True),
+                    catalog_release_visible(),
+                )
+                .order_by(CardPackCard.position, CardPackCard.id)
+            )
+        )
+        if not rows or abs(sum(link.probability for link, _ in rows) - 100) > 0.001:
+            raise AppError(409, "INVALID_PACK_ODDS", "이 카드팩의 공개 확률표가 유효하지 않습니다.")
+        if any(card.status != "published" for _, card in rows):
+            raise AppError(
+                409, "PACK_CARDS_NOT_PUBLISHED", "카드팩에 공개되지 않은 카드가 포함되어 있습니다."
+            )
+        draw = secrets.SystemRandom().uniform(0, 100)
+        cursor = 0.0
+        selected_link, selected_card = rows[-1]
+        for link, card in rows:
+            cursor += link.probability
+            if draw <= cursor:
+                selected_link, selected_card = link, card
+                break
+        locked_card = await session.scalar(
+            select(Card).where(Card.id == selected_card.id).with_for_update()
+        )
+        serial = (
+            await session.scalar(
+                select(func.count()).select_from(UserCard).where(UserCard.card_id == locked_card.id)
+            )
+            or 0
+        ) + 1
+        issuance_code = f"PF-{secrets.token_hex(16).upper()}"
+        opening = CardPackOpening(
+            id=f"opening_{uuid4().hex[:12]}",
+            user_id=user_id,
+            pack_id=pack.id,
+            card_id=locked_card.id,
+            issuance_code=issuance_code,
+        )
+        user_card = UserCard(
+            id=f"uc_{uuid4().hex[:12]}",
+            user_id=user_id,
+            card_id=locked_card.id,
+            serial_number=serial,
+            acquisition_source="card_pack",
+            acquired_at=datetime.now(UTC),
+            drop_id=locked_card.drop_id,
+        )
+        session.add_all([opening, user_card])
+        event = await record_engagement_event(
+            session,
+            user_id=user_id,
+            kind="card_collected",
+            source_type="user_card",
+            source_id=user_card.id,
+            payload={
+                "cardId": locked_card.id,
+                "artistId": locked_card.artist_id,
+                "memberId": locked_card.member_id,
+                "packId": pack.id,
+                "source": "card_pack",
+            },
+        )
+        await record_audit(
+            session,
+            actor_user_id=user_id,
+            action="card_pack.opened",
+            entity_type="card_pack_opening",
+            entity_id=opening.id,
+            artist_id=pack.artist_id,
+            details={
+                "cardId": locked_card.id,
+                "userCardId": user_card.id,
+                "engagementEventId": event.id,
+            },
+        )
+    return {
+        "ok": True,
+        "data": {
+            "openingId": opening.id,
+            "issuanceCode": opening.issuance_code,
+            "userCardId": user_card.id,
+            "packId": pack.id,
+            "cardId": locked_card.id,
+            "serialNumber": user_card.serial_number,
+            "probability": selected_link.probability,
+            "card": public_pack_card_data(selected_link, locked_card),
         },
     }
 

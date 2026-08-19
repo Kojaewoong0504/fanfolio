@@ -688,21 +688,26 @@ def test_collection_returns_live_summary_and_card_metadata(
         "totalSlots": 9,
         "completionRate": 11,
     }
-    assert collection["cards"] == [
-        {
-            "userCardId": redeemed["userCardId"],
-            "cardId": "card_published",
-            "name": "컴백 기념 사인 카드",
-            "imageUrl": "/src/assets/hero.png",
-            "isOfficial": True,
-            "artistId": "artist_nova3",
-            "artistName": "드림스케이프",
-            "memberId": "member_yuna",
-            "memberName": "유나",
-            "serialNumber": 1,
-            "acquiredAt": collection["cards"][0]["acquiredAt"],
-        }
-    ]
+    card = collection["cards"][0]
+    assert card == {
+        "userCardId": redeemed["userCardId"],
+        "cardId": "card_published",
+        "name": "컴백 기념 사인 카드",
+        "imageUrl": "/src/assets/hero.png",
+        "isOfficial": True,
+        "artistId": "artist_nova3",
+        "artistName": "드림스케이프",
+        "memberId": "member_yuna",
+        "memberName": "유나",
+        "serialNumber": 1,
+        "acquiredAt": card["acquiredAt"],
+        "rarity": "Special",
+        "seasonName": "2026 SPRING",
+        "cardType": None,
+        "signatureText": "오늘 와줘서 고마워",
+        "issueLimit": 500,
+        "acquisitionSource": "qr",
+    }
 
 
 def test_fan_can_load_an_artist_uploaded_image_for_a_published_card(
