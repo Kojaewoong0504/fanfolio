@@ -376,6 +376,71 @@ def test_fan_can_claim_unlocked_pass_tier_once(
     assert fan_pass["seasons"][0]["tiers"][0]["claimable"] is False
 
 
+def test_global_progression_includes_grants_from_global_pass_events(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    async def seed_global_pass_grant() -> None:
+        async with SessionLocal() as session:
+            session.add(
+                RewardCatalog(
+                    id="reward_global_pass_artist_tagged",
+                    artist_id="artist_nova3",
+                    reward_type="badge",
+                    name="Global Pass Badge",
+                    status="published",
+                )
+            )
+            session.add(
+                PassSeason(
+                    id="pass_global_scope",
+                    artist_id=None,
+                    title="Global Pass",
+                    status="published",
+                    starts_at=now() - timedelta(days=1),
+                    ends_at=now() + timedelta(days=7),
+                    is_paid=False,
+                )
+            )
+            session.add(
+                PassTier(
+                    id="pass_global_scope_tier",
+                    season_id="pass_global_scope",
+                    tier=1,
+                    required_xp=0,
+                    reward_id="reward_global_pass_artist_tagged",
+                )
+            )
+            session.add(
+                EngagementEvent(
+                    id="evt_global_pass_scope",
+                    user_id="fan",
+                    kind="pass_tier_claimed",
+                    source_type="pass_tier",
+                    source_id="pass_global_scope_tier",
+                    payload={},
+                    status="processed",
+                    processed_at=now(),
+                )
+            )
+            session.add(
+                RewardGrant(
+                    id="reward_grant_global_pass_scope",
+                    user_id="fan",
+                    reward_id="reward_global_pass_artist_tagged",
+                    source_event_id="evt_global_pass_scope",
+                    rule_key="pass_tier:pass_global_scope_tier",
+                    claimed_at=now(),
+                )
+            )
+            await session.commit()
+
+    asyncio.run(seed_global_pass_grant())
+    progression = assert_success(actors["fan"].get("/api/me/progression?scope=global"))
+    assert [item["id"] for item in progression["claimedRewards"]] == [
+        "reward_grant_global_pass_scope"
+    ]
+
+
 def test_pass_tier_claim_requires_owner_progress_and_required_xp(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:

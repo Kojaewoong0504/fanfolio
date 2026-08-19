@@ -576,6 +576,29 @@ def _event_artist_expression():
     return EngagementEvent.payload["artistId"].as_string()
 
 
+def _global_pass_reward_grant_filter():
+    """Treat a grant from a global pass as global even if its catalog is artist-tagged.
+
+    Older/admin-created pass rewards may retain an artist association in the
+    catalog while the pass season itself is global. The pass event is the
+    authoritative source for that grant's scope.
+    """
+    return (
+        select(PassTier.id)
+        .join(PassSeason, PassSeason.id == PassTier.season_id)
+        .join(
+            EngagementEvent,
+            and_(
+                EngagementEvent.id == RewardGrant.source_event_id,
+                EngagementEvent.source_type == "pass_tier",
+                EngagementEvent.source_id == PassTier.id,
+            ),
+        )
+        .where(PassSeason.artist_id.is_(None))
+        .exists()
+    )
+
+
 async def fan_progression_data(
     session: AsyncSession,
     user_id: str,
@@ -621,6 +644,13 @@ async def fan_progression_data(
             }
         )
 
+    reward_scope_filter = (
+        or_(RewardCatalog.artist_id.is_(None), _global_pass_reward_grant_filter())
+        if global_scope
+        else True
+        if artist_id is None
+        else RewardCatalog.artist_id == artist_id
+    )
     claimable_reward_rows = (
         await session.execute(
             select(RewardGrant, RewardCatalog)
@@ -629,13 +659,7 @@ async def fan_progression_data(
                 RewardGrant.user_id == user_id,
                 RewardGrant.claimed_at.is_(None),
                 RewardCatalog.status == "published",
-                or_(
-                    RewardCatalog.artist_id.is_(None)
-                    if global_scope
-                    else True
-                    if artist_id is None
-                    else RewardCatalog.artist_id == artist_id,
-                ),
+                reward_scope_filter,
             )
             .order_by(RewardGrant.granted_at, RewardGrant.id)
         )
@@ -648,13 +672,7 @@ async def fan_progression_data(
                 RewardGrant.user_id == user_id,
                 RewardGrant.claimed_at.is_not(None),
                 RewardCatalog.status == "published",
-                or_(
-                    RewardCatalog.artist_id.is_(None)
-                    if global_scope
-                    else True
-                    if artist_id is None
-                    else RewardCatalog.artist_id == artist_id,
-                ),
+                reward_scope_filter,
             )
             .order_by(RewardGrant.claimed_at, RewardGrant.granted_at, RewardGrant.id)
         )
