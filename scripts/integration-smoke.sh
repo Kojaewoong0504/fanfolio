@@ -274,11 +274,12 @@ async def main() -> None:
             ]
         )
         await session.flush()
+        session.add(Drop(id=drop_id, name="Integration drop", status="live"))
+        await session.flush()
         session.add_all(
             [
                 Session(token=session_a, user_id=user_a),
                 Session(token=session_b, user_id=user_b),
-                Drop(id=drop_id, name="Integration drop", status="live"),
                 Card(
                     id=card_id,
                     name="Integration card",
