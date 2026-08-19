@@ -5,4 +5,9 @@ export type Card = {
   artist: string
   member: string
   image: string
+  rarity?: string
+  seasonName?: string
+  cardType?: string
+  acquisitionSource?: string
+  acquiredAt?: string
 }

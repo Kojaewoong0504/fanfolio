@@ -170,6 +170,46 @@ export type CollectionCard = {
   artistName?: string | null
   memberId?: string | null
   memberName?: string | null
+  rarity?: string | null
+  seasonName?: string | null
+  cardType?: string | null
+  signatureText?: string | null
+  issueLimit?: number | null
+  acquisitionSource?: string | null
+}
+
+export type CardPackCard = {
+  cardId: string
+  name: string
+  rarity: string | null
+  imageUrl: string
+  memberId: string | null
+  probability: number
+  position: number
+}
+
+export type CardPack = {
+  id: string
+  artistId: string
+  name: string
+  seasonName: string | null
+  version: string
+  imageUrl: string | null
+  description: string | null
+  status: string
+  publishedAt: string | null
+  cards: CardPackCard[]
+}
+
+export type CardPackOpening = {
+  openingId: string
+  issuanceCode: string
+  userCardId: string
+  packId: string
+  cardId: string
+  serialNumber: number
+  probability: number
+  card: CardPackCard
 }
 
 export type CollectionSummary = {
@@ -611,4 +651,17 @@ export function getFanPass(artistId?: string | null): Promise<{ ok: true, data: 
 
 export function claimPassTier(tierId: string): Promise<{ ok: true, data: PassTierClaim }> {
   return apiFetch<{ ok: true, data: PassTierClaim }>(`/me/pass-tiers/${encodeURIComponent(tierId)}/claim`, { method: 'POST' })
+}
+
+export function getCardPacks(artistId?: string | null): Promise<{ ok: true, data: { items: CardPack[] } }> {
+  const query = artistId ? `?artistId=${encodeURIComponent(artistId)}` : ''
+  return apiFetch<{ ok: true, data: { items: CardPack[] } }>(`/catalog/card-packs${query}`)
+}
+
+export function getCardPackOdds(packId: string): Promise<{ ok: true, data: { pack: CardPack, items: CardPackCard[], totalProbability: number } }> {
+  return apiFetch<{ ok: true, data: { pack: CardPack, items: CardPackCard[], totalProbability: number } }>(`/catalog/card-packs/${encodeURIComponent(packId)}/odds`)
+}
+
+export function openCardPack(packId: string): Promise<{ ok: true, data: CardPackOpening }> {
+  return apiFetch<{ ok: true, data: CardPackOpening }>(`/me/card-packs/${encodeURIComponent(packId)}/open`, { method: 'POST' })
 }

@@ -140,6 +140,25 @@ class CodeBatchRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class CardPackCardInput(BaseModel):
+    card_id: str = Field(alias="cardId", min_length=1)
+    position: int = Field(default=0, ge=0)
+    probability: float = Field(gt=0, le=100)
+    enabled: bool = True
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class CardPackCreate(BaseModel):
+    artist_id: str = Field(alias="artistId", min_length=1)
+    name: str = Field(min_length=1, max_length=200)
+    season_name: str | None = Field(default=None, alias="seasonName", max_length=200)
+    version: str = Field(default="v1.0", min_length=1, max_length=32)
+    image_url: str | None = Field(default=None, alias="imageUrl", max_length=2048)
+    description: str | None = Field(default=None, max_length=1000)
+    cards: list[CardPackCardInput] = Field(default_factory=list, max_length=200)
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class DropCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     organization_id: str | None = Field(default=None, alias="organizationId")

@@ -38,6 +38,7 @@ const state = {
   notifications: [],
   unreadNotificationCount: 0,
   cards: [],
+  cardPacks: [],
   cardThumbnailUrls: {},
   drops: [],
   batches: [],
@@ -474,7 +475,11 @@ function dashboardView() {
   const scopeDescription = isRoot()
     ? "전체 파트너와 서비스 운영 현황"
     : `${scopeLabel()} · 배정된 아티스트 운영 현황`;
-  return `<div class="page-heading"><div><p class="eyebrow">TODAY</p><h2>운영 현황을 한눈에 확인하세요</h2><p>${escapeHtml(scopeDescription)}</p></div></div><div class="metrics"><article class="metric"><span class="metric-icon purple">${icon("style")}</span><div><span class="metric-label">전체 카드</span><strong class="metric-value">${metrics.totalCards}</strong><span class="metric-note">현재 범위 등록 카드</span></div></article><article class="metric"><span class="metric-icon green">${icon("public")}</span><div><span class="metric-label">공개 카드</span><strong class="metric-value">${metrics.publishedCards}</strong><span class="metric-note">팬에게 노출 중</span></div></article><article class="metric"><span class="metric-icon blue">${icon("campaign")}</span><div><span class="metric-label">진행 중 드롭</span><strong class="metric-value">${metrics.activeDrops}</strong><span class="metric-note">현재 라이브</span></div></article><article class="metric"><span class="metric-icon amber">${icon("qr_code_scanner")}</span><div><span class="metric-label">누적 발급</span><strong class="metric-value">${Number(metrics.redeemedCount).toLocaleString()}</strong><span class="metric-note">사용 완료 코드</span></div></article></div><div class="dashboard-grid"><section class="panel action-panel"><div class="panel-heading"><div><p class="eyebrow">QUICK ACTIONS</p><h2>바로 시작하기</h2></div></div><div class="quick-actions">${can("cards:write") ? `<button class="quick-action" id="open-card-drawer" type="button"><span>${icon("add_card")}</span><div><strong>새 카드 등록</strong><small>이미지와 카드 정보를 등록합니다.</small></div>${icon("arrow_forward")}</button>` : ""}${isRoot() ? `<button class="quick-action" data-view="partners" type="button"><span>${icon("domain_add")}</span><div><strong>파트너 관리</strong><small>기업 담당자와 아티스트를 배정합니다.</small></div>${icon("arrow_forward")}</button>` : ""}<button class="quick-action" data-view="artists" type="button"><span>${icon("recent_actors")}</span><div><strong>아티스트 확인</strong><small>소속과 계정 상태를 확인합니다.</small></div>${icon("arrow_forward")}</button></div></section><section class="panel"><div class="panel-heading"><div><p class="eyebrow">RECENT ACTIVITY</p><h2>최근 운영 활동</h2></div><button class="text-button" data-view="audit" type="button">전체 보기 ${icon("arrow_forward")}</button></div><div class="activity-list">${activity}</div></section></div>`;
+  const publishedPacks = state.cardPacks.filter((pack) => pack.status === "published").length;
+  const draftPacks = state.cardPacks.length - publishedPacks;
+  const packRows = state.cardPacks.slice(0, 3).map((pack) => `<li><span><strong>${escapeHtml(pack.name)}</strong><small>${escapeHtml(pack.seasonName || pack.version || "버전 미설정")}</small></span><em class="badge ${pack.status === "published" ? "success-badge" : "draft"}">${pack.status === "published" ? "공개됨" : "초안"}</em></li>`).join("");
+  const packSummary = `<section class="panel card-pack-summary"><div class="panel-heading"><div><p class="eyebrow">CARD PACKS</p><h2>카드팩 연동 상태</h2></div><span class="panel-count">${state.cardPacks.length}개</span></div><div class="card-pack-summary-stats"><span><strong>${publishedPacks}</strong> 공개</span><span><strong>${draftPacks}</strong> 편집 중</span></div>${packRows ? `<ul class="card-pack-summary-list">${packRows}</ul>` : `<div class="empty">연결된 카드팩이 없습니다.</div>`}</section>`;
+  return `<div class="page-heading"><div><p class="eyebrow">TODAY</p><h2>운영 현황을 한눈에 확인하세요</h2><p>${escapeHtml(scopeDescription)}</p></div></div><div class="metrics"><article class="metric"><span class="metric-icon purple">${icon("style")}</span><div><span class="metric-label">전체 카드</span><strong class="metric-value">${metrics.totalCards}</strong><span class="metric-note">현재 범위 등록 카드</span></div></article><article class="metric"><span class="metric-icon green">${icon("public")}</span><div><span class="metric-label">공개 카드</span><strong class="metric-value">${metrics.publishedCards}</strong><span class="metric-note">팬에게 노출 중</span></div></article><article class="metric"><span class="metric-icon blue">${icon("campaign")}</span><div><span class="metric-label">진행 중 드롭</span><strong class="metric-value">${metrics.activeDrops}</strong><span class="metric-note">현재 라이브</span></div></article><article class="metric"><span class="metric-icon amber">${icon("qr_code_scanner")}</span><div><span class="metric-label">누적 발급</span><strong class="metric-value">${Number(metrics.redeemedCount).toLocaleString()}</strong><span class="metric-note">사용 완료 코드</span></div></article></div><div class="dashboard-grid"><section class="panel action-panel"><div class="panel-heading"><div><p class="eyebrow">QUICK ACTIONS</p><h2>바로 시작하기</h2></div></div><div class="quick-actions">${can("cards:write") ? `<button class="quick-action" id="open-card-drawer" type="button"><span>${icon("add_card")}</span><div><strong>새 카드 등록</strong><small>이미지와 카드 정보를 등록합니다.</small></div>${icon("arrow_forward")}</button>` : ""}${isRoot() ? `<button class="quick-action" data-view="partners" type="button"><span>${icon("domain_add")}</span><div><strong>파트너 관리</strong><small>기업 담당자와 아티스트를 배정합니다.</small></div>${icon("arrow_forward")}</button>` : ""}<button class="quick-action" data-view="artists" type="button"><span>${icon("recent_actors")}</span><div><strong>아티스트 확인</strong><small>소속과 계정 상태를 확인합니다.</small></div>${icon("arrow_forward")}</button></div></section>${packSummary}<section class="panel"><div class="panel-heading"><div><p class="eyebrow">RECENT ACTIVITY</p><h2>최근 운영 활동</h2></div><button class="text-button" data-view="audit" type="button">전체 보기 ${icon("arrow_forward")}</button></div><div class="activity-list">${activity}</div></section></div>`;
 }
 function activityLabel(action) {
   return (
@@ -1870,9 +1875,12 @@ async function loadData() {
     if (state.auditQuery.trim()) auditParams.set("q", state.auditQuery.trim());
     if (state.auditAction !== "all")
       auditParams.set("action", state.auditAction);
-    const [dashboard, cards, auditLogs, catalog, notifications] = await Promise.all([
+    const [dashboard, cards, cardPacks, auditLogs, catalog, notifications] = await Promise.all([
       api("/admin/dashboard"),
       api("/admin/cards"),
+      can("cards:read")
+        ? api("/admin/card-packs")
+        : Promise.resolve({ data: { items: [] } }),
       api(`/admin/audit-logs?${auditParams}`),
       api("/admin/catalog"),
       api("/admin/notifications"),
@@ -1880,6 +1888,7 @@ async function loadData() {
     state.metrics = dashboard.data.metrics;
     state.recentActivity = dashboard.data.recentActivity || [];
     state.cards = cards.data.items;
+    state.cardPacks = cardPacks.data.items || [];
     void loadCardThumbnails(state.cards);
     state.auditLogs = auditLogs.data.items;
     state.auditPagination = auditLogs.data.meta.pagination;
@@ -2518,6 +2527,7 @@ async function logoutAdmin() {
   state.unreadNotificationCount = 0;
   state.notificationPanelOpen = false;
   state.cards = [];
+  state.cardPacks = [];
   state.drops = [];
   state.batches = [];
   state.users = [];
@@ -3850,6 +3860,350 @@ function bind() {
     if (event.key === "Escape" && state.drawer) closeDrawer();
   };
 }
+const cardOperationsPreviewState = {
+  view: "packs",
+  oddsMode: "card",
+  odds: [1, 9, 30, 60],
+  publicPreviewOpen: false,
+  packDraftTitle: "",
+  issueDraftName: "",
+  issueDraftType: "limited",
+  issueDraftQuantity: 100,
+  selectedCardIndex: 0,
+  selectedIssuanceMethod: "limited",
+  selectedBatchIndex: 0,
+  cardQuery: "",
+  cardArtist: "all",
+  cardRarity: "all",
+  cardStatus: "all",
+  packQuery: "",
+  packArtist: "all",
+  packStatus: "all",
+  issueQuery: "",
+  issueStatus: "all",
+  issueType: "all",
+  issuePeriod: "all",
+  packVersionDrafts: 0,
+  compositionCards: [
+    { code: "N-01", member: "지유", rarity: "UR", included: true, odds: 1, src: "./assets/preview/card-aurora-portrait.jpg" },
+    { code: "N-02", member: "수아", rarity: "SR", included: true, odds: 1.5, src: "./assets/preview/card-stardust-backstage.jpg" },
+    { code: "N-03", member: "시연", rarity: "SR", included: true, odds: 1.5, src: "./assets/preview/card-minho-midnight.jpg" },
+    { code: "N-04", member: "유현", rarity: "R", included: true, odds: 7.5, src: "./assets/preview/card-motion-stage.jpg" },
+    { code: "N-05", member: "다미", rarity: "R", included: true, odds: 7.5, src: "./assets/preview/card-aurora-portrait.jpg" },
+    { code: "N-06", member: "한동", rarity: "R", included: true, odds: 7.5, src: "./assets/preview/card-stardust-backstage.jpg" },
+    { code: "N-07", member: "가현", rarity: "N", included: true, odds: 15, src: "./assets/preview/card-motion-stage.jpg" },
+  ],
+};
+
+function calculatePreviewOddsTotal(values) {
+  return values.reduce((total, value) => {
+    const parsed = Number(value);
+    return total + (Number.isFinite(parsed) ? Math.max(0, parsed) : 0);
+  }, 0);
+}
+
+function cardOperationsPreviewNavigation() {
+  const view = cardOperationsPreviewState.view;
+  const submenu = [
+    ["cards", "카드 관리", "playing_cards"],
+    ["packs", "카드팩 관리", "deployed_code"],
+    ["codes", "발급·인증번호", "qr_code_2"],
+  ];
+  return `<aside class="app-nav card-ops-preview-nav" aria-label="관리자 주요 메뉴">
+    <div class="nav-brand"><span class="nav-brand-mark"><img src="./assets/fanfolio-app-icon-192.png" alt="Fanfolio 서비스 아이콘" /></span><span class="nav-brand-copy"><strong>FANFOLIO</strong><small>OPERATIONS</small></span>${icon("keyboard_double_arrow_left")}</div>
+    <nav>
+      <button class="nav-item" type="button">${icon("space_dashboard")}<span>개요</span></button>
+      <button class="nav-item" type="button">${icon("domain")}<span>파트너</span></button>
+      <button class="nav-item" type="button">${icon("recent_actors")}<span>아티스트</span></button>
+      <div class="card-ops-nav-group">
+        <button class="nav-item card-ops-parent active" type="button">${icon("style")}<span>카드</span>${icon("expand_less")}</button>
+        <div class="card-ops-subnav">${submenu.map(([id, label, iconName]) => `<button type="button" data-card-ops-view="${id}" class="${view === id || (view === "composition" && id === "packs") || (view === "pack-create" && id === "packs") ? "active" : ""}">${icon(iconName)}<span>${label}</span></button>`).join("")}</div>
+      </div>
+      <button class="nav-item" type="button">${icon("campaign")}<span>이벤트</span></button>
+      <button class="nav-item" type="button">${icon("workspace_premium")}<span>팬 성장</span></button>
+      <button class="nav-item" type="button">${icon("group")}<span>서비스 사용자</span></button>
+      <button class="nav-item" type="button">${icon("history")}<span>감사 로그</span></button>
+      <button class="nav-item" type="button">${icon("help")}<span>운영 가이드</span></button>
+    </nav>
+    <div class="nav-account"><span class="account-avatar">운</span><div class="nav-account-copy"><strong>운영 관리자</strong><small>루트 관리자</small></div>${icon("logout")}</div>
+  </aside>`;
+}
+
+function cardOperationsPreviewTopbar() {
+  const titles = {
+    cards: ["카드 관리", "CARD LIBRARY"],
+    packs: ["카드팩 관리", "CARD PACKS"],
+    codes: ["발급·인증번호", "ISSUANCE"],
+    composition: ["카드 구성 편집", "CARD PACKS"],
+    "pack-create": ["새 카드팩 만들기", "CARD PACKS"],
+    "issue-create": ["새 발급 배치 만들기", "ISSUANCE"],
+  };
+  const [titleText, eyebrow] = titles[cardOperationsPreviewState.view];
+  return `<header class="topbar card-ops-preview-topbar"><div class="topbar-title"><div><p class="eyebrow">${eyebrow}</p><h1 class="title">${titleText}</h1></div></div><div class="top-actions"><span class="scope-chip root-scope">${icon("shield_person")}<span>ROOT 운영 영역</span></span><button class="icon-button" type="button" aria-label="알림">${icon("notifications")}</button><span class="top-avatar">운</span></div></header>`;
+}
+
+function previewCardThumb(src, name) {
+  return `<span class="preview-card-thumb"><img src="${src}" alt="${name}" /></span>`;
+}
+
+function cardManagementPreview() {
+  const cards = [
+    { name: "Nebula Ver.", member: "민재", artist: "DREAMSCAPE", rarity: "UR", src: "./assets/preview/card-aurora-portrait.jpg", status: "공개됨", method: "한정 특전", count: "14장", message: "이 순간이 오래도록 빛나길 바라요. 항상 고마워요, 우리 팬들! ✨" },
+    { name: "Starlight Ver.", member: "도윤", artist: "DREAMSCAPE", rarity: "SR", src: "./assets/preview/card-stardust-backstage.jpg", status: "공개됨", method: "한정 특전", count: "14장", message: "같이 만든 별빛 같은 순간을 오래 기억할게요." },
+    { name: "Midnight Ver.", member: "하린", artist: "DREAMSCAPE", rarity: "R", src: "./assets/preview/card-motion-stage.jpg", status: "공개됨", method: "한정 특전", count: "14장", message: "언제나 곁에서 응원해 줘서 고마워요." },
+    { name: "Aurora Ver.", member: "민재", artist: "DREAMSCAPE", rarity: "R", src: "./assets/preview/card-minho-midnight.jpg", status: "검수 완료", method: "카드팩 랜덤", count: "28장", message: "새로운 계절에도 우리 함께해요." },
+    { name: "Eclipse Ver.", member: "도윤", artist: "DREAMSCAPE", rarity: "N", src: "./assets/preview/card-aurora-portrait.jpg", status: "검수 완료", method: "카드팩 랜덤", count: "14장", message: "오늘도 좋은 하루 보내요." },
+    { name: "Bloom Ver.", member: "하린", artist: "LUMINA", rarity: "R", src: "./assets/preview/card-stardust-backstage.jpg", status: "공개됨", method: "한정 특전", count: "20장", message: "우리의 순간이 활짝 피어나길." },
+    { name: "Petal Ver.", member: "민재", artist: "LUMINA", rarity: "SR", src: "./assets/preview/card-motion-stage.jpg", status: "검수 완료", method: "카드팩 랜덤", count: "30장", message: "소중한 마음 잊지 않을게요." },
+    { name: "Forest Ver.", member: "도윤", artist: "LUMINA", rarity: "N", src: "./assets/preview/card-minho-midnight.jpg", status: "검수 완료", method: "카드팩 랜덤", count: "20장", message: "늘 응원해 줘서 고마워요." },
+  ];
+  const query = cardOperationsPreviewState.cardQuery.trim().toLowerCase();
+  const visibleCards = cards.map((card, index) => ({ card, index })).filter(({ card }) => {
+    const haystack = `${card.name} ${card.member} ${card.artist}`.toLowerCase();
+    return (!query || haystack.includes(query)) && (cardOperationsPreviewState.cardArtist === "all" || card.artist === cardOperationsPreviewState.cardArtist) && (cardOperationsPreviewState.cardRarity === "all" || card.rarity === cardOperationsPreviewState.cardRarity) && (cardOperationsPreviewState.cardStatus === "all" || card.status === cardOperationsPreviewState.cardStatus);
+  });
+  const selected = cards[cardOperationsPreviewState.selectedCardIndex] || cards[0];
+  const selectedMethod = cardOperationsPreviewState.selectedIssuanceMethod || (selected.method === "한정 특전" ? "limited" : "random");
+  return `<section class="card-ops-page card-library-preview">
+    <div class="card-ops-heading"><div><nav>카드 <span>›</span> <strong>카드 관리</strong></nav><h2>카드 관리</h2><p>아티스트 스튜디오에서 등록된 카드와 공개 상태를 관리합니다.</p></div><span class="source-info"><span class="source-info-label">등록 경로</span> 아티스트 스튜디오</span></div>
+    <div class="card-ops-master-detail card-library-master-detail"><section class="panel card-ops-table-panel"><div class="card-ops-toolbar"><label class="search-field">${icon("search")}<input data-preview-search="cardQuery" value="${cardOperationsPreviewState.cardQuery}" placeholder="카드명 또는 아티스트 검색" /></label><select data-preview-filter="cardArtist"><option value="all" ${cardOperationsPreviewState.cardArtist === "all" ? "selected" : ""}>전체 아티스트</option><option value="DREAMSCAPE" ${cardOperationsPreviewState.cardArtist === "DREAMSCAPE" ? "selected" : ""}>DREAMSCAPE</option><option value="LUMINA" ${cardOperationsPreviewState.cardArtist === "LUMINA" ? "selected" : ""}>LUMINA</option></select><select data-preview-filter="cardRarity"><option value="all" ${cardOperationsPreviewState.cardRarity === "all" ? "selected" : ""}>전체 희귀도</option><option value="UR" ${cardOperationsPreviewState.cardRarity === "UR" ? "selected" : ""}>UR</option><option value="SR" ${cardOperationsPreviewState.cardRarity === "SR" ? "selected" : ""}>SR</option><option value="R" ${cardOperationsPreviewState.cardRarity === "R" ? "selected" : ""}>R</option><option value="N" ${cardOperationsPreviewState.cardRarity === "N" ? "selected" : ""}>N</option></select><select data-preview-filter="cardStatus"><option value="all" ${cardOperationsPreviewState.cardStatus === "all" ? "selected" : ""}>전체 상태</option><option value="공개됨" ${cardOperationsPreviewState.cardStatus === "공개됨" ? "selected" : ""}>공개됨</option><option value="검수 완료" ${cardOperationsPreviewState.cardStatus === "검수 완료" ? "selected" : ""}>검수 완료</option></select></div><div class="table-wrap"><table class="table"><thead><tr><th>카드</th><th>카드명</th><th>아티스트</th><th>시즌</th><th>희귀도</th><th>발행 방식</th><th>발행 수량</th><th>공개 상태</th></tr></thead><tbody>${visibleCards.map(({ card, index }) => `<tr tabindex="0" data-preview-card-index="${index}" class="${index === cardOperationsPreviewState.selectedCardIndex ? "selected-preview-row" : ""}"><td>${previewCardThumb(card.src, card.name)}</td><td><strong>${card.name}</strong></td><td>${card.artist}</td><td>정규 1집</td><td class="rarity-cell"><span class="preview-rarity rarity-${card.rarity.toLowerCase()}">${card.rarity}</span></td><td>${card.method}</td><td>${card.count}</td><td><span class="badge ${card.status === "공개됨" ? "success-badge" : "warning-badge"}">${card.status}</span></td></tr>`).join("")}</tbody></table></div><footer class="preview-table-footer"><strong>총 ${visibleCards.length}개</strong><span class="pagination-control">‹ <b>1</b> ›</span></footer></section>
+    <aside class="panel card-detail-preview"><div class="detail-panel-heading"><div><small>카드 상세</small><h3>${selected.name} <span class="preview-rarity rarity-${selected.rarity.toLowerCase()}">${selected.rarity}</span></h3></div>${icon("close")}</div><div class="card-detail-images"><figure><figcaption>앞면</figcaption><img src="${selected.src}" alt="${selected.name} 앞면" /></figure><figure><figcaption>뒷면</figcaption><img src="./assets/preview/card-back-template.png" alt="${selected.name} 뒷면" /></figure></div><section class="card-detail-message"><strong>아티스트 메시지</strong><p>${selected.message}</p></section><dl><div><dt>아티스트</dt><dd>${selected.artist}</dd></div><div><dt>시즌</dt><dd>정규 1집</dd></div><div><dt>희귀도</dt><dd><span class="preview-rarity rarity-${selected.rarity.toLowerCase()}">${selected.rarity}</span></dd></div><div><dt>발행 수량</dt><dd>${selected.count}</dd></div><div><dt>공개 상태</dt><dd><span class="badge success-badge">공개됨</span></dd></div></dl><div class="issuance-method-preview"><strong>발행 방식</strong><button type="button" class="issuance-method-option ${selectedMethod === "limited" ? "selected" : ""}" data-issuance-method="limited" aria-pressed="${selectedMethod === "limited"}"><span>${icon("featured_seasonal_and_gifts")}</span><span><b>한정 특전</b><small>행사 등록 코드로 팬 컬렉션에 추가됩니다.</small></span><em>${selected.count}</em></button><button type="button" class="issuance-method-option ${selectedMethod === "random" ? "selected" : ""}" data-issuance-method="random" aria-pressed="${selectedMethod === "random"}"><span>${icon("inventory_2")}</span><span><b>카드팩 랜덤</b><small>카드팩 개봉 시 확률에 따라 발급됩니다.</small></span><em>${selectedMethod === "random" ? selected.count : "-"}</em></button></div></aside></div>
+  </section>`;
+}
+
+function packManagementPreview() {
+  const packs = [
+    ["Nebula Ver.", "14장", "100%", "공개됨", "DREAMSCAPE"],
+    ["Starlight Ver.", "12장", "100%", "공개됨", "DREAMSCAPE"],
+    ["Midnight Ver.", "14장", "100%", "임시 저장", "DREAMSCAPE"],
+  ];
+  if (cardOperationsPreviewState.packDraftTitle) packs.unshift([cardOperationsPreviewState.packDraftTitle, "0장", "0%", "임시 저장", "DREAMSCAPE"]);
+  const query = cardOperationsPreviewState.packQuery.trim().toLowerCase();
+  const visiblePacks = packs.map((pack, index) => ({ pack, index })).filter(({ pack }) => (!query || `${pack[0]} ${pack[4]}`.toLowerCase().includes(query)) && (cardOperationsPreviewState.packArtist === "all" || pack[4] === cardOperationsPreviewState.packArtist) && (cardOperationsPreviewState.packStatus === "all" || pack[3] === cardOperationsPreviewState.packStatus));
+  return `<section class="card-ops-page pack-management-preview">
+    <div class="card-ops-heading"><div><nav>카드 <span>›</span> <strong>카드팩 관리</strong></nav><h2>카드팩 관리</h2><p>카드팩 이미지와 정보, 버전별 카드 구성 및 공개 확률을 관리합니다.</p></div><button class="primary" type="button" data-create-pack-version>${icon("add")} 새 버전 만들기</button></div>
+    <div class="card-ops-master-detail"><section class="panel card-ops-table-panel"><div class="card-ops-toolbar"><label class="search-field">${icon("search")}<input data-preview-search="packQuery" value="${cardOperationsPreviewState.packQuery}" placeholder="카드팩 또는 아티스트 검색" /></label><select data-preview-filter="packArtist"><option value="all" ${cardOperationsPreviewState.packArtist === "all" ? "selected" : ""}>전체 아티스트</option><option value="DREAMSCAPE" ${cardOperationsPreviewState.packArtist === "DREAMSCAPE" ? "selected" : ""}>DREAMSCAPE</option></select><select data-preview-filter="packStatus"><option value="all" ${cardOperationsPreviewState.packStatus === "all" ? "selected" : ""}>전체 상태</option><option value="공개됨" ${cardOperationsPreviewState.packStatus === "공개됨" ? "selected" : ""}>공개됨</option><option value="임시 저장" ${cardOperationsPreviewState.packStatus === "임시 저장" ? "selected" : ""}>임시 저장</option></select></div><div class="table-wrap"><table class="table"><thead><tr><th>카드팩</th><th>버전</th><th>포함 카드</th><th>확률 합계</th><th>공개 상태</th><th></th></tr></thead><tbody>${visiblePacks.map(({ pack, index }) => { const [name, count, total, status] = pack; const version = name === cardOperationsPreviewState.packDraftTitle ? "v1.0" : `v${3 - index}.0`; return `<tr class="${index === 0 ? "selected-preview-row" : ""}"><td><div class="pack-table-name"><img src="./assets/preview/card-back-template.png" alt="${name} 카드팩 이미지" /><div><small>정규 1집 · DREAMSCAPE</small><strong>${name}</strong></div></div></td><td>${version}</td><td>${count}</td><td><strong>${total}</strong></td><td><span class="badge ${status === "공개됨" ? "success-badge" : "draft"}">${status}</span></td><td><button class="icon-button" type="button">${icon("chevron_right")}</button></td></tr>`; }).join("")}</tbody></table></div><footer class="preview-table-footer"><strong>총 ${visiblePacks.length}개</strong><span class="pagination-control">‹ <b>1</b> ›</span></footer></section>
+    <aside class="panel pack-detail-preview"><div class="pack-detail-cover"><img src="./assets/preview/card-back-template.png" alt="Nebula Ver. 카드팩 이미지" /><div><small>정규 1집 · DREAMSCAPE</small><h3>Nebula Ver.</h3><span class="badge success-badge">공개됨</span></div></div><dl><div><dt>아티스트</dt><dd>DREAMSCAPE</dd></div><div><dt>포함 카드</dt><dd>14장</dd></div><div><dt>확률 합계</dt><dd>100%</dd></div><div><dt>공개 상태</dt><dd>공개됨</dd></div><div><dt>업데이트</dt><dd>2026. 8. 19. 13:20</dd></div></dl><div class="public-odds-mini"><strong>공개 확률 미리보기</strong><span><b>UR</b> 1%</span><span><b>SR</b> 9%</span><span><b>R</b> 30%</span><span><b>N</b> 60%</span></div><button class="primary" type="button" data-card-ops-view="composition">${icon("edit_square")} 카드 구성 편집</button><button class="secondary" type="button" data-open-odds-preview>${icon("public")} 확률표 공개</button></aside></div>
+  </section>`;
+}
+
+function packCreationPreview() {
+  return `<section class="card-ops-page pack-creation-preview">
+    <div class="card-ops-heading"><div><nav>카드 <span>›</span> <strong>카드팩 관리</strong> <span>›</span> <strong>새 카드팩 만들기</strong></nav><h2>새 카드팩 만들기</h2><p>카드팩의 기본 정보와 이미지를 등록한 뒤 카드 구성을 편집합니다.</p></div><span class="badge draft">초안</span></div>
+    <div class="pack-creation-layout"><form class="panel pack-creation-form" data-pack-creation-form><div class="panel-heading"><div><p class="eyebrow">PACK INFORMATION</p><h3>카드팩 기본 정보</h3><p>먼저 팬에게 노출될 카드팩 정보를 등록하세요.</p></div></div><label class="field"><span>카드팩 이름</span><input name="packTitle" value="${cardOperationsPreviewState.packDraftTitle}" placeholder="예: Nebula Ver." required /></label><div class="form-grid"><label class="field"><span>아티스트</span><select name="packArtist"><option>DREAMSCAPE</option><option>LUMINA</option></select></label><label class="field"><span>버전</span><input name="packVersion" type="text" value="v1.0" placeholder="예: v1.0" required /></label></div><label class="field"><span>카드팩 이미지</span><input name="packImage" type="file" accept="image/png,image/jpeg,image/webp" /><small class="field-help">PNG, JPG, WebP · 세로형 카드팩 이미지를 권장합니다.</small></label><label class="field"><span>설명 <em class="field-optional">선택</em></span><textarea name="packDescription" rows="4" placeholder="팬에게 표시할 카드팩 설명"></textarea></label><footer class="drawer-footer"><button class="secondary" data-card-ops-view="packs" type="button">취소</button><button class="primary" data-create-pack type="submit">카드팩 만들고 구성 편집</button></footer></form><aside class="panel pack-creation-guide"><p class="eyebrow">WORKFLOW</p><h3>카드팩 등록 순서</h3><ol><li class="active"><b>1</b><span><strong>기본 정보 등록</strong><small>이름·이미지·버전을 입력합니다.</small></span></li><li><b>2</b><span><strong>카드 구성 편집</strong><small>포함 카드와 개별 확률을 설정합니다.</small></span></li><li><b>3</b><span><strong>검수 요청 및 공개</strong><small>확률표를 확인하고 검수를 요청합니다.</small></span></li></ol><div class="pack-creation-note">공개된 버전은 확률을 수정할 수 없습니다. 변경이 필요하면 새 버전을 만들어야 합니다.</div></aside></div>
+  </section>`;
+}
+
+function buildPreviewIssuanceCsv(rows) {
+  return rows.map((row) => row.map((value) => {
+    const cell = String(value ?? "").replaceAll('"', '""');
+    return /[",\r\n]/.test(cell) ? `"${cell}"` : cell;
+  }).join(",")).join("\r\n");
+}
+
+function previewIssuanceExportRows() {
+  return [
+    ["배치명", "카드 유형", "수량", "발급", "등록 완료", "잔여 수량", "인증번호 상태", "상태", "생성일"],
+    ["Nebula Ver. 특전 카드 배치 #001", "한정 특전", 100, 0, 0, 100, "생성 완료", "등록 완료", "2024.05.10 10:30"],
+    ["Nebula Ver. 팩 배치 #001", "카드팩", 1000, 250, 60, 750, "발급 시 생성", "발급 중", "2024.05.10 11:20"],
+    ["Bloom Ver. 특전 카드 배치 #001", "한정 특전", 50, 50, 50, 0, "생성 완료", "등록 완료", "2024.05.08 09:15"],
+    ["Petal Ver. 팩 배치 #001", "카드팩", 1500, 1120, 820, 380, "발급 시 생성", "발급 중", "2024.05.07 14:40"],
+    ["Starlight Ver. 특전 카드 배치 #001", "한정 특전", 30, 30, 27, 3, "생성 완료", "등록 완료", "2024.04.06 16:05"],
+  ];
+}
+
+function downloadPreviewIssuanceCsv() {
+  const csv = buildPreviewIssuanceCsv(previewIssuanceExportRows());
+  const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `fanfolio-issuance-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function issuanceCodesPreview() {
+  const batches = [
+    { name: "Nebula Ver. 특전 카드 배치 #001", type: "한정 특전", quantity: 100, issued: 0, registered: 0, remaining: 100, code: "NB-2024-0510-001", status: "등록 완료", codeStatus: "생성 완료", created: "2024.05.10 10:30" },
+    { name: "Nebula Ver. 팩 배치 #001", type: "카드팩", quantity: 1000, issued: 250, registered: 60, remaining: 750, code: "NB-2024-0510-002", status: "발급 중", codeStatus: "발급 시 생성", created: "2024.05.10 11:20" },
+    { name: "Bloom Ver. 특전 카드 배치 #001", type: "한정 특전", quantity: 50, issued: 50, registered: 50, remaining: 0, code: "BL-2024-0508-001", status: "등록 완료", codeStatus: "생성 완료", created: "2024.05.08 09:15" },
+    { name: "Petal Ver. 팩 배치 #001", type: "카드팩", quantity: 1500, issued: 1120, registered: 820, remaining: 380, code: "PT-2024-0507-001", status: "발급 중", codeStatus: "발급 시 생성", created: "2024.05.07 14:40" },
+    { name: "Starlight Ver. 특전 카드 배치 #001", type: "한정 특전", quantity: 30, issued: 30, registered: 27, remaining: 3, code: "ST-2024-0506-001", status: "등록 완료", codeStatus: "생성 완료", created: "2024.04.06 16:05" },
+  ];
+  const query = cardOperationsPreviewState.issueQuery.trim().toLowerCase();
+  const visibleBatches = batches.map((batch, index) => ({ batch, index })).filter(({ batch }) => (!query || `${batch.name} ${batch.code}`.toLowerCase().includes(query)) && (cardOperationsPreviewState.issueStatus === "all" || batch.status === cardOperationsPreviewState.issueStatus) && (cardOperationsPreviewState.issueType === "all" || batch.type === cardOperationsPreviewState.issueType) && (cardOperationsPreviewState.issuePeriod === "all" || batch.created.startsWith(cardOperationsPreviewState.issuePeriod)));
+  const selected = batches[cardOperationsPreviewState.selectedBatchIndex] || batches[0];
+  return `<section class="card-ops-page issue-code-preview">
+    <div class="card-ops-heading"><div><nav>카드 <span>›</span> <strong>발급·인증번호</strong></nav><h2>발급·인증번호</h2><p>카드 발급 배치와 인증 상태를 관리합니다.</p></div><button class="primary" type="button" data-create-issuance-batch>${icon("add")} 추가 발급 배치 만들기</button></div>
+    <div class="card-ops-stats issue-stats"><article><span>${icon("calendar_month")}</span><small>예약 배치</small><strong>3개</strong></article><article><span>${icon("inventory_2")}</span><small>발급 중 배치</small><strong>5개</strong></article><article><span>${icon("check_circle")}</span><small>등록 완료 배치</small><strong>2개</strong></article><article><span>${icon("schedule")}</span><small>잔여 수량</small><strong>3,240장</strong></article></div>
+    <div class="card-ops-master-detail issuance-master-detail"><section class="panel card-ops-table-panel"><div class="card-ops-toolbar"><label class="search-field">${icon("search")}<input data-preview-search="issueQuery" value="${cardOperationsPreviewState.issueQuery}" placeholder="배치명, 카드명 검색" /></label><select data-preview-filter="issueStatus"><option value="all" ${cardOperationsPreviewState.issueStatus === "all" ? "selected" : ""}>전체 상태</option><option value="등록 완료" ${cardOperationsPreviewState.issueStatus === "등록 완료" ? "selected" : ""}>등록 완료</option><option value="발급 중" ${cardOperationsPreviewState.issueStatus === "발급 중" ? "selected" : ""}>발급 중</option></select><select data-preview-filter="issueType"><option value="all" ${cardOperationsPreviewState.issueType === "all" ? "selected" : ""}>전체 카드 유형</option><option value="한정 특전" ${cardOperationsPreviewState.issueType === "한정 특전" ? "selected" : ""}>한정 특전</option><option value="카드팩" ${cardOperationsPreviewState.issueType === "카드팩" ? "selected" : ""}>카드팩</option></select><select data-preview-filter="issuePeriod"><option value="all" ${cardOperationsPreviewState.issuePeriod === "all" ? "selected" : ""}>전체 기간</option><option value="2024.05" ${cardOperationsPreviewState.issuePeriod === "2024.05" ? "selected" : ""}>2024년 5월</option><option value="2024.04" ${cardOperationsPreviewState.issuePeriod === "2024.04" ? "selected" : ""}>2024년 4월</option></select></div><div class="table-wrap"><table class="table"><thead><tr><th>배치명</th><th>카드 유형</th><th>수량</th><th>발급</th><th>등록 완료</th><th>잔여 수량</th><th>인증번호 상태</th><th>상태</th><th>생성일</th></tr></thead><tbody>${visibleBatches.map(({ batch, index }) => `<tr tabindex="0" data-preview-batch-index="${index}" class="${index === cardOperationsPreviewState.selectedBatchIndex ? "selected-preview-row" : ""}"><td><div class="code-batch-name">${previewCardThumb(index % 2 ? "./assets/preview/card-back-template.png" : "./assets/preview/card-aurora-portrait.jpg", batch.name)}<div><strong>${batch.name}</strong><small>${batch.type}</small></div></div></td><td>${batch.type}</td><td>${batch.quantity}장</td><td>${batch.issued}장</td><td>${batch.registered}장</td><td>${batch.remaining}장</td><td><span class="badge ${batch.codeStatus === "생성 완료" ? "success-badge" : "warning-badge"}">${batch.codeStatus}</span></td><td><span class="badge ${batch.status === "등록 완료" ? "success-badge" : "warning-badge"}">${batch.status}</span></td><td>${batch.created}</td></tr>`).join("")}</tbody></table></div><footer class="preview-table-footer"><strong>총 ${visibleBatches.length}개</strong><span class="pagination-control">‹ <b>1</b> ›</span></footer></section>
+    <aside class="panel issuance-detail-preview"><div class="detail-panel-heading"><div><small>배치 상세</small><h3>${selected.name}</h3><p><span class="badge draft">${selected.type}</span> <span class="badge success-badge">${selected.status}</span></p></div>${icon("close")}</div><section><h4>기본 정보</h4><dl><div><dt>배치 번호</dt><dd>${selected.code}</dd></div><div><dt>카드 유형</dt><dd>${selected.type}</dd></div><div><dt>수량</dt><dd>${selected.quantity}장</dd></div><div><dt>생성일</dt><dd>${selected.created}</dd></div><div><dt>생성자</dt><dd>운영 관리자</dd></div><div><dt>설명</dt><dd>${selected.name}</dd></div></dl></section><section><h4>발급 현황</h4><dl><div><dt>발급</dt><dd>${selected.issued}장</dd></div><div><dt>등록 완료</dt><dd>${selected.registered}장</dd></div><div><dt>잔여 수량</dt><dd>${selected.remaining}장</dd></div></dl></section><section><h4>고유 시리얼</h4><dl><div><dt>시작 시리얼</dt><dd>NBDL-********-000001</dd></div><div><dt>종료 시리얼</dt><dd>NBDL-********-${String(selected.quantity).padStart(6, "0")}</dd></div><div><dt>총 개수</dt><dd>${selected.quantity}개</dd></div></dl></section><section><h4>인증번호 상태</h4><dl><div><dt>생성 방식</dt><dd>${selected.codeStatus === "생성 완료" ? "사전 생성" : "발급 시 생성"}</dd></div><div><dt>상태</dt><dd><span class="badge success-badge">${selected.codeStatus}</span></dd></div></dl></section><div class="detail-actions"><button class="secondary" data-export-issuance-csv type="button">${icon("download")} CSV 내보내기</button></div></aside></div>
+  </section>`;
+}
+
+function issuanceCreationPreview() {
+  return `<section class="card-ops-page issuance-creation-preview">
+    <div class="card-ops-heading"><div><nav>카드 <span>›</span> <strong>발급·인증번호</strong> <span>›</span> <strong>새 발급 배치 만들기</strong></nav><h2>새 발급 배치 만들기</h2><p>발급 대상과 수량, 인증번호 생성 방식을 먼저 등록합니다.</p></div><span class="badge draft">초안</span></div>
+    <div class="issuance-creation-layout"><form class="panel issuance-creation-form" data-issuance-creation-form><div class="panel-heading"><div><p class="eyebrow">ISSUANCE BATCH</p><h3>배치 기본 정보</h3><p>등록 후 발급 현황과 인증번호 상태를 추적할 수 있습니다.</p></div></div><label class="field"><span>배치명</span><input name="issueName" value="${cardOperationsPreviewState.issueDraftName}" placeholder="예: Nebula Ver. 특전 카드 배치 #002" required /></label><div class="form-grid"><label class="field"><span>발급 유형</span><select name="issueType"><option value="limited" ${cardOperationsPreviewState.issueDraftType === "limited" ? "selected" : ""}>한정 특전 카드</option><option value="pack" ${cardOperationsPreviewState.issueDraftType === "pack" ? "selected" : ""}>카드팩</option></select></label><label class="field"><span>발급 수량</span><input name="issueQuantity" type="number" min="1" step="1" value="${cardOperationsPreviewState.issueDraftQuantity}" required /></label></div><label class="field"><span>발급 대상</span><select name="issueTarget"><option>Nebula Ver. · DREAMSCAPE</option><option>Starlight Ver. · DREAMSCAPE</option><option>Bloom Ver. · LUMINA</option></select></label><label class="field"><span>인증번호 생성 방식</span><select name="issueCodeMode"><option value="pre-generated">발급 전 일괄 생성 · 한정 특전용</option><option value="on-issue">발급 시 생성 · 카드팩용</option></select><small class="field-help">한정 특전은 생성 수량만큼 고유 인증번호를 미리 만들고, 카드팩은 실제 카드 발급 시 번호를 생성합니다.</small></label><label class="field"><span>설명 <em class="field-optional">선택</em></span><textarea name="issueDescription" rows="4" placeholder="운영 메모 또는 발급 조건"></textarea></label><footer class="drawer-footer"><button class="secondary" data-card-ops-view="codes" type="button">취소</button><button class="primary" data-create-issuance type="submit">배치 만들기</button></footer></form><aside class="panel issuance-creation-guide"><p class="eyebrow">WORKFLOW</p><h3>발급 배치 등록 순서</h3><ol><li class="active"><b>1</b><span><strong>배치 기본 정보</strong><small>유형·대상·수량을 입력합니다.</small></span></li><li><b>2</b><span><strong>인증번호 준비</strong><small>유형에 맞는 생성 방식으로 준비합니다.</small></span></li><li><b>3</b><span><strong>발급 현황 관리</strong><small>발급·등록 완료·잔여 수량을 추적합니다.</small></span></li></ol><div class="issuance-creation-note">고유 인증번호는 중복되지 않으며, 한정 특전은 사전 생성하고 카드팩은 발급 시 생성합니다.</div></aside></div>
+  </section>`;
+}
+
+function packCompositionRows() {
+  return cardOperationsPreviewState.compositionCards.map((card, index) => `<tr draggable="true" data-composition-index="${index}" class="${card.included ? "" : "excluded-card"}"><td class="drag-cell" title="드래그해서 순서 변경" aria-label="드래그해서 카드 순서 변경"></td><td>${previewCardThumb(card.src, `${card.code} ${card.member}`)}</td><td><strong>${card.code}</strong></td><td>${card.member}</td><td class="rarity-cell"><span class="preview-rarity rarity-${card.rarity.toLowerCase()}">${card.rarity}</span></td><td><button class="composition-switch ${card.included ? "active" : ""}" type="button" data-toggle-composition-card="${index}" aria-pressed="${card.included}"><span></span></button></td><td><label class="odds-input"><input data-preview-card-odds="${index}" type="number" min="0" step="0.1" value="${card.odds}" ${cardOperationsPreviewState.oddsMode === "card" ? "" : "disabled"} /><span>%</span></label></td><td><button class="remove-card-button" type="button" data-remove-composition-card="${index}">삭제</button></td></tr>`).join("");
+}
+
+function publicOddsPreview() {
+  if (!cardOperationsPreviewState.publicPreviewOpen) return "";
+  const labels = [["UR", "N-01"], ["SR", "N-03"], ["R", "N-06"], ["N", "N-10"]];
+  const total = calculatePreviewOddsTotal(cardOperationsPreviewState.odds);
+  return `<aside class="public-odds-preview" role="dialog" aria-label="팬앱 공개 확률표"><div class="public-odds-heading"><div><p class="eyebrow">FAN APP PREVIEW</p><h3>팬앱 공개 확률표</h3></div><button class="icon-button" data-close-odds-preview type="button" aria-label="닫기">${icon("close")}</button></div><div class="public-pack-summary"><img src="./assets/preview/card-back-template.png" alt="Nebula Ver. 카드팩" /><div><strong>Nebula Ver.</strong><span>정규 1집 · DREAMSCAPE</span></div></div><p>카드팩에서 획득할 수 있는 카드와 개별 확률입니다. 모든 확률은 소수점 단위까지 공개됩니다.</p><div class="public-odds-list">${labels.map(([rarity, code], index) => `<span><b>${rarity} · ${code}</b><em>${Number(cardOperationsPreviewState.odds[index] || 0).toFixed(1)}%</em></span>`).join("")}</div><small>확률 합계 ${total.toFixed(1)}% · 2026. 8. 19. 기준</small></aside>`;
+}
+
+function packCompositionPreview() {
+  const total = calculatePreviewOddsTotal(cardOperationsPreviewState.odds);
+  const valid = Math.abs(total - 100) < 0.001;
+  const packTitle = cardOperationsPreviewState.packDraftTitle || "Nebula Ver.";
+  return `<section class="card-ops-page pack-composition-preview">
+    <div class="card-ops-heading"><div><nav>카드 <span>›</span> 카드팩 관리 <span>›</span> <strong>카드 구성 편집</strong></nav><h2>카드 구성 편집</h2><p>카드팩에 포함될 카드와 확률을 설정합니다.</p></div><span class="badge draft composition-status">편집 중</span></div>
+    <div class="pack-composition-workbench"><section class="panel composition-main"><div class="composition-pack-summary"><img src="./assets/preview/card-aurora-portrait.jpg" alt="${packTitle} 카드팩 이미지" /><div><small>정규 1집 · DREAMSCAPE</small><h3>${packTitle}</h3><p>총 14장 · 공개 상태: 공개됨</p></div><button class="secondary" type="button" data-card-ops-view="packs">${icon("arrow_back")} 목록으로</button></div><div class="composition-controls"><button class="primary" type="button">${icon("add")} 카드 추가</button><div class="odds-mode-control"><small>확률 입력 방식</small><div class="segmented-control" role="tablist" aria-label="확률 입력 방식"><button title="등급별 확률로 입력" class="${cardOperationsPreviewState.oddsMode === "rarity" ? "active" : ""}" type="button" data-odds-mode="rarity">등급별 확률</button><button title="카드별 확률로 입력" class="${cardOperationsPreviewState.oddsMode === "card" ? "active" : ""}" type="button" data-odds-mode="card">카드별 확률</button></div></div><p>카드팩에 표시할 확률 기준을 선택합니다.</p></div><div class="table-wrap"><table class="table composition-table"><thead><tr><th></th><th>카드</th><th>카드 번호</th><th>멤버</th><th>등급</th><th>포함 여부</th><th>카드별 확률(%)</th><th>작업</th></tr></thead><tbody>${packCompositionRows()}</tbody></table></div><footer class="composition-table-footer"><strong>총 ${cardOperationsPreviewState.compositionCards.length}장</strong><span class="composition-pagination">‹ <b>1</b> / 1 ›</span><button class="secondary" type="button">20개씩 보기 ${icon("expand_more")}</button></footer></section>
+    <aside class="panel odds-editor-panel"><div class="odds-validation"><span>${icon(valid ? "check_circle" : "error")}</span><div><h3>확률 유효성 검증</h3><p>${valid ? "모든 항목이 유효합니다." : "확률 합계를 확인해 주세요."}</p></div></div><div class="odds-policy-card"><strong>${icon("verified_user")} 확률표는 항상 공개됩니다</strong><p>공개 후 확률은 잠깁니다. 이후 수정이 필요하면 새 버전을 만들어야 합니다.</p><span class="badge success-badge">공개 후 확률은 잠깁니다</span></div><div><h3>현재 확률 합계 <em>${total.toFixed(0)}%</em></h3><div class="public-odds-mini odds-breakdown">${[["UR", 0, 1], ["SR", 1, 2], ["R", 2, 4], ["N", 3, 7]].map(([rarity, index, count]) => `<span><b class="preview-rarity rarity-${rarity.toLowerCase()}">${rarity}</b><em>${cardOperationsPreviewState.odds[index]}%</em><small>${count}장</small></span>`).join("")}</div></div><div class="odds-total ${valid ? "valid" : "invalid"}"><span>확률 합계</span><strong data-odds-total>${total.toFixed(1)}%</strong><small>${valid ? `${icon("check_circle")} 공개 가능한 확률 구성입니다.` : `${icon("error")} 합계가 100%가 되도록 조정하세요.`}</small></div><button class="secondary full-width" type="button" data-open-odds-preview>${icon("public")} 공개 확률표 미리보기</button><button class="primary full-width" type="button" ${valid ? "" : "disabled"}>저장 후 검수 요청</button><p class="odds-policy-note">검수 승인 후 서비스에 공개됩니다.</p></aside></div>${publicOddsPreview()}
+  </section>`;
+}
+
+function cardOperationsPreviewView() {
+  const body = {
+    cards: cardManagementPreview,
+    packs: packManagementPreview,
+    codes: issuanceCodesPreview,
+    composition: packCompositionPreview,
+    "pack-create": packCreationPreview,
+    "issue-create": issuanceCreationPreview,
+  }[cardOperationsPreviewState.view]();
+  return `<div class="admin-shell card-ops-preview">${cardOperationsPreviewNavigation()}<main class="workspace">${cardOperationsPreviewTopbar()}<section class="page-content">${body}</section></main></div>${cardOperationsPreviewState.view !== "composition" ? publicOddsPreview() : ""}<div class="toast" id="card-ops-preview-toast" role="status" aria-live="polite"></div>`;
+}
+
+function renderCardOperationsPreview() {
+  app.innerHTML = cardOperationsPreviewView();
+  document.querySelectorAll("[data-card-ops-view]").forEach((button) => button.addEventListener("click", () => {
+    cardOperationsPreviewState.view = button.dataset.cardOpsView;
+    cardOperationsPreviewState.publicPreviewOpen = false;
+    renderCardOperationsPreview();
+  }));
+  document.querySelectorAll("[data-odds-mode]").forEach((button) => button.addEventListener("click", () => {
+    cardOperationsPreviewState.oddsMode = button.dataset.oddsMode;
+    renderCardOperationsPreview();
+  }));
+  document.querySelectorAll("[data-preview-card-index]").forEach((row) => row.addEventListener("click", () => {
+    cardOperationsPreviewState.selectedCardIndex = Number(row.dataset.previewCardIndex);
+    const cardMethod = row.querySelector("td:nth-child(6)")?.textContent?.trim();
+    cardOperationsPreviewState.selectedIssuanceMethod = cardMethod === "한정 특전" ? "limited" : "random";
+    renderCardOperationsPreview();
+  }));
+  document.querySelectorAll("[data-issuance-method]").forEach((button) => button.addEventListener("click", () => {
+    cardOperationsPreviewState.selectedIssuanceMethod = button.dataset.issuanceMethod;
+    renderCardOperationsPreview();
+  }));
+  document.querySelectorAll("[data-create-pack-version]").forEach((button) => button.addEventListener("click", () => {
+    cardOperationsPreviewState.view = "pack-create";
+    cardOperationsPreviewState.publicPreviewOpen = false;
+    cardOperationsPreviewState.packDraftTitle = "";
+    renderCardOperationsPreview();
+  }));
+  document.querySelectorAll("[data-create-issuance-batch]").forEach((button) => button.addEventListener("click", () => {
+    cardOperationsPreviewState.view = "issue-create";
+    cardOperationsPreviewState.publicPreviewOpen = false;
+    cardOperationsPreviewState.issueDraftName = "";
+    renderCardOperationsPreview();
+  }));
+  document.querySelector("[data-pack-creation-form]")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const title = event.currentTarget.elements.packTitle?.value.trim() || "새 카드팩";
+    cardOperationsPreviewState.packDraftTitle = title;
+    cardOperationsPreviewState.packVersionDrafts += 1;
+    cardOperationsPreviewState.view = "composition";
+    renderCardOperationsPreview();
+  });
+  document.querySelector("[data-issuance-creation-form]")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    cardOperationsPreviewState.issueDraftName = form.elements.issueName?.value.trim() || "새 발급 배치";
+    cardOperationsPreviewState.issueDraftType = form.elements.issueType?.value || "limited";
+    cardOperationsPreviewState.issueDraftQuantity = Math.max(1, Number(form.elements.issueQuantity?.value || 1));
+    cardOperationsPreviewState.view = "codes";
+    renderCardOperationsPreview();
+  });
+  document.querySelectorAll("[data-preview-batch-index]").forEach((row) => row.addEventListener("click", () => {
+    cardOperationsPreviewState.selectedBatchIndex = Number(row.dataset.previewBatchIndex);
+    renderCardOperationsPreview();
+  }));
+  document.querySelectorAll("[data-export-issuance-csv]").forEach((button) => button.addEventListener("click", downloadPreviewIssuanceCsv));
+  document.querySelectorAll("[data-toggle-composition-card]").forEach((button) => button.addEventListener("click", () => {
+    const card = cardOperationsPreviewState.compositionCards[Number(button.dataset.toggleCompositionCard)];
+    if (card) card.included = !card.included;
+    renderCardOperationsPreview();
+  }));
+  document.querySelectorAll("[data-remove-composition-card]").forEach((button) => button.addEventListener("click", () => {
+    cardOperationsPreviewState.compositionCards.splice(Number(button.dataset.removeCompositionCard), 1);
+    renderCardOperationsPreview();
+  }));
+  document.querySelectorAll("[data-preview-card-odds]").forEach((input) => input.addEventListener("input", () => {
+    const card = cardOperationsPreviewState.compositionCards[Number(input.dataset.previewCardOdds)];
+    if (card) card.odds = Number(input.value || 0);
+  }));
+  document.querySelectorAll("[data-preview-search]").forEach((input) => input.addEventListener("input", () => {
+    cardOperationsPreviewState[input.dataset.previewSearch] = input.value;
+    renderCardOperationsPreview();
+    const next = document.querySelector(`[data-preview-search="${input.dataset.previewSearch}"]`);
+    next?.focus();
+    next?.setSelectionRange(next.value.length, next.value.length);
+  }));
+  document.querySelectorAll("[data-preview-filter]").forEach((select) => select.addEventListener("change", () => {
+    cardOperationsPreviewState[select.dataset.previewFilter] = select.value;
+    renderCardOperationsPreview();
+  }));
+  document.querySelectorAll("[data-composition-index]").forEach((row) => {
+    row.addEventListener("dragstart", (event) => {
+      row.classList.add("dragging");
+      event.dataTransfer?.setData("text/plain", row.dataset.compositionIndex);
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+    });
+    row.addEventListener("dragover", (event) => { event.preventDefault(); row.classList.add("drag-over"); });
+    row.addEventListener("dragleave", () => row.classList.remove("drag-over"));
+    row.addEventListener("drop", (event) => {
+      event.preventDefault();
+      const from = Number(event.dataTransfer?.getData("text/plain"));
+      const to = Number(row.dataset.compositionIndex);
+      if (Number.isInteger(from) && Number.isInteger(to) && from !== to) {
+        const [moved] = cardOperationsPreviewState.compositionCards.splice(from, 1);
+        cardOperationsPreviewState.compositionCards.splice(to, 0, moved);
+        renderCardOperationsPreview();
+      }
+    });
+    row.addEventListener("dragend", () => row.classList.remove("dragging", "drag-over"));
+  });
+  document.querySelectorAll("[data-preview-odds-index]").forEach((input) => input.addEventListener("input", () => {
+    cardOperationsPreviewState.odds[Number(input.dataset.previewOddsIndex)] = input.value;
+    const total = calculatePreviewOddsTotal(cardOperationsPreviewState.odds);
+    const totalBox = document.querySelector(".odds-total");
+    const totalValue = document.querySelector("[data-odds-total]");
+    const valid = Math.abs(total - 100) < 0.001;
+    if (totalValue) totalValue.textContent = `${total.toFixed(1)}%`;
+    totalBox?.classList.toggle("valid", valid);
+    totalBox?.classList.toggle("invalid", !valid);
+  }));
+  document.querySelectorAll("[data-open-odds-preview]").forEach((button) => button.addEventListener("click", () => {
+    cardOperationsPreviewState.publicPreviewOpen = true;
+    renderCardOperationsPreview();
+  }));
+  document.querySelector("[data-close-odds-preview]")?.addEventListener("click", () => {
+    cardOperationsPreviewState.publicPreviewOpen = false;
+    renderCardOperationsPreview();
+  });
+}
+
 async function restoreAdminSession() {
   try {
     const context = await api("/admin/me");
@@ -3864,11 +4218,13 @@ async function restoreAdminSession() {
   }
 }
 
-const localPreviewMode = isLocalHost
-  ? new URLSearchParams(window.location.search).get("preview")
+const localPreviewMode = isLocalHost && typeof URLSearchParams !== "undefined"
+  ? new URLSearchParams(window.location.search || "").get("preview")
   : "";
 
-if (localPreviewMode === "reward-builder") {
+if (localPreviewMode === "card-operations") {
+  renderCardOperationsPreview();
+} else if (localPreviewMode === "reward-builder") {
   state.authenticated = true;
   state.restoringSession = false;
   state.view = "fan-growth";

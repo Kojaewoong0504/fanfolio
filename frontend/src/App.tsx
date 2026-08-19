@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from 'react'
 import './App.css'
 import './reference.css'
-import { ApiError, apiFetch, applyToFanEvent, claimPassTier, claimReward, clearAccessToken, connectNotificationStream, getFanEvent, getFanEventComments, getFanEvents, getFanHome, getMyEventApplications, getFanPass, getNotificationPreferences, getProgression, oauthStartUrl, postFanEventComment, reconcilePassRewards, resolveApiUrl, setAccessToken, updateNotificationPreferences, updateProfileEquipment, type CardDesignConfig, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionSummary, type CurrentUser, type EventPagination, type FanEvent, type FanEventApplication, type FanEventComment, type FanEventStatus, type FanHomeResponse, type FanProgression, type NotificationItem, type ProfileEquipment, type RewardGrant, type UserCardDetail } from './api/client'
+import { ApiError, apiFetch, applyToFanEvent, claimPassTier, claimReward, clearAccessToken, connectNotificationStream, getCardPacks, getFanEvent, getFanEventComments, getFanEvents, getFanHome, getMyEventApplications, getFanPass, getNotificationPreferences, getProgression, oauthStartUrl, postFanEventComment, reconcilePassRewards, resolveApiUrl, setAccessToken, updateNotificationPreferences, updateProfileEquipment, type CardDesignConfig, type CardPack, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionSummary, type CurrentUser, type EventPagination, type FanEvent, type FanEventApplication, type FanEventComment, type FanEventStatus, type FanHomeResponse, type FanProgression, type NotificationItem, type ProfileEquipment, type RewardGrant, type UserCardDetail } from './api/client'
 import { QrRedeemModal, RedeemIcon } from './components/QrRedeemModal'
 import { CardDetail } from './components/CardDetail'
 import { InteractiveCollectibleCard } from './components/InteractiveCollectibleCard'
@@ -165,12 +165,17 @@ function readSavedCards(userId: string): Card[] {
 
 function toCollectionCard(card: CollectionCard): Card {
   return {
-    id: `#${String(card.serialNumber).padStart(3, '0')}`,
+    id: card.cardId,
     userCardId: card.userCardId,
     title: card.name,
     artist: card.artistName ?? 'Fanfolio 아티스트',
     member: card.memberName ?? '공식 카드',
     image: demoCardImage(resolveApiUrl(card.imageUrl), `member:${card.memberName ?? card.memberId ?? card.userCardId}`),
+    rarity: card.rarity ?? undefined,
+    seasonName: card.seasonName ?? undefined,
+    cardType: card.cardType ?? undefined,
+    acquisitionSource: card.acquisitionSource ?? undefined,
+    acquiredAt: card.acquiredAt,
   }
 }
 
@@ -1396,6 +1401,48 @@ const cardCollectionGroups: CardCollectionGroup[] = [
     ],
   },
 ]
+
+function buildRemoteCardCollectionGroups(packs: CardPack[], ownedCards: CollectionCard[]): CardCollectionGroup[] {
+  const ownedByCard = new Map<string, CollectionCard[]>()
+  for (const card of ownedCards) {
+    const list = ownedByCard.get(card.cardId) ?? []
+    list.push(card)
+    ownedByCard.set(card.cardId, list)
+  }
+  const grouped = new Map<string, CardCollectionGroup>()
+  for (const pack of packs) {
+    const groupId = `${pack.artistId}:${pack.seasonName ?? 'default'}`
+    const group = grouped.get(groupId) ?? { id: groupId, displayName: pack.seasonName ?? pack.name, owned: 0, total: 0, packs: [] }
+    const prefix = pack.name.replace(/[^A-Za-z]/g, '').slice(0, 1).toUpperCase() || 'P'
+    const slots = pack.cards.map((packCard, index) => {
+      const owned = ownedByCard.get(packCard.cardId) ?? []
+      const source = owned[0]
+      const copies = owned.length
+      const rarityValue = packCard.rarity ?? 'N'
+      const rarity = (['UR', 'SR', 'R', 'N'].includes(rarityValue) ? rarityValue : 'N') as CardCollectionSlot['rarity']
+      return {
+        number: packCard.position || index + 1,
+        rarity,
+        copies,
+        card: copies > 0 ? {
+          id: packCard.cardId,
+          userCardId: source?.userCardId,
+          title: pack.name,
+          artist: source?.artistName ?? 'Fanfolio 아티스트',
+          member: source?.memberName ?? '공식 카드',
+          image: demoCardImage(resolveApiUrl(packCard.imageUrl), `card:${packCard.cardId}`),
+        } : undefined,
+      }
+    })
+    const packOwned = slots.filter(slot => Boolean(slot.card)).length
+    group.packs.push({ id: pack.id, name: pack.name, prefix, owned: packOwned, total: slots.length, slots })
+    group.owned += packOwned
+    group.total += slots.length
+    grouped.set(groupId, group)
+  }
+  return [...grouped.values()]
+}
+
 function Home(props: HomeProps) {
   const [recommendations, setRecommendations] = useState<Card[]>([])
 
@@ -1890,6 +1937,7 @@ function CardCollectionDetail({ item, onBack }: { item: CardCollectionDetailItem
 }
 
 function CardCollectionRepository({ onBack, onNavigate }: { onBack: () => void, onNavigate: (tab: Tab) => void }) {
+  const [remoteGroups, setRemoteGroups] = useState<CardCollectionGroup[] | null>(null)
   const [groupId, setGroupId] = useState(cardCollectionGroups[0].id)
   const [packId, setPackId] = useState(cardCollectionGroups[0].packs[0].id)
   const [groupMenuOpen, setGroupMenuOpen] = useState(false)
@@ -1897,7 +1945,26 @@ function CardCollectionRepository({ onBack, onNavigate }: { onBack: () => void, 
   const [filter, setFilter] = useState<'all' | 'owned' | 'missing' | 'duplicate'>('all')
   const [sort, setSort] = useState<'number' | 'rarity' | 'copies'>('number')
   const [selectedItem, setSelectedItem] = useState<CardCollectionDetailItem | null>(null)
-  const group = cardCollectionGroups.find(item => item.id === groupId) ?? cardCollectionGroups[0]
+  const groups = remoteGroups ?? cardCollectionGroups
+  const group = groups.find(item => item.id === groupId) ?? groups[0] ?? { id: 'empty', displayName: '카드 컬렉션', owned: 0, total: 0, packs: [] }
+  useEffect(() => {
+    let cancelled = false
+    void Promise.all([
+      getCardPacks(),
+      apiFetch<{ ok: true, data: { cards: CollectionCard[] } }>('/me/collection'),
+    ]).then(([packs, collection]) => {
+      if (cancelled) return
+      const nextGroups = buildRemoteCardCollectionGroups(packs.data.items, collection.data.cards)
+      setRemoteGroups(nextGroups)
+      if (nextGroups[0]) {
+        setGroupId(nextGroups[0].id)
+        setPackId(nextGroups[0].packs[0]?.id ?? 'all')
+      }
+    }).catch(() => {
+      if (!cancelled) setRemoteGroups([])
+    })
+    return () => { cancelled = true }
+  }, [])
   const allPack: CardCollectionPack = {
     id: 'all',
     name: '전체 팩',
@@ -1931,7 +1998,7 @@ function CardCollectionRepository({ onBack, onNavigate }: { onBack: () => void, 
           <span><b>{group.displayName}</b><i><em style={{ width: `${group.owned / group.total * 100}%` }} /><small>{group.owned} / {group.total}</small></i></span>
           <InlineIcon name="chevron" />
         </button>
-        {groupMenuOpen && <div className="card-collection-group-menu" role="listbox" aria-label="컬렉션 그룹">{cardCollectionGroups.map(item => <button type="button" role="option" aria-selected={item.id === group.id} key={item.id} onClick={() => selectGroup(item)}><b>{item.displayName}</b><small>{item.owned} / {item.total}</small></button>)}</div>}
+        {groupMenuOpen && <div className="card-collection-group-menu" role="listbox" aria-label="컬렉션 그룹">{groups.map(item => <button type="button" role="option" aria-selected={item.id === group.id} key={item.id} onClick={() => selectGroup(item)}><b>{item.displayName}</b><small>{item.owned} / {item.total}</small></button>)}</div>}
       </div>
     </section>
 

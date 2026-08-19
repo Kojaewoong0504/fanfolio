@@ -22,6 +22,8 @@ from app.models import (
     Asset,
     AuditLog,
     Card,
+    CardPack,
+    CardPackCard,
     CollectionCampaign,
     Drop,
     EngagementEvent,
@@ -55,6 +57,7 @@ from app.schemas import (
     AdminUserRoleUpdate,
     ArtistAccountCreate,
     ArtistReviewSubmitRequest,
+    CardPackCreate,
     CodeBatchRequest,
     CollectionCampaignCreate,
     CollectionCampaignUpdate,
@@ -178,6 +181,36 @@ def drop_data(drop: Drop) -> dict:
         "startsAt": drop.starts_at.isoformat() if drop.starts_at else None,
         "endsAt": drop.ends_at.isoformat() if drop.ends_at else None,
     }
+
+
+def card_pack_data(pack: CardPack, cards: list[dict] | None = None) -> dict:
+    return {
+        "id": pack.id,
+        "artistId": pack.artist_id,
+        "name": pack.name,
+        "seasonName": pack.season_name,
+        "version": pack.version,
+        "imageUrl": pack.image_url,
+        "description": pack.description,
+        "status": pack.status,
+        "publishedAt": pack.published_at.isoformat() if pack.published_at else None,
+        "cards": cards or [],
+    }
+
+
+async def validate_card_pack_input(payload: CardPackCreate, session: DbSession) -> None:
+    if len({item.card_id for item in payload.cards}) != len(payload.cards):
+        raise AppError(
+            422, "DUPLICATE_PACK_CARD", "카드팩에 같은 카드를 중복으로 넣을 수 없습니다."
+        )
+    total = sum(item.probability for item in payload.cards if item.enabled)
+    if payload.cards and abs(total - 100) > 0.001:
+        raise AppError(422, "INVALID_PACK_ODDS", "공개 확률의 합계는 100%여야 합니다.")
+    cards = await session.scalars(
+        select(Card).where(Card.id.in_([item.card_id for item in payload.cards]))
+    )
+    if len(cards.all()) != len(payload.cards):
+        raise AppError(404, "CARD_NOT_FOUND", "카드팩에 포함할 카드를 찾을 수 없습니다.")
 
 
 def _iso_utc(value: datetime | None) -> str | None:
@@ -1159,6 +1192,171 @@ async def list_drops(context: CurrentAdmin, session: DbSession) -> dict:
             statement = statement.where(Drop.artist_id.in_(context.assigned_artist_ids))
     drops = await session.scalars(statement)
     return {"ok": True, "data": {"items": [drop_data(drop) for drop in drops]}}
+
+
+def _card_pack_card_data(link: CardPackCard, card: Card) -> dict:
+    return {
+        "id": link.id,
+        "cardId": card.id,
+        "name": card.name,
+        "rarity": card.rarity,
+        "memberId": card.member_id,
+        "artistId": card.artist_id,
+        "imageUrl": card.image_url,
+        "position": link.position,
+        "probability": link.probability,
+        "enabled": link.enabled,
+    }
+
+
+@router.get("/card-packs")
+async def list_card_packs(
+    context: CurrentAdmin,
+    session: DbSession,
+    q: str | None = None,
+    pack_status: str | None = Query(default=None, alias="status"),
+) -> dict:
+    _require_scoped_action(context, "cards:read")
+    filters = []
+    if q:
+        filters.append(or_(CardPack.name.ilike(f"%{q}%"), CardPack.season_name.ilike(f"%{q}%")))
+    if pack_status:
+        filters.append(CardPack.status == pack_status)
+    if not context.is_root:
+        filters.append(CardPack.artist_id.in_(context.assigned_artist_ids))
+    packs = list(
+        await session.scalars(
+            select(CardPack)
+            .where(*filters)
+            .order_by(CardPack.created_at.desc(), CardPack.id.desc())
+        )
+    )
+    return {"ok": True, "data": {"items": [card_pack_data(pack) for pack in packs]}}
+
+
+@router.post("/card-packs", status_code=status.HTTP_201_CREATED)
+async def create_card_pack(
+    payload: CardPackCreate,
+    context: CurrentAdmin,
+    session: DbSession,
+) -> dict:
+    _require_scoped_action(context, "cards:write")
+    context.require_write()
+    await validate_card_pack_input(payload, session)
+    artist = await session.get(Artist, payload.artist_id)
+    if artist is None:
+        raise AppError(404, "ARTIST_NOT_FOUND", "아티스트를 찾을 수 없습니다.")
+    if not context.is_root:
+        context.require_artist(artist.id)
+    card_rows = list(
+        await session.scalars(
+            select(Card).where(Card.id.in_([item.card_id for item in payload.cards]))
+        )
+    )
+    cards_by_id = {card.id: card for card in card_rows}
+    if any(card.artist_id != artist.id for card in card_rows):
+        raise AppError(422, "PACK_ARTIST_MISMATCH", "카드팩과 카드의 아티스트가 일치해야 합니다.")
+    pack = CardPack(
+        id=f"pack_{uuid4().hex[:12]}",
+        artist_id=artist.id,
+        name=payload.name,
+        season_name=payload.season_name,
+        version=payload.version,
+        image_url=payload.image_url,
+        description=payload.description,
+        status="draft",
+    )
+    session.add(pack)
+    links = []
+    for item in payload.cards:
+        link = CardPackCard(
+            id=f"pack_card_{uuid4().hex[:12]}",
+            pack_id=pack.id,
+            card_id=item.card_id,
+            position=item.position,
+            probability=item.probability,
+            enabled=item.enabled,
+        )
+        session.add(link)
+        links.append((link, cards_by_id[item.card_id]))
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="card_pack.created",
+        entity_type="card_pack",
+        entity_id=pack.id,
+        organization_id=context.membership.organization_id,
+        artist_id=pack.artist_id,
+        details={"cardCount": len(links)},
+    )
+    await session.commit()
+    return {
+        "ok": True,
+        "data": card_pack_data(pack, [_card_pack_card_data(link, card) for link, card in links]),
+    }
+
+
+@router.get("/card-packs/{pack_id}")
+async def card_pack_detail(pack_id: str, context: CurrentAdmin, session: DbSession) -> dict:
+    _require_scoped_action(context, "cards:read")
+    pack = await session.get(CardPack, pack_id)
+    if pack is None:
+        raise AppError(404, "CARD_PACK_NOT_FOUND", "카드팩을 찾을 수 없습니다.")
+    context.require_artist(pack.artist_id)
+    rows = list(
+        await session.execute(
+            select(CardPackCard, Card)
+            .join(Card, CardPackCard.card_id == Card.id)
+            .where(CardPackCard.pack_id == pack.id)
+            .order_by(CardPackCard.position, CardPackCard.id)
+        )
+    )
+    return {
+        "ok": True,
+        "data": card_pack_data(pack, [_card_pack_card_data(link, card) for link, card in rows]),
+    }
+
+
+@router.post("/card-packs/{pack_id}/publish")
+async def publish_card_pack(pack_id: str, context: CurrentAdmin, session: DbSession) -> dict:
+    _require_scoped_action(context, "cards:write")
+    context.require_write()
+    pack = await session.get(CardPack, pack_id)
+    if pack is None:
+        raise AppError(404, "CARD_PACK_NOT_FOUND", "카드팩을 찾을 수 없습니다.")
+    context.require_artist(pack.artist_id)
+    links = list(await session.scalars(select(CardPackCard).where(CardPackCard.pack_id == pack.id)))
+    total = sum(link.probability for link in links if link.enabled)
+    if not links or abs(total - 100) > 0.001:
+        raise AppError(422, "INVALID_PACK_ODDS", "공개 확률의 합계는 100%여야 합니다.")
+    card_ids = [link.card_id for link in links if link.enabled]
+    unpublished_count = await session.scalar(
+        select(func.count())
+        .select_from(Card)
+        .where(
+            Card.id.in_(card_ids),
+            Card.status != "published",
+        )
+    )
+    if unpublished_count:
+        raise AppError(
+            422,
+            "PACK_CARDS_NOT_PUBLISHED",
+            "공개되지 않은 카드는 카드팩을 공개하기 전에 먼저 공개해야 합니다.",
+        )
+    pack.status = "published"
+    pack.published_at = datetime.now(UTC)
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="card_pack.published",
+        entity_type="card_pack",
+        entity_id=pack.id,
+        organization_id=context.membership.organization_id,
+        artist_id=pack.artist_id,
+    )
+    await session.commit()
+    return {"ok": True, "data": card_pack_data(pack)}
 
 
 @router.get("/drops/{drop_id}")

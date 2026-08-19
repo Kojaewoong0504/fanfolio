@@ -617,6 +617,15 @@ async def home(user: FanUser, session: DbSession) -> dict:
             ),
         ),
     ]
+    favorite_artist_ids = set(user.favorite_artist_ids or [])
+    favorite_member_ids = set(user.favorite_member_ids or [])
+    if favorite_artist_ids or favorite_member_ids:
+        catalog_filters.append(
+            or_(
+                Card.artist_id.in_(favorite_artist_ids),
+                Card.member_id.in_(favorite_member_ids),
+            )
+        )
     new_card_rows = (
         await session.execute(
             select(Card, Artist, Member)
