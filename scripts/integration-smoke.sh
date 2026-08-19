@@ -261,6 +261,7 @@ async def main() -> None:
                     status="published",
                     is_official=True,
                     image_url="https://example.test/integration.png",
+                    drop_id=drop_id,
                 ),
                 RedeemCode(code=code, card_id=card_id, drop_id=drop_id, max_uses=1),
                 RedeemCode(code=code_a, card_id=card_id, drop_id=drop_id, max_uses=1),
