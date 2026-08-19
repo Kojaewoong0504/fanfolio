@@ -700,6 +700,18 @@ async def claim_reward_grant(session: AsyncSession, *, user_id: str, grant_id: s
     grant, reward = row
     if grant.claimed_at is None:
         grant.claimed_at = now()
+        session.add(
+            Notification(
+                id=f"notification_{uuid4().hex[:12]}",
+                user_id=user_id,
+                kind="reward_claimed",
+                title="보상을 보관함에 추가했어요",
+                body=f"{reward.name} 보상을 보관함에서 확인할 수 있어요.",
+                entity_type="reward_grant",
+                entity_id=grant.id,
+                event_key=f"reward:{grant.id}:claimed",
+            )
+        )
         await session.commit()
     return _reward_grant_data(grant, reward)
 
@@ -1083,6 +1095,19 @@ async def claim_pass_tier(session: AsyncSession, *, user_id: str, tier_id: str) 
         )
         reward = await session.get(RewardCatalog, tier.reward_id)
         if reward is not None:
+            grant.claimed_at = now()
+            session.add(
+                Notification(
+                    id=f"notification_{uuid4().hex[:12]}",
+                    user_id=user_id,
+                    kind="reward_claimed",
+                    title="보상을 받았어요",
+                    body=f"{reward.name} 보상이 보관함에 추가되었습니다.",
+                    entity_type="reward_grant",
+                    entity_id=grant.id,
+                    event_key=f"reward:{grant.id}:claimed",
+                )
+            )
             reward_grant_data = _reward_grant_data(grant, reward)
 
     claimed_tier_ids.append(tier.id)
