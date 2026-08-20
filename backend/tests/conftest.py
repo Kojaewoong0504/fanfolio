@@ -1,17 +1,18 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from importlib import import_module
 from typing import Any
-
-import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 # VSCode's test runner may not forward python.testing.env consistently.
 # The fixture API is test-only, so the test process must opt into it before
 # importing app.main (which decides whether to register that router).
 os.environ.setdefault("APP_ENV", "test")
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture(scope="session")
@@ -58,6 +59,77 @@ def actors(app: FastAPI, seeded: dict[str, Any]) -> dict[str, TestClient]:
         actor.cookies.set("fanfolio_session", session)
         result[role] = actor
     return result
+
+
+@pytest.fixture
+def seeded_roles(app: FastAPI, actors: dict[str, TestClient]) -> dict[str, TestClient]:
+    """기준 출시 시나리오에서 사용하는 역할별 인증 클라이언트를 고정한다."""
+    from app.db.session import SessionLocal
+    from app.models import (
+        AdminArtistAssignment,
+        AdminMembership,
+        Organization,
+        OrganizationArtist,
+        Role,
+        Session,
+        User,
+    )
+
+    async def add_partner_users() -> None:
+        async with SessionLocal() as session:
+            session.add(
+                Organization(
+                    id="org_scenario_partner",
+                    name="시나리오 파트너사",
+                    slug="scenario-partner",
+                    status="active",
+                )
+            )
+            session.add(
+                OrganizationArtist(organization_id="org_scenario_partner", artist_id="artist_nova3")
+            )
+            for user_id, access_level in (
+                ("scenario_partner_manager", "manager"),
+                ("scenario_partner_editor", "editor"),
+            ):
+                session.add(
+                    User(
+                        id=user_id,
+                        email=f"{user_id}@example.test",
+                        role=Role.ADMIN,
+                    )
+                )
+                session.add(Session(token=f"test-session-{user_id}", user_id=user_id))
+                session.add(
+                    AdminMembership(
+                        user_id=user_id,
+                        organization_id="org_scenario_partner",
+                        access_level=access_level,
+                        status="active",
+                        display_name=user_id,
+                    )
+                )
+                session.add(AdminArtistAssignment(admin_user_id=user_id, artist_id="artist_nova3"))
+            await session.commit()
+
+    asyncio.run(add_partner_users())
+    roles = dict(actors)
+    roles.update(
+        {
+            "root": actors["admin"],
+            "general_admin": actors["admin"],
+            "artist_studio": actors["artist"],
+            "partner_manager": _session_client(app, "test-session-scenario_partner_manager"),
+            "partner_editor": _session_client(app, "test-session-scenario_partner_editor"),
+        }
+    )
+    return roles
+
+
+def _session_client(app: FastAPI, token: str) -> TestClient:
+    client = TestClient(app)
+    client.cookies.set("fanfolio_session", token)
+    return client
 
 
 def assert_success(response: Any, status_code: int = 200) -> dict[str, Any]:

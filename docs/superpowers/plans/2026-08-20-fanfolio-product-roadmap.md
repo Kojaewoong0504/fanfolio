@@ -51,7 +51,7 @@
 - Create: `frontend/tests/product-scenario-contract.test.mjs`
 - Modify: `docs/PRODUCT_SCENARIO_AND_RELEASE_GATE.md`
 
-- [ ] **Step 1: 실패하는 통합 시나리오 테스트를 작성한다.**
+- [x] **Step 1: 실패하는 통합 시나리오 테스트를 작성한다.**
 
 ```python
 async def test_partner_card_release_pack_open_and_collection(client, seeded_roles):
@@ -65,25 +65,27 @@ async def test_partner_card_release_pack_open_and_collection(client, seeded_role
     assert opened["userCardId"] in {item["userCardId"] for item in collection["cards"]}
 ```
 
-- [ ] **Step 2: 테스트를 실행해 현재 통합 흐름의 실패 지점을 기록한다.**
+- [x] **Step 2: 테스트를 실행해 현재 통합 흐름의 실패 지점을 기록한다.**
 
 Run: `cd backend && pytest tests/contract/test_card_release_to_collection.py -q`
 
 Expected: 현재 구현되지 않은 권한·검수·발급 연결 지점을 명시적으로 확인한다. 테스트가 우연히 통과하면 각 단계의 상태와 응답을 assertion으로 강화한다.
 
-- [ ] **Step 3: 역할별 fixture와 고정된 테스트 카드팩을 추가한다.**
+- [x] **Step 3: 역할별 fixture와 고정된 테스트 카드팩을 추가한다.**
 
 `backend/tests/conftest.py`에 root, general admin, partner manager, partner editor, artist studio, fan을 만들고 각 계정의 `AdminMembership`과 `AdminArtistAssignment`를 명시한다. 테스트 데이터는 하나의 파트너와 두 개의 아티스트를 사용해 파트너 범위 누출을 검증한다.
 
-- [ ] **Step 4: 프론트 시나리오 계약 테스트에 필요한 화면 계약을 고정한다.**
+- [x] **Step 4: 프론트 시나리오 계약 테스트에 필요한 화면 계약을 고정한다.**
 
 `frontend/tests/product-scenario-contract.test.mjs`에서 컬렉션, 카드 상세, QR 등록, 카드팩 개봉이 실제 API 경로를 사용하는지 확인한다.
 
-- [ ] **Step 5: 전체 기준 문서에 테스트 ID를 기록한다.**
+- [x] **Step 5: 전체 기준 문서에 테스트 ID를 기록한다.**
 
 `docs/PRODUCT_SCENARIO_AND_RELEASE_GATE.md`의 시나리오 A~C에 테스트 이름과 현재 결과를 기록한다.
 
-- [ ] **Step 6: 변경을 커밋한다.**
+검증 결과: `backend/tests/contract/test_card_release_to_collection.py` 단일 테스트와 전체 백엔드 계약 테스트가 통과했다. `seeded_roles`는 root/general admin, partner manager/editor, artist studio, fan 세션을 고정한다.
+
+- [ ] **Step 6: 변경을 커밋한다.** (현재 혼합된 작업 트리를 보존하기 위해 전용 커밋은 별도 정리 단계에서 수행)
 
 ```bash
 git add backend/tests/conftest.py backend/tests/contract/test_card_release_to_collection.py frontend/tests/product-scenario-contract.test.mjs docs/PRODUCT_SCENARIO_AND_RELEASE_GATE.md
@@ -327,7 +329,7 @@ git commit -m "feat: expose card operation history and metrics"
 **Files:**
 
 - Modify: `backend/app/models.py`
-- Create: `backend/alembic/versions/0045_card_combinations.py`
+- Create: `backend/alembic/versions/0044_card_combinations.py`
 - Modify: `backend/app/schemas.py`
 - Modify: `backend/app/services.py`
 - Create: `backend/app/routers/combinations.py`
@@ -337,27 +339,31 @@ git commit -m "feat: expose card operation history and metrics"
 - Modify: `frontend/src/App.tsx`
 - Create: `frontend/tests/card-combination.test.mjs`
 
-- [ ] **Step 1: 조합 정책과 실패 테스트를 고정한다.**
+- [x] **Step 1: 조합 정책과 핵심 실패 테스트를 고정한다.**
 
 같은 팩 범위, 필요한 중복 수량, 상위 등급 풀, 확률, UR·한정 카드 제외 정책을 fixture로 만든다. 수량 부족·범위 불일치·동시 요청·확률 버전 불일치가 모두 실패하는 테스트를 작성한다.
 
-- [ ] **Step 2: 조합 모델을 추가한다.**
+- [x] **Step 2: 조합 모델을 추가한다.**
 
 `CardCombinationRecipe`에 `scope_type`, `scope_id`, `input_quantity`, `output_rarity_pool`, `probability_snapshot`, `status`를 저장하고, `CardCombination`에 사용자·재료 카드·결과 카드·확률 버전·상태를 저장한다.
 
-- [ ] **Step 3: 원자적 조합 서비스를 구현한다.**
+- [x] **Step 3: 원자적 조합 서비스를 구현한다.**
 
 `POST /api/me/card-combinations/preview`는 소비 대상과 공개 확률만 반환한다. `POST /api/me/card-combinations`는 재료 UserCard를 잠그고, 이미 소비된 카드가 없는지 확인한 뒤, `grant_user_card`로 결과를 지급하고 조합 원장을 기록한다.
 
-- [ ] **Step 4: 팬 앱 조합 화면을 구현한다.**
+- [x] **Step 4: 팬 앱 조합 화면을 구현한다.**
 
 중복 카드 수량, 소비 카드 목록, 결과 등급 풀, 확률, 완료 후 예상 상태를 표시한다. 특정 카드를 확정 획득하는 것처럼 보이는 문구를 사용하지 않는다.
 
-- [ ] **Step 5: 테스트와 동시성 검증을 실행한다.**
+- [x] **Step 5: 계약 테스트와 멱등성 검증을 실행한다.**
 
 Run: `cd backend && pytest tests/contract/test_card_combinations.py -q`
 
 Run: `cd frontend && node --test tests/card-combination.test.mjs`
+
+Run: `cd backend && pytest tests/unit/test_migrations.py -q`
+
+확인 결과: 조합 계약 테스트 1건, 팬앱 조합 UI 계약 테스트, 전체 마이그레이션 테스트 15건, 프론트 빌드가 통과했다. 초기 스키마와 0044 신규 테이블 중복 생성 및 SQLite 0043 다운그레이드 호환성도 보완했다.
 
 - [ ] **Step 6: 커밋한다.**
 

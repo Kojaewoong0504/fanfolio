@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from tests.conftest import assert_success
-from tests.contract.test_card_release_workflow import create_partner_client, submit_studio_card
+from tests.contract.test_card_release_workflow import submit_studio_card
 
 
 def _pack_payload(card_id: str) -> dict[str, Any]:
@@ -29,16 +29,12 @@ def _pack_payload(card_id: str) -> dict[str, Any]:
 
 
 def test_artist_card_reaches_fan_collection_after_review_and_pack_release(
-    app: FastAPI, actors: dict[str, TestClient]
+    app: FastAPI, seeded_roles: dict[str, TestClient]
 ) -> None:
     """아티스트 제작 카드의 정식 출시 경로를 하나의 계약으로 고정한다."""
-    partner = create_partner_client(
-        app,
-        user_id="partner_release_contract",
-        access_level="manager",
-    )
+    partner = seeded_roles["partner_manager"]
 
-    submitted = submit_studio_card(actors["artist"], rarity="R")
+    submitted = submit_studio_card(seeded_roles["artist_studio"], rarity="R")
     assert submitted["releaseStatus"] == "pending_partner_review"
 
     approved = assert_success(
@@ -57,7 +53,7 @@ def test_artist_card_reaches_fan_collection_after_review_and_pack_release(
     assert created_pack["cards"][0]["cardId"] == submitted["id"]
 
     published_card = assert_success(
-        actors["admin"].post(f"/api/admin/cards/{submitted['id']}/publish")
+        seeded_roles["root"].post(f"/api/admin/cards/{submitted['id']}/publish")
     )
     assert published_card["status"] == "published"
 
@@ -67,10 +63,10 @@ def test_artist_card_reaches_fan_collection_after_review_and_pack_release(
     assert published_pack["status"] == "published"
 
     opened = assert_success(
-        actors["fan"].post(f"/api/me/card-packs/{created_pack['id']}/open"),
+        seeded_roles["fan"].post(f"/api/me/card-packs/{created_pack['id']}/open"),
         201,
     )
     assert opened["cardId"] == submitted["id"]
 
-    collection = assert_success(actors["fan"].get("/api/me/collection"))
+    collection = assert_success(seeded_roles["fan"].get("/api/me/collection"))
     assert opened["userCardId"] in {item["userCardId"] for item in collection["cards"]}

@@ -46,7 +46,7 @@ Fanfolio는 아티스트와 파트너사가 직접 만든 디지털 포토카드
 | 카드팩·카드 구성 | 관리자 API 생성·공개, 관리자 브라우저 조회, 팬앱 카드팩 개봉·컬렉션 반영 검증 | 관리자 카드 생성 UI의 이미지 업로드와 카드 검수 UI 연속 흐름은 추가 검증 필요 |
 | QR·인증번호 발급·등록 | 신규 관리자 발급 배치·QR PNG 생성·팬앱 실제 QR 인식·등록·컬렉션 반영·중복 차단 검증 완료 | 운영 환경의 QR 이미지 출력 품질과 다중 기기 카메라 호환성은 출시 전 별도 확인 |
 | 역할·권한·파트너 격리 | 요구사항 정의 | API 기준 통합 검증 필요 |
-| 카드 조합 | 기획 | 미구현 |
+| 카드 조합 | 백엔드·팬앱 1차 구현, 로컬 DB 마이그레이션 적용, 조합 계약 테스트·멱등성 테스트·전체 마이그레이션 테스트 통과 | 동시성 부하 검증·관리자 레시피 UI는 추가 필요 |
 | 카드 트레이딩 | 기획 | 미구현 |
 | 팔로잉·컬렉션 공개 | 기획 | 미구현 |
 | 아티스트 전문 효과 편집 | 단계적 기획 | 기본 프리셋부터 구현 필요 |
@@ -60,8 +60,10 @@ Fanfolio는 아티스트와 파트너사가 직접 만든 디지털 포토카드
 - 카드팩 공개 전 카드 공개가 누락되면 테스트가 중단되어야 하며, 팬 컬렉션에는 발급 카드가 생성되지 않아야 한다.
 - `test_card_ownership_ledger.py`에서 동일 `Idempotency-Key`의 카드팩 개봉이 `UserCard`와 원장 행을 각각 한 건만 생성하는지 확인한다.
 - `test_card_role_scope_matrix.py`에서 아티스트의 공개 API 차단과 파트너 간 카드 범위 격리를 확인한다.
-- 백엔드 계약 테스트 단일 실행 결과: `256 passed` (기존 Starlette/httpx deprecation warning 1건).
-- 팬 앱 계약 테스트 결과: `130 passed`; 관리자 카드 운영 관련 계약 테스트 결과: `46 passed`.
+- 백엔드 계약 테스트 전체 실행 결과: `257 passed` (기존 Starlette/httpx deprecation warning 1건).
+- 팬 앱 계약 테스트 결과: `133 passed`; 관리자 카드 운영 관련 계약 테스트 결과: `46 passed`.
+- 기준 출시 시나리오 `test_artist_card_reaches_fan_collection_after_review_and_pack_release`는 고정 역할 fixture(root/general admin, partner manager/editor, artist studio, fan)로 카드 제출 → 파트너 검수 승인 → 루트 공개 → 카드팩 공개 → 팬 개봉 → 컬렉션 반영을 통과했다.
+- 프론트 `product-scenario-contract.test.mjs`는 실 API 경로, 공개/개봉/공개 카드 추가 완료 이동, 컬렉션 새로고침 계약을 포함해 전체 133개 테스트로 통과했다.
 - 현재 확인된 범위는 백엔드·계약 테스트와 격리 DB 기반 팬앱·관리자 브라우저 E2E다. 관리자 카드팩 생성·공개 API, 관리자 카드팩 조회, 팬앱 카드팩 확률표·개봉·컬렉션·상세, 인증코드 성공·중복·미공개 코드 차단까지 확인했다.
 - 로컬 SQLite에는 `0043_card_ownership_ledger`를 적용했고 Alembic head 상태를 확인했다.
 - 로컬 백엔드 `8002`의 읽기 전용 `GET /api/catalog/card-packs`는 `200`을 반환했다. 테스트 DB 전체 초기화는 기존 로컬 데이터 보존을 위해 실행하지 않았다.
