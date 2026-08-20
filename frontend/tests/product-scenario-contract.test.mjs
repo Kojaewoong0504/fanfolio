@@ -14,3 +14,11 @@ test('fan release scenario uses live pack, redemption, collection, and detail AP
   assert.match(appSource, /refreshCollection/)
   assert.match(appSource, /onOpenCard/)
 })
+
+test('the release scenario keeps role handoffs and completion navigation explicit', () => {
+  assert.match(appSource, /\/reveal\//)
+  assert.match(appSource, /컬렉션에 추가/)
+  assert.match(appSource, /보관함에서 카드 보기/)
+  assert.match(appSource, /getCardPacks/)
+  assert.match(appSource, /refreshCollection/)
+})
