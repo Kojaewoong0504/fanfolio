@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from 'react'
 import './App.css'
 import './reference.css'
-import { ApiError, apiFetch, applyToFanEvent, claimPassTier, claimReward, clearAccessToken, connectNotificationStream, getCardPacks, getFanEvent, getFanEventComments, getFanEvents, getFanHome, getMyEventApplications, getFanPass, getNotificationPreferences, getProgression, oauthStartUrl, postFanEventComment, reconcilePassRewards, resolveApiUrl, setAccessToken, updateNotificationPreferences, updateProfileEquipment, type CardDesignConfig, type CardPack, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionSummary, type CurrentUser, type EventPagination, type FanEvent, type FanEventApplication, type FanEventComment, type FanEventStatus, type FanHomeResponse, type FanProgression, type NotificationItem, type ProfileEquipment, type RewardGrant, type UserCardDetail } from './api/client'
+import { ApiError, apiFetch, applyToFanEvent, claimPassTier, claimReward, clearAccessToken, connectNotificationStream, getCardPacks, getCardPackOdds, getFanEvent, getFanEventComments, getFanEvents, getFanHome, getMyEventApplications, getFanPass, getNotificationPreferences, getProgression, oauthStartUrl, openCardPack, postFanEventComment, reconcilePassRewards, resolveApiUrl, setAccessToken, updateNotificationPreferences, updateProfileEquipment, type CardDesignConfig, type CardPack, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionSummary, type CurrentUser, type EventPagination, type FanEvent, type FanEventApplication, type FanEventComment, type FanEventStatus, type FanHomeResponse, type FanProgression, type NotificationItem, type ProfileEquipment, type RewardGrant, type UserCardDetail } from './api/client'
 import { QrRedeemModal, RedeemIcon } from './components/QrRedeemModal'
 import { CardDetail } from './components/CardDetail'
 import { InteractiveCollectibleCard } from './components/InteractiveCollectibleCard'
@@ -650,6 +650,11 @@ function App() {
     }
   }, [clearLocalSession, growthArtistId])
 
+  const handleCardPackOpened = async (userCardId: string) => {
+    await Promise.allSettled([refreshCollection(), refreshGrowth()])
+    openReveal(userCardId)
+  }
+
   const refreshUser = async () => {
     const result = await apiFetch<{ ok: true, data: CurrentUser }>('/me')
     setCurrentUser(result.data)
@@ -842,7 +847,7 @@ function App() {
   }
 
   if (showCardCollection) {
-    return <CardCollectionRepository onBack={closeCardCollection} onNavigate={navigateTab} />
+    return <CardCollectionRepository onBack={closeCardCollection} onNavigate={navigateTab} onOpenCard={handleCardPackOpened} />
   }
 
   if (revealedCardId) {
@@ -867,6 +872,12 @@ function App() {
 
   if (showNotificationSettings) {
     return <NotificationSettings onBack={() => setShowNotificationSettings(false)} />
+  }
+
+  // Card routes are full-screen destinations. Keep the detail view outside
+  // the collection shell so `/cards/:id` is not rendered as a backdrop dialog.
+  if (selectedCard) {
+    return <CardDetail card={selectedCard} isSaved={savedCardIds.includes(selectedCard.userCardId ?? selectedCard.id)} onClose={closeCard} onToggleSaved={() => { const id = selectedCard.userCardId ?? selectedCard.id; setSavedCards(cards => cards.some(item => (item.userCardId ?? item.id) === id) ? cards.filter(item => (item.userCardId ?? item.id) !== id) : [...cards, selectedCard]) }} onRedeem={() => { closeCard(); openRedeem() }} imageFor={demoCardImage} onImageError={keepCardVisual} cardTypeLabel={cardTypeLabel} />
   }
 
   return (
@@ -898,7 +909,6 @@ function App() {
       <BottomNavigation active={tab} onNavigate={navigateTab} />
 
       {showRedeem && <QrRedeemModal onClose={closeRedeem} onRedeemed={(id) => { closeRedeem(); openReveal(id); void Promise.allSettled([refreshCollection(), refreshGrowth()]) }} />}
-      {selectedCard && <CardDetail card={selectedCard} isSaved={savedCardIds.includes(selectedCard.userCardId ?? selectedCard.id)} onClose={closeCard} onToggleSaved={() => { const id = selectedCard.userCardId ?? selectedCard.id; setSavedCards(cards => cards.some(item => (item.userCardId ?? item.id) === id) ? cards.filter(item => (item.userCardId ?? item.id) !== id) : [...cards, selectedCard]) }} onRedeem={() => { closeCard(); openRedeem() }} imageFor={demoCardImage} onImageError={keepCardVisual} cardTypeLabel={cardTypeLabel} />}
     </main>
   )
 }
@@ -1936,8 +1946,9 @@ function CardCollectionDetail({ item, onBack }: { item: CardCollectionDetailItem
   </main>
 }
 
-function CardCollectionRepository({ onBack, onNavigate }: { onBack: () => void, onNavigate: (tab: Tab) => void }) {
+function CardCollectionRepository({ onBack, onNavigate, onOpenCard }: { onBack: () => void, onNavigate: (tab: Tab) => void, onOpenCard?: (userCardId: string) => Promise<void> | void }) {
   const [remoteGroups, setRemoteGroups] = useState<CardCollectionGroup[] | null>(null)
+  const [remotePacks, setRemotePacks] = useState<CardPack[]>([])
   const [groupId, setGroupId] = useState(cardCollectionGroups[0].id)
   const [packId, setPackId] = useState(cardCollectionGroups[0].packs[0].id)
   const [groupMenuOpen, setGroupMenuOpen] = useState(false)
@@ -1945,6 +1956,10 @@ function CardCollectionRepository({ onBack, onNavigate }: { onBack: () => void, 
   const [filter, setFilter] = useState<'all' | 'owned' | 'missing' | 'duplicate'>('all')
   const [sort, setSort] = useState<'number' | 'rarity' | 'copies'>('number')
   const [selectedItem, setSelectedItem] = useState<CardCollectionDetailItem | null>(null)
+  const [packSheetOpen, setPackSheetOpen] = useState(false)
+  const [packOdds, setPackOdds] = useState<{ pack: CardPack, items: CardPack['cards'], totalProbability: number } | null>(null)
+  const [packOpening, setPackOpening] = useState(false)
+  const [packError, setPackError] = useState('')
   const groups = remoteGroups ?? cardCollectionGroups
   const group = groups.find(item => item.id === groupId) ?? groups[0] ?? { id: 'empty', displayName: '카드 컬렉션', owned: 0, total: 0, packs: [] }
   useEffect(() => {
@@ -1954,6 +1969,7 @@ function CardCollectionRepository({ onBack, onNavigate }: { onBack: () => void, 
       apiFetch<{ ok: true, data: { cards: CollectionCard[] } }>('/me/collection'),
     ]).then(([packs, collection]) => {
       if (cancelled) return
+      setRemotePacks(packs.data.items)
       const nextGroups = buildRemoteCardCollectionGroups(packs.data.items, collection.data.cards)
       setRemoteGroups(nextGroups)
       if (nextGroups[0]) {
@@ -1974,6 +1990,7 @@ function CardCollectionRepository({ onBack, onNavigate }: { onBack: () => void, 
     slots: group.packs.flatMap(pack => pack.slots.slice(0, pack.total).map(slot => ({ ...slot, sourcePrefix: pack.prefix }))),
   }
   const activePack = packId === 'all' ? allPack : group.packs.find(item => item.id === packId) ?? group.packs[0]
+  const selectedRemotePack = activePack.id === 'all' ? null : remotePacks.find(pack => pack.id === activePack.id) ?? null
   const rarityOrder = { UR: 4, SR: 3, R: 2, N: 1 }
   const visibleSlots = [...activePack.slots]
     .filter(slot => filter === 'all' ? true : filter === 'owned' ? Boolean(slot.card) : filter === 'missing' ? !slot.card : slot.copies > 1)
@@ -1982,6 +1999,31 @@ function CardCollectionRepository({ onBack, onNavigate }: { onBack: () => void, 
     setGroupId(nextGroup.id)
     setPackId(nextGroup.packs[0].id)
     setGroupMenuOpen(false)
+  }
+  const openPackSheet = async () => {
+    if (!selectedRemotePack || !onOpenCard) return
+    setPackError('')
+    setPackSheetOpen(true)
+    try {
+      const result = await getCardPackOdds(selectedRemotePack.id)
+      setPackOdds(result.data)
+    } catch (error) {
+      setPackError(error instanceof Error ? error.message : '확률표를 불러오지 못했어요.')
+    }
+  }
+  const openSelectedPack = async () => {
+    if (!selectedRemotePack || !onOpenCard || packOpening) return
+    setPackOpening(true)
+    setPackError('')
+    try {
+      const opening = await openCardPack(selectedRemotePack.id)
+      setPackSheetOpen(false)
+      await onOpenCard(opening.data.userCardId)
+    } catch (error) {
+      setPackError(error instanceof Error ? error.message : '카드팩을 열지 못했어요. 잠시 후 다시 시도해 주세요.')
+    } finally {
+      setPackOpening(false)
+    }
   }
   if (selectedItem) return <CardCollectionDetail item={selectedItem} onBack={() => setSelectedItem(null)} />
   return <main className="app-shell card-collection-shell">
@@ -2014,6 +2056,7 @@ function CardCollectionRepository({ onBack, onNavigate }: { onBack: () => void, 
       <div className="card-collection-heading">
         <h2>{activePack.name} 카드 <small>· <strong>{activePack.owned}</strong> / {activePack.total}</small></h2>
         <div>
+          {selectedRemotePack && onOpenCard && <button type="button" className="card-collection-open-pack" onClick={() => { void openPackSheet() }}>팩 열기</button>}
           <label><span className="sr-only">카드 정렬</span><select aria-label="카드 정렬" value={sort} onChange={event => setSort(event.target.value as typeof sort)}><option value="number">카드 번호순</option><option value="rarity">희귀도순</option><option value="copies">보유 수량순</option></select></label>
           <button type="button" className={filtersOpen || filter !== 'all' ? 'active' : ''} aria-label="카드 필터" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(open => !open)}><NavIcon name="settings" /></button>
         </div>
@@ -2033,6 +2076,17 @@ function CardCollectionRepository({ onBack, onNavigate }: { onBack: () => void, 
       })}</div>
       {visibleSlots.length === 0 && <p className="card-collection-empty">선택한 조건에 맞는 카드가 없어요.</p>}
     </section>
+    {packSheetOpen && selectedRemotePack && <div className="card-pack-opening-backdrop" role="presentation" onClick={event => { if (event.target === event.currentTarget && !packOpening) setPackSheetOpen(false) }}>
+      <section className="card-pack-opening-sheet" role="dialog" aria-modal="true" aria-labelledby="card-pack-opening-title">
+        <button type="button" className="card-pack-opening-close" aria-label="팩 열기 닫기" onClick={() => { if (!packOpening) setPackSheetOpen(false) }}>×</button>
+        <img src={resolveApiUrl(selectedRemotePack.imageUrl) || dreamscapeCardPack} alt="" />
+        <div className="card-pack-opening-copy"><span className="eyebrow">CARD PACK</span><h2 id="card-pack-opening-title">{selectedRemotePack.name}</h2><p>{selectedRemotePack.seasonName ?? '공식 카드팩'} · {selectedRemotePack.version}</p>{selectedRemotePack.description && <small>{selectedRemotePack.description}</small>}</div>
+        <div className="card-pack-opening-odds"><div><b>공개 확률표</b><strong>{packOdds?.totalProbability ?? 100}%</strong></div>{packOdds ? packOdds.items.map(item => <div className="card-pack-opening-odds-row" key={item.cardId}><span><em className={`card-collection-rarity rarity-${(item.rarity ?? 'N').toLowerCase()}`}>{item.rarity ?? 'N'}</em>{item.name}</span><strong>{item.probability}%</strong></div>) : <p>{packError || '확률표를 불러오는 중이에요.'}</p>}</div>
+        {packError && packOdds && <p className="card-pack-opening-error" role="alert">{packError}</p>}
+        <button type="button" className="card-pack-opening-submit" disabled={!packOdds || packOpening} onClick={() => { void openSelectedPack() }}>{packOpening ? '카드를 준비하고 있어요…' : '팩 열기'}</button>
+        <small className="card-pack-opening-note">개봉 즉시 카드가 컬렉션에 등록되고 카드 상세 화면에서 확인할 수 있어요.</small>
+      </section>
+    </div>}
     <BottomNavigation active="collection" onNavigate={onNavigate} />
   </main>
 }

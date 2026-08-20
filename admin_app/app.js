@@ -88,6 +88,7 @@ const state = {
   newPassword: "",
   batch: null,
   codeBatch: null,
+  codeQr: null,
   reviewCard: null,
   reviewImageSrc: "",
   reviewImageError: false,
@@ -1567,7 +1568,7 @@ function codeStatusLabel(status) {
 function codeBatchPanel() {
   const selected = state.codeBatch;
   if (!selected) return "";
-  return `<div class="panel"><div class="review-heading"><div><p class="eyebrow">개별 코드 관리</p><h2>${escapeHtml(selected.batchId)}</h2><p class="hint">코드가 유출되거나 훼손된 경우 해당 코드만 비활성화할 수 있습니다.</p></div><button class="secondary" id="close-code-batch">닫기</button></div><div class="table-wrap"><table class="table"><thead><tr><th>코드</th><th>상태</th><th>사용</th><th>만료</th><th>관리</th></tr></thead><tbody>${selected.items.length ? selected.items.map((code) => `<tr><td><code>${escapeHtml(code.code)}</code></td><td><span class="badge ${code.status !== "active" ? "draft" : ""}">${escapeHtml(codeStatusLabel(code.status))}</span></td><td>${code.usedCount}/${code.maxUses}</td><td>${code.expiresAt ? escapeHtml(new Date(code.expiresAt).toLocaleDateString("ko-KR")) : "-"}</td><td>${code.status === "active" ? `<button class="secondary disable-code" data-code="${escapeHtml(code.code)}">비활성화</button>` : '<span class="eyebrow">변경 불가</span>'}</td></tr>`).join("") : '<tr><td colspan="5" class="empty">표시할 코드가 없습니다.</td></tr>'}</tbody></table></div><p class="hint">전체 ${Number(selected.total).toLocaleString()}개 중 ${selected.items.length}개를 표시합니다.</p></div>`;
+  return `<div class="panel"><div class="review-heading"><div><p class="eyebrow">개별 코드 관리</p><h2>${escapeHtml(selected.batchId)}</h2><p class="hint">코드가 유출되거나 훼손된 경우 해당 코드만 비활성화할 수 있습니다.</p></div><button class="secondary" id="close-code-batch">닫기</button></div><div class="table-wrap"><table class="table"><thead><tr><th>코드</th><th>상태</th><th>사용</th><th>만료</th><th>관리</th></tr></thead><tbody>${selected.items.length ? selected.items.map((code) => `<tr><td><code>${escapeHtml(code.code)}</code></td><td><span class="badge ${code.status !== "active" ? "draft" : ""}">${escapeHtml(codeStatusLabel(code.status))}</span></td><td>${code.usedCount}/${code.maxUses}</td><td>${code.expiresAt ? escapeHtml(new Date(code.expiresAt).toLocaleDateString("ko-KR")) : "-"}</td><td class="code-actions">${code.status === "active" ? `<button class="secondary show-code-qr" data-code="${escapeHtml(code.code)}">QR 보기</button><button class="secondary disable-code" data-code="${escapeHtml(code.code)}">비활성화</button>` : '<span class="eyebrow">변경 불가</span>'}</td></tr>`).join("") : '<tr><td colspan="5" class="empty">표시할 코드가 없습니다.</td></tr>'}</tbody></table></div><p class="hint">전체 ${Number(selected.total).toLocaleString()}개 중 ${selected.items.length}개를 표시합니다.</p>${state.codeQr ? `<div class="code-qr-preview" role="dialog" aria-label="인증번호 QR 보기"><div class="review-heading"><div><p class="eyebrow">QR PREVIEW</p><h3>인증번호 QR</h3><code>${escapeHtml(state.codeQr.code)}</code></div><button class="secondary" id="close-code-qr" type="button">닫기</button></div><img src="${escapeHtml(state.codeQr.url)}" alt="${escapeHtml(state.codeQr.code)} QR 코드" /><p class="hint">이 QR은 팬앱의 QR 스캐너에서 인식할 수 있습니다.</p></div>` : ""}</div>`;
 }
 function batchRows() {
   if (!state.batches.length)
@@ -2805,6 +2806,7 @@ async function createBatch(event) {
 }
 async function openCodeBatch(batchId) {
   try {
+    clearCodeQr();
     const result = await api(
       `/admin/redeem-code-batches/${encodeURIComponent(batchId)}/codes`,
     );
@@ -2813,6 +2815,32 @@ async function openCodeBatch(batchId) {
     layout();
   } catch {
     toast("배치 코드를 불러오지 못했습니다. 관리자 세션을 확인해 주세요.");
+  }
+}
+function clearCodeQr() {
+  if (state.codeQr?.url) URL.revokeObjectURL(state.codeQr.url);
+  state.codeQr = null;
+}
+async function showCodeQr(code) {
+  const selected = state.codeBatch?.items?.find((item) => item.code === code);
+  if (!selected?.qrUrl) return;
+  try {
+    const response = await fetch(
+      `${API_BASE}${selected.qrUrl.replace(/^\/api/, "")}`,
+      {
+        credentials: "include",
+        headers: {
+          "X-Fanfolio-Client": "admin",
+          ...(ACCESS_TOKEN ? { Authorization: `Bearer ${ACCESS_TOKEN}` } : {}),
+        },
+      },
+    );
+    if (!response.ok) throw new Error(`QR ${response.status}`);
+    clearCodeQr();
+    state.codeQr = { code, url: URL.createObjectURL(await response.blob()) };
+    layout();
+  } catch {
+    toast("QR을 불러오지 못했습니다. 관리자 세션을 확인해 주세요.");
   }
 }
 async function disableCode(code) {
@@ -3712,7 +3740,15 @@ function bind() {
       ),
     );
   document.querySelector("#close-code-batch")?.addEventListener("click", () => {
+    clearCodeQr();
     state.codeBatch = null;
+    layout();
+  });
+  document.querySelectorAll(".show-code-qr").forEach((button) =>
+    button.addEventListener("click", () => void showCodeQr(button.dataset.code)),
+  );
+  document.querySelector("#close-code-qr")?.addEventListener("click", () => {
+    clearCodeQr();
     layout();
   });
   document

@@ -426,6 +426,13 @@ class CardPackOpening(Base):
     __tablename__ = "card_pack_openings"
     __table_args__ = (
         UniqueConstraint("issuance_code", name="uq_card_pack_openings_issuance_code"),
+        Index(
+            "uq_card_pack_openings_user_pack_key",
+            "user_id",
+            "pack_id",
+            "idempotency_key",
+            unique=True,
+        ),
         Index("ix_card_pack_openings_user_created", "user_id", "created_at"),
     )
     id: Mapped[str] = mapped_column(String, primary_key=True)
@@ -436,6 +443,10 @@ class CardPackOpening(Base):
     card_id: Mapped[str] = mapped_column(
         ForeignKey("cards.id", ondelete="RESTRICT"), nullable=False
     )
+    user_card_id: Mapped[str | None] = mapped_column(
+        ForeignKey("user_cards.id", ondelete="RESTRICT"), nullable=True
+    )
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
     issuance_code: Mapped[str] = mapped_column(String(80), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
@@ -599,6 +610,44 @@ class UserCard(Base):
     serial_number: Mapped[int] = mapped_column(Integer)
     acquisition_source: Mapped[str] = mapped_column(String, default="redeem_code")
     acquired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class CardOwnershipLedger(Base):
+    """Append-only ownership event for every card grant or transfer."""
+
+    __tablename__ = "card_ownership_ledger"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "action",
+            "source_type",
+            "source_id",
+            name="uq_card_ownership_ledger_event",
+        ),
+        Index("ix_card_ownership_ledger_user_created", "user_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_card_id: Mapped[str] = mapped_column(
+        ForeignKey("user_cards.id", ondelete="RESTRICT"), nullable=False
+    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    card_id: Mapped[str] = mapped_column(
+        ForeignKey("cards.id", ondelete="RESTRICT"), nullable=False
+    )
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    from_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    to_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
 
 
 class EngagementEvent(Base):

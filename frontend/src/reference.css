@@ -616,6 +616,7 @@ main.collection-shell .collection-reward-inventory-entry > .inline-icon { width:
 .card-collection-heading select { width:118px; height:42px; padding:0 30px 0 12px; border:1px solid #dfdbec; border-radius:12px; background:#fff; color:#747a91; font-size:11px; font-weight:700; outline:0; cursor:pointer; }
 .card-collection-heading > div > button { display:grid; width:42px; height:42px; place-items:center; padding:0; border:1px solid #dfdbec; border-radius:12px; background:#f5f2ff; color:#171b35; cursor:pointer; }
 .card-collection-heading > div > button.active { border-color:#6a58ef; color:#5c49ec; }
+.card-collection-open-pack { width:auto!important; min-width:62px; height:42px!important; padding:0 12px!important; border-color:#634eff!important; background:#634eff!important; color:#fff!important; font-size:11px; font-weight:850; }
 .card-collection-heading .nav-icon { width:22px; height:22px; }
 .card-collection-filters { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; padding:5px; border-radius:12px; background:#f3f1f8; }
 .card-collection-filters button { min-height:32px; border:0; border-radius:8px; background:transparent; color:#777d91; font-size:10px; font-weight:750; cursor:pointer; }
@@ -635,6 +636,26 @@ button.card-collection-slot { cursor:pointer; }
 .card-collection-slot.missing > b { color:#8e7bf3; text-shadow:none; }
 .card-collection-slot.missing .card-collection-rarity { opacity:.55; }
 .card-collection-empty { margin:20px 0; padding:28px; border:1px dashed #ddd8ed; border-radius:15px; color:#7b8195; font-size:11px; text-align:center; }
+.card-pack-opening-backdrop { position:fixed; z-index:80; inset:0; display:grid; align-items:end; background:#17152d66; backdrop-filter:blur(5px); }
+.card-pack-opening-sheet { position:relative; display:grid; gap:12px; width:min(100%,430px); max-height:min(82dvh,720px); overflow:auto; padding:26px 20px 24px; border-radius:24px 24px 0 0; background:linear-gradient(160deg,#fff,#f7f5ff); box-shadow:0 -15px 45px #241c5233; }
+.card-pack-opening-close { position:absolute; top:12px; right:14px; display:grid; width:34px; height:34px; place-items:center; border:0; border-radius:50%; background:#f0edff; color:#5d4aeb; font-size:23px; line-height:1; cursor:pointer; }
+.card-pack-opening-sheet > img { width:58px; height:88px; object-fit:contain; filter:drop-shadow(0 8px 12px #4335a333); }
+.card-pack-opening-copy { display:grid; gap:5px; }
+.card-pack-opening-copy .eyebrow { color:#654cf0; font-size:9px; font-weight:900; letter-spacing:.12em; }
+.card-pack-opening-copy h2 { margin:0; color:#161a35; font-size:22px; font-weight:900; letter-spacing:-.055em; }
+.card-pack-opening-copy p,.card-pack-opening-copy small { margin:0; color:#777d94; font-size:11px; line-height:1.45; }
+.card-pack-opening-odds { display:grid; gap:8px; padding:13px; border:1px solid #e2def4; border-radius:16px; background:#fff; }
+.card-pack-opening-odds > div:first-child { display:flex; align-items:center; justify-content:space-between; padding-bottom:6px; border-bottom:1px solid #eeeaf7; color:#222640; font-size:12px; }
+.card-pack-opening-odds > div:first-child strong { color:#5a47eb; }
+.card-pack-opening-odds-row { display:flex; align-items:center; justify-content:space-between; gap:8px; color:#626981; font-size:10px; }
+.card-pack-opening-odds-row > span { display:flex; min-width:0; align-items:center; gap:7px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.card-pack-opening-odds-row .card-collection-rarity { position:static; padding:4px 6px; font-size:8px; }
+.card-pack-opening-odds-row strong { color:#252943; font-size:11px; }
+.card-pack-opening-odds > p { margin:3px 0; color:#777d94; font-size:10px; text-align:center; }
+.card-pack-opening-error { margin:0; color:#c54858; font-size:10px; line-height:1.4; }
+.card-pack-opening-submit { min-height:46px; border:0; border-radius:13px; background:#624cf2; color:#fff; font-size:13px; font-weight:850; cursor:pointer; }
+.card-pack-opening-submit:disabled { opacity:.55; cursor:not-allowed; }
+.card-pack-opening-note { color:#858aa0; font-size:10px; line-height:1.45; text-align:center; }
 @media (max-width:390px) {
   .card-collection-identity { padding-right:16px; padding-left:16px; }
   .card-collection-artist img { width:42px; height:42px; flex-basis:42px; }
