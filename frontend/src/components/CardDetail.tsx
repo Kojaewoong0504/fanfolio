@@ -23,13 +23,13 @@ function useDialogFocus(open: boolean): void {
     if (!open) return
     previousActiveElement.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const frame = window.requestAnimationFrame(() => {
-      document.querySelector<HTMLElement>('.detail-panel .detail-topbar > button:first-child')?.focus()
+      document.querySelector<HTMLElement>('.card-detail-screen .detail-topbar > button:first-child')?.focus()
     })
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Tab') return
-      const dialog = document.querySelector<HTMLElement>('.detail-panel[role="dialog"]')
-      if (!dialog) return
-      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], audio[controls], video[controls]'))
+      const screen = document.querySelector<HTMLElement>('.card-detail-screen')
+      if (!screen) return
+      const focusable = Array.from(screen.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], audio[controls], video[controls]'))
         .filter(element => element.getClientRects().length > 0)
       if (focusable.length === 0) {
         event.preventDefault()
@@ -108,8 +108,7 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
   const videoUrl = detail?.card.hasVideo && detail.card.videoUrl ? resolveApiUrl(detail.card.videoUrl) : ''
   const hasSpecialMedia = Boolean(voiceAudioUrl || videoUrl)
 
-  return <div className="detail-backdrop" role="presentation" onClick={event => { if (event.target === event.currentTarget) onClose() }}>
-    <aside className="detail-panel detail-reference-panel" role="dialog" aria-modal="true" aria-labelledby="card-detail-title">
+  return <main className="app-shell card-detail-screen detail-reference-panel" aria-labelledby="card-detail-title">
       <div className="detail-topbar">
         <button className="detail-back-button" onClick={onClose} aria-label="카드 상세 닫기"><InlineIcon name="back" /></button>
         <h1>카드 상세</h1>
@@ -174,6 +173,5 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
       </section>}
       {detailError && <div className="detail-error-actions"><p className="detail-hint error-message">카드 상세 정보를 불러오지 못했어요.</p><button className="outline" onClick={() => setDetailAttempt(value => value + 1)}>다시 시도</button></div>}
       {!isOwned && <><p className="detail-hint">카드 패키지의 QR 또는 코드를 사용해 컬렉션에 등록할 수 있어요.</p><button className="primary detail-action" onClick={onRedeem}>카드 등록하기</button></>}
-    </aside>
-  </div>
+  </main>
 }

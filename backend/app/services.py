@@ -27,6 +27,7 @@ from app.models import (
     AuditLog,
     BackgroundRemovalJob,
     Card,
+    CardOwnershipLedger,
     CardReviewDecision,
     CardReviewRequest,
     CollectionBenefitClaim,
@@ -64,6 +65,69 @@ PASS_CLAIM_GRACE_DAYS = 14
 
 def now() -> datetime:
     return datetime.now(UTC)
+
+
+async def grant_user_card(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    card_id: str,
+    source_type: str,
+    source_id: str,
+    acquisition_source: str,
+    metadata: dict | None = None,
+    redeem_code_id: str | None = None,
+    drop_id: str | None = None,
+) -> UserCard:
+    """Grant one card and its immutable ownership event inside the caller transaction."""
+    existing_id = await session.scalar(
+        select(CardOwnershipLedger.user_card_id).where(
+            CardOwnershipLedger.user_id == user_id,
+            CardOwnershipLedger.action == "grant",
+            CardOwnershipLedger.source_type == source_type,
+            CardOwnershipLedger.source_id == source_id,
+        )
+    )
+    if existing_id:
+        existing = await session.get(UserCard, existing_id)
+        if existing:
+            return existing
+
+    card = await session.scalar(select(Card).where(Card.id == card_id).with_for_update())
+    if card is None or card.status != "published":
+        raise AppError(409, "CARD_NOT_PUBLISHED", "공개되지 않은 카드입니다.")
+    serial = (
+        await session.scalar(
+            select(func.count()).select_from(UserCard).where(UserCard.card_id == card_id)
+        )
+        or 0
+    ) + 1
+    user_card = UserCard(
+        id=f"uc_{uuid4().hex[:12]}",
+        user_id=user_id,
+        card_id=card_id,
+        redeem_code_id=redeem_code_id,
+        drop_id=drop_id,
+        serial_number=serial,
+        acquisition_source=acquisition_source,
+        acquired_at=now(),
+    )
+    session.add(user_card)
+    session.add(
+        CardOwnershipLedger(
+            id=f"ledger_{uuid4().hex[:12]}",
+            user_card_id=user_card.id,
+            user_id=user_id,
+            card_id=card_id,
+            action="grant",
+            source_type=source_type,
+            source_id=source_id,
+            to_user_id=user_id,
+            metadata_json=metadata or {},
+        )
+    )
+    await session.flush()
+    return user_card
 
 
 def magic_link_token_hash(token: str) -> str:
@@ -2104,9 +2168,7 @@ async def redeem(
         )
         if expires_at and expires_at < now():
             raise AppError(409, "REDEEM_CODE_EXPIRED", "만료된 코드입니다.")
-        # The card lock also serializes serial-number allocation when two different
-        # redeem codes issue copies of the same card at the same time.
-        card = await session.scalar(select(Card).where(Card.id == code.card_id).with_for_update())
+        card = await session.scalar(select(Card).where(Card.id == code.card_id))
         if card is None or card.status != "published":
             raise AppError(409, "CARD_NOT_PUBLISHED", "공개되지 않은 카드입니다.")
         drop = await session.get(Drop, code.drop_id)
@@ -2119,22 +2181,17 @@ async def redeem(
                 "카드 발행 드롭과 코드 드롭이 일치하지 않습니다.",
             )
         code.used_count += 1
-        serial = (
-            await session.scalar(
-                select(func.count()).select_from(UserCard).where(UserCard.card_id == card.id)
-            )
-        ) + 1
-        user_card = UserCard(
-            id=f"uc_{uuid4().hex[:12]}",
+        user_card = await grant_user_card(
+            session,
             user_id=user_id,
             card_id=card.id,
+            source_type="redeem_code",
+            source_id=code.code,
+            acquisition_source=acquisition_source,
             redeem_code_id=code.code,
             drop_id=card.drop_id,
-            serial_number=serial,
-            acquisition_source=acquisition_source,
-            acquired_at=now(),
+            metadata={"dropId": drop.id, "acquisitionSource": acquisition_source},
         )
-        session.add(user_card)
         event = await record_engagement_event(
             session,
             user_id=user_id,
@@ -2170,7 +2227,7 @@ async def redeem(
         {
             "userCardId": user_card.id,
             "cardId": card.id,
-            "serialNumber": serial,
+            "serialNumber": user_card.serial_number,
             "redirectTo": f"/reveal/{user_card.id}",
         },
         event.id,

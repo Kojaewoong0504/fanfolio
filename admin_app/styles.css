@@ -5476,6 +5476,35 @@ code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+.code-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.code-qr-preview {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 18px;
+  background: #f7f5ff;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+}
+
+.code-qr-preview .review-heading {
+  width: 100%;
+}
+
+.code-qr-preview img {
+  width: 240px;
+  height: 240px;
+  padding: 12px;
+  background: #fff;
+  border-radius: 10px;
+}
+
 .text-link {
   padding: 0;
   color: var(--purple);

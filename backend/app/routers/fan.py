@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Query, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Header, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, case, desc, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
@@ -46,6 +46,7 @@ from app.services import (
     claim_reward_grant,
     fan_pass_data,
     fan_progression_data,
+    grant_user_card,
     reconcile_claimed_global_pass_reward_grants,
     record_audit,
     record_engagement_event,
@@ -98,6 +99,11 @@ def catalog_release_visible() -> object:
         and_(Card.review_version == 0, Card.drop_id.is_(None)),
         and_(Card.release_status == "published", Drop.status == "live"),
     )
+
+
+def pack_card_release_visible() -> object:
+    """A published pack is the release authority for cards it contains."""
+    return Card.status == "published"
 
 
 async def card_is_visible_to_fans(card: Card, session: DbSession) -> bool:
@@ -256,7 +262,7 @@ async def catalog_card_packs(
                 .where(
                     CardPackCard.pack_id == pack.id,
                     CardPackCard.enabled.is_(True),
-                    catalog_release_visible(),
+                    pack_card_release_visible(),
                 )
                 .order_by(CardPackCard.position, CardPackCard.id)
             )
@@ -280,7 +286,7 @@ async def catalog_card_pack_odds(pack_id: str, session: DbSession) -> dict:
             .where(
                 CardPackCard.pack_id == pack.id,
                 CardPackCard.enabled.is_(True),
-                catalog_release_visible(),
+                pack_card_release_visible(),
             )
             .order_by(CardPackCard.position, CardPackCard.id)
         )
@@ -296,7 +302,12 @@ async def catalog_card_pack_odds(pack_id: str, session: DbSession) -> dict:
 
 
 @router.post("/me/card-packs/{pack_id}/open", status_code=status.HTTP_201_CREATED)
-async def open_card_pack(pack_id: str, user: FanUser, session: DbSession) -> dict:
+async def open_card_pack(
+    pack_id: str,
+    user: FanUser,
+    session: DbSession,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> dict:
     user_id = user.id
     if session.in_transaction():
         await session.rollback()
@@ -308,6 +319,39 @@ async def open_card_pack(pack_id: str, user: FanUser, session: DbSession) -> dic
         )
         if pack is None:
             raise AppError(404, "CARD_PACK_NOT_FOUND", "공개된 카드팩을 찾을 수 없습니다.")
+        if idempotency_key:
+            existing = await session.scalar(
+                select(CardPackOpening)
+                .where(
+                    CardPackOpening.user_id == user_id,
+                    CardPackOpening.pack_id == pack.id,
+                    CardPackOpening.idempotency_key == idempotency_key,
+                )
+                .with_for_update()
+            )
+            if existing and existing.user_card_id:
+                existing_card = await session.get(UserCard, existing.user_card_id)
+                existing_link = await session.scalar(
+                    select(CardPackCard).where(
+                        CardPackCard.pack_id == pack.id,
+                        CardPackCard.card_id == existing.card_id,
+                    )
+                )
+                existing_card_row = await session.get(Card, existing.card_id)
+                if existing_card and existing_link and existing_card_row:
+                    return {
+                        "ok": True,
+                        "data": {
+                            "openingId": existing.id,
+                            "issuanceCode": existing.issuance_code,
+                            "userCardId": existing_card.id,
+                            "packId": pack.id,
+                            "cardId": existing_card_row.id,
+                            "serialNumber": existing_card.serial_number,
+                            "probability": existing_link.probability,
+                            "card": public_pack_card_data(existing_link, existing_card_row),
+                        },
+                    }
         rows = list(
             await session.execute(
                 select(CardPackCard, Card)
@@ -316,7 +360,7 @@ async def open_card_pack(pack_id: str, user: FanUser, session: DbSession) -> dic
                 .where(
                     CardPackCard.pack_id == pack.id,
                     CardPackCard.enabled.is_(True),
-                    catalog_release_visible(),
+                    pack_card_release_visible(),
                 )
                 .order_by(CardPackCard.position, CardPackCard.id)
             )
@@ -338,30 +382,29 @@ async def open_card_pack(pack_id: str, user: FanUser, session: DbSession) -> dic
         locked_card = await session.scalar(
             select(Card).where(Card.id == selected_card.id).with_for_update()
         )
-        serial = (
-            await session.scalar(
-                select(func.count()).select_from(UserCard).where(UserCard.card_id == locked_card.id)
-            )
-            or 0
-        ) + 1
+        if locked_card is None:
+            raise AppError(409, "CARD_NOT_FOUND", "선택된 카드가 존재하지 않습니다.")
         issuance_code = f"PF-{secrets.token_hex(16).upper()}"
         opening = CardPackOpening(
             id=f"opening_{uuid4().hex[:12]}",
             user_id=user_id,
             pack_id=pack.id,
             card_id=locked_card.id,
+            idempotency_key=idempotency_key,
             issuance_code=issuance_code,
         )
-        user_card = UserCard(
-            id=f"uc_{uuid4().hex[:12]}",
+        user_card = await grant_user_card(
+            session,
             user_id=user_id,
             card_id=locked_card.id,
-            serial_number=serial,
+            source_type="card_pack_opening",
+            source_id=opening.id,
             acquisition_source="card_pack",
-            acquired_at=datetime.now(UTC),
             drop_id=locked_card.drop_id,
+            metadata={"packId": pack.id, "issuanceCode": issuance_code},
         )
-        session.add_all([opening, user_card])
+        opening.user_card_id = user_card.id
+        session.add(opening)
         event = await record_engagement_event(
             session,
             user_id=user_id,
