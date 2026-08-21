@@ -259,25 +259,25 @@ git commit -m "feat: complete card release workflow"
 - Modify: `frontend/tests/card-detail-route.test.mjs`
 - Modify: `frontend/tests/card-registration-complete.test.mjs`
 
-- [ ] **Step 1: 카드팩·QR·인증번호 세 경로의 성공·실패 테스트를 작성한다.**
+- [x] **Step 1: 카드팩·QR·인증번호 세 경로의 성공·실패 테스트를 작성한다.**
 
 각 성공 결과에 대해 `/me/collection` 새로고침 후 카드가 존재하고, 실패·중복 요청은 컬렉션을 변경하지 않는지 확인한다.
 
-- [ ] **Step 2: 팬 앱 API 데이터를 공통 카드 모델로 정규화한다.**
+- [x] **Step 2: 팬 앱 API 데이터를 공통 카드 모델로 정규화한다.**
 
 `frontend/src/api/client.ts`의 카드 응답 타입에 `acquisitionSource`, `serialNumber`, `acquiredAt`, `designConfig`, `voiceUrl`, `videoUrl`, `handwritingUrl`을 유지하고, `App.tsx`가 fixture 카드를 실제 응답보다 우선하지 않도록 한다.
 
-- [ ] **Step 3: 카드 상세 독립 경로의 회귀를 확인한다.**
+- [x] **Step 3: 카드 상세 독립 경로의 회귀를 확인한다.**
 
 `/cards/:id`에서 `main.card-detail-screen`만 렌더링하고 `dialog`·`detail-backdrop`가 없으며, 뒤로가기·직접 새로고침·뒷면 틸트가 동작하는지 테스트한다.
 
-- [ ] **Step 4: 브라우저 시나리오를 실행한다.**
+- [x] **Step 4: 브라우저 시나리오를 실행한다.**
 
 Run: `cd frontend && npm test && npm run build && npm run lint`
 
 Expected: 카드 등록·팩 개봉·상세 화면 테스트가 통과하고 lint에 새로운 오류가 없다.
 
-- [ ] **Step 5: 커밋한다.**
+- [x] **Step 5: 커밋한다.**
 
 ```bash
 git add frontend/src frontend/tests

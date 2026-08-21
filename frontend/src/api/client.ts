@@ -653,6 +653,21 @@ export function claimPassTier(tierId: string): Promise<{ ok: true, data: PassTie
   return apiFetch<{ ok: true, data: PassTierClaim }>(`/me/pass-tiers/${encodeURIComponent(tierId)}/claim`, { method: 'POST' })
 }
 
+export type RedemptionSource = 'qr' | 'manual'
+
+export type CardRedemption = {
+  userCardId: string
+  cardId: string
+  serialNumber: number
+}
+
+export function redeemCard(code: string, source: RedemptionSource): Promise<{ ok: true, data: CardRedemption }> {
+  return apiFetch<{ ok: true, data: CardRedemption }>('/redemptions', {
+    method: 'POST',
+    body: JSON.stringify({ code, source }),
+  })
+}
+
 export function getCardPacks(artistId?: string | null): Promise<{ ok: true, data: { items: CardPack[] } }> {
   const query = artistId ? `?artistId=${encodeURIComponent(artistId)}` : ''
   return apiFetch<{ ok: true, data: { items: CardPack[] } }>(`/catalog/card-packs${query}`)

@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import type { IScannerControls } from '@zxing/browser'
-import { apiFetch } from '../api/client'
+import { redeemCard, type RedemptionSource } from '../api/client'
 import '../App.css'
 import './QrRedeemModal.css'
 import { normalizeQrValue } from './qrUtils'
 import registrationCardImage from '../assets/card-registration-idol-generated.png'
 import qrScannerImage from '../assets/card-registration-qr-scanner-generated.png'
 
-type RedemptionSource = 'manual' | 'qr'
 type RegistrationMethod = 'qr' | 'manual' | 'photo'
 type RegistrationStep = 1 | 2 | 3
 
@@ -162,7 +161,7 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
     setSaving(true)
     setMessage('')
     try {
-      const result = await apiFetch<{ ok: true, data: { userCardId: string } }>('/redemptions', { method: 'POST', body: JSON.stringify({ code, source }) })
+      const result = await redeemCard(code, source)
       onRedeemed(result.data.userCardId)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '카드 등록에 실패했습니다.')
