@@ -862,6 +862,10 @@ function App() {
     />
   }
 
+  if (showCardCollection) {
+    return <CardCollectionRepository onBack={closeCardCollection} onNavigate={navigateTab} onOpenCard={handleCardPackOpened} />
+  }
+
   if (showApplicationComplete) {
     return <EventApplicationComplete event={selectedEvent} onBack={() => setShowApplicationComplete(false)} onEvents={() => { setShowApplicationComplete(false); openEvents() }} onApplications={openMyApplications} />
   }
@@ -908,7 +912,7 @@ function App() {
 
       <BottomNavigation active={tab} onNavigate={navigateTab} />
 
-      {showRedeem && <QrRedeemModal onClose={closeRedeem} onRedeemed={(id) => { closeRedeem(); openReveal(id); void Promise.allSettled([refreshCollection(), refreshGrowth()]) }} />}
+      {showRedeem && <QrRedeemModal onClose={closeRedeem} onRedeemed={(id) => { closeRedeem(); void Promise.allSettled([refreshCollection(), refreshGrowth()]).then(() => openReveal(id)) }} />}
     </main>
   )
 }
