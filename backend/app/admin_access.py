@@ -166,6 +166,13 @@ class AdminContext:
             raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
         return artist_id
 
+    def require_organization(self, organization_id: str | None) -> None:
+        """Enforce partner ownership while keeping legacy global records readable."""
+        if self.is_root or organization_id is None:
+            return
+        if self.organization is None or organization_id != self.organization.id:
+            raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
+
 
 async def load_admin_context(session: AsyncSession, user: User) -> AdminContext:
     membership = await session.get(AdminMembership, user.id)
