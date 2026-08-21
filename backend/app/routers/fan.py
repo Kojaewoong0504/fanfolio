@@ -18,6 +18,8 @@ from app.models import (
     Artist,
     Asset,
     Card,
+    CardEffectVersion,
+    CardOwnershipLedger,
     CardPack,
     CardPackCard,
     CardPackOpening,
@@ -47,6 +49,7 @@ from app.services import (
     fan_pass_data,
     fan_progression_data,
     grant_user_card,
+    notify_user_once,
     reconcile_claimed_global_pass_reward_grants,
     record_audit,
     record_engagement_event,
@@ -432,6 +435,16 @@ async def open_card_pack(
                 "engagementEventId": event.id,
             },
         )
+        await notify_user_once(
+            session,
+            user_id=user_id,
+            kind="card_pack_opened",
+            title="카드팩에서 새 카드를 얻었어요",
+            body=f"{locked_card.name} 카드가 내 컬렉션에 추가되었습니다.",
+            entity_type="user_card",
+            entity_id=user_card.id,
+            event_key=f"pack-opening:{opening.id}",
+        )
     return {
         "ok": True,
         "data": {
@@ -443,6 +456,40 @@ async def open_card_pack(
             "serialNumber": user_card.serial_number,
             "probability": selected_link.probability,
             "card": public_pack_card_data(selected_link, locked_card),
+        },
+    }
+
+
+@router.get("/me/cards/{user_card_id}/history")
+async def card_acquisition_history(user_card_id: str, user: FanUser, session: DbSession) -> dict:
+    """Return immutable acquisition and ownership events for one owned card."""
+    user_card = await session.scalar(
+        select(UserCard).where(UserCard.id == user_card_id, UserCard.user_id == user.id)
+    )
+    if user_card is None:
+        raise AppError(404, "USER_CARD_NOT_FOUND", "내 카드에서 찾을 수 없습니다.")
+    events = await session.scalars(
+        select(CardOwnershipLedger)
+        .where(CardOwnershipLedger.user_card_id == user_card_id)
+        .order_by(CardOwnershipLedger.created_at.desc(), CardOwnershipLedger.id.desc())
+    )
+    return {
+        "ok": True,
+        "data": {
+            "userCardId": user_card_id,
+            "items": [
+                {
+                    "id": event.id,
+                    "action": event.action,
+                    "sourceType": event.source_type,
+                    "sourceId": event.source_id,
+                    "fromUserId": event.from_user_id,
+                    "toUserId": event.to_user_id,
+                    "metadata": event.metadata_json or {},
+                    "createdAt": event.created_at.isoformat(),
+                }
+                for event in events
+            ],
         },
     }
 
@@ -905,6 +952,19 @@ async def card_detail(user_card_id: str, user: FanUser, session: DbSession) -> d
     if not row:
         raise AppError(404, "USER_CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
     uc, card, artist, member, drop = row
+    approved_effect = await session.scalar(
+        select(CardEffectVersion)
+        .where(CardEffectVersion.card_id == card.id, CardEffectVersion.status == "approved")
+        .order_by(CardEffectVersion.version.desc())
+    )
+    has_effect_versions = bool(
+        await session.scalar(
+            select(func.count(CardEffectVersion.id)).where(CardEffectVersion.card_id == card.id)
+        )
+    )
+    public_design_config = card.design_config
+    if has_effect_versions:
+        public_design_config = approved_effect.design_config if approved_effect else None
     handwriting_image_url = None
     if card.handwriting_asset_id:
         handwriting_asset = await session.get(Asset, card.handwriting_asset_id)
@@ -923,7 +983,7 @@ async def card_detail(user_card_id: str, user: FanUser, session: DbSession) -> d
         if video_asset and (video_asset.processed_storage_path or video_asset.storage_path):
             video_url = f"/api/me/cards/{uc.id}/video?client=fan"
     lenticular_image_url = None
-    front = (card.design_config or {}).get("front")
+    front = (public_design_config or {}).get("front")
     lenticular_asset_id = front.get("lenticularAssetId") if isinstance(front, dict) else None
     if isinstance(lenticular_asset_id, str):
         lenticular_asset = await session.get(Asset, lenticular_asset_id)
@@ -952,7 +1012,7 @@ async def card_detail(user_card_id: str, user: FanUser, session: DbSession) -> d
                 "handwrittenMessage": None,
                 "issueLimit": card.issue_limit,
                 "status": card.status,
-                "designConfig": card.design_config,
+                "designConfig": public_design_config,
                 "imageUrl": card_image_url(card),
                 "artistId": artist.id if artist else card.artist_id,
                 "artistName": artist.name if artist else None,

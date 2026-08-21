@@ -2014,6 +2014,39 @@ async def notify_admin_once(
     )
 
 
+async def notify_user_once(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    kind: str,
+    title: str,
+    body: str,
+    entity_type: str,
+    entity_id: str,
+    event_key: str,
+) -> None:
+    """Create one fan notification for an immutable domain event."""
+    if await session.scalar(
+        select(Notification.id).where(
+            Notification.user_id == user_id,
+            Notification.event_key == event_key,
+        )
+    ):
+        return
+    session.add(
+        Notification(
+            id=f"notification_{uuid4().hex[:12]}",
+            user_id=user_id,
+            kind=kind,
+            title=title,
+            body=body,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            event_key=event_key,
+        )
+    )
+
+
 async def notify_partner_reviewers(session: AsyncSession, *, card: Card) -> None:
     if not card.artist_id:
         return
@@ -2231,14 +2264,15 @@ async def redeem(
             entity_id=user_card.id,
             details={**record_details, "engagementEventId": event.id},
         )
-        session.add(
-            Notification(
-                id=f"notification_{uuid4().hex[:12]}",
-                user_id=user_id,
-                kind="card_redeemed",
-                title="카드를 컬렉션에 추가했어요",
-                body=f"{card.name} 카드가 내 컬렉션에 추가되었습니다.",
-            )
+        await notify_user_once(
+            session,
+            user_id=user_id,
+            kind="card_redeemed",
+            title="카드를 컬렉션에 추가했어요",
+            body=f"{card.name} 카드가 내 컬렉션에 추가되었습니다.",
+            entity_type="user_card",
+            entity_id=user_card.id,
+            event_key=f"redemption:{code.code}:{user_id}",
         )
     return (
         {

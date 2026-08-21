@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Request, Response, status
@@ -5,6 +6,7 @@ from sqlalchemy import func, select
 
 from app.core.config import get_settings
 from app.dependencies import ArtistUser, DbSession
+from app.effects import validate_effect_config
 from app.errors import AppError
 from app.image_processing import compose_card_preview, compose_card_preview_bytes
 from app.models import (
@@ -13,6 +15,7 @@ from app.models import (
     Asset,
     BackgroundRemovalJob,
     Card,
+    CardEffectVersion,
     Member,
     UserCard,
 )
@@ -22,6 +25,8 @@ from app.schemas import (
     ArtistCardUpdate,
     ArtistProfileUpdate,
     ArtistReviewSubmitRequest,
+    CardEffectVersionCreate,
+    CardEffectVersionUpdate,
 )
 from app.services import release_card_data, submit_card_for_release_review
 from app.storage import configured_asset_storage, storage_response
@@ -337,6 +342,108 @@ async def validate_design_assets(
 async def get_card(card_id: str, user: ArtistUser, session: DbSession) -> dict:
     card = await owned_card(card_id, user, session)
     return {"ok": True, "data": card_data(card)}
+
+
+async def effect_version_or_404(
+    card_id: str, version_id: str, user: ArtistUser, session: DbSession
+) -> CardEffectVersion:
+    await owned_card(card_id, user, session)
+    version = await session.get(CardEffectVersion, version_id)
+    if not version or version.card_id != card_id:
+        raise AppError(404, "EFFECT_VERSION_NOT_FOUND", "효과 버전을 찾을 수 없습니다.")
+    return version
+
+
+def effect_version_data(version: CardEffectVersion) -> dict:
+    return {
+        "id": version.id,
+        "cardId": version.card_id,
+        "version": version.version,
+        "designConfig": version.design_config,
+        "status": version.status,
+        "reviewNote": version.review_note,
+        "submittedAt": version.submitted_at.isoformat() if version.submitted_at else None,
+        "approvedAt": version.approved_at.isoformat() if version.approved_at else None,
+        "createdAt": version.created_at.isoformat() if version.created_at else None,
+    }
+
+
+@router.get("/artist/cards/{card_id}/effect-versions")
+async def list_effect_versions(card_id: str, user: ArtistUser, session: DbSession) -> dict:
+    await owned_card(card_id, user, session)
+    versions = (
+        await session.scalars(
+            select(CardEffectVersion)
+            .where(CardEffectVersion.card_id == card_id)
+            .order_by(CardEffectVersion.version.desc())
+        )
+    ).all()
+    return {"ok": True, "data": {"items": [effect_version_data(item) for item in versions]}}
+
+
+@router.post("/artist/cards/{card_id}/effect-versions", status_code=status.HTTP_201_CREATED)
+async def create_effect_version(
+    card_id: str,
+    payload: CardEffectVersionCreate,
+    user: ArtistUser,
+    session: DbSession,
+) -> dict:
+    card = await owned_card(card_id, user, session)
+    config = validate_effect_config(payload.design_config)
+    await validate_design_assets(config, user, session)
+    latest = await session.scalar(
+        select(func.max(CardEffectVersion.version)).where(CardEffectVersion.card_id == card_id)
+    )
+    version = CardEffectVersion(
+        id=f"effect_{uuid4().hex[:12]}",
+        card_id=card.id,
+        version=(latest or 0) + 1,
+        design_config=config,
+        author_user_id=user.id,
+        status="draft",
+    )
+    session.add(version)
+    await session.commit()
+    return {"ok": True, "data": effect_version_data(version)}
+
+
+@router.patch("/artist/cards/{card_id}/effect-versions/{version_id}")
+async def update_effect_version(
+    card_id: str,
+    version_id: str,
+    payload: CardEffectVersionUpdate,
+    user: ArtistUser,
+    session: DbSession,
+) -> dict:
+    version = await effect_version_or_404(card_id, version_id, user, session)
+    if version.status not in {"draft", "rejected"}:
+        raise AppError(
+            409, "EFFECT_VERSION_LOCKED", "검수 중이거나 승인된 효과는 수정할 수 없습니다."
+        )
+    if payload.design_config is not None:
+        config = validate_effect_config(payload.design_config)
+        await validate_design_assets(config, user, session)
+        version.design_config = config
+    version.status = "draft"
+    version.review_note = None
+    await session.commit()
+    return {"ok": True, "data": effect_version_data(version)}
+
+
+@router.post("/artist/cards/{card_id}/effect-versions/{version_id}/submit-review")
+async def submit_effect_version_review(
+    card_id: str, version_id: str, user: ArtistUser, session: DbSession
+) -> dict:
+    version = await effect_version_or_404(card_id, version_id, user, session)
+    if version.status not in {"draft", "rejected"}:
+        raise AppError(
+            409, "EFFECT_VERSION_INVALID_STATUS", "현재 효과 버전은 검수를 요청할 수 없습니다."
+        )
+    version.status = "pending_review"
+    version.submitted_at = datetime.now(UTC)
+    version.review_note = None
+    await session.commit()
+    return {"ok": True, "data": effect_version_data(version)}
 
 
 @router.get("/artist/cards/{card_id}/image")

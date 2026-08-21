@@ -587,6 +587,17 @@ export type UserCardDetail = {
   }
 }
 
+export type UserCardHistoryItem = {
+  id: string
+  action: string
+  sourceType: string
+  sourceId: string
+  fromUserId: string | null
+  toUserId: string | null
+  metadata: Record<string, unknown>
+  createdAt: string
+}
+
 export class ApiError extends Error {
   status: number
 
@@ -713,6 +724,10 @@ export function getCardPackOdds(packId: string): Promise<{ ok: true, data: { pac
 
 export function openCardPack(packId: string): Promise<{ ok: true, data: CardPackOpening }> {
   return apiFetch<{ ok: true, data: CardPackOpening }>(`/me/card-packs/${encodeURIComponent(packId)}/open`, { method: 'POST' })
+}
+
+export function getUserCardHistory(userCardId: string): Promise<{ ok: true, data: { userCardId: string, items: UserCardHistoryItem[] } }> {
+  return apiFetch<{ ok: true, data: { userCardId: string, items: UserCardHistoryItem[] } }>(`/me/cards/${encodeURIComponent(userCardId)}/history`)
 }
 
 export function getCardCombination(packId: string): Promise<{ ok: true, data: CardCombinationRecipe }> {

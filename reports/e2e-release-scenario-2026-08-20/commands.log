@@ -1,0 +1,12 @@
+2026-08-21 Task 10 local verification
+API: DATABASE_URL=sqlite+aiosqlite:////private/tmp/fanfolio-task10.db APP_ENV=test AUTO_CREATE_SCHEMA=true SEED_DEMO_CATALOG=true .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+API health: 200 {"status":"healthy"}
+API readiness: 200 {"status":"ready"}
+Fan app: npm run dev -- --host 127.0.0.1 --port 5173 -> HTTP 200
+Admin web: python3 -m http.server 4174 --bind 127.0.0.1 -> HTTP 200
+Backend: backend/.venv/bin/pytest -q -> 387 passed, 2 skipped
+Frontend: npm --prefix frontend test -> 143 passed
+Frontend build: npm --prefix frontend run build -> exit 0
+Frontend lint: npm --prefix frontend run lint -> exit 0, 4 existing warnings
+Admin: node --test admin_app/tests/*.test.mjs -> 102 passed
+Sensitive values and authentication tokens intentionally omitted.

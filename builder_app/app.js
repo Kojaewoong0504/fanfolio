@@ -246,6 +246,7 @@ const state = {
   insights: null,
   profile: null,
   cardId: savedDraft?.cardId || null,
+  effectVersionId: savedDraft?.effectVersionId || null,
   editingCardId: savedDraft?.editingCardId || null,
   selectedRecipe: savedDraft?.selectedRecipe || 'voice',
   form: { ...initialForm(), ...(savedDraft?.form || {}) },
@@ -1995,6 +1996,14 @@ async function submitReview() {
   state.busy = true
   render()
   try {
+    const effectVersion = await api(`/artist/cards/${state.cardId}/effect-versions`, {
+      method: 'POST',
+      body: JSON.stringify({ designConfig: card.designConfig || {} }),
+    })
+    state.effectVersionId = effectVersion.data.id
+    await api(`/artist/cards/${state.cardId}/effect-versions/${state.effectVersionId}/submit-review`, {
+      method: 'POST',
+    })
     const result = await api(`/artist/cards/${state.cardId}/submit-review`, {
       method: 'POST',
       body: JSON.stringify({ reviewNote: state.reviewNote || null }),
