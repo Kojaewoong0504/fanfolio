@@ -214,23 +214,23 @@ git commit -m "feat: enforce scoped card operations"
 - Create: `backend/tests/contract/test_card_release_to_collection.py`
 - Modify: `admin_app/tests/admin-release-review.test.mjs`
 
-- [ ] **Step 1: 승인 전 팬 노출 실패 테스트를 작성한다.**
+- [x] **Step 1: 승인 전 팬 노출 실패 테스트를 작성한다.**
 
 초안·검수 중 카드가 `/api/catalog/cards`, `/api/catalog/card-packs`, 카드 이미지 경로에서 노출되지 않는지 검증한다.
 
-- [ ] **Step 2: 카드 상태 전이를 서버에서 제한한다.**
+- [x] **Step 2: 카드 상태 전이를 서버에서 제한한다.**
 
 허용 전이를 `draft → pending_review → approved → published`로 제한하고, 반려·재검수는 이전 버전과 새 review version을 구분한다. 파트너 승인과 플랫폼 승인이 필요한 경우 각각 `CardReviewRequest`와 `CardReviewDecision`에 기록한다.
 
-- [ ] **Step 3: 카드팩 포함 조건을 검증한다.**
+- [x] **Step 3: 카드팩 포함 조건을 검증한다.**
 
 공개 카드팩에는 승인·공개된 카드만 추가할 수 있도록 `validate_card_pack_input`을 강화하고, 확률 합계 100%와 동일 카드 중복 금지를 계속 보장한다.
 
-- [ ] **Step 4: 관리자 UI에서 제작·검수·공개 단계를 분리한다.**
+- [x] **Step 4: 관리자 UI에서 제작·검수·공개 단계를 분리한다.**
 
 `admin_app/app.js`의 카드 상세에서 제작자 콘텐츠, 검수 상태, 승인·반려·공개 액션을 별도 영역으로 표현한다. 승인 전 카드는 팬 노출 경로가 없다는 안내를 표시한다.
 
-- [ ] **Step 5: 전체 출시 테스트를 실행한다.**
+- [x] **Step 5: 전체 출시 테스트를 실행한다.**
 
 Run: `cd backend && pytest tests/contract/test_card_release_workflow.py tests/contract/test_card_packs.py tests/contract/test_card_release_to_collection.py -q`
 

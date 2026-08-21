@@ -209,8 +209,15 @@ async def validate_card_pack_input(payload: CardPackCreate, session: DbSession) 
     cards = await session.scalars(
         select(Card).where(Card.id.in_([item.card_id for item in payload.cards]))
     )
-    if len(cards.all()) != len(payload.cards):
+    card_rows = cards.all()
+    if len(card_rows) != len(payload.cards):
         raise AppError(404, "CARD_NOT_FOUND", "카드팩에 포함할 카드를 찾을 수 없습니다.")
+    if any(card.status != "published" for card in card_rows):
+        raise AppError(
+            422,
+            "PACK_CARDS_NOT_PUBLISHED",
+            "공개되지 않은 카드는 카드팩에 포함할 수 없습니다.",
+        )
 
 
 def _iso_utc(value: datetime | None) -> str | None:
@@ -2776,6 +2783,12 @@ async def publish(card_id: str, admin: RootAdminUser, session: DbSession) -> dic
     card = await session.get(Card, card_id)
     if not card:
         raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
+    if card.owner_artist_id is not None:
+        raise AppError(
+            409,
+            "CARD_RELEASE_DROP_REQUIRED",
+            "아티스트 카드는 승인 후 드롭 공개를 통해 출시해야 합니다.",
+        )
     if card.status == "pending_review" or (
         card.status == "draft" and card.owner_artist_id is not None
     ):
