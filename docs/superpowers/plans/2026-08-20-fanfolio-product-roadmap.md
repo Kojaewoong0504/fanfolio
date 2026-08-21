@@ -106,15 +106,15 @@ git commit -m "test: lock card release scenario fixtures"
 - Create: `backend/tests/contract/test_card_ownership_ledger.py`
 - Create: `backend/tests/unit/test_card_ownership_service.py`
 
-- [ ] **Step 1: 중복 발급을 재현하는 테스트를 작성한다.**
+- [x] **Step 1: 중복 발급을 재현하는 테스트를 작성한다.**
 
 동일한 인증번호 등록 요청과 동일한 카드팩 개봉 멱등성 키를 동시에 실행하고 `UserCard`가 한 건만 생성되는지 검증한다. 실패 요청은 카드 수량과 인증번호 상태를 변경하지 않아야 한다.
 
-- [ ] **Step 2: 원장 모델과 유니크 제약을 추가한다.**
+- [x] **Step 2: 원장 모델과 유니크 제약을 추가한다.**
 
 `CardOwnershipLedger`를 추가해 `user_card_id`, `action`, `source_type`, `source_id`, `from_user_id`, `to_user_id`, `metadata`, `created_at`을 기록한다. `action + source_type + source_id + user_id` 조합을 유니크하게 만들어 동일 이벤트 재처리를 막는다.
 
-- [ ] **Step 3: 공통 소유권 서비스 함수를 구현한다.**
+- [x] **Step 3: 공통 소유권 서비스 함수를 구현한다.**
 
 `backend/app/services.py`에 다음 계약을 추가한다.
 
@@ -134,17 +134,19 @@ async def grant_user_card(
 
 이 함수가 다음 순서를 지키게 한다: 멱등성 조회 → 카드·수량 검증 → serial 할당 → `UserCard` 생성 → 원장 기록 → commit.
 
-- [ ] **Step 4: 카드팩 개봉과 인증번호 등록을 공통 서비스로 전환한다.**
+- [x] **Step 4: 카드팩 개봉과 인증번호 등록을 공통 서비스로 전환한다.**
 
 `backend/app/routers/fan.py`의 `/me/card-packs/{pack_id}/open`과 `/redemptions`가 직접 `UserCard`를 만들지 않고 `grant_user_card`를 호출하게 한다.
 
-- [ ] **Step 5: 테스트를 실행한다.**
+- [x] **Step 5: 테스트를 실행한다.**
 
 Run: `cd backend && pytest tests/unit/test_card_ownership_service.py tests/contract/test_card_ownership_ledger.py tests/contract/test_card_packs.py tests/contract/test_redemptions.py -q`
 
 Expected: 중복 요청에도 `UserCard`와 원장 행이 각각 한 건만 생성된다.
 
-- [ ] **Step 6: 커밋한다.**
+검증 결과: `test_card_ownership_service.py`에서 공통 발급 서비스의 멱등성·실패 원자성을 확인했고, `test_card_ownership_ledger.py`에서 카드팩 개봉과 인증번호 등록이 각각 단일 `UserCard`·원장 이벤트를 생성하는 것을 확인했다. 데이터베이스 행 잠금 동시성 부하는 운영 PostgreSQL 환경에서 별도 수행한다.
+
+- [x] **Step 6: 커밋한다.**
 
 ```bash
 git add backend/app/models.py backend/alembic/versions/0043_card_ownership_ledger.py backend/app/services.py backend/app/routers/fan.py backend/app/routers/admin.py backend/tests

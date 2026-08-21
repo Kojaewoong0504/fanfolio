@@ -73,3 +73,31 @@ def test_same_pack_open_idempotency_key_returns_one_owned_card(
     ledger = asyncio.run(read_ledger())
     assert len(ledger) == 1
     assert ledger[0].source_type == "card_pack_opening"
+
+
+def test_redeem_code_registration_records_one_ownership_event(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    redeemed = assert_success(
+        actors["fan"].post(
+            "/api/redemptions",
+            json={"code": seeded["codes"]["valid"], "source": "qr"},
+        ),
+        201,
+    )
+
+    async def read_ledger() -> list[CardOwnershipLedger]:
+        async with SessionLocal() as session:
+            return list(
+                await session.scalars(
+                    select(CardOwnershipLedger).where(
+                        CardOwnershipLedger.user_card_id == redeemed["userCardId"]
+                    )
+                )
+            )
+
+    ledger = asyncio.run(read_ledger())
+    assert len(ledger) == 1
+    assert ledger[0].action == "grant"
+    assert ledger[0].source_type == "redeem_code"
+    assert ledger[0].source_id == seeded["codes"]["valid"]
