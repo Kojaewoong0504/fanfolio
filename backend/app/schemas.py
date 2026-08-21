@@ -110,6 +110,21 @@ class ProfileEquipmentUpdate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class CollectionVisibilityUpdate(BaseModel):
+    public: bool
+
+
+class TradeProposalCreate(BaseModel):
+    recipient_user_id: str = Field(alias="recipientUserId", min_length=1)
+    offered_user_card_ids: list[str] = Field(
+        alias="offeredUserCardIds", min_length=1, max_length=20
+    )
+    requested_user_card_ids: list[str] = Field(
+        default_factory=list, alias="requestedUserCardIds", max_length=20
+    )
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class ArtistProfileUpdate(BaseModel):
     nickname: str | None = Field(default=None, min_length=1, max_length=40)
     email_enabled: bool | None = Field(default=None, alias="emailEnabled")
@@ -156,6 +171,23 @@ class CardPackCreate(BaseModel):
     image_url: str | None = Field(default=None, alias="imageUrl", max_length=2048)
     description: str | None = Field(default=None, max_length=1000)
     cards: list[CardPackCardInput] = Field(default_factory=list, max_length=200)
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class CardCombinationRecipeCreate(BaseModel):
+    scope_type: Literal["card_pack"] = Field(alias="scopeType")
+    scope_id: str = Field(alias="scopeId", min_length=1)
+    input_quantity: int = Field(alias="inputQuantity", ge=2, le=100)
+    output_rarity_pool: list[str] = Field(alias="outputRarityPool", min_length=1, max_length=8)
+    probability_snapshot: dict[str, float] = Field(alias="probabilitySnapshot", min_length=1)
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class CardCombinationRequest(BaseModel):
+    recipe_id: str = Field(alias="recipeId", min_length=1)
+    material_user_card_ids: list[str] = Field(
+        alias="materialUserCardIds", min_length=1, max_length=100
+    )
     model_config = ConfigDict(populate_by_name=True)
 
 

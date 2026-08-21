@@ -81,10 +81,16 @@ def downgrade() -> None:
     if "uq_card_pack_openings_user_pack_key" in indexes:
         op.drop_index("uq_card_pack_openings_user_pack_key", table_name="card_pack_openings")
     columns = {column["name"] for column in inspector.get_columns("card_pack_openings")}
-    if "idempotency_key" in columns:
-        op.drop_column("card_pack_openings", "idempotency_key")
-    if "user_card_id" in columns:
-        op.drop_column("card_pack_openings", "user_card_id")
+    columns_to_drop = [
+        column for column in ("idempotency_key", "user_card_id") if column in columns
+    ]
+    if columns_to_drop:
+        # SQLite cannot drop a column directly when the table contains a
+        # foreign-key definition. Batch recreation preserves the legacy
+        # constraints while removing the 0043 columns safely.
+        with op.batch_alter_table("card_pack_openings", recreate="always") as batch:
+            for column in columns_to_drop:
+                batch.drop_column(column)
     if inspector.has_table("card_ownership_ledger"):
         op.drop_index("ix_card_ownership_ledger_user_created", table_name="card_ownership_ledger")
         op.drop_table("card_ownership_ledger")

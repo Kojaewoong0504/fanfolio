@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from 'react'
 import './App.css'
 import './reference.css'
-import { ApiError, apiFetch, applyToFanEvent, claimPassTier, claimReward, clearAccessToken, connectNotificationStream, getCardPacks, getCardPackOdds, getFanEvent, getFanEventComments, getFanEvents, getFanHome, getMyEventApplications, getFanPass, getNotificationPreferences, getProgression, oauthStartUrl, openCardPack, postFanEventComment, reconcilePassRewards, resolveApiUrl, setAccessToken, updateNotificationPreferences, updateProfileEquipment, type CardDesignConfig, type CardPack, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionSummary, type CurrentUser, type EventPagination, type FanEvent, type FanEventApplication, type FanEventComment, type FanEventStatus, type FanHomeResponse, type FanProgression, type NotificationItem, type ProfileEquipment, type RewardGrant, type UserCardDetail } from './api/client'
+import { ApiError, apiFetch, applyToFanEvent, claimPassTier, claimReward, clearAccessToken, combineCards, connectNotificationStream, getCardCombination, getCardPacks, getCardPackOdds, getFanEvent, getFanEventComments, getFanEvents, getFanHome, getMyEventApplications, getFanPass, getNotificationPreferences, getProgression, oauthStartUrl, openCardPack, postFanEventComment, previewCardCombination, reconcilePassRewards, resolveApiUrl, setAccessToken, updateNotificationPreferences, updateProfileEquipment, type CardCombinationPreview, type CardCombinationRecipe, type CardCombinationResult, type CardDesignConfig, type CardPack, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionSummary, type CurrentUser, type EventPagination, type FanEvent, type FanEventApplication, type FanEventComment, type FanEventStatus, type FanHomeResponse, type FanProgression, type NotificationItem, type ProfileEquipment, type RewardGrant, type UserCardDetail } from './api/client'
 import { QrRedeemModal, RedeemIcon } from './components/QrRedeemModal'
 import { CardDetail } from './components/CardDetail'
 import { InteractiveCollectibleCard } from './components/InteractiveCollectibleCard'
@@ -12,6 +12,7 @@ import { FanPassPage } from './components/FanPassPage'
 import { EventDetail } from './components/EventDetail'
 import { EventList } from './components/EventList'
 import { AuthenticatedImage } from './components/AuthenticatedImage'
+import { PublicCollection } from './components/PublicCollection'
 import type { Card } from './types'
 import { demoCardImage, demoMemberImage, keepCardVisual } from './utils/cardVisual'
 import cardYunaImage from './assets/card-yuna-lavender.jpg'
@@ -290,6 +291,7 @@ function App() {
   const cardReturnPathRef = useRef<string | null>(null)
   const savedCardsOwnerRef = useRef<string | null>(null)
   const savedCardIds = savedCards.map(card => card.userCardId ?? card.id)
+  const publicCollectionUserId = publicCollectionIdFromPath(window.location.pathname)
 
   useEffect(() => {
     const favoriteArtistIds = currentUser?.favoriteArtistIds ?? []
@@ -460,6 +462,12 @@ function App() {
   }
 
   const openReveal = (userCardId: string) => {
+    // The reveal experience is a route-level screen. Clear collection-only
+    // state before navigating so the previous repository cannot win the
+    // render precedence while the URL is already /reveal/:userCardId.
+    setShowCardCollection(false)
+    setShowRewardInventory(false)
+    setShowRedeem(false)
     setRevealedCardId(userCardId)
     const nextPath = `/reveal/${encodeURIComponent(userCardId)}`
     if (window.location.pathname !== nextPath) window.history.pushState({}, '', nextPath)
@@ -815,6 +823,10 @@ function App() {
     setFanProgression(current => current ? { ...current, equipment: result.data } : current)
   }
 
+  if (publicCollectionUserId) {
+    return <PublicCollection userId={publicCollectionUserId} onBack={() => window.location.assign('/collection')} />
+  }
+
   if (sessionChecking) {
     return <SessionLoading />
   }
@@ -844,10 +856,6 @@ function App() {
 
   if (showRewardInventory) {
     return <RewardInventory progression={inventoryProgression} loading={growthLoading} error={growthError} onRetry={refreshGrowth} onBack={closeRewardInventory} onEquip={saveGrowthEquipment} onNavigate={navigateTab} />
-  }
-
-  if (showCardCollection) {
-    return <CardCollectionRepository onBack={closeCardCollection} onNavigate={navigateTab} onOpenCard={handleCardPackOpened} />
   }
 
   if (revealedCardId) {
@@ -944,6 +952,11 @@ function pathForTab(tab: Tab): string {
 
 function eventIdFromPath(pathname: string): string | null {
   const match = pathname.match(/^\/events\/(.+)$/)
+  return match ? decodeURIComponent(match[1]) : null
+}
+
+function publicCollectionIdFromPath(pathname: string): string | null {
+  const match = pathname.match(/^\/fans\/([^/]+)\/collection$/)
   return match ? decodeURIComponent(match[1]) : null
 }
 
@@ -1317,6 +1330,7 @@ type CardCollectionSlot = {
   sourcePrefix?: string
   rarity: 'UR' | 'SR' | 'R' | 'N'
   copies: number
+  userCardIds?: string[]
   card?: Card
 }
 
@@ -1438,6 +1452,7 @@ function buildRemoteCardCollectionGroups(packs: CardPack[], ownedCards: Collecti
         number: packCard.position || index + 1,
         rarity,
         copies,
+        userCardIds: owned.map(card => card.userCardId),
         card: copies > 0 ? {
           id: packCard.cardId,
           userCardId: source?.userCardId,
@@ -1964,6 +1979,13 @@ function CardCollectionRepository({ onBack, onNavigate, onOpenCard }: { onBack: 
   const [packOdds, setPackOdds] = useState<{ pack: CardPack, items: CardPack['cards'], totalProbability: number } | null>(null)
   const [packOpening, setPackOpening] = useState(false)
   const [packError, setPackError] = useState('')
+  const [combinationRecipe, setCombinationRecipe] = useState<CardCombinationRecipe | null>(null)
+  const [combinationPreview, setCombinationPreview] = useState<CardCombinationPreview | null>(null)
+  const [combinationResult, setCombinationResult] = useState<CardCombinationResult | null>(null)
+  const [combinationSheetOpen, setCombinationSheetOpen] = useState(false)
+  const [combinationBusy, setCombinationBusy] = useState(false)
+  const [combinationError, setCombinationError] = useState('')
+  const [combinationRequestKey, setCombinationRequestKey] = useState<string | null>(null)
   const groups = remoteGroups ?? cardCollectionGroups
   const group = groups.find(item => item.id === groupId) ?? groups[0] ?? { id: 'empty', displayName: '카드 컬렉션', owned: 0, total: 0, packs: [] }
   useEffect(() => {
@@ -1995,6 +2017,8 @@ function CardCollectionRepository({ onBack, onNavigate, onOpenCard }: { onBack: 
   }
   const activePack = packId === 'all' ? allPack : group.packs.find(item => item.id === packId) ?? group.packs[0]
   const selectedRemotePack = activePack.id === 'all' ? null : remotePacks.find(pack => pack.id === activePack.id) ?? null
+  const combinationMaterialIds = activePack.slots.flatMap(slot => slot.userCardIds ?? []).slice(0, combinationRecipe?.inputQuantity ?? 0)
+  const canCombine = Boolean(combinationRecipe && combinationMaterialIds.length === combinationRecipe.inputQuantity)
   const rarityOrder = { UR: 4, SR: 3, R: 2, N: 1 }
   const visibleSlots = [...activePack.slots]
     .filter(slot => filter === 'all' ? true : filter === 'owned' ? Boolean(slot.card) : filter === 'missing' ? !slot.card : slot.copies > 1)
@@ -2029,6 +2053,47 @@ function CardCollectionRepository({ onBack, onNavigate, onOpenCard }: { onBack: 
       setPackOpening(false)
     }
   }
+  useEffect(() => {
+    setCombinationRecipe(null)
+    setCombinationPreview(null)
+    setCombinationResult(null)
+    setCombinationRequestKey(`card-combination-${crypto.randomUUID()}`)
+    setCombinationSheetOpen(false)
+    setCombinationError('')
+    if (!selectedRemotePack) return
+    let cancelled = false
+    void getCardCombination(selectedRemotePack.id)
+      .then(result => { if (!cancelled) setCombinationRecipe(result.data) })
+      .catch(() => { if (!cancelled) setCombinationRecipe(null) })
+    return () => { cancelled = true }
+  }, [selectedRemotePack?.id])
+  const openCombinationSheet = async () => {
+    if (!combinationRecipe || !canCombine || combinationBusy) return
+    setCombinationError('')
+    setCombinationResult(null)
+    setCombinationSheetOpen(true)
+    try {
+      const result = await previewCardCombination(combinationRecipe.id, combinationMaterialIds)
+      setCombinationPreview(result.data)
+    } catch (error) {
+      setCombinationError(error instanceof Error ? error.message : '조합 가능 여부를 확인하지 못했어요.')
+    }
+  }
+  const submitCombination = async () => {
+    if (!combinationRecipe || !combinationPreview || combinationBusy) return
+    setCombinationBusy(true)
+    setCombinationError('')
+    try {
+      const result = await combineCards(combinationRecipe.id, combinationPreview.consumableUserCardIds, combinationRequestKey ?? undefined)
+      setCombinationResult(result.data)
+      setCombinationSheetOpen(false)
+      if (onOpenCard) await onOpenCard(result.data.userCardId)
+    } catch (error) {
+      setCombinationError(error instanceof Error ? error.message : '중복 카드 조합에 실패했어요. 잠시 후 다시 시도해 주세요.')
+    } finally {
+      setCombinationBusy(false)
+    }
+  }
   if (selectedItem) return <CardCollectionDetail item={selectedItem} onBack={() => setSelectedItem(null)} />
   return <main className="app-shell card-collection-shell">
     <header className="card-collection-topbar">
@@ -2060,6 +2125,7 @@ function CardCollectionRepository({ onBack, onNavigate, onOpenCard }: { onBack: 
       <div className="card-collection-heading">
         <h2>{activePack.name} 카드 <small>· <strong>{activePack.owned}</strong> / {activePack.total}</small></h2>
         <div>
+          {combinationRecipe && canCombine && <button type="button" className="card-collection-combine" onClick={() => { void openCombinationSheet() }}>중복 카드 조합</button>}
           {selectedRemotePack && onOpenCard && <button type="button" className="card-collection-open-pack" onClick={() => { void openPackSheet() }}>팩 열기</button>}
           <label><span className="sr-only">카드 정렬</span><select aria-label="카드 정렬" value={sort} onChange={event => setSort(event.target.value as typeof sort)}><option value="number">카드 번호순</option><option value="rarity">희귀도순</option><option value="copies">보유 수량순</option></select></label>
           <button type="button" className={filtersOpen || filter !== 'all' ? 'active' : ''} aria-label="카드 필터" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(open => !open)}><NavIcon name="settings" /></button>
@@ -2091,6 +2157,19 @@ function CardCollectionRepository({ onBack, onNavigate, onOpenCard }: { onBack: 
         <small className="card-pack-opening-note">개봉 즉시 카드가 컬렉션에 등록되고 카드 상세 화면에서 확인할 수 있어요.</small>
       </section>
     </div>}
+    {combinationSheetOpen && combinationRecipe && <div className="card-pack-opening-backdrop" role="presentation" onClick={event => { if (event.target === event.currentTarget && !combinationBusy) setCombinationSheetOpen(false) }}>
+      <section className="card-pack-opening-sheet card-combination-sheet" role="dialog" aria-modal="true" aria-labelledby="card-combination-title">
+        <button type="button" className="card-pack-opening-close" aria-label="중복 카드 조합 닫기" onClick={() => { if (!combinationBusy) setCombinationSheetOpen(false) }}>×</button>
+        <span className="eyebrow">CARD COMBINATION</span>
+        <div className="card-pack-opening-copy"><h2 id="card-combination-title">중복 카드 조합</h2><p>{selectedRemotePack?.name ?? '카드팩'}에서 보유한 중복 카드 {combinationRecipe.inputQuantity}장을 사용해요.</p></div>
+        <div className="card-combination-materials"><b>사용할 카드</b><span>{combinationPreview?.consumableUserCardIds.length ?? combinationMaterialIds.length}장 선택됨</span></div>
+        <div className="card-pack-opening-odds"><div><b>조합 결과 확률</b><strong>{combinationRecipe.probabilityVersion}</strong></div>{combinationRecipe.publicOdds.map(item => <div className="card-pack-opening-odds-row" key={item.cardId}><span><em className={`card-collection-rarity rarity-${(item.rarity ?? 'N').toLowerCase()}`}>{item.rarity ?? 'N'}</em>{item.name}</span><strong>{item.probability}%</strong></div>)}</div>
+        {combinationError && <p className="card-pack-opening-error" role="alert">{combinationError}</p>}
+        <button type="button" className="card-pack-opening-submit" disabled={!combinationPreview || combinationBusy} onClick={() => { void submitCombination() }}>{combinationBusy ? '카드를 조합하고 있어요…' : '조합하기'}</button>
+        <small className="card-pack-opening-note">사용한 중복 카드는 소모되고, 결과 카드는 즉시 컬렉션에 추가돼요.</small>
+      </section>
+    </div>}
+    {combinationResult && !combinationSheetOpen && !onOpenCard && <p className="card-combination-result" role="status">조합 완료 · {combinationResult.card.name} 카드를 획득했어요.</p>}
     <BottomNavigation active="collection" onNavigate={onNavigate} />
   </main>
 }
