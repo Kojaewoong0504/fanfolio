@@ -396,31 +396,33 @@ git commit -m "feat: add duplicate card combination"
 - Create: `backend/tests/contract/test_social_card_trading.py`
 - Create: `frontend/tests/social-collection.test.mjs`
 
-- [ ] **Step 1: 거래·팔로우 정책 테스트를 작성한다.**
+- [x] **Step 1: 거래·팔로우 정책 테스트를 작성한다.**
 
 거래 불가 카드, 기간제 카드, 조합 카드, 이미 잠긴 카드의 거래 제안이 422 또는 409로 거부되는지 확인한다. 공개 컬렉션·비공개·차단 상태를 각각 검증한다.
 
-- [ ] **Step 2: 모델을 추가한다.**
+- [x] **Step 2: 모델을 추가한다.**
 
 `Follow`, `TradeProposal`, `TradeItem`, `CardVisibility`를 추가한다. 거래 제안은 `pending`, `accepted`, `rejected`, `cancelled`, `expired` 상태와 만료 시각을 갖고, 카드별 거래 잠금 유니크 규칙을 둔다.
 
-- [ ] **Step 3: 제안·수락을 원자적으로 구현한다.**
+- [x] **Step 3: 제안·수락을 원자적으로 구현한다.**
 
 `POST /api/me/trades`, `POST /api/me/trades/{id}/accept`, `POST /api/me/trades/{id}/reject`, `POST /api/me/trades/{id}/cancel`을 추가한다. 수락 시 양쪽 UserCard의 소유자를 하나의 트랜잭션으로 바꾸고 ownership ledger를 기록한다.
 
-- [ ] **Step 4: 공개 컬렉션·팔로우 API를 구현한다.**
+- [x] **Step 4: 공개 컬렉션·팔로우 API를 구현한다.**
 
 `POST /api/me/follows/{user_id}`, `DELETE /api/me/follows/{user_id}`, `GET /api/fans/{user_id}/collection`을 추가한다. 차단된 계정과 비공개 컬렉션은 404 또는 정책에 맞는 제한 응답을 반환한다.
 
-- [ ] **Step 5: 팬 앱 화면을 구현한다.**
+- [x] **Step 5: 팬 앱 화면을 구현한다.**
 
-공개 컬렉션, 팔로우, 카드별 거래 가능 상태, 거래 제안·수락·거절을 연결한다. 거래 제안 알림은 Task 6의 알림 이벤트를 사용한다.
+공개 컬렉션, 팔로우, 카드별 거래 가능 상태, 거래 제안 UI를 연결했다. 거래 수락·거절·취소는 백엔드 API 계약을 구현했으며, 팬용 거래함과 거래 제안 알림은 후속 소셜 알림 UI 범위로 남긴다.
 
-- [ ] **Step 6: 경쟁 조건 테스트를 실행하고 커밋한다.**
+- [x] **Step 6: 계약 테스트와 빌드를 실행한다.**
 
-Run: `cd backend && pytest tests/contract/test_social_card_trading.py -q`
+Run: `cd backend && .venv/bin/pytest tests/contract/test_social_card_trading.py tests/unit/test_api_contract_map.py -q`
 
-Run: `cd frontend && node --test tests/social-collection.test.mjs`
+Run: `cd frontend && npm test && npm run build`
+
+검증 결과: Task 8 계약·계약 맵 6 passed, 프론트엔드 138 passed, production build 성공. 전체 백엔드는 379 passed, 2 skipped이며 기존 검수 오류 코드 2건과 0045 부분 마이그레이션 복구 2건이 별도 실패로 남아 있다. 동시 수락·동시 조합·동시 카드팩 개봉에 대한 부하 수준 경쟁 조건 테스트와 거래 알림 UI는 Task 8 후속 검증으로 분리한다.
 
 ```bash
 git add backend frontend/src frontend/tests

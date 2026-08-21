@@ -12,7 +12,18 @@ from app.core.config import get_settings
 from app.db.session import SessionLocal, engine
 from app.errors import AppError
 from app.models import Base
-from app.routers import admin, artist, assets, auth, events, fan, fixtures, health
+from app.routers import (
+    admin,
+    artist,
+    assets,
+    auth,
+    combinations,
+    events,
+    fan,
+    fixtures,
+    health,
+    social,
+)
 from app.services import (
     ensure_admin_bootstrap,
     ensure_data_identity,
@@ -134,6 +145,8 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(fan.router)
+    app.include_router(social.router)
+    app.include_router(combinations.router)
     app.include_router(admin.router)
     app.include_router(artist.router)
     app.include_router(assets.router)

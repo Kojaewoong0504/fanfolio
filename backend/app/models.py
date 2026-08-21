@@ -65,6 +65,53 @@ class User(Base):
     notification_email_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class Follow(Base):
+    """One fan following another fan's public activity."""
+
+    __tablename__ = "follows"
+    __table_args__ = (
+        UniqueConstraint("follower_id", "following_id", name="uq_follows_pair"),
+        Index("ix_follows_following", "following_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    follower_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    following_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class UserBlock(Base):
+    """A private block relationship used to hide social surfaces."""
+
+    __tablename__ = "user_blocks"
+    __table_args__ = (UniqueConstraint("blocker_id", "blocked_id", name="uq_user_blocks_pair"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    blocker_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    blocked_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class CardVisibility(Base):
+    """Per-fan switch controlling whether a collection can be viewed publicly."""
+
+    __tablename__ = "card_visibilities"
+
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    public_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
 class Organization(Base):
     """A partner company whose staff operate only assigned artists."""
 
@@ -327,6 +374,7 @@ class Card(Base):
     review_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
     has_voice: Mapped[bool] = mapped_column(Boolean, default=False)
     issue_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    tradable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     preview_storage_path: Mapped[str | None] = mapped_column(String, nullable=True)
     # Never infer a release from artist scope: a card belongs to one concrete drop.
     drop_id: Mapped[str | None] = mapped_column(ForeignKey("drops.id"), nullable=True)
@@ -456,6 +504,85 @@ class CardPackOpening(Base):
     )
     idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
     issuance_code: Mapped[str] = mapped_column(String(80), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class CardCombinationRecipe(Base):
+    """Published, immutable policy for converting duplicate pack cards."""
+
+    __tablename__ = "card_combination_recipes"
+    __table_args__ = (
+        UniqueConstraint("scope_type", "scope_id", name="uq_card_combination_recipe_scope"),
+        Index("ix_card_combination_recipes_status", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    scope_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    scope_id: Mapped[str] = mapped_column(String, nullable=False)
+    input_quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    output_rarity_pool: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    probability_snapshot: Mapped[dict[str, float]] = mapped_column(JSON, nullable=False)
+    probability_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="published")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class CardCombination(Base):
+    """One atomic material consumption and weighted result grant."""
+
+    __tablename__ = "card_combinations"
+    __table_args__ = (
+        UniqueConstraint("user_id", "idempotency_key", name="uq_card_combinations_user_key"),
+        Index("ix_card_combinations_user_created", "user_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    recipe_id: Mapped[str] = mapped_column(
+        ForeignKey("card_combination_recipes.id", ondelete="RESTRICT"), nullable=False
+    )
+    result_card_id: Mapped[str] = mapped_column(
+        ForeignKey("cards.id", ondelete="RESTRICT"), nullable=False
+    )
+    result_user_card_id: Mapped[str | None] = mapped_column(
+        ForeignKey("user_cards.id", ondelete="RESTRICT"), nullable=True
+    )
+    material_user_card_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    probability_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="completed")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class CardCombinationMaterial(Base):
+    """Unique material reservation prevents a UserCard from being reused."""
+
+    __tablename__ = "card_combination_materials"
+    __table_args__ = (
+        UniqueConstraint("user_card_id", name="uq_card_combination_material_user_card"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    combination_id: Mapped[str] = mapped_column(
+        ForeignKey("card_combinations.id", ondelete="CASCADE"), nullable=False
+    )
+    user_card_id: Mapped[str] = mapped_column(
+        ForeignKey("user_cards.id", ondelete="RESTRICT"), nullable=False
+    )
+    card_id: Mapped[str] = mapped_column(
+        ForeignKey("cards.id", ondelete="RESTRICT"), nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
@@ -618,6 +745,57 @@ class UserCard(Base):
     serial_number: Mapped[int] = mapped_column(Integer)
     acquisition_source: Mapped[str] = mapped_column(String, default="redeem_code")
     acquired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    trade_locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class TradeProposal(Base):
+    """A pending two-sided fan card exchange."""
+
+    __tablename__ = "trade_proposals"
+    __table_args__ = (
+        Index("ix_trade_proposals_recipient_status", "recipient_id", "status"),
+        Index("ix_trade_proposals_proposer_status", "proposer_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    proposer_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    recipient_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class TradeItem(Base):
+    """Card offered by one side of a trade proposal."""
+
+    __tablename__ = "trade_items"
+    __table_args__ = (
+        UniqueConstraint("proposal_id", "user_card_id", name="uq_trade_items_proposal_card"),
+        Index("ix_trade_items_user_card", "user_card_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    proposal_id: Mapped[str] = mapped_column(ForeignKey("trade_proposals.id", ondelete="CASCADE"))
+    user_card_id: Mapped[str] = mapped_column(ForeignKey("user_cards.id", ondelete="RESTRICT"))
+    side: Mapped[str] = mapped_column(String(16), nullable=False)
+
+
+class TradeLock(Base):
+    """Unique active lock preventing a card from entering two open trades."""
+
+    __tablename__ = "trade_locks"
+    __table_args__ = (UniqueConstraint("user_card_id", name="uq_trade_locks_user_card"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    proposal_id: Mapped[str] = mapped_column(ForeignKey("trade_proposals.id", ondelete="CASCADE"))
+    user_card_id: Mapped[str] = mapped_column(ForeignKey("user_cards.id", ondelete="RESTRICT"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
 
 
 class CardOwnershipLedger(Base):

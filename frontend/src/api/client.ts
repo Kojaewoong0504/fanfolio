@@ -212,6 +212,40 @@ export type CardPackOpening = {
   card: CardPackCard
 }
 
+export type CardCombinationOdds = {
+  cardId: string
+  name: string
+  rarity: string | null
+  imageUrl: string
+  probability: number
+}
+
+export type CardCombinationRecipe = {
+  id: string
+  packId?: string
+  packName?: string
+  inputQuantity: number
+  outputRarityPool: string[]
+  probabilityVersion: string
+  publicOdds: CardCombinationOdds[]
+}
+
+export type CardCombinationPreview = CardCombinationRecipe & {
+  consumableUserCardIds: string[]
+  requiredQuantity: number
+}
+
+export type CardCombinationResult = {
+  combinationId: string
+  recipeId: string
+  cardId: string
+  userCardId: string
+  consumedUserCardIds: string[]
+  probabilityVersion: string
+  status: string
+  card: CardPackCard
+}
+
 export type CollectionSummary = {
   ownedCount: number
   totalSlots: number
@@ -679,4 +713,79 @@ export function getCardPackOdds(packId: string): Promise<{ ok: true, data: { pac
 
 export function openCardPack(packId: string): Promise<{ ok: true, data: CardPackOpening }> {
   return apiFetch<{ ok: true, data: CardPackOpening }>(`/me/card-packs/${encodeURIComponent(packId)}/open`, { method: 'POST' })
+}
+
+export function getCardCombination(packId: string): Promise<{ ok: true, data: CardCombinationRecipe }> {
+  return apiFetch<{ ok: true, data: CardCombinationRecipe }>(`/catalog/card-packs/${encodeURIComponent(packId)}/combination`)
+}
+
+export function previewCardCombination(recipeId: string, materialUserCardIds: string[]): Promise<{ ok: true, data: CardCombinationPreview }> {
+  return apiFetch<{ ok: true, data: CardCombinationPreview }>('/me/card-combinations/preview', {
+    method: 'POST',
+    body: JSON.stringify({ recipeId, materialUserCardIds }),
+  })
+}
+
+export function combineCards(recipeId: string, materialUserCardIds: string[], idempotencyKey = `card-combination-${crypto.randomUUID()}`): Promise<{ ok: true, data: CardCombinationResult }> {
+  return apiFetch<{ ok: true, data: CardCombinationResult }>('/me/card-combinations', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': idempotencyKey },
+    body: JSON.stringify({ recipeId, materialUserCardIds }),
+  })
+}
+
+export type PublicCollection = {
+  userId: string
+  nickname: string | null
+  visibility: 'public'
+  summary: { ownedCount: number }
+  cards: Array<CollectionCard & { expiresAt?: string | null; tradable: boolean }>
+}
+
+export type TradeProposal = {
+  id: string
+  proposerUserId: string
+  recipientUserId: string
+  status: 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'expired'
+  offeredUserCardIds: string[]
+  requestedUserCardIds: string[]
+  expiresAt: string
+  createdAt: string
+}
+
+export function getPublicCollection(userId: string): Promise<{ ok: true, data: PublicCollection }> {
+  return apiFetch<{ ok: true, data: PublicCollection }>(`/fans/${encodeURIComponent(userId)}/collection`)
+}
+
+export function followFan(userId: string): Promise<{ ok: true, data: { followingUserId: string; following: boolean } }> {
+  return apiFetch<{ ok: true, data: { followingUserId: string; following: boolean } }>(`/me/follows/${encodeURIComponent(userId)}`, { method: 'POST' })
+}
+
+export function unfollowFan(userId: string): Promise<{ ok: true, data: { followingUserId: string; following: boolean } }> {
+  return apiFetch<{ ok: true, data: { followingUserId: string; following: boolean } }>(`/me/follows/${encodeURIComponent(userId)}`, { method: 'DELETE' })
+}
+
+export function updateCollectionVisibility(publicEnabled: boolean): Promise<{ ok: true, data: { public: boolean } }> {
+  return apiFetch<{ ok: true, data: { public: boolean } }>('/me/collection-visibility', {
+    method: 'PUT',
+    body: JSON.stringify({ public: publicEnabled }),
+  })
+}
+
+export function createTradeProposal(input: {
+  recipientUserId: string
+  offeredUserCardIds: string[]
+  requestedUserCardIds?: string[]
+}): Promise<{ ok: true, data: TradeProposal }> {
+  return apiFetch<{ ok: true, data: TradeProposal }>('/me/trades', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export function respondToTradeProposal(
+  proposalId: string,
+  action: 'accept' | 'reject' | 'cancel',
+): Promise<{ ok: true, data: { id: string; status: TradeProposal['status'] } }> {
+  return apiFetch<{ ok: true, data: { id: string; status: TradeProposal['status'] } }>(`/me/trades/${encodeURIComponent(proposalId)}/${action}`, { method: 'POST' })
 }
