@@ -617,6 +617,7 @@ main.collection-shell .collection-reward-inventory-entry > .inline-icon { width:
 .card-collection-heading > div > button { display:grid; width:42px; height:42px; place-items:center; padding:0; border:1px solid #dfdbec; border-radius:12px; background:#f5f2ff; color:#171b35; cursor:pointer; }
 .card-collection-heading > div > button.active { border-color:#6a58ef; color:#5c49ec; }
 .card-collection-open-pack { width:auto!important; min-width:62px; height:42px!important; padding:0 12px!important; border-color:#634eff!important; background:#634eff!important; color:#fff!important; font-size:11px; font-weight:850; }
+.card-collection-combine { width:auto!important; min-width:92px; height:42px!important; padding:0 11px!important; border:1px solid #634eff!important; border-radius:12px!important; background:#f1eeff!important; color:#5d49e9!important; font-size:10px; font-weight:850; cursor:pointer; }
 .card-collection-heading .nav-icon { width:22px; height:22px; }
 .card-collection-filters { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; padding:5px; border-radius:12px; background:#f3f1f8; }
 .card-collection-filters button { min-height:32px; border:0; border-radius:8px; background:transparent; color:#777d91; font-size:10px; font-weight:750; cursor:pointer; }
@@ -656,6 +657,11 @@ button.card-collection-slot { cursor:pointer; }
 .card-pack-opening-submit { min-height:46px; border:0; border-radius:13px; background:#624cf2; color:#fff; font-size:13px; font-weight:850; cursor:pointer; }
 .card-pack-opening-submit:disabled { opacity:.55; cursor:not-allowed; }
 .card-pack-opening-note { color:#858aa0; font-size:10px; line-height:1.45; text-align:center; }
+.card-combination-sheet { gap:14px; }
+.card-combination-sheet > .eyebrow { color:#654cf0; font-size:9px; font-weight:900; letter-spacing:.12em; }
+.card-combination-materials { display:flex; align-items:center; justify-content:space-between; padding:13px; border:1px solid #e2def4; border-radius:16px; background:#fff; color:#252943; font-size:12px; }
+.card-combination-materials span { color:#624cf2; font-weight:850; }
+.card-combination-result { margin:0 20px 20px; padding:14px; border-radius:14px; background:#f0edff; color:#4f3ed2; font-size:12px; font-weight:800; text-align:center; }
 @media (max-width:390px) {
   .card-collection-identity { padding-right:16px; padding-left:16px; }
   .card-collection-artist img { width:42px; height:42px; flex-basis:42px; }
@@ -703,6 +709,12 @@ button.card-collection-slot { cursor:pointer; }
 .card-collection-detail-message h2,.card-collection-detail-special h2 { margin:0 0 7px; color:#252941; font-size:13px; font-weight:850; letter-spacing:-.03em; }
 .card-collection-detail-message p { margin:0; color:#494f69; font-size:13px; font-weight:650; line-height:1.55; }
 .card-collection-detail-benefit { display:flex; width:100%; box-sizing:border-box; align-items:flex-start; gap:9px; margin:0; padding:14px 16px; border-radius:15px; background:#eeebff; color:#5c4bd2; font-size:12px; font-weight:750; line-height:1.45; }
+.card-collection-detail-history { width:100%; box-sizing:border-box; padding:17px 18px; border:1px solid #e2def2; border-radius:18px; background:#ffffffeb; }
+.card-collection-detail-history h2 { margin:0 0 4px; color:#252941; font-size:14px; font-weight:850; }
+.card-collection-detail-history small { color:#85899c; font-size:11px; }
+.card-collection-detail-history ol { display:grid; gap:0; margin:14px 0 0; padding:0; list-style:none; }
+.card-collection-detail-history li { display:flex; justify-content:space-between; gap:12px; padding:11px 0; border-top:1px solid #f0edf6; color:#444a63; font-size:12px; }
+.card-collection-detail-history li span { color:#85899c; font-size:11px; white-space:nowrap; }
 .card-collection-detail-benefit .inline-icon { width:18px; height:18px; flex:0 0 18px; }
 .card-collection-detail-special { width:100%; box-sizing:border-box; padding:17px 18px; border:1px solid #e2def2; border-radius:18px; background:#ffffffeb; }
 .card-collection-detail-special > img { display:block; width:100%; max-height:240px; object-fit:contain; border-radius:12px; background:#f5f3fb; }

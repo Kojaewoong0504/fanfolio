@@ -20,7 +20,7 @@ from app.models import (
     UserCard,
 )
 from app.schemas import CardCombinationRecipeCreate, CardCombinationRequest
-from app.services import grant_user_card, record_audit
+from app.services import grant_user_card, notify_user_once, record_audit
 
 router = APIRouter(prefix="/api", tags=["card-combinations"])
 
@@ -324,6 +324,16 @@ async def combine_cards(
         metadata={"recipeId": recipe.id, "packId": pack.id},
     )
     combination.result_user_card_id = result.id
+    await notify_user_once(
+        session,
+        user_id=user.id,
+        kind="card_combined",
+        title="카드 조합이 완료됐어요",
+        body=f"{cards[result_card_id].name} 카드를 새로 획득했습니다.",
+        entity_type="user_card",
+        entity_id=result.id,
+        event_key=f"combination:{combination.id}",
+    )
     try:
         await session.commit()
     except IntegrityError as exc:

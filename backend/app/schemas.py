@@ -737,6 +737,21 @@ class ArtistCardUpdate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class CardEffectVersionCreate(BaseModel):
+    design_config: dict = Field(alias="designConfig")
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class CardEffectVersionUpdate(BaseModel):
+    design_config: dict | None = Field(default=None, alias="designConfig")
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class CardEffectReviewDecision(BaseModel):
+    decision: Literal["approve", "reject"]
+    note: str | None = Field(default=None, max_length=500)
+
+
 class UploadPresignRequest(BaseModel):
     file_name: str = Field(alias="fileName", min_length=1, max_length=255)
     content_type: Literal[

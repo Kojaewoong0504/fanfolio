@@ -97,7 +97,16 @@ export function normalizeCardEffects(designConfig: unknown = {}): NormalizedCard
   const legacyFinish = front.effectFinish ?? (front.effect === 'holographic' ? 'glass' : undefined)
   const legacyMaterial =
     typeof legacyFinish === 'string' ? LEGACY_MATERIAL[legacyFinish] : undefined
-  const legacyPreset = typeof front.effectPreset === 'string' ? front.effectPreset : ''
+  const configuredPreset = typeof front.preset === 'string' ? front.preset : ''
+  const legacyPreset = typeof front.effectPreset === 'string' ? front.effectPreset : configuredPreset
+  const presetPattern = {
+    light: 'aurora-wave',
+    glow: 'aurora-wave',
+    foil: 'prism',
+    hologram: 'prism',
+    particles: 'micro-star',
+    motion: 'aurora-wave',
+  } as const
 
   return {
     version: 3,
@@ -106,7 +115,7 @@ export function normalizeCardEffects(designConfig: unknown = {}): NormalizedCard
       foilPattern: oneOf(
         front.foilPattern,
         FOIL_PATTERNS,
-        LEGACY_PATTERN[legacyPreset] ?? 'aurora-wave',
+        LEGACY_PATTERN[legacyPreset] ?? presetPattern[configuredPreset as keyof typeof presetPattern] ?? 'aurora-wave',
       ),
       foilCoverage: oneOf(front.foilCoverage, FOIL_COVERAGES, 'full'),
       interaction: normalizedInteraction,

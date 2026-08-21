@@ -781,6 +781,62 @@ button.top-avatar {
   margin-top: 14px;
 }
 
+.operational-metrics-panel {
+  grid-column: 1 / -1;
+}
+
+.operational-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px 16px 10px;
+}
+
+.operational-metrics-grid span {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
+}
+
+.operational-metrics-grid small,
+.operational-rarity > small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.operational-metrics-grid strong {
+  font: 800 20px/1.1 Manrope, sans-serif;
+}
+
+.operational-rarity {
+  display: grid;
+  gap: 8px;
+  padding: 0 16px 16px;
+}
+
+.operational-rarity > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.operational-rarity span {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  .operational-metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .fan-growth-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2743,6 +2799,13 @@ button.top-avatar {
   justify-content: space-between;
   min-height: 58px;
   padding: 2px 2px 0;
+}
+
+.review-command-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .review-commandbar h2 {
@@ -5928,6 +5991,11 @@ code {
 
   .review-commandbar {
     display: grid;
+  }
+
+  .review-command-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 
   .with-actions .primary {

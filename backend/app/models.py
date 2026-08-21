@@ -380,6 +380,29 @@ class Card(Base):
     drop_id: Mapped[str | None] = mapped_column(ForeignKey("drops.id"), nullable=True)
 
 
+class CardEffectVersion(Base):
+    """Versioned artist effect configuration kept separate from the published card."""
+
+    __tablename__ = "card_effect_versions"
+    __table_args__ = (
+        UniqueConstraint("card_id", "version", name="uq_card_effect_version"),
+        Index("ix_card_effect_versions_card_status", "card_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    card_id: Mapped[str] = mapped_column(ForeignKey("cards.id", ondelete="CASCADE"))
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    design_config: Mapped[dict] = mapped_column(JSON, nullable=False)
+    author_user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    status: Mapped[str] = mapped_column(String, nullable=False, default="draft")
+    review_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
 class CardReviewRequest(Base):
     __tablename__ = "card_review_requests"
     __table_args__ = (

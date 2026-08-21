@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from 'react'
 import './App.css'
 import './reference.css'
+import { getUserCardHistory, type UserCardHistoryItem } from './api/client'
 import { ApiError, apiFetch, applyToFanEvent, claimPassTier, claimReward, clearAccessToken, combineCards, connectNotificationStream, getCardCombination, getCardPacks, getCardPackOdds, getFanEvent, getFanEventComments, getFanEvents, getFanHome, getMyEventApplications, getFanPass, getNotificationPreferences, getProgression, oauthStartUrl, openCardPack, postFanEventComment, previewCardCombination, reconcilePassRewards, resolveApiUrl, setAccessToken, updateNotificationPreferences, updateProfileEquipment, type CardCombinationPreview, type CardCombinationRecipe, type CardCombinationResult, type CardDesignConfig, type CardPack, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionSummary, type CurrentUser, type EventPagination, type FanEvent, type FanEventApplication, type FanEventComment, type FanEventStatus, type FanHomeResponse, type FanProgression, type NotificationItem, type ProfileEquipment, type RewardGrant, type UserCardDetail } from './api/client'
 import { QrRedeemModal, RedeemIcon } from './components/QrRedeemModal'
 import { CardDetail } from './components/CardDetail'
@@ -1876,6 +1877,7 @@ function RewardInventory({ progression, loading, error, onRetry, onBack, onEquip
 function CardCollectionDetail({ item, onBack }: { item: CardCollectionDetailItem, onBack: () => void }) {
   const [favorite, setFavorite] = useState(false)
   const [detail, setDetail] = useState<UserCardDetail | null>(null)
+  const [history, setHistory] = useState<UserCardHistoryItem[]>([])
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState(false)
   const [detailAttempt, setDetailAttempt] = useState(0)
@@ -1883,12 +1885,16 @@ function CardCollectionDetail({ item, onBack }: { item: CardCollectionDetailItem
   useEffect(() => {
     let cancelled = false
     setDetail(null)
+    setHistory([])
     setDetailError(false)
     const hasRemoteDetail = Boolean(item.card.userCardId && !item.card.userCardId.startsWith('user-card-'))
     setDetailLoading(hasRemoteDetail)
     if (!hasRemoteDetail || !item.card.userCardId) return
-    void apiFetch<{ ok: true, data: UserCardDetail }>(`/me/cards/${item.card.userCardId}`)
-      .then(result => { if (!cancelled) { setDetail(result.data); setDetailLoading(false) } })
+    void Promise.all([
+      apiFetch<{ ok: true, data: UserCardDetail }>(`/me/cards/${item.card.userCardId}`),
+      getUserCardHistory(item.card.userCardId),
+    ])
+      .then(([detailResult, historyResult]) => { if (!cancelled) { setDetail(detailResult.data); setHistory(historyResult.data.items); setDetailLoading(false) } })
       .catch(() => { if (!cancelled) { setDetailError(true); setDetailLoading(false) } })
     return () => { cancelled = true }
   }, [item.card.userCardId, detailAttempt])
@@ -1953,6 +1959,10 @@ function CardCollectionDetail({ item, onBack }: { item: CardCollectionDetailItem
           {detail?.card.issueLimit && <div><dt>발행 수량</dt><dd>{detail.card.issueLimit.toLocaleString()}장</dd></div>}
         </dl>
       </section>
+      {history.length > 0 && <section className="card-collection-detail-history" aria-label="카드 획득 기록">
+        <div><h2>획득 기록</h2><small>이 카드의 발급·소유권 변경 기록</small></div>
+        <ol>{history.map(event => <li key={event.id}><strong>{event.action === 'grant' ? '컬렉션에 추가됨' : event.action === 'transfer' ? '소유권 이동' : event.action === 'consume' ? '조합에 사용됨' : event.action}</strong><span>{new Date(event.createdAt).toLocaleString('ko-KR')}</span></li>)}</ol>
+      </section>}
       {futureBenefitPreview && <p className="card-collection-detail-benefit"><InlineIcon name="sparkles" />{futureBenefitPreview}</p>}
       {handwritingImageUrl && <section className="card-collection-detail-special"><h2>손글씨 특전</h2><img src={handwritingImageUrl} alt={`${memberName} 손글씨 메시지`} /></section>}
       {(voiceAudioUrl || videoUrl) && <section className="card-collection-detail-special" aria-labelledby="collection-special-media-title">

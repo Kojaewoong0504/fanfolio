@@ -1,5 +1,6 @@
 import asyncio
 import csv
+import json
 from datetime import UTC, datetime
 from io import BytesIO, StringIO
 from secrets import token_urlsafe
@@ -13,6 +14,7 @@ from sqlalchemy import delete, func, or_, select, update
 
 from app.admin_access import AdminContext
 from app.dependencies import CurrentAdmin, DbSession, RootAdminUser
+from app.effects import validate_effect_config
 from app.errors import AppError
 from app.models import (
     AchievementDefinition,
@@ -22,8 +24,11 @@ from app.models import (
     Asset,
     AuditLog,
     Card,
+    CardCombination,
+    CardEffectVersion,
     CardPack,
     CardPackCard,
+    CardPackOpening,
     CollectionCampaign,
     Drop,
     EngagementEvent,
@@ -38,6 +43,8 @@ from app.models import (
     RewardCatalog,
     RewardGrant,
     Role,
+    TradeItem,
+    TradeProposal,
     User,
     UserCard,
     XpLedger,
@@ -57,6 +64,7 @@ from app.schemas import (
     AdminUserRoleUpdate,
     ArtistAccountCreate,
     ArtistReviewSubmitRequest,
+    CardEffectReviewDecision,
     CardPackCreate,
     CodeBatchRequest,
     CollectionCampaignCreate,
@@ -84,6 +92,38 @@ from app.storage import configured_asset_storage, storage_response
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 router.include_router(partner_router)
 LENTICULAR_IMAGE_CONTENT_TYPES = {"image/png", "image/jpeg", "image/webp"}
+
+
+def _csv_download(
+    filename: str,
+    headers: list[str],
+    rows: list[list[object]],
+    *,
+    include_bom: bool = False,
+) -> StreamingResponse:
+    output = StringIO(newline="")
+    writer = csv.writer(output)
+    writer.writerow(headers)
+    writer.writerows(rows)
+    prefix = "\ufeff" if include_bom else ""
+    payload = (prefix + output.getvalue()).encode("utf-8")
+    return StreamingResponse(
+        iter([payload]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _card_scope_filters(context: CurrentAdmin) -> list[object]:
+    if context.is_root:
+        return []
+    return [
+        Card.artist_id.in_(context.assigned_artist_ids),
+        or_(
+            Card.organization_id == context.membership.organization_id,
+            Card.organization_id.is_(None),
+        ),
+    ]
 
 
 @router.get("/me")
@@ -1140,6 +1180,168 @@ async def dashboard(context: CurrentAdmin, session: DbSession) -> dict:
     }
 
 
+@router.get("/card-operations/metrics")
+async def card_operations_metrics(context: CurrentAdmin, session: DbSession) -> dict:
+    """Return scoped operational counters for the card lifecycle dashboard."""
+    _require_scoped_action(context, "audit:read")
+    card_scope = _card_scope_filters(context)
+
+    pack_openings = (
+        await session.scalar(
+            select(func.count())
+            .select_from(CardPackOpening)
+            .join(Card, Card.id == CardPackOpening.card_id)
+            .where(*card_scope)
+        )
+        or 0
+    )
+    issued_cards = (
+        await session.scalar(
+            select(func.count())
+            .select_from(UserCard)
+            .join(Card, Card.id == UserCard.card_id)
+            .where(*card_scope)
+        )
+        or 0
+    )
+    card_holders = (
+        await session.scalar(
+            select(func.count(func.distinct(UserCard.user_id)))
+            .select_from(UserCard)
+            .join(Card, Card.id == UserCard.card_id)
+            .where(*card_scope)
+        )
+        or 0
+    )
+    combinations = (
+        await session.scalar(
+            select(func.count())
+            .select_from(CardCombination)
+            .join(Card, Card.id == CardCombination.result_card_id)
+            .where(*card_scope)
+        )
+        or 0
+    )
+    trade_rows = await session.execute(
+        select(TradeProposal.status, func.count(func.distinct(TradeProposal.id)))
+        .select_from(TradeProposal)
+        .join(TradeItem, TradeItem.proposal_id == TradeProposal.id)
+        .join(UserCard, UserCard.id == TradeItem.user_card_id)
+        .join(Card, Card.id == UserCard.card_id)
+        .where(*card_scope)
+        .group_by(TradeProposal.status)
+    )
+    trade_counts = {status: count for status, count in trade_rows}
+    redeem_success = (
+        await session.scalar(
+            select(func.count())
+            .select_from(UserCard)
+            .join(Card, Card.id == UserCard.card_id)
+            .where(*card_scope, UserCard.redeem_code_id.is_not(None))
+        )
+        or 0
+    )
+    audit_scope = []
+    if not context.is_root:
+        audit_scope = [
+            AuditLog.organization_id == context.membership.organization_id,
+            or_(AuditLog.artist_id.is_(None), AuditLog.artist_id.in_(context.assigned_artist_ids)),
+        ]
+    redeem_failures = (
+        await session.scalar(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(*audit_scope, AuditLog.action == "redemption.failed")
+        )
+        or 0
+    )
+    rarity_rows = await session.execute(
+        select(Card.rarity, func.count(UserCard.id))
+        .select_from(UserCard)
+        .join(Card, Card.id == UserCard.card_id)
+        .where(*card_scope)
+        .group_by(Card.rarity)
+        .order_by(Card.rarity)
+    )
+    holder_rows = await session.execute(
+        select(Card.id, Card.name, func.count(func.distinct(UserCard.user_id)))
+        .select_from(Card)
+        .outerjoin(UserCard, UserCard.card_id == Card.id)
+        .where(*card_scope)
+        .group_by(Card.id, Card.name)
+        .order_by(Card.name, Card.id)
+    )
+    return {
+        "ok": True,
+        "data": {
+            "packOpenings": pack_openings,
+            "issuedCards": issued_cards,
+            "cardHolders": card_holders,
+            "redeem": {"success": redeem_success, "failure": redeem_failures},
+            "combinations": combinations,
+            "trades": {
+                "total": sum(trade_counts.values()),
+                "pending": trade_counts.get("pending", 0),
+                "accepted": trade_counts.get("accepted", 0),
+                "rejected": trade_counts.get("rejected", 0),
+                "cancelled": trade_counts.get("cancelled", 0),
+                "expired": trade_counts.get("expired", 0),
+            },
+            "byRarity": [
+                {"rarity": rarity or "미지정", "issued": count} for rarity, count in rarity_rows
+            ],
+            "cards": [
+                {"cardId": card_id, "cardName": name, "holders": count}
+                for card_id, name, count in holder_rows
+            ],
+        },
+    }
+
+
+@router.get("/cards/export")
+async def export_cards(
+    context: CurrentAdmin,
+    session: DbSession,
+    q: str | None = None,
+    card_status: str | None = Query(default=None, alias="status"),
+    limit: int = Query(default=5000, ge=1, le=10000),
+) -> StreamingResponse:
+    _require_scoped_action(context, "cards:read")
+    filters = _card_scope_filters(context)
+    if q:
+        filters.append(Card.name.ilike(f"%{q}%"))
+    if card_status:
+        filters.append(Card.status == card_status)
+    cards = await session.scalars(select(Card).where(*filters).order_by(Card.id).limit(limit))
+    return _csv_download(
+        "fanfolio-cards.csv",
+        [
+            "card_id",
+            "name",
+            "artist_id",
+            "member_id",
+            "rarity",
+            "status",
+            "issue_limit",
+            "season_name",
+        ],
+        [
+            [
+                card.id,
+                card.name,
+                card.artist_id,
+                card.member_id,
+                card.rarity,
+                card.status,
+                card.issue_limit,
+                card.season_name,
+            ]
+            for card in cards
+        ],
+        include_bom=True,
+    )
+
+
 @router.get("/cards")
 async def cards(
     context: CurrentAdmin,
@@ -1422,6 +1624,98 @@ def admin_card_data(card: Card) -> dict:
         "backImageUrl": f"/api/admin/cards/{card.id}/back-image",
         **release_card_data(card),
     }
+
+
+async def scoped_effect_version_or_404(
+    card_id: str, version_id: str, context: AdminContext, session: DbSession
+) -> tuple[Card, CardEffectVersion]:
+    card = await session.get(Card, card_id)
+    if not card:
+        raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
+    context.require_organization(card.organization_id)
+    context.require_artist(card.artist_id)
+    version = await session.get(CardEffectVersion, version_id)
+    if not version or version.card_id != card_id:
+        raise AppError(404, "EFFECT_VERSION_NOT_FOUND", "효과 버전을 찾을 수 없습니다.")
+    return card, version
+
+
+def admin_effect_version_data(version: CardEffectVersion) -> dict:
+    return {
+        "id": version.id,
+        "cardId": version.card_id,
+        "version": version.version,
+        "designConfig": version.design_config,
+        "status": version.status,
+        "reviewNote": version.review_note,
+        "submittedAt": version.submitted_at.isoformat() if version.submitted_at else None,
+        "approvedAt": version.approved_at.isoformat() if version.approved_at else None,
+        "createdAt": version.created_at.isoformat() if version.created_at else None,
+    }
+
+
+@router.get("/cards/{card_id}/effect-versions")
+async def admin_effect_versions(card_id: str, context: CurrentAdmin, session: DbSession) -> dict:
+    _require_scoped_action(context, "cards:read")
+    card = await session.get(Card, card_id)
+    if not card:
+        raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
+    context.require_organization(card.organization_id)
+    context.require_artist(card.artist_id)
+    versions = (
+        await session.scalars(
+            select(CardEffectVersion)
+            .where(CardEffectVersion.card_id == card_id)
+            .order_by(CardEffectVersion.version.desc())
+        )
+    ).all()
+    return {"ok": True, "data": {"items": [admin_effect_version_data(item) for item in versions]}}
+
+
+@router.post("/cards/{card_id}/effect-versions/{version_id}/approve")
+async def approve_effect_version(
+    card_id: str,
+    version_id: str,
+    context: CurrentAdmin,
+    session: DbSession,
+) -> dict:
+    _require_scoped_action(context, "cards:write")
+    card, version = await scoped_effect_version_or_404(card_id, version_id, context, session)
+    if version.status != "pending_review":
+        raise AppError(
+            409, "EFFECT_VERSION_INVALID_STATUS", "검수 요청된 효과만 승인할 수 있습니다."
+        )
+    version.status = "approved"
+    version.approved_at = datetime.now(UTC)
+    version.review_note = None
+    card.design_config = validate_effect_config(version.design_config)
+    await session.commit()
+    return {"ok": True, "data": admin_effect_version_data(version)}
+
+
+@router.post("/cards/{card_id}/effect-versions/{version_id}/review")
+async def review_effect_version(
+    card_id: str,
+    version_id: str,
+    payload: CardEffectReviewDecision,
+    context: CurrentAdmin,
+    session: DbSession,
+) -> dict:
+    _require_scoped_action(context, "cards:write")
+    card, version = await scoped_effect_version_or_404(card_id, version_id, context, session)
+    if version.status != "pending_review":
+        raise AppError(
+            409, "EFFECT_VERSION_INVALID_STATUS", "검수 요청된 효과만 처리할 수 있습니다."
+        )
+    version.status = "approved" if payload.decision == "approve" else "rejected"
+    version.review_note = payload.note
+    if payload.decision == "approve":
+        version.approved_at = datetime.now(UTC)
+        card.design_config = validate_effect_config(version.design_config)
+    else:
+        version.approved_at = None
+    await session.commit()
+    return {"ok": True, "data": admin_effect_version_data(version)}
 
 
 async def validate_admin_assets(
@@ -2569,13 +2863,10 @@ async def export_code_batch(
     codes = await session.scalars(
         select(RedeemCode).where(RedeemCode.batch_id == batch_id).order_by(RedeemCode.code)
     )
-    output = StringIO(newline="")
-    writer = csv.writer(output)
-    writer.writerow(
-        ["code", "card_id", "drop_id", "expires_at", "used_count", "max_uses", "qr_image_url"]
-    )
-    for code in codes:
-        writer.writerow(
+    return _csv_download(
+        f"{batch_id}.csv",
+        ["code", "card_id", "drop_id", "expires_at", "used_count", "max_uses", "qr_image_url"],
+        [
             [
                 code.code,
                 code.card_id,
@@ -2585,12 +2876,8 @@ async def export_code_batch(
                 code.max_uses,
                 f"/api/admin/redeem-codes/{code.code}/qr",
             ]
-        )
-    output.seek(0)
-    return StreamingResponse(
-        iter([output.getvalue()]),
-        media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{batch_id}.csv"'},
+            for code in codes
+        ],
     )
 
 
@@ -2778,12 +3065,81 @@ async def audit_logs(
     }
 
 
+@router.get("/audit-logs/export")
+async def export_audit_logs(
+    context: CurrentAdmin,
+    session: DbSession,
+    action: str | None = None,
+    q: str | None = None,
+    limit: int = Query(default=5000, ge=1, le=10000),
+) -> StreamingResponse:
+    _require_scoped_action(context, "audit:read")
+    filters = [AuditLog.action == action] if action else []
+    if not context.is_root:
+        filters.extend(
+            [
+                AuditLog.organization_id == context.membership.organization_id,
+                or_(
+                    AuditLog.artist_id.is_(None),
+                    AuditLog.artist_id.in_(context.assigned_artist_ids),
+                ),
+            ]
+        )
+    if q:
+        pattern = f"%{q}%"
+        filters.append(
+            or_(
+                AuditLog.actor_user_id.ilike(pattern),
+                AuditLog.action.ilike(pattern),
+                AuditLog.entity_type.ilike(pattern),
+                AuditLog.entity_id.ilike(pattern),
+            )
+        )
+    logs = await session.scalars(
+        select(AuditLog)
+        .where(*filters)
+        .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+        .limit(limit)
+    )
+    return _csv_download(
+        "fanfolio-audit-logs.csv",
+        [
+            "id",
+            "actor_id",
+            "action",
+            "entity_type",
+            "entity_id",
+            "organization_id",
+            "artist_id",
+            "created_at",
+            "metadata",
+        ],
+        [
+            [
+                log.id,
+                log.actor_user_id,
+                log.action,
+                log.entity_type,
+                log.entity_id,
+                log.organization_id,
+                log.artist_id,
+                log.created_at.isoformat(),
+                json.dumps(log.details or {}, ensure_ascii=False, separators=(",", ":")),
+            ]
+            for log in logs
+        ],
+        include_bom=True,
+    )
+
+
 @router.post("/cards/{card_id}/publish")
 async def publish(card_id: str, admin: RootAdminUser, session: DbSession) -> dict:
     card = await session.get(Card, card_id)
     if not card:
         raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
-    if card.owner_artist_id is not None:
+    if card.owner_artist_id is not None and card.status == "pending_review":
+        raise AppError(409, "REVIEW_REQUIRED", "검수 승인 후 카드를 공개할 수 있습니다.")
+    if card.owner_artist_id is not None and card.release_status == "approved":
         raise AppError(
             409,
             "CARD_RELEASE_DROP_REQUIRED",

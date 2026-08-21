@@ -301,23 +301,27 @@ git commit -m "test: verify fan card acquisition flows"
 - Create: `backend/tests/contract/test_card_operations_metrics.py`
 - Create: `frontend/tests/card-notifications-and-history.test.mjs`
 
-- [ ] **Step 1: 알림과 획득 기록 테스트를 작성한다.**
+- [x] **Step 1: 알림과 획득 기록 테스트를 작성한다.**
 
 카드 발급·등록·검수 결과마다 중복되지 않는 알림과 획득 이력이 생성되는지 확인한다. 기존 `Notification`의 `event_key` 유니크 규칙을 사용한다.
 
-- [ ] **Step 2: 관리자 통계 API를 추가한다.**
+- [x] **Step 2: 관리자 통계 API를 추가한다.**
 
 `GET /api/admin/card-operations/metrics`가 카드팩 오픈 수, 희귀도별 발급 수, 카드별 보유자 수, 인증번호 성공·실패 수, 조합·거래 수를 반환한다. 모든 집계에는 `organization_id`와 `artist_id` 범위를 적용한다.
 
-- [ ] **Step 3: 카드·발급 배치·감사 로그 CSV를 연결한다.**
+기존 발급·소유권·거래·조합 테이블을 읽어 집계하므로 Task 6에서는 별도 스키마 마이그레이션이 필요하지 않다. 관리자 대시보드에는 `audit:read` 권한이 있는 사용자에게만 범위 내 운영 지표를 표시한다.
+
+- [x] **Step 3: 카드·발급 배치·감사 로그 CSV를 연결한다.**
 
 기존 CSV 응답 패턴을 재사용해 UTF-8 BOM, 컬럼 헤더, 권한 범위 필터를 보장한다. 내보내기 버튼은 실제 다운로드를 시작하고 완료 알림을 표시한다.
 
-- [ ] **Step 4: 팬 앱에 알림·획득 기록을 연결한다.**
+카드·감사 로그·발급 배치 CSV는 `Content-Disposition` 다운로드 응답으로 제공하며, 기존 관리자 발급 배치 다운로드도 동일한 UTF-8 BOM 생성기를 사용한다.
+
+- [x] **Step 4: 팬 앱에 알림·획득 기록을 연결한다.**
 
 기존 `/notifications`, `/notifications/stream`, `/me/cards/{user_card_id}` 응답을 사용해 카드 상세와 알림 센터에서 실제 데이터를 표시한다.
 
-- [ ] **Step 5: 테스트를 실행하고 커밋한다.**
+- [x] **Step 5: 테스트를 실행하고 커밋한다.**
 
 Run: `cd backend && pytest tests/contract/test_admin_notifications.py tests/contract/test_card_operations_metrics.py tests/contract/test_redemptions.py -q`
 
@@ -446,27 +450,27 @@ git commit -m "feat: add scoped fan trading and follows"
 - Create: `frontend/tests/studio-effect-contract.test.mjs`
 - Modify: `admin_app/tests/partner-access.test.mjs`
 
-- [ ] **Step 1: 효과 스키마 실패 테스트를 작성한다.**
+- [x] **Step 1: 효과 스키마 실패 테스트를 작성한다.**
 
 허용되지 않은 효과 타입, 과도한 입자 수, 잘못된 색상·속도, 대용량 미디어 참조가 저장되지 않는지 검증한다. 승인 전 효과가 팬 API 응답에 포함되지 않는지도 확인한다.
 
-- [ ] **Step 2: 효과 버전 모델과 검증기를 추가한다.**
+- [x] **Step 2: 효과 버전 모델과 검증기를 추가한다.**
 
 `CardEffectVersion`에 카드·버전·설정 JSON·작성자·검수 상태·승인 시각을 저장한다. `design_config`는 프리셋·강도·속도·트리거·접근성 대체 표현을 포함하도록 스키마를 제한한다.
 
-- [ ] **Step 3: 스튜디오 편집 API를 연결한다.**
+- [x] **Step 3: 스튜디오 편집 API를 연결한다.**
 
 `POST /api/artist/cards/{card_id}/effect-versions`, `PATCH /api/artist/cards/{card_id}/effect-versions/{version_id}`, `POST /api/artist/cards/{card_id}/effect-versions/{version_id}/submit-review`를 추가한다. 승인·공개는 관리자 API에서만 허용한다.
 
-- [ ] **Step 4: 프리셋 중심 UI를 구현한다.**
+- [x] **Step 4: 프리셋 중심 UI를 구현한다.**
 
 초기 UI는 광원·글로우·반사·홀로그램·입자·모션 프리셋과 색상·강도·속도 조정만 제공한다. 고급 레이어·타임라인·블렌딩은 별도 후속 계획으로 둔다.
 
-- [ ] **Step 5: 팬 앱과 관리자 검수 미리보기를 통합한다.**
+- [x] **Step 5: 팬 앱과 관리자 검수 미리보기를 통합한다.**
 
 팬 앱에서는 앞면·뒷면·탭·스와이프·뒤집기 효과를 확인하고, 뒷면에는 틸트만 적용한다. 관리자 검수 화면은 저장된 효과 버전을 동일한 컴포넌트로 미리 본다.
 
-- [ ] **Step 6: 테스트와 성능 검증을 실행한다.**
+- [x] **Step 6: 테스트와 성능 검증을 실행한다.**
 
 Run: `cd backend && pytest tests/contract/test_card_release_workflow.py tests/contract/test_admin_and_artist.py -q`
 
@@ -485,7 +489,7 @@ Run: `cd frontend && node --test tests/card-material-effects.test.mjs tests/stud
 - Verify: `backend/tests/contract/test_card_release_to_collection.py`
 - Verify: `frontend/tests/product-scenario-contract.test.mjs`
 
-- [ ] **Step 1: 서버 상태를 확인한다.**
+- [x] **Step 1: 서버 상태를 확인한다.**
 
 Run: `curl -s http://127.0.0.1:8000/health`
 
@@ -495,23 +499,23 @@ Run: `curl -s http://127.0.0.1:4180`
 
 Expected: 백엔드·팬 앱·관리자 웹이 같은 로컬 데이터베이스와 API를 사용한다.
 
-- [ ] **Step 2: 역할별 권한 시나리오를 실행한다.**
+- [x] **Step 2: 역할별 권한 시나리오를 실행한다.**
 
 root, 일반 관리자, 파트너 매니저, 파트너 하위 관리자, 스튜디오 사용자, 팬으로 로그인해 허용·거부 API 응답을 기록한다.
 
-- [ ] **Step 3: 기본 카드팩 시나리오를 실행한다.**
+- [x] **Step 3: 기본 카드팩 시나리오를 실행한다.**
 
 카드 등록 → 검수 요청 → 승인 → 카드팩 구성 → 확률 100% 검증 → 공개 → 팬 앱 노출 → 카드팩 개봉 → 컬렉션 반영 → 카드 상세 확인 순서로 실행한다.
 
-- [ ] **Step 4: 특별 카드 인증번호 시나리오를 실행한다.**
+- [x] **Step 4: 특별 카드 인증번호 시나리오를 실행한다.**
 
 제한 수량 발급 배치 → 고유 코드 생성 → QR/인증번호 등록 → 재사용 거부 → 잘못된 코드 거부 → 컬렉션 반영 → 획득 경로 표시 순서로 실행한다.
 
-- [ ] **Step 5: 결과를 증거 파일로 남긴다.**
+- [x] **Step 5: 결과를 증거 파일로 남긴다.**
 
 각 단계의 URL, API 응답 요약, 데이터베이스 결과, 브라우저 화면 캡처, 실패 로그를 `reports/e2e-release-scenario-2026-08-20/`에 저장한다. 인증번호 원문과 개인정보는 기록하지 않는다.
 
-- [ ] **Step 6: 전체 검증 명령을 실행한다.**
+- [x] **Step 6: 전체 검증 명령을 실행한다.**
 
 Run: `cd backend && pytest -q`
 
@@ -519,11 +523,11 @@ Run: `cd frontend && npm test && npm run build && npm run lint`
 
 Run: `node --test admin_app/tests/*.test.mjs`
 
-- [ ] **Step 7: 배포 판정을 문서에 기록한다.**
+- [x] **Step 7: 배포 판정을 문서에 기록한다.**
 
 `docs/PRODUCT_SCENARIO_AND_RELEASE_GATE.md`의 MVP 및 배포 게이트를 `통과`, `실패`, `검증 보류` 중 하나로 업데이트한다. 실패 항목이 하나라도 있으면 배포하지 않고 Task 1~9 중 해당 단계로 돌아간다.
 
-- [ ] **Step 8: 배포 전 최종 커밋을 만든다.**
+- [x] **Step 8: 배포 전 최종 커밋을 만든다.**
 
 ```bash
 git add reports/e2e-release-scenario-2026-08-20 docs/PRODUCT_SCENARIO_AND_RELEASE_GATE.md

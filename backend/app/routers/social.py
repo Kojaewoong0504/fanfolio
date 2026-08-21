@@ -25,6 +25,7 @@ from app.models import (
     UserCard,
 )
 from app.schemas import CollectionVisibilityUpdate, TradeProposalCreate
+from app.services import notify_user_once
 
 router = APIRouter(prefix="/api", tags=["social"])
 
@@ -347,6 +348,26 @@ async def accept_trade(proposal_id: str, user: FanUser, session: DbSession) -> d
     proposal.status = "accepted"
     proposal.responded_at = now
     await session.execute(delete(TradeLock).where(TradeLock.proposal_id == proposal.id))
+    await notify_user_once(
+        session,
+        user_id=proposal.proposer_id,
+        kind="trade_accepted",
+        title="카드 거래가 성사됐어요",
+        body="상대방이 카드 거래를 수락했습니다.",
+        entity_type="trade",
+        entity_id=proposal.id,
+        event_key=f"trade:{proposal.id}:proposer",
+    )
+    await notify_user_once(
+        session,
+        user_id=proposal.recipient_id,
+        kind="trade_accepted",
+        title="카드 거래가 성사됐어요",
+        body="카드 거래가 완료되어 컬렉션이 업데이트됐습니다.",
+        entity_type="trade",
+        entity_id=proposal.id,
+        event_key=f"trade:{proposal.id}:recipient",
+    )
     await session.commit()
     return {"ok": True, "data": {"id": proposal.id, "status": proposal.status}}
 
