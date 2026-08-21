@@ -113,6 +113,11 @@ async def grant_user_card(
         acquired_at=now(),
     )
     session.add(user_card)
+    # Flush the parent row before inserting the ledger event.  There is no
+    # ORM relationship between these write-model records, so relying on one
+    # combined flush can make SQLite emit the ledger insert first and violate
+    # the user_cards foreign key.
+    await session.flush()
     session.add(
         CardOwnershipLedger(
             id=f"ledger_{uuid4().hex[:12]}",

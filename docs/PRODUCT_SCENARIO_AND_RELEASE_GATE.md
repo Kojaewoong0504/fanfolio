@@ -59,8 +59,10 @@ Fanfolio는 아티스트와 파트너사가 직접 만든 디지털 포토카드
 - 검수 승인(`approved`)과 카드 공개(`published`)는 별도 상태 전이이므로, 기준 시나리오에 루트 관리자 카드 공개 단계를 명시한다.
 - 카드팩 공개 전 카드 공개가 누락되면 테스트가 중단되어야 하며, 팬 컬렉션에는 발급 카드가 생성되지 않아야 한다.
 - `test_card_ownership_ledger.py`에서 동일 `Idempotency-Key`의 카드팩 개봉이 `UserCard`와 원장 행을 각각 한 건만 생성하는지 확인한다.
+- `test_card_ownership_service.py`에서 공통 카드 발급 서비스가 동일 소유권 이벤트를 한 번만 반영하고, 미공개 카드 실패 시 `UserCard`·원장 행을 만들지 않는지 확인한다.
+- 인증번호 등록도 `redeem_code` 원장 이벤트를 하나만 남기는지 확인한다.
 - `test_card_role_scope_matrix.py`에서 아티스트의 공개 API 차단과 파트너 간 카드 범위 격리를 확인한다.
-- 백엔드 계약 테스트 전체 실행 결과: `257 passed` (기존 Starlette/httpx deprecation warning 1건).
+- 백엔드 계약 테스트 전체 실행 결과: `258 passed` (기존 Starlette/httpx deprecation warning 1건).
 - 팬 앱 계약 테스트 결과: `133 passed`; 관리자 카드 운영 관련 계약 테스트 결과: `46 passed`.
 - 기준 출시 시나리오 `test_artist_card_reaches_fan_collection_after_review_and_pack_release`는 고정 역할 fixture(root/general admin, partner manager/editor, artist studio, fan)로 카드 제출 → 파트너 검수 승인 → 루트 공개 → 카드팩 공개 → 팬 개봉 → 컬렉션 반영을 통과했다.
 - 프론트 `product-scenario-contract.test.mjs`는 실 API 경로, 공개/개봉/공개 카드 추가 완료 이동, 컬렉션 새로고침 계약을 포함해 전체 133개 테스트로 통과했다.
