@@ -168,19 +168,21 @@ git commit -m "feat: centralize card ownership issuance"
 - Modify: `admin_app/app.js`
 - Modify: `admin_app/tests/partner-access.test.mjs`
 
-- [ ] **Step 1: 권한 매트릭스 실패 테스트를 작성한다.**
+- [x] **Step 1: 권한 매트릭스 실패 테스트를 작성한다.**
 
 파트너 A 관리자가 파트너 B 카드·카드팩·발급 배치를 조회하거나 수정할 때 403을 반환하는 테스트를 작성한다. 스튜디오 사용자가 승인·공개·확률 변경 API를 호출할 때도 403을 검증한다.
 
-- [ ] **Step 2: 공통 범위 검사를 적용한다.**
+- [x] **Step 2: 공통 범위 검사를 적용한다.**
 
 카드·드롭·카드팩을 조회할 때 `organization_id`, 연결된 `artist_id`, `assigned_artist_ids`, `allowed_actions`를 함께 확인한다. 파트너 범위를 확인하지 않는 기존 관리자 경로를 제거한다.
 
-- [ ] **Step 3: UI 권한 표현을 API 결과와 맞춘다.**
+- [x] **Step 3: UI 권한 표현을 API 결과와 맞춘다.**
 
 `admin_app/app.js`는 `/api/admin/me`의 `accessLevel`, `organization`, `assignedArtists`, `allowedActions`만 사용해 메뉴·버튼·검수 액션을 표시한다. 거부된 API 응답은 일반 오류가 아니라 권한 부족 메시지로 표시한다.
 
-- [ ] **Step 4: 테스트를 실행한다.**
+검증 결과: 동일 아티스트를 공유하는 두 파트너의 카드 격리 회귀 테스트를 추가했다. 파트너 소유 카드와 카드팩에는 `organization_id`를 저장하고, 카드 상세·수정·미디어·검수·카드팩 조회·공개 경로에서 조직과 아티스트 범위를 함께 검사한다. 기존 레거시 전역 데이터는 조직이 비어 있을 때 기존 아티스트 범위로 읽을 수 있지만, 신규 파트너 데이터는 다른 조직에 노출되지 않는다. 스튜디오 제출 카드는 첫 파트너 검수 시 해당 조직에 귀속된다. 범위 밖 리소스는 리소스 존재 여부를 노출하지 않도록 `404 RESOURCE_NOT_FOUND`로 응답하며, 역할 자체가 부족한 작업은 기존 `403` 권한 코드로 응답한다.
+
+- [x] **Step 4: 테스트를 실행한다.**
 
 Run: `cd backend && pytest tests/contract/test_admin_partner_access.py tests/contract/test_admin_management.py tests/contract/test_card_role_scope_matrix.py -q`
 
@@ -188,7 +190,9 @@ Run: `node --test admin_app/tests/partner-access.test.mjs`
 
 Expected: 파트너 경계를 넘는 모든 API 요청이 거부되고 허용된 범위는 정상 동작한다.
 
-- [ ] **Step 5: 커밋한다.**
+검증 결과: 백엔드 권한·관리 테스트 63개와 관리자 권한 UI 테스트 29개가 통과했다. SQLite 임시 DB에 `0045_partner_card_scope` 마이그레이션을 적용해 카드·카드팩 조직 컬럼과 외래 키 생성을 확인했다.
+
+- [x] **Step 5: 커밋한다.** (혼합 작업 트리에서 Task3 관련 파일만 별도 커밋한다.)
 
 ```bash
 git add backend/app/admin_access.py backend/app/dependencies.py backend/app/routers/admin.py backend/app/routers/admin_partners.py backend/app/routers/artist.py backend/tests/contract/test_card_role_scope_matrix.py admin_app/app.js admin_app/tests/partner-access.test.mjs

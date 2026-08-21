@@ -1149,6 +1149,12 @@ async def cards(
         filters.append(Card.status == card_status)
     if not context.is_root:
         filters.append(Card.artist_id.in_(context.assigned_artist_ids))
+        filters.append(
+            or_(
+                Card.organization_id == context.membership.organization_id,
+                Card.organization_id.is_(None),
+            )
+        )
     total = await session.scalar(select(func.count()).select_from(Card).where(*filters)) or 0
     results = await session.scalars(
         select(Card)
@@ -1224,6 +1230,12 @@ async def list_card_packs(
         filters.append(CardPack.status == pack_status)
     if not context.is_root:
         filters.append(CardPack.artist_id.in_(context.assigned_artist_ids))
+        filters.append(
+            or_(
+                CardPack.organization_id == context.membership.organization_id,
+                CardPack.organization_id.is_(None),
+            )
+        )
     packs = list(
         await session.scalars(
             select(CardPack)
@@ -1258,6 +1270,7 @@ async def create_card_pack(
         raise AppError(422, "PACK_ARTIST_MISMATCH", "카드팩과 카드의 아티스트가 일치해야 합니다.")
     pack = CardPack(
         id=f"pack_{uuid4().hex[:12]}",
+        organization_id=context.membership.organization_id,
         artist_id=artist.id,
         name=payload.name,
         season_name=payload.season_name,
@@ -1302,6 +1315,7 @@ async def card_pack_detail(pack_id: str, context: CurrentAdmin, session: DbSessi
     pack = await session.get(CardPack, pack_id)
     if pack is None:
         raise AppError(404, "CARD_PACK_NOT_FOUND", "카드팩을 찾을 수 없습니다.")
+    context.require_organization(pack.organization_id)
     context.require_artist(pack.artist_id)
     rows = list(
         await session.execute(
@@ -1324,6 +1338,7 @@ async def publish_card_pack(pack_id: str, context: CurrentAdmin, session: DbSess
     pack = await session.get(CardPack, pack_id)
     if pack is None:
         raise AppError(404, "CARD_PACK_NOT_FOUND", "카드팩을 찾을 수 없습니다.")
+    context.require_organization(pack.organization_id)
     context.require_artist(pack.artist_id)
     links = list(await session.scalars(select(CardPackCard).where(CardPackCard.pack_id == pack.id)))
     total = sum(link.probability for link in links if link.enabled)
@@ -1562,7 +1577,11 @@ async def create_admin_card(
         )
     if not context.is_root:
         values["artist_id"] = context.require_artist(values.get("artist_id"))
-    card = Card(id=f"card_{uuid4().hex[:10]}", **values)
+    card = Card(
+        id=f"card_{uuid4().hex[:10]}",
+        organization_id=context.membership.organization_id,
+        **values,
+    )
     session.add(card)
     await record_audit(
         session,
@@ -1582,6 +1601,7 @@ async def card_detail(card_id: str, context: CurrentAdmin, session: DbSession) -
     card = await session.get(Card, card_id)
     if not card:
         raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
+    context.require_organization(card.organization_id)
     context.require_artist(card.artist_id)
     return {"ok": True, "data": admin_card_data(card)}
 
@@ -1596,6 +1616,7 @@ async def update_admin_card(
     card = await session.get(Card, card_id)
     if not card:
         raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
+    context.require_organization(card.organization_id)
     context.require_artist(card.artist_id)
     context.require_write()
     if card.status == "published":
@@ -1633,6 +1654,7 @@ async def card_preview_image(card_id: str, context: CurrentAdmin, session: DbSes
     card = await session.get(Card, card_id)
     if not card or not card.preview_storage_path:
         raise AppError(404, "PREVIEW_NOT_READY", "카드 미리보기가 아직 준비되지 않았습니다.")
+    context.require_organization(card.organization_id)
     context.require_artist(card.artist_id)
     return storage_response(
         configured_asset_storage(), card.preview_storage_path, media_type="image/png"
@@ -1645,6 +1667,7 @@ async def card_source_image(card_id: str, context: CurrentAdmin, session: DbSess
     card = await session.get(Card, card_id)
     if not card or not card.image_asset_id:
         raise AppError(404, "CARD_IMAGE_NOT_FOUND", "카드 원본 이미지를 찾을 수 없습니다.")
+    context.require_organization(card.organization_id)
     context.require_artist(card.artist_id)
     asset = await session.get(Asset, card.image_asset_id)
     if not asset or not asset.storage_path:
@@ -1660,6 +1683,7 @@ async def card_back_image(card_id: str, context: CurrentAdmin, session: DbSessio
     card = await session.get(Card, card_id)
     if not card:
         raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
+    context.require_organization(card.organization_id)
     context.require_artist(card.artist_id)
     design_config = card.design_config if isinstance(card.design_config, dict) else {}
     back_config = design_config.get("back") if isinstance(design_config.get("back"), dict) else {}
@@ -1689,6 +1713,7 @@ async def submit_admin_card_review(
     card = await session.get(Card, card_id)
     if not card:
         raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
+    context.require_organization(card.organization_id)
     context.require_artist(card.artist_id)
     if card.status not in {"draft", "changes_requested"} or card.release_status not in {
         "draft",
@@ -1783,7 +1808,12 @@ async def decide_partner_review(
         raise AppError(403, "ADMIN_PARTNER_REVIEW_REQUIRED", "회사 검수 권한이 필요합니다.")
     decision, note = release_decision_payload(payload.model_dump())
     card = await reviewed_card_or_404(card_id, session)
+    context.require_organization(card.organization_id)
     context.require_artist(card.artist_id)
+    # Studio-submitted cards are unowned until the first partner review. The
+    # approving partner becomes the persisted owner for all later operations.
+    if card.organization_id is None and context.organization is not None:
+        card.organization_id = context.organization.id
     if card.release_status != "pending_partner_review":
         raise AppError(
             409, "INVALID_REVIEW_STATUS", "회사 검수 대기 중인 카드만 검수할 수 있습니다."

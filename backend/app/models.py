@@ -309,6 +309,11 @@ class Card(Base):
     artist_id: Mapped[str | None] = mapped_column(String, nullable=True)
     member_id: Mapped[str | None] = mapped_column(ForeignKey("members.id"), nullable=True)
     owner_artist_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Partner-owned cards must remain isolated even when two organizations
+    # collaborate with the same artist.
+    organization_id: Mapped[str | None] = mapped_column(
+        ForeignKey("organizations.id"), nullable=True
+    )
     template_id: Mapped[str | None] = mapped_column(String, nullable=True)
     season_name: Mapped[str | None] = mapped_column(String, nullable=True)
     rarity: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -387,6 +392,9 @@ class CardPack(Base):
         Index("ix_card_packs_status_artist", "status", "artist_id"),
     )
     id: Mapped[str] = mapped_column(String, primary_key=True)
+    organization_id: Mapped[str | None] = mapped_column(
+        ForeignKey("organizations.id"), nullable=True
+    )
     artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     season_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
