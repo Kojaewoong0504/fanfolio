@@ -40,6 +40,10 @@ const state = {
   unreadNotificationCount: 0,
   cards: [],
   cardPacks: [],
+  cardPackQuery: "",
+  cardPackStatus: "all",
+  cardPackArtist: "all",
+  selectedCardPack: null,
   cardThumbnailUrls: {},
   drops: [],
   batches: [],
@@ -294,6 +298,9 @@ function title() {
     partners: "파트너 관리",
     artists: "아티스트 관리",
     cards: "카드 관리",
+    "card-packs": "카드팩 관리",
+    "card-pack-create": "새 카드팩 만들기",
+    "card-pack-composition": "카드 구성 편집",
     batches: "드롭·코드",
     events: "이벤트",
     "fan-growth": "팬 성장",
@@ -315,9 +322,6 @@ function navItems() {
       : []),
     { id: "artists", label: "아티스트", icon: "recent_actors" },
     { id: "cards", label: "카드", icon: "style" },
-    ...(can("drops:read")
-      ? [{ id: "batches", label: "드롭·코드", icon: "qr_code_2" }]
-      : []),
     ...(can("events:read")
       ? [{ id: "events", label: "이벤트", icon: "campaign" }]
       : []),
@@ -362,12 +366,9 @@ function navigationView() {
   const person = state.adminContext?.user || {};
   const role = isRoot() ? "루트 관리자" : `${state.adminContext?.accessLevel || "viewer"} · ${scopeLabel()}`;
   const navToggleLabel = state.navCollapsed ? "내비게이션 펼치기" : "내비게이션 접기";
-  return `<aside class="app-nav ${state.mobileNavOpen ? "open" : ""}" aria-label="관리자 주요 메뉴"><div class="nav-brand"><span class="nav-brand-mark"><img src="./assets/fanfolio-app-icon-192.png" alt="Fanfolio 서비스 아이콘" /></span><span class="nav-brand-copy"><strong>FANFOLIO</strong><small>OPERATIONS</small></span><button class="icon-button nav-toggle" id="desktop-nav-toggle" type="button" aria-label="${navToggleLabel}" title="${navToggleLabel}">${icon(state.navCollapsed ? "keyboard_double_arrow_right" : "keyboard_double_arrow_left")}</button></div><nav>${navItems()
-    .map(
-      (item) =>
-        `<button type="button" data-view="${item.id}" class="nav-item ${state.view === item.id ? "active" : ""}" aria-current="${state.view === item.id ? "page" : "false"}" aria-label="${escapeHtml(item.label)}" title="${escapeHtml(item.label)}">${icon(item.icon)}<span>${item.label}</span></button>`,
-    )
-    .join("")}</nav><div class="nav-account"><span class="account-avatar">${escapeHtml((person.displayName || person.email || "관").slice(0, 1))}</span><div class="nav-account-copy"><strong>${escapeHtml(person.displayName || "관리자")}</strong><small>${escapeHtml(role)}</small></div><button class="icon-button" id="logout" type="button" aria-label="로그아웃" title="로그아웃">${icon("logout")}</button></div></aside>`;
+  const cardSection = `<div class="nav-section-group"><button type="button" data-view="cards" class="nav-item ${["cards", "card-packs", "card-pack-create", "card-pack-composition", "batches"].includes(state.view) ? "active" : ""}" aria-label="카드" title="카드">${icon("style")}<span>카드</span>${icon("expand_more", "nav-section-chevron")}</button><div class="nav-subitems"><button type="button" data-view="cards" class="nav-subitem ${state.view === "cards" ? "active" : ""}">카드 관리</button>${can("cards:read") ? `<button type="button" data-view="card-packs" class="nav-subitem ${["card-packs", "card-pack-create", "card-pack-composition"].includes(state.view) ? "active" : ""}">카드팩 관리</button>` : ""}${can("codes:read") ? `<button type="button" data-view="batches" class="nav-subitem ${state.view === "batches" ? "active" : ""}">발급·인증번호</button>` : ""}</div></div>`;
+  const items = navItems().map((item) => item.id === "cards" ? cardSection : `<button type="button" data-view="${item.id}" class="nav-item ${state.view === item.id ? "active" : ""}" aria-current="${state.view === item.id ? "page" : "false"}" aria-label="${escapeHtml(item.label)}" title="${escapeHtml(item.label)}">${icon(item.icon)}<span>${item.label}</span></button>`).join("");
+  return `<aside class="app-nav ${state.mobileNavOpen ? "open" : ""}" aria-label="관리자 주요 메뉴"><div class="nav-brand"><span class="nav-brand-mark"><img src="./assets/fanfolio-app-icon-192.png" alt="Fanfolio 서비스 아이콘" /></span><span class="nav-brand-copy"><strong>FANFOLIO</strong><small>OPERATIONS</small></span><button class="icon-button nav-toggle" id="desktop-nav-toggle" type="button" aria-label="${navToggleLabel}" title="${navToggleLabel}">${icon(state.navCollapsed ? "keyboard_double_arrow_right" : "keyboard_double_arrow_left")}</button></div><nav>${items}</nav><div class="nav-account"><span class="account-avatar">${escapeHtml((person.displayName || person.email || "관").slice(0, 1))}</span><div class="nav-account-copy"><strong>${escapeHtml(person.displayName || "관리자")}</strong><small>${escapeHtml(role)}</small></div><button class="icon-button" id="logout" type="button" aria-label="로그아웃" title="로그아웃">${icon("logout")}</button></div></aside>`;
 }
 
 function topbarView() {
@@ -408,6 +409,9 @@ function currentView() {
     partners: partnersView,
     artists: artistsView,
     cards: cardsView,
+    "card-packs": cardPacksView,
+    "card-pack-create": cardPackCreateView,
+    "card-pack-composition": cardPackCompositionView,
     batches: batchesView,
     events: eventsView,
     "fan-growth": fanGrowthView,
@@ -1080,6 +1084,44 @@ function cardsView() {
   const reviewDetail = reviewPanel() || emptyDetail;
   return `<div class="commercial-review-workspace"><div class="review-commandbar"><div><nav class="review-breadcrumb" aria-label="카드 > 검수"><span>카드</span><span aria-hidden="true">&gt;</span><strong>검수</strong></nav><h2>${isRoot() ? "전체 카드 운영" : "담당 카드 운영"}</h2><p>${isRoot() ? "아티스트 카드의 검수와 공개 상태를 관리합니다." : "배정된 아티스트의 카드 초안을 만들고 검수를 요청합니다."}</p></div><div class="review-command-actions"><button class="secondary" id="export-cards-csv" type="button">${icon("download")} CSV 내보내기</button>${can("cards:write") ? `<button class="primary review-register-cta" id="open-card-drawer" type="button">${icon("add_card")} 카드 등록</button>` : ""}</div></div>${reviewStatusTabs()}<div class="review-workbench"><section class="panel review-list-panel"><div class="review-list-heading"><div><p class="eyebrow">RELEASE REVIEW</p><h3>검수 대기열</h3></div><span>${visible.length}개 항목</span></div><div class="toolbar compact-toolbar"><label class="search-field grow">${icon("search")}<input id="card-search" placeholder="카드명, 아티스트 검색" value="${escapeHtml(state.query)}" /></label>${adminSelect({ id: "card-artist-filter", value: state.cardArtist, label: "아티스트 필터", className: "filter-select card-artist-filter", options: artistOptions })}${adminSelect({ id: "card-status", value: state.status, label: "카드 상태 필터", className: "filter-select card-status-filter", options: statusOptions })}</div><div class="table-wrap"><table class="table responsive-table card-table"><thead><tr><th>카드</th><th>메타데이터</th><th>마감</th><th>담당자</th><th>상태</th><th><span class="sr-only">관리</span></th></tr></thead><tbody>${cardRows(visible)}</tbody></table></div></section>${reviewDetail}</div></div>`;
 }
+
+function cardPackStatusLabel(status) {
+  return ({ published: "공개됨", draft: "임시 저장", pending_review: "검수 대기" }[status] || status || "-");
+}
+
+function cardPackRows(packs) {
+  if (!packs.length) return '<tr><td colspan="6" class="empty">등록된 카드팩이 없습니다.</td></tr>';
+  return packs.map((pack) => `<tr class="${state.selectedCardPack?.id === pack.id ? "selected-preview-row" : ""}"><td><button class="table-link card-pack-open" type="button" data-card-pack-id="${escapeHtml(pack.id)}"><strong>${escapeHtml(pack.name)}</strong><small>${escapeHtml(pack.seasonName || "시즌 미지정")} · ${escapeHtml(pack.version || "v1.0")}</small></button></td><td>${escapeHtml(pack.version || "-")}</td><td>${Number(pack.cards?.length || 0)}장</td><td><span class="badge ${pack.status === "published" ? "success-badge" : "draft"}">${escapeHtml(cardPackStatusLabel(pack.status))}</span></td><td>${pack.cards?.length ? `${pack.cards.filter((card) => card.enabled !== false).length}장 활성` : "구성 전"}</td><td><button class="secondary card-pack-compose" type="button" data-card-pack-id="${escapeHtml(pack.id)}">구성 편집</button></td></tr>`).join("");
+}
+
+function cardPacksView() {
+  const artists = scopedArtists();
+  const query = state.cardPackQuery.trim().toLowerCase();
+  const packs = state.cardPacks.filter((pack) => {
+    const haystack = `${pack.name} ${pack.seasonName || ""} ${pack.version || ""}`.toLowerCase();
+    return (!query || haystack.includes(query)) && (state.cardPackStatus === "all" || pack.status === state.cardPackStatus) && (state.cardPackArtist === "all" || pack.artistId === state.cardPackArtist);
+  });
+  const selected = state.selectedCardPack;
+  const detail = selected ? `<aside class="panel card-pack-detail-panel"><div class="panel-heading"><div><p class="eyebrow">PACK DETAIL</p><h3>${escapeHtml(selected.name)}</h3><span>${escapeHtml(selected.seasonName || "시즌 미지정")} · ${escapeHtml(selected.version || "v1.0")}</span></div><span class="badge ${selected.status === "published" ? "success-badge" : "draft"}">${escapeHtml(cardPackStatusLabel(selected.status))}</span></div><dl class="detail-list"><div><dt>아티스트</dt><dd>${escapeHtml(artists.find((artist) => artist.id === selected.artistId)?.name || selected.artistId || "-")}</dd></div><div><dt>포함 카드</dt><dd>${Number(selected.cards?.length || 0)}장</dd></div><div><dt>확률 합계</dt><dd>${(selected.cards || []).filter((card) => card.enabled !== false).reduce((total, card) => total + Number(card.probability || 0), 0).toFixed(2)}%</dd></div></dl><div class="detail-actions"><button class="primary card-pack-compose" type="button" data-card-pack-id="${escapeHtml(selected.id)}">카드 구성 편집</button>${selected.status !== "published" && can("cards:write") ? `<button class="secondary card-pack-publish" type="button" data-card-pack-id="${escapeHtml(selected.id)}">검수 후 공개</button>` : ""}</div></aside>` : '<aside class="panel card-pack-detail-panel empty-detail">카드팩을 선택하면 구성과 확률을 확인할 수 있습니다.</aside>';
+  return `<div class="card-operations-page"><div class="page-heading with-actions"><div><p class="eyebrow">CARD PACKS</p><h2>카드팩 관리</h2><p>카드팩 기본 정보와 포함 카드 구성을 실제 서비스 데이터로 관리합니다.</p></div>${can("cards:write") ? `<button class="primary" id="open-card-pack-create" type="button">${icon("add")} 새 카드팩 만들기</button>` : ""}</div><div class="card-operations-layout"><section class="panel"><div class="toolbar compact-toolbar"><label class="search-field grow">${icon("search")}<input id="card-pack-search" placeholder="카드팩 또는 시즌 검색" value="${escapeHtml(state.cardPackQuery)}" /></label>${adminSelect({ id: "card-pack-artist", value: state.cardPackArtist, label: "아티스트", className: "filter-select", options: [{ value: "all", label: "전체 아티스트" }, ...artists.map((artist) => ({ value: artist.id, label: artist.name }))] })}${adminSelect({ id: "card-pack-status", value: state.cardPackStatus, label: "상태", className: "filter-select", options: [{ value: "all", label: "전체 상태" }, { value: "published", label: "공개됨" }, { value: "draft", label: "임시 저장" }, { value: "pending_review", label: "검수 대기" }] })}</div><div class="table-wrap"><table class="table responsive-table card-pack-table"><thead><tr><th>카드팩</th><th>버전</th><th>포함 카드</th><th>공개 상태</th><th>활성 구성</th><th>관리</th></tr></thead><tbody>${cardPackRows(packs)}</tbody></table></div><footer class="preview-table-footer"><strong>총 ${packs.length}개</strong><span class="pagination-control">‹ <b>1</b> ›</span></footer></section>${detail}</div></div>`;
+}
+
+function cardPackCreateView() {
+  const artists = scopedArtists();
+  const publishedCards = state.cards.filter((card) => card.status === "published");
+  const defaultOdds = publishedCards.length >= 4 ? [1, 9, 30, 60] : publishedCards.map(() => Number((100 / Math.max(publishedCards.length, 1)).toFixed(2)));
+  const cardChoices = publishedCards.map((card, index) => `<label class="pack-card-choice"><input type="checkbox" data-pack-card="${escapeHtml(card.id)}" ${index < Math.min(4, publishedCards.length) ? "checked" : ""} /><span><strong>${escapeHtml(card.name)}</strong><small>${escapeHtml(card.rarity || "N")} · ${escapeHtml(card.id)}</small></span><input class="pack-card-probability" data-pack-card-probability="${escapeHtml(card.id)}" type="number" min="0.01" max="100" step="0.01" value="${defaultOdds[index] || 0}" aria-label="${escapeHtml(card.name)} 확률" /></label>`).join("");
+  return `<div class="card-operations-page"><div class="page-heading"><div><p class="eyebrow">PACK INFORMATION</p><h2>새 카드팩 만들기</h2><p>팬에게 표시될 카드팩 기본 정보를 등록한 뒤 카드 구성을 편집합니다.</p></div></div><div class="card-creation-layout"><form class="panel form" id="card-pack-form"><label class="field"><span>카드팩 이름</span><input name="name" placeholder="예: Nebula Ver." required /></label><div class="form-grid"><label class="field"><span>아티스트</span>${adminSelect({ id: "card-pack-create-artist", name: "artistId", value: artists[0]?.id || "", label: "아티스트", className: "form-select", options: artists.map((artist) => ({ value: artist.id, label: artist.name })) })}</label><label class="field"><span>버전</span><input name="version" value="v1.0" required /></label></div><label class="field"><span>시즌/앨범명</span><input name="seasonName" placeholder="예: 정규 1집 · DREAMSCAPE" /></label><label class="field"><span>카드팩 이미지 URL</span><input name="imageUrl" type="url" placeholder="https://..." /></label><label class="field"><span>설명</span><textarea name="description" maxlength="1000" placeholder="팬에게 공개할 카드팩 설명"></textarea></label><fieldset class="pack-card-selection"><legend>포함 카드와 확률</legend>${cardChoices || '<p class="empty">먼저 공개된 카드를 등록해 주세요.</p>'}</fieldset><div class="notice">카드팩은 먼저 임시 저장됩니다. 활성 카드 확률 합계가 100%일 때 공개할 수 있습니다.</div><footer class="drawer-footer"><button class="secondary" type="button" data-view="card-packs">취소</button><button class="primary" type="submit" ${publishedCards.length ? "" : "disabled"}>카드팩 만들고 구성 편집</button></footer></form><aside class="panel workflow-panel"><p class="eyebrow">WORKFLOW</p><h3>카드팩 등록 순서</h3><ol><li><strong>기본 정보 등록</strong><span>이름·시즌·이미지를 입력합니다.</span></li><li><strong>카드 구성 편집</strong><span>공개된 카드와 개별 확률을 연결합니다.</span></li><li><strong>검수 요청·공개</strong><span>확률이 100%인지 확인한 뒤 공개합니다.</span></li></ol></aside></div></div>`;
+}
+
+function cardPackCompositionView() {
+  const pack = state.selectedCardPack;
+  if (!pack) return '<div class="panel empty-detail">카드팩을 먼저 선택해 주세요.</div>';
+  const total = (pack.cards || []).filter((card) => card.enabled !== false).reduce((sum, card) => sum + Number(card.probability || 0), 0);
+  const editable = pack.status !== "published" && can("cards:write");
+  const rows = (pack.cards || []).map((card, index) => `<tr><td><strong>${escapeHtml(card.name)}</strong><small>${escapeHtml(card.cardId)}</small></td><td><span class="preview-rarity rarity-${String(card.rarity || "n").toLowerCase()}">${escapeHtml(card.rarity || "N")}</span></td><td>${editable ? `<input type="checkbox" data-composition-enabled="${escapeHtml(card.cardId)}" ${card.enabled !== false ? "checked" : ""} aria-label="${escapeHtml(card.name)} 포함" />` : (card.enabled !== false ? "포함" : "제외")}</td><td>${editable ? `<input class="pack-card-probability" data-composition-probability="${escapeHtml(card.cardId)}" type="number" min="0.01" max="100" step="0.01" value="${Number(card.probability || 0)}" aria-label="${escapeHtml(card.name)} 확률" /> %` : `${Number(card.probability || 0).toFixed(2)}%`}</td><td>${index + 1}</td></tr>`).join("");
+  return `<div class="card-operations-page"><div class="page-heading with-actions"><div><p class="eyebrow">CARD PACK COMPOSITION</p><h2>카드 구성 편집</h2><p>${escapeHtml(pack.seasonName || "시즌 미지정")} · ${escapeHtml(pack.name)} · ${escapeHtml(pack.version || "v1.0")}</p></div><button class="secondary" data-view="card-packs" type="button">${icon("arrow_back")} 카드팩 목록</button></div><div class="card-operations-layout"><section class="panel"><div class="panel-heading"><div><h3>포함 카드</h3><span>총 ${rows ? (pack.cards || []).length : 0}장</span></div><strong class="odds-total ${Math.abs(total - 100) < 0.001 ? "valid" : "invalid"}">확률 합계 ${total.toFixed(2)}%</strong></div><form id="card-pack-composition-form"><div class="table-wrap"><table class="table responsive-table composition-table"><thead><tr><th>카드</th><th>등급</th><th>포함 여부</th><th>확률</th><th>순서</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="empty">포함된 카드가 없습니다.</td></tr>'}</tbody></table></div>${editable ? `<footer class="drawer-footer"><button class="primary" type="submit">변경사항 저장</button></footer>` : ""}</form></section><aside class="panel odds-editor-panel"><div class="odds-validation"><span>${icon(Math.abs(total - 100) < 0.001 ? "check_circle" : "error")}</span><div><h3>확률 유효성 검증</h3><p>${Math.abs(total - 100) < 0.001 ? "모든 항목이 유효합니다." : "확률 합계를 100%로 맞춰 주세요."}</p></div></div><div class="odds-policy-card"><strong>${icon("verified_user")} 공개 확률표</strong><p>공개된 카드팩의 확률은 팬앱에도 동일하게 표시됩니다.</p></div>${pack.status !== "published" && can("cards:write") ? `<button class="primary full-width card-pack-publish" data-card-pack-id="${escapeHtml(pack.id)}" type="button" ${Math.abs(total - 100) < 0.001 ? "" : "disabled"}>저장 후 공개</button>` : `<span class="badge success-badge">공개된 구성</span>`}</aside></div></div>`;
+}
 function statusLabel(status) {
   return (
     {
@@ -1563,6 +1605,106 @@ async function loadEventHeroPreview() {
       image.replaceWith(fallback);
     }
   }));
+}
+
+async function loadCardPackDetail(packId, openComposition = false) {
+  try {
+    const result = await api(`/admin/card-packs/${encodeURIComponent(packId)}`);
+    state.selectedCardPack = result.data;
+    state.view = openComposition ? "card-pack-composition" : "card-packs";
+    layout();
+  } catch {
+    toast("카드팩 상세를 불러오지 못했습니다.");
+  }
+}
+
+async function createCardPack(event) {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  const artistId = String(form.get("artistId") || "");
+  const cards = [...document.querySelectorAll("[data-pack-card]")]
+    .filter((input) => input.checked)
+    .map((input, position) => {
+      const probabilityInput = [...document.querySelectorAll("[data-pack-card-probability]")]
+        .find((candidate) => candidate.dataset.packCardProbability === input.dataset.packCard);
+      return { cardId: input.dataset.packCard, position, probability: Number(probabilityInput?.value || 0), enabled: true };
+    });
+  if (!cards.length) {
+    toast("카드팩에 포함할 카드를 하나 이상 선택해 주세요.");
+    return;
+  }
+  const mismatchedCard = cards.find((entry) => {
+    const card = state.cards.find((candidate) => candidate.id === entry.cardId);
+    return card && artistId && (card.artistId || card.ownerArtistId) !== artistId;
+  });
+  if (mismatchedCard) {
+    toast("카드팩의 아티스트와 포함 카드의 아티스트를 같게 선택해 주세요.");
+    return;
+  }
+  try {
+    const result = await api("/admin/card-packs", {
+      method: "POST",
+      body: JSON.stringify({
+        name: form.get("name"),
+        artistId,
+        version: form.get("version"),
+        seasonName: form.get("seasonName") || null,
+        imageUrl: form.get("imageUrl") || null,
+        description: form.get("description") || null,
+        cards,
+      }),
+    });
+    state.selectedCardPack = result.data;
+    state.view = "card-pack-composition";
+    await loadData();
+    layout();
+    toast("카드팩을 임시 저장했습니다. 구성과 확률을 확인해 주세요.");
+  } catch (error) {
+    toast(error?.message || "카드팩을 만들지 못했습니다. 입력값과 권한을 확인해 주세요.");
+  }
+}
+
+async function publishCardPack(packId) {
+  try {
+    await api(`/admin/card-packs/${encodeURIComponent(packId)}/publish`, { method: "POST", body: "{}" });
+    await loadData();
+    await loadCardPackDetail(packId, true);
+    toast("카드팩을 공개했습니다.");
+  } catch (error) {
+    toast(error?.message || "카드팩 공개에 실패했습니다. 카드 공개 상태와 확률 합계를 확인해 주세요.");
+  }
+}
+
+async function saveCardPackComposition(event) {
+  event.preventDefault();
+  const pack = state.selectedCardPack;
+  if (!pack) return;
+  const cards = (pack.cards || []).map((card, position) => ({
+    cardId: card.cardId,
+    position,
+    probability: Number(document.querySelector(`[data-composition-probability="${CSS.escape(card.cardId)}"]`)?.value || 0),
+    enabled: Boolean(document.querySelector(`[data-composition-enabled="${CSS.escape(card.cardId)}"]`)?.checked),
+  }));
+  try {
+    const result = await api(`/admin/card-packs/${encodeURIComponent(pack.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        artistId: pack.artistId,
+        name: pack.name,
+        version: pack.version,
+        seasonName: pack.seasonName || null,
+        imageUrl: pack.imageUrl || null,
+        description: pack.description || null,
+        cards,
+      }),
+    });
+    state.selectedCardPack = result.data;
+    await loadData();
+    layout();
+    toast("카드팩 구성을 저장했습니다.");
+  } catch (error) {
+    toast(error?.message || "카드팩 구성을 저장하지 못했습니다. 확률 합계를 확인해 주세요.");
+  }
 }
 
 function batchesView() {
@@ -3306,6 +3448,35 @@ function bind() {
       if (state.view === "events") void loadEvents(true);
     });
   });
+  document.querySelector("#open-card-pack-create")?.addEventListener("click", () => {
+    state.view = "card-pack-create";
+    state.selectedCardPack = null;
+    layout();
+  });
+  document.querySelector("#card-pack-form")?.addEventListener("submit", createCardPack);
+  document.querySelector("#card-pack-composition-form")?.addEventListener("submit", saveCardPackComposition);
+  document.querySelectorAll(".card-pack-open").forEach((button) =>
+    button.addEventListener("click", () => void loadCardPackDetail(button.dataset.cardPackId)),
+  );
+  document.querySelectorAll(".card-pack-compose").forEach((button) =>
+    button.addEventListener("click", () => void loadCardPackDetail(button.dataset.cardPackId, true)),
+  );
+  document.querySelectorAll(".card-pack-publish").forEach((button) =>
+    button.addEventListener("click", () => void publishCardPack(button.dataset.cardPackId)),
+  );
+  document.querySelector("#card-pack-search")?.addEventListener("input", (event) => {
+    state.cardPackQuery = event.currentTarget.value;
+    layout();
+    const input = document.querySelector("#card-pack-search");
+    input?.focus();
+    input?.setSelectionRange(state.cardPackQuery.length, state.cardPackQuery.length);
+  });
+  document.querySelectorAll("[data-select-id=card-pack-artist] .admin-select-option").forEach((button) =>
+    button.addEventListener("click", () => { state.cardPackArtist = button.dataset.value; layout(); }),
+  );
+  document.querySelectorAll("[data-select-id=card-pack-status] .admin-select-option").forEach((button) =>
+    button.addEventListener("click", () => { state.cardPackStatus = button.dataset.value; layout(); }),
+  );
   document
     .querySelector("#desktop-nav-toggle")
     ?.addEventListener("click", toggleDesktopNavigation);

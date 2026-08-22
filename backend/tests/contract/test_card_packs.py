@@ -63,3 +63,18 @@ def test_card_pack_requires_transparent_probability_total(
     payload["cards"][0]["probability"] = 99
     response = actors["admin"].post("/api/admin/card-packs", json=payload)
     assert_error(response, 422, "INVALID_PACK_ODDS")
+
+
+def test_admin_can_update_draft_card_pack_composition(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    created = assert_success(
+        actors["admin"].post("/api/admin/card-packs", json=_pack_payload(seeded)), 201
+    )
+    payload = _pack_payload(seeded)
+    payload["name"] = "Nebula Ver. updated"
+    updated = assert_success(
+        actors["admin"].patch(f"/api/admin/card-packs/{created['id']}", json=payload)
+    )
+    assert updated["name"] == "Nebula Ver. updated"
+    assert updated["cards"][0]["probability"] == 100

@@ -1452,7 +1452,20 @@ async def list_card_packs(
             .order_by(CardPack.created_at.desc(), CardPack.id.desc())
         )
     )
-    return {"ok": True, "data": {"items": [card_pack_data(pack) for pack in packs]}}
+    cards_by_pack: dict[str, list[dict]] = {pack.id: [] for pack in packs}
+    if packs:
+        rows = await session.execute(
+            select(CardPackCard, Card)
+            .join(Card, CardPackCard.card_id == Card.id)
+            .where(CardPackCard.pack_id.in_(cards_by_pack))
+            .order_by(CardPackCard.position, CardPackCard.id)
+        )
+        for link, card in rows:
+            cards_by_pack[link.pack_id].append(_card_pack_card_data(link, card))
+    return {
+        "ok": True,
+        "data": {"items": [card_pack_data(pack, cards_by_pack[pack.id]) for pack in packs]},
+    }
 
 
 @router.post("/card-packs", status_code=status.HTTP_201_CREATED)
@@ -1505,6 +1518,72 @@ async def create_card_pack(
         session,
         actor_user_id=context.user.id,
         action="card_pack.created",
+        entity_type="card_pack",
+        entity_id=pack.id,
+        organization_id=context.membership.organization_id,
+        artist_id=pack.artist_id,
+        details={"cardCount": len(links)},
+    )
+    await session.commit()
+    return {
+        "ok": True,
+        "data": card_pack_data(pack, [_card_pack_card_data(link, card) for link, card in links]),
+    }
+
+
+@router.patch("/card-packs/{pack_id}")
+async def update_card_pack(
+    pack_id: str,
+    payload: CardPackCreate,
+    context: CurrentAdmin,
+    session: DbSession,
+) -> dict:
+    _require_scoped_action(context, "cards:write")
+    context.require_write()
+    pack = await session.get(CardPack, pack_id)
+    if pack is None:
+        raise AppError(404, "CARD_PACK_NOT_FOUND", "카드팩을 찾을 수 없습니다.")
+    context.require_organization(pack.organization_id)
+    context.require_artist(pack.artist_id)
+    if pack.status == "published":
+        raise AppError(
+            409,
+            "PUBLISHED_PACK_IMMUTABLE",
+            "공개된 카드팩은 수정할 수 없습니다. 새 버전을 만들어 주세요.",
+        )
+    await validate_card_pack_input(payload, session)
+    if payload.artist_id != pack.artist_id:
+        raise AppError(422, "PACK_ARTIST_IMMUTABLE", "기존 카드팩의 아티스트는 변경할 수 없습니다.")
+    card_rows = list(
+        await session.scalars(
+            select(Card).where(Card.id.in_([item.card_id for item in payload.cards]))
+        )
+    )
+    cards_by_id = {card.id: card for card in card_rows}
+    if any(card.artist_id != pack.artist_id for card in card_rows):
+        raise AppError(422, "PACK_ARTIST_MISMATCH", "카드팩과 카드의 아티스트가 일치해야 합니다.")
+    pack.name = payload.name
+    pack.season_name = payload.season_name
+    pack.version = payload.version
+    pack.image_url = payload.image_url
+    pack.description = payload.description
+    await session.execute(delete(CardPackCard).where(CardPackCard.pack_id == pack.id))
+    links = []
+    for item in payload.cards:
+        link = CardPackCard(
+            id=f"pack_card_{uuid4().hex[:12]}",
+            pack_id=pack.id,
+            card_id=item.card_id,
+            position=item.position,
+            probability=item.probability,
+            enabled=item.enabled,
+        )
+        session.add(link)
+        links.append((link, cards_by_id[item.card_id]))
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="card_pack.updated",
         entity_type="card_pack",
         entity_id=pack.id,
         organization_id=context.membership.organization_id,
