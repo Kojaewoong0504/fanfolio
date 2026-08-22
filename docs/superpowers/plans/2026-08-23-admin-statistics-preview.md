@@ -15,11 +15,11 @@
 **Files:**
 - Create: `admin_app/tests/admin-statistics-preview.test.mjs`
 
-- [ ] **Step 1: Write a failing source-contract test**
+- [x] **Step 1: Write a failing source-contract test**
 
 Assert the local preview route, ROOT/partner role switch, period/filter controls, KPI cards, trend chart, pack performance, funnel, odds comparison, and responsive CSS selectors.
 
-- [ ] **Step 2: Run the targeted test and verify failure**
+- [x] **Step 2: Run the targeted test and verify failure**
 
 Run: `node --test admin_app/tests/admin-statistics-preview.test.mjs`
 
@@ -30,23 +30,23 @@ Expected: FAIL because the statistics preview functions and styles do not exist.
 **Files:**
 - Modify: `admin_app/app.js`
 
-- [ ] **Step 1: Add preview data and state**
+- [x] **Step 1: Add preview data and state**
 
 Create ROOT and partner datasets, selected scope, period, entity filters, and comparison toggle.
 
-- [ ] **Step 2: Add reusable metric and chart renderers**
+- [x] **Step 2: Add reusable metric and chart renderers**
 
 Render KPI cards, SVG line/area charts, bar comparisons, progress rows, funnel steps, and anomaly notices from preview data.
 
-- [ ] **Step 3: Add ROOT and partner dashboard composition**
+- [x] **Step 3: Add ROOT and partner dashboard composition**
 
 Keep shared filters consistent while changing labels and panels to match each administrator's allowed scope.
 
-- [ ] **Step 4: Bind controls and local preview route**
+- [x] **Step 4: Bind controls and local preview route**
 
 Add `renderStatisticsPreview()` listeners and route `?preview=statistics` before session restoration.
 
-- [ ] **Step 5: Run the targeted test**
+- [x] **Step 5: Run the targeted test**
 
 Run: `node --test admin_app/tests/admin-statistics-preview.test.mjs`
 
@@ -57,15 +57,15 @@ Expected: Function and route assertions pass; styling assertions may still fail.
 **Files:**
 - Modify: `admin_app/styles.css`
 
-- [ ] **Step 1: Add dashboard layout and component styles**
+- [x] **Step 1: Add dashboard layout and component styles**
 
 Style the scope switch, filter bar, KPI cards, charts, tables, funnel, odds comparison, and monitoring panel with existing variables and spacing.
 
-- [ ] **Step 2: Add tablet and mobile layout rules**
+- [x] **Step 2: Add tablet and mobile layout rules**
 
 Collapse multi-column grids and keep controls readable below 1180px, 820px, and 620px.
 
-- [ ] **Step 3: Run targeted and full admin tests**
+- [x] **Step 3: Run targeted and full admin tests**
 
 Run: `node --test admin_app/tests/admin-statistics-preview.test.mjs`
 
@@ -78,19 +78,18 @@ Expected: PASS with no existing admin preview regressions.
 **Files:**
 - No code changes expected
 
-- [ ] **Step 1: Start the admin app**
+- [x] **Step 1: Start the admin app**
 
 Run the existing local admin development command and open `http://127.0.0.1:<port>/?preview=statistics`.
 
-- [ ] **Step 2: Exercise controls**
+- [x] **Step 2: Exercise controls**
 
 Verify ROOT/partner switching, period changes, entity filters, and comparison toggle update the visible data without errors.
 
-- [ ] **Step 3: Verify responsive layouts**
+- [x] **Step 3: Verify responsive layouts**
 
 Inspect desktop and narrow widths for overflow, clipped labels, and chart readability.
 
-- [ ] **Step 4: Record verification evidence**
+- [x] **Step 4: Record verification evidence**
 
 Capture the final preview URL and test counts in the handoff.
-
