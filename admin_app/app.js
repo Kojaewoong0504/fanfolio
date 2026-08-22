@@ -549,6 +549,15 @@ async function loadFanGrowth(renderAfter = false) {
   if (renderAfter) layout();
 }
 
+async function loadOptionalFanGrowth() {
+  try {
+    await loadOptionalFanGrowth();
+  } catch (error) {
+    state.engagement = { ...fanGrowthEmptyState };
+    console.warn("Optional fan growth data unavailable", error);
+  }
+}
+
 async function loadEvents(renderAfter = false) {
   if (!can("events:read")) return;
   const params = new URLSearchParams({ page: String(state.eventPage), pageSize: "20" });
@@ -1775,9 +1784,23 @@ async function api(path, options = {}, allowRefresh = true) {
     const error = new Error(detail || `API ${response.status}`);
     error.status = response.status;
     error.code = errorCode;
+    error.path = path;
     throw error;
   }
   return response.status === 204 ? null : response.json();
+}
+
+async function loadOptionalOperationalMetrics() {
+  if (!can("audit:read")) return { data: null };
+  try {
+    return await api("/admin/card-operations/metrics");
+  } catch (error) {
+    // Operational counters are supplementary to the dashboard. An unavailable
+    // metrics query must not hide the rest of the administrator workspace.
+    if (error.status === 401) throw error;
+    console.warn("Optional administrator metrics unavailable", error);
+    return { data: null };
+  }
 }
 async function uploadAsset(file, purpose) {
   const presigned = await api("/uploads/presign", {
@@ -1900,9 +1923,7 @@ async function loadData() {
       api(`/admin/audit-logs?${auditParams}`),
       api("/admin/catalog"),
       api("/admin/notifications"),
-      can("audit:read")
-        ? api("/admin/card-operations/metrics")
-        : Promise.resolve({ data: null }),
+      loadOptionalOperationalMetrics(),
     ]);
     state.metrics = dashboard.data.metrics;
     state.operationalMetrics = operationalMetrics.data;
@@ -1943,7 +1964,7 @@ async function loadData() {
       state.artistAccounts = artistAccounts.data.items;
       state.artistProfiles = artistProfiles.data.items;
       state.artistProfilesLoaded = true;
-      await loadOrganizations(false);
+      await loadOptionalOrganizations();
     } else {
       const dropsRequest = can("drops:read")
         ? api("/admin/drops")
@@ -1992,8 +2013,11 @@ async function loadData() {
     } else if (error.status === 403) {
       state.error = "현재 관리자 권한으로 접근할 수 없는 작업입니다.";
     } else {
+      const endpoint = error.path
+        ? ` (${error.path}${error.status ? ` · HTTP ${error.status}` : ""})`
+        : "";
       state.error =
-        "관리자 API에 연결하지 못했습니다. 관리자 세션과 API 서버를 확인해 주세요.";
+        `관리자 데이터를 불러오지 못했습니다${endpoint}. 관리자 세션과 API 서버를 확인해 주세요.`;
     }
   }
   layout();
@@ -2073,6 +2097,18 @@ async function createArtistAccount(event) {
         ? "이미 사용 중인 아이디입니다."
         : "계정 발급에 실패했습니다. 관리자 권한과 입력값을 확인해 주세요.",
     );
+  }
+}
+
+async function loadOptionalOrganizations() {
+  try {
+    await loadOrganizations(false);
+  } catch (error) {
+    state.organizations = [];
+    state.organizationMembers = [];
+    state.selectedOrganization = null;
+    state.selectedOrganizationId = "";
+    console.warn("Optional organization data unavailable", error);
   }
 }
 async function resetArtistPassword(userId) {
