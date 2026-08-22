@@ -12,6 +12,13 @@ test('fan app exposes the published combination policy and completion API', () =
   assert.match(appSource, /조합 결과 확률/)
 })
 
+test('combination sheet requires explicit duplicate-card selection before preview', () => {
+  assert.match(appSource, /조합 재료 카드 선택/)
+  assert.match(appSource, /조합 재료 선택/)
+  assert.match(appSource, /선택한 카드 ID/)
+  assert.doesNotMatch(appSource, /const combinationMaterialIds = activePack\.slots\.flatMap\(slot => slot\.userCardIds \?\? \[\]\)\.slice\(0, combinationRecipe\?\.inputQuantity \?\? 0\)/)
+})
+
 test('combination completion makes the reveal route authoritative over the repository screen', () => {
   assert.match(appSource, /const openReveal = \(userCardId: string\) => \{[\s\S]*?setShowCardCollection\(false\)[\s\S]*?setRevealedCardId\(userCardId\)/)
   assert.ok(appSource.indexOf('if (revealedCardId)') < appSource.indexOf('if (showCardCollection)'))

@@ -690,6 +690,12 @@ class NotificationItem(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class CollectionGoalCreate(BaseModel):
+    pack_id: str = Field(alias="packId", min_length=1)
+    target_count: int | None = Field(default=None, alias="targetCount", gt=0)
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class ArtistReviewSubmitRequest(BaseModel):
     review_note: str | None = Field(default=None, alias="reviewNote", max_length=500)
     model_config = ConfigDict(populate_by_name=True)

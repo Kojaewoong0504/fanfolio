@@ -71,9 +71,14 @@ export function isPublicFanMediaPath(path: string): boolean {
   return /^\/api\/(?:cards|rewards)\/[^/]+\/image(?:\?|$)/.test(path)
 }
 
-export async function fetchAuthenticatedMedia(path: string): Promise<string | null> {
+export async function fetchAuthenticatedMedia(path: string, force = false): Promise<string | null> {
   if (isPublicFanMediaPath(path)) return resolveApiUrl(path)
   const cacheKey = resolveApiUrl(path)
+  if (force) {
+    const cached = mediaUrlCache.get(cacheKey)
+    if (cached) URL.revokeObjectURL(cached)
+    mediaUrlCache.delete(cacheKey)
+  }
   const cachedUrl = mediaUrlCache.get(cacheKey)
   if (cachedUrl) return cachedUrl
   const pending = mediaRequestCache.get(cacheKey)
@@ -176,6 +181,8 @@ export type CollectionCard = {
   signatureText?: string | null
   issueLimit?: number | null
   acquisitionSource?: string | null
+  expiresAt?: string | null
+  tradable?: boolean
 }
 
 export type CardPackCard = {
@@ -250,6 +257,18 @@ export type CollectionSummary = {
   ownedCount: number
   totalSlots: number
   completionRate: number
+}
+
+export type CollectionGoal = {
+  id: string
+  packId: string
+  packName: string
+  seasonName: string | null
+  targetCount: number
+  ownedCount: number
+  completionRate: number
+  completedAt: string | null
+  createdAt: string
 }
 
 export type CollectionBenefit = {
@@ -753,8 +772,19 @@ export type PublicCollection = {
   userId: string
   nickname: string | null
   visibility: 'public'
-  summary: { ownedCount: number }
+  isFollowing: boolean
+  summary: { ownedCount: number; followerCount: number; followingCount: number }
   cards: Array<CollectionCard & { expiresAt?: string | null; tradable: boolean }>
+}
+
+export type FanSummary = {
+  id: string
+  nickname: string
+  profileImageUrl?: string | null
+  isFollowing: boolean
+  followerCount: number
+  followingCount: number
+  ownedCount: number
 }
 
 export type TradeProposal = {
@@ -768,8 +798,68 @@ export type TradeProposal = {
   createdAt: string
 }
 
+export type TradeParticipant = {
+  id: string
+  nickname?: string | null
+  profileImageUrl?: string | null
+}
+
+export type TradeCard = CollectionCard & {
+  side: 'offered' | 'requested'
+  unavailable?: boolean
+}
+
+export type TradeProposalDetail = TradeProposal & {
+  proposer: TradeParticipant
+  recipient: TradeParticipant
+  offeredCards: TradeCard[]
+  requestedCards: TradeCard[]
+}
+
 export function getPublicCollection(userId: string): Promise<{ ok: true, data: PublicCollection }> {
   return apiFetch<{ ok: true, data: PublicCollection }>(`/fans/${encodeURIComponent(userId)}/collection`)
+}
+
+export function searchFans(query = ''): Promise<{ ok: true, data: { items: FanSummary[] } }> {
+  const params = new URLSearchParams()
+  if (query.trim()) params.set('query', query.trim())
+  const suffix = params.size > 0 ? `?${params.toString()}` : ''
+  return apiFetch<{ ok: true, data: { items: FanSummary[] } }>(`/fans${suffix}`)
+}
+
+export function getFanConnections(kind: 'following' | 'followers'): Promise<{ ok: true, data: { kind: typeof kind; items: FanSummary[] } }> {
+  return apiFetch<{ ok: true, data: { kind: typeof kind; items: FanSummary[] } }>(`/me/follows?kind=${kind}`)
+}
+
+export function getMyCollection(): Promise<{ ok: true, data: { summary: CollectionSummary; cards: CollectionCard[] } }> {
+  return apiFetch<{ ok: true, data: { summary: CollectionSummary; cards: CollectionCard[] } }>('/me/collection')
+}
+
+export function getWishlist(): Promise<{ ok: true, data: { items: Array<{ cardId: string }> } }> {
+  return apiFetch<{ ok: true, data: { items: Array<{ cardId: string }> } }>('/me/wishlist')
+}
+
+export function saveWishlistCard(cardId: string): Promise<{ ok: true, data: { cardId: string; saved: true } }> {
+  return apiFetch<{ ok: true, data: { cardId: string; saved: true } }>(`/me/wishlist/${encodeURIComponent(cardId)}`, { method: 'PUT' })
+}
+
+export function removeWishlistCard(cardId: string): Promise<{ ok: true, data: { cardId: string; saved: false } }> {
+  return apiFetch<{ ok: true, data: { cardId: string; saved: false } }>(`/me/wishlist/${encodeURIComponent(cardId)}`, { method: 'DELETE' })
+}
+
+export function getCollectionGoals(): Promise<{ ok: true, data: { items: CollectionGoal[] } }> {
+  return apiFetch<{ ok: true, data: { items: CollectionGoal[] } }>('/me/collection-goals')
+}
+
+export function createCollectionGoal(packId: string, targetCount?: number): Promise<{ ok: true, data: CollectionGoal }> {
+  return apiFetch<{ ok: true, data: CollectionGoal }>('/me/collection-goals', {
+    method: 'POST',
+    body: JSON.stringify({ packId, ...(targetCount ? { targetCount } : {}) }),
+  })
+}
+
+export function deleteCollectionGoal(goalId: string): Promise<{ ok: true, data: { deleted: boolean } }> {
+  return apiFetch<{ ok: true, data: { deleted: boolean } }>(`/me/collection-goals/${encodeURIComponent(goalId)}`, { method: 'DELETE' })
 }
 
 export function followFan(userId: string): Promise<{ ok: true, data: { followingUserId: string; following: boolean } }> {
@@ -796,6 +886,19 @@ export function createTradeProposal(input: {
     method: 'POST',
     body: JSON.stringify(input),
   })
+}
+
+export function getTradeProposals(
+  box: 'all' | 'sent' | 'received' = 'all',
+  tradeStatus?: TradeProposal['status'],
+): Promise<{ ok: true, data: { box: typeof box; items: TradeProposalDetail[] } }> {
+  const params = new URLSearchParams({ box })
+  if (tradeStatus) params.set('status', tradeStatus)
+  return apiFetch<{ ok: true, data: { box: typeof box; items: TradeProposalDetail[] } }>(`/me/trades?${params.toString()}`)
+}
+
+export function getTradeProposal(proposalId: string): Promise<{ ok: true, data: TradeProposalDetail }> {
+  return apiFetch<{ ok: true, data: TradeProposalDetail }>(`/me/trades/${encodeURIComponent(proposalId)}`)
 }
 
 export function respondToTradeProposal(

@@ -86,6 +86,20 @@ function nonemptyString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value : null
 }
 
+/**
+ * A missing/empty design is the normal card state. Keep the visual treatment
+ * opt-in so legacy cards do not receive a fake foil effect just because the
+ * normalizer has safe defaults.
+ */
+export function hasConfiguredFrontEffect(designConfig?: CardDesignConfig | null): boolean {
+  if (!isRecord(designConfig) || !isRecord(designConfig.front)) return false
+  const front = designConfig.front
+  const frontValues = front as Record<string, unknown>
+  const effectKeys = ['material', 'foilPattern', 'foilCoverage', 'effect', 'effectPreset', 'effectIntensity', 'effectAngle', 'effectSpread', 'effectGrain', 'effectFinish']
+  if (effectKeys.some(key => frontValues[key] !== undefined && frontValues[key] !== null && String(frontValues[key]).trim() !== '')) return true
+  return front.interaction === 'tilt' || front.interaction === 'lenticular'
+}
+
 export function normalizeCardEffects(designConfig?: CardDesignConfig | null): NormalizedCardEffects
 export function normalizeCardEffects(designConfig: unknown): NormalizedCardEffects
 export function normalizeCardEffects(designConfig: unknown = {}): NormalizedCardEffects {

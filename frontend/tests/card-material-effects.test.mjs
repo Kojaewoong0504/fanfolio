@@ -11,6 +11,7 @@ const frontendRoot = dirname(fileURLToPath(new URL('../package.json', import.met
 const apiSource = await readFile(new URL('../src/api/client.ts', import.meta.url), 'utf8')
 const effectsSource = await readFile(new URL('../src/utils/cardEffects.ts', import.meta.url), 'utf8')
 const detailSource = await readFile(new URL('../src/components/CardDetail.tsx', import.meta.url), 'utf8')
+const appSource = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
 const collectibleSource = await readFile(
   new URL('../src/components/InteractiveCollectibleCard.tsx', import.meta.url),
   'utf8',
@@ -300,6 +301,32 @@ test('shared collectible renders normalized v3 front and back classes', () => {
   assert.match(detailSource, /\.slice\(-8\)\.toUpperCase\(\)/)
   assert.doesNotMatch(collectibleSource, /import hologramTexture/)
   assert.doesNotMatch(collectibleSource, /hologramStyle/)
+})
+
+test('collectible effects are opt-in and do not expose a redundant effect button', () => {
+  sourceContainsAll(effectsSource, [
+    'export function hasConfiguredFrontEffect',
+  ])
+  assert.match(collectibleSource, /hasConfiguredFrontEffect\(designConfig\)/)
+  assert.match(collectibleSource, /const hasSurface = hasConfiguredFrontEffect\(designConfig\)/)
+  assert.doesNotMatch(collectibleSource, /const \[effectPreview, setEffectPreview\]/)
+  assert.doesNotMatch(collectibleSource, /card-effect-action/)
+})
+
+test('card detail supports a stable authenticated handwriting layer and media retry', () => {
+  assert.match(detailSource, /useAuthenticatedMedia\(handwritingPath, mediaRetryKey\)/)
+  assert.match(detailSource, /onRetryMedia/)
+  assert.match(collectibleSource, /handwritingImageUrl\?: string \| null/)
+  assert.match(collectibleSource, /fan-card-handwriting-layer/)
+  assert.match(cssSource, /\.fan-card-handwriting-layer/)
+  assert.match(detailSource, /스페셜 미디어 다시 불러오기/)
+})
+
+test('collection detail keeps the shared collectible media contract', () => {
+  assert.match(appSource, /handwritingImageUrl=\{handwritingImageUrl\}/)
+  assert.match(appSource, /useAuthenticatedMedia\(handwritingPath, mediaRetryKey\)/)
+  assert.match(appSource, /스페셜 미디어 다시 불러오기/)
+  assert.match(appSource, /designConfig=\{detail\?\.card\.designConfig \?\? null\}/)
 })
 
 test('card detail does not expose a fake back serial before owned detail loads', () => {

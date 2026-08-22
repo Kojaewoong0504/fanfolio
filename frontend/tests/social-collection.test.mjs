@@ -1,11 +1,18 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 
 const clientSource = readFileSync(new URL('../src/api/client.ts', import.meta.url), 'utf8')
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8')
 const collectionSource = readFileSync(new URL('../src/components/PublicCollection.tsx', import.meta.url), 'utf8')
 const tradeSource = readFileSync(new URL('../src/components/TradeProposal.tsx', import.meta.url), 'utf8')
+const fanHubUrl = new URL('../src/components/FanSocialHub.tsx', import.meta.url)
+const tradeInboxUrl = new URL('../src/components/TradeInbox.tsx', import.meta.url)
+const tradeComposerUrl = new URL('../src/components/TradeComposer.tsx', import.meta.url)
+const fanHubSource = existsSync(fileURLToPath(fanHubUrl)) ? readFileSync(fanHubUrl, 'utf8') : ''
+const tradeInboxSource = existsSync(fileURLToPath(tradeInboxUrl)) ? readFileSync(tradeInboxUrl, 'utf8') : ''
+const tradeComposerSource = existsSync(fileURLToPath(tradeComposerUrl)) ? readFileSync(tradeComposerUrl, 'utf8') : ''
 
 test('fan app exposes public collection and follow controls', () => {
   assert.match(clientSource, /getPublicCollection/)
@@ -15,6 +22,12 @@ test('fan app exposes public collection and follow controls', () => {
   assert.match(collectionSource, /팔로우/)
   assert.match(appSource, /publicCollectionIdFromPath/)
   assert.match(appSource, /<PublicCollection userId=\{publicCollectionUserId\}/)
+  assert.match(clientSource, /searchFans/)
+  assert.match(clientSource, /getFanConnections/)
+  assert.match(fanHubSource, /팬 찾기/)
+  assert.match(fanHubSource, /팔로잉/)
+  assert.match(fanHubSource, /팔로워/)
+  assert.match(appSource, /pathname === '\/fans'/)
 })
 
 test('fan app exposes trade proposal constraints and submission', () => {
@@ -22,4 +35,19 @@ test('fan app exposes trade proposal constraints and submission', () => {
   assert.match(clientSource, /respondToTradeProposal/)
   assert.match(tradeSource, /기간제·조합·잠금 카드는 거래할 수 없습니다/)
   assert.match(tradeSource, /거래 제안 보내기/)
+  assert.match(clientSource, /getTradeProposals/)
+  assert.match(clientSource, /getTradeProposal/)
+  assert.match(tradeInboxSource, /받은 제안/)
+  assert.match(tradeInboxSource, /보낸 제안/)
+  assert.match(tradeInboxSource, /respondToTradeProposal/)
+  assert.match(tradeComposerSource, /내가 제안할 카드/)
+  assert.match(appSource, /pathname === '\/trades'/)
+  assert.match(appSource, /pathname === '\/trades\/new'/)
+})
+
+test('card repository supports text search and keeps real acquisition metadata', () => {
+  assert.match(appSource, /placeholder="카드명·멤버·번호 검색"/)
+  assert.match(appSource, /setSearchQuery/)
+  assert.match(appSource, /slot\.acquisitionSource/)
+  assert.match(appSource, /slot\.acquiredAt/)
 })

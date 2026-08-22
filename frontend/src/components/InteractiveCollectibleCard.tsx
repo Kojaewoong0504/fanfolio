@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type SyntheticEvent } from 'react'
 import type { CardDesignConfig } from '../api/client'
 import { normalizeCardEffects } from '../utils/cardEffects'
+import { hasConfiguredFrontEffect } from '../utils/cardEffects'
 import { InlineIcon } from '../App'
 
 type CollectibleStyle = CSSProperties & Record<'--tilt-x' | '--tilt-y' | '--light-x' | '--light-y' | '--lenticular-reveal' | '--effect-opacity' | '--effect-angle' | '--effect-spread' | '--effect-grain', string>
@@ -21,6 +22,8 @@ export type InteractiveCollectibleCardProps = {
   lenticularImageUrl?: string | null
   hiddenMessage?: string
   badgeLabel?: string
+  handwritingImageUrl?: string | null
+  handwritingAlt?: string
   onImageError?: (event: SyntheticEvent<HTMLImageElement>) => void
   presentation?: 'detail' | 'reveal'
   enableDeviceMotion?: boolean
@@ -77,6 +80,8 @@ export function InteractiveCollectibleCard({
   lenticularImageUrl,
   hiddenMessage,
   badgeLabel = '공식 카드',
+  handwritingImageUrl,
+  handwritingAlt = '카드에 포함된 손글씨·사인·그림 특전',
   onImageError,
   presentation = 'detail',
   enableDeviceMotion = false,
@@ -85,7 +90,6 @@ export function InteractiveCollectibleCard({
   showControls = true,
 }: InteractiveCollectibleCardProps) {
   const [visibleSide, setVisibleSide] = useState<VisibleSide>(initialSide)
-  const [effectPreview, setEffectPreview] = useState(false)
   const [motionStatus, setMotionStatus] = useState<MotionStatus>('idle')
   const [deviceMotionEnabled, setDeviceMotionEnabled] = useState(false)
   const collectibleRef = useRef<HTMLDivElement | null>(null)
@@ -101,8 +105,7 @@ export function InteractiveCollectibleCard({
   }, [identity])
 
   const effects = normalizeCardEffects(designConfig)
-  const legacyHolographic = designConfig?.front?.effect === 'holographic'
-  const hasSurface = Boolean(legacyHolographic || designConfig?.version === 3)
+  const hasSurface = hasConfiguredFrontEffect(designConfig)
   const hasLenticular = Boolean(effects.front.interaction === 'lenticular' && lenticularImageUrl)
   const reducedEffects = prefersReducedEffects()
   const motionSupported = !reducedEffects && supportsDeviceMotion()
@@ -240,6 +243,7 @@ export function InteractiveCollectibleCard({
     <div className="fan-card-art-window">
       <img className="fan-card-photo" src={imageUrl} alt="" onError={onImageError} />
       {hasLenticular && <img className="fan-card-lenticular" src={lenticularImageUrl ?? ''} alt="" aria-hidden="true" />}
+      {handwritingImageUrl && <img className="fan-card-handwriting-layer" src={handwritingImageUrl} alt={handwritingAlt} />}
     </div>
     <span className="fan-card-material" aria-hidden="true" />
     <span className="fan-card-surface" aria-hidden="true" />
@@ -271,14 +275,11 @@ export function InteractiveCollectibleCard({
     <span className="fan-card-surface" aria-hidden="true" />
   </div>
 
-  return <section className={`interactive-collectible presentation-${presentation}${presentation === 'reveal' ? ' collectible-reveal-enter' : ''}${effectPreview ? ' effect-preview-active' : ''}`} aria-label="인터랙티브 카드 보기">
+  return <section className={`interactive-collectible presentation-${presentation}${presentation === 'reveal' ? ' collectible-reveal-enter' : ''}`} aria-label="인터랙티브 카드 보기">
     {card}
     {showControls && presentation === 'detail' && <div className="detail-interaction-actions" role="group" aria-label="카드 인터랙션">
       <button type="button" className="card-flip-action" onClick={() => setVisibleSide(current => current === 'front' ? 'back' : 'front')}>
         <span aria-hidden="true"><InlineIcon name="rotate" /></span>카드 뒤집기
-      </button>
-      <button type="button" className="card-effect-action" aria-pressed={effectPreview} onClick={() => setEffectPreview(current => !current)}>
-        <span aria-hidden="true"><InlineIcon name="sparkles" /></span>특수 효과 보기
       </button>
     </div>}
     {showControls && <div className="card-side-toggle" role="group" aria-label="카드 면 선택">

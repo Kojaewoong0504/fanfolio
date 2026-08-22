@@ -317,9 +317,9 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
         <div className="redeem-flow-intro"><h1>카드 정보를 확인해 주세요</h1><p>등록할 카드가 맞는지 확인한 뒤 컬렉션에 추가해요.</p></div>
         <article className="redeem-flow-confirm-card">
           <div className="redeem-flow-confirm-image"><img src={registrationCardImage} alt="하린 Nebula 버전 카드" /><span>SR</span></div>
-          <div><small>드림스케이프 2026 SPRING</small><h3>하린 · Nebula Ver.</h3><b>SR</b><p>{isDemo ? '샘플 미리보기 카드' : '인증 코드 확인 완료'}</p></div>
+          <div><small>드림스케이프 2026 SPRING</small><h3>하린 · Nebula Ver.</h3><b>SR</b><p>{isDemo ? '샘플 미리보기 카드' : '입력한 인증 코드'}</p></div>
         </article>
-        <div className="redeem-flow-confirm-notice"><RedeemIcon name="scan" /><span><b>카드 정보 확인 완료</b><small>다음 단계에서 카드가 공개되고 컬렉션에 추가돼요.</small></span></div>
+        <div className="redeem-flow-confirm-notice"><RedeemIcon name="scan" /><span><b>등록할 카드 정보를 확인해 주세요</b><small>등록하기를 누르면 서버에서 인증번호를 최종 확인한 뒤 컬렉션에 추가해요.</small></span></div>
         <button type="button" className="primary redeem-flow-step-button" disabled={saving} onClick={confirmRegistration}>{saving ? '등록 중...' : '이 카드 등록하기'}</button>
       </section>}
 

@@ -3,8 +3,8 @@
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from fastapi import APIRouter, status
-from sqlalchemy import delete, or_, select
+from fastapi import APIRouter, Query, status
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, FanUser, OptionalCurrentUser
@@ -12,6 +12,7 @@ from app.errors import AppError
 from app.models import (
     Artist,
     Card,
+    CardCombinationMaterial,
     CardOwnershipLedger,
     CardVisibility,
     Follow,
@@ -25,7 +26,7 @@ from app.models import (
     UserCard,
 )
 from app.schemas import CollectionVisibilityUpdate, TradeProposalCreate
-from app.services import notify_user_once
+from app.services import notify_followers_of_card, notify_user_once
 
 router = APIRouter(prefix="/api", tags=["social"])
 
@@ -58,7 +59,10 @@ def _collection_card(
         "serialNumber": user_card.serial_number,
         "acquiredAt": user_card.acquired_at.isoformat(),
         "expiresAt": user_card.expires_at.isoformat() if user_card.expires_at else None,
-        "tradable": bool(card.tradable) and not bool(user_card.expires_at),
+        "tradable": bool(card.tradable)
+        and user_card.expires_at is None
+        and user_card.trade_locked_at is None
+        and user_card.acquisition_source != "combination",
     }
 
 
@@ -124,6 +128,12 @@ async def _validate_trade_cards(
             raise _trade_error("CARD_NOT_TRADABLE", "잠긴 카드는 거래할 수 없습니다.")
         if user_card.acquisition_source == "combination":
             raise _trade_error("CARD_NOT_TRADABLE", "조합으로 얻은 카드는 거래할 수 없습니다.")
+        if await session.scalar(
+            select(CardCombinationMaterial.id).where(
+                CardCombinationMaterial.user_card_id == user_card.id
+            )
+        ):
+            raise _trade_error("CARD_NOT_TRADABLE", "조합에 사용한 카드는 거래할 수 없습니다.")
         if await session.scalar(select(TradeLock.id).where(TradeLock.user_card_id == user_card.id)):
             raise _trade_error("CARD_ALREADY_IN_TRADE", "이미 다른 거래에 포함된 카드입니다.")
 
@@ -139,6 +149,125 @@ def _proposal_data(proposal: TradeProposal, items: list[TradeItem]) -> dict:
         "expiresAt": proposal.expires_at.isoformat(),
         "createdAt": proposal.created_at.isoformat(),
     }
+
+
+async def _fan_counts(session: DbSession, user_id: str) -> tuple[int, int, int]:
+    follower_count = int(
+        await session.scalar(
+            select(func.count()).select_from(Follow).where(Follow.following_id == user_id)
+        )
+        or 0
+    )
+    following_count = int(
+        await session.scalar(
+            select(func.count()).select_from(Follow).where(Follow.follower_id == user_id)
+        )
+        or 0
+    )
+    owned_count = int(
+        await session.scalar(
+            select(func.count())
+            .select_from(UserCard)
+            .outerjoin(
+                CardCombinationMaterial,
+                CardCombinationMaterial.user_card_id == UserCard.id,
+            )
+            .where(
+                UserCard.user_id == user_id,
+                CardCombinationMaterial.id.is_(None),
+            )
+        )
+        or 0
+    )
+    return follower_count, following_count, owned_count
+
+
+async def _fan_data(session: DbSession, target: User, viewer_id: str | None) -> dict:
+    follower_count, following_count, owned_count = await _fan_counts(session, target.id)
+    is_following = False
+    if viewer_id and viewer_id != target.id:
+        is_following = bool(
+            await session.scalar(
+                select(Follow.id).where(
+                    Follow.follower_id == viewer_id,
+                    Follow.following_id == target.id,
+                )
+            )
+        )
+    return {
+        "id": target.id,
+        "nickname": target.nickname or target.email or target.id,
+        "profileImageUrl": target.profile_image_url,
+        "isFollowing": is_following,
+        "followerCount": follower_count,
+        "followingCount": following_count,
+        "ownedCount": owned_count,
+    }
+
+
+async def _trade_card_data(session: DbSession, item: TradeItem) -> dict:
+    row = (
+        await session.execute(
+            select(UserCard, Card, Artist, Member)
+            .select_from(UserCard)
+            .join(Card, UserCard.card_id == Card.id)
+            .outerjoin(Artist, Card.artist_id == Artist.id)
+            .outerjoin(Member, Card.member_id == Member.id)
+            .where(UserCard.id == item.user_card_id)
+        )
+    ).one_or_none()
+    if row is None:
+        return {"userCardId": item.user_card_id, "side": item.side, "unavailable": True}
+    user_card, card, artist, member = row
+    return {**_collection_card(user_card, card, artist, member), "side": item.side}
+
+
+def _trade_user_data(user: User) -> dict:
+    return {
+        "id": user.id,
+        "nickname": user.nickname or user.email or user.id,
+        "profileImageUrl": user.profile_image_url,
+    }
+
+
+async def _trade_data(session: DbSession, proposal: TradeProposal) -> dict:
+    items = list(
+        await session.scalars(
+            select(TradeItem)
+            .where(TradeItem.proposal_id == proposal.id)
+            .order_by(TradeItem.side, TradeItem.id)
+        )
+    )
+    cards = [await _trade_card_data(session, item) for item in items]
+    proposer = await session.get(User, proposal.proposer_id)
+    recipient = await session.get(User, proposal.recipient_id)
+    return {
+        **_proposal_data(proposal, items),
+        "proposer": _trade_user_data(proposer) if proposer else {"id": proposal.proposer_id},
+        "recipient": _trade_user_data(recipient) if recipient else {"id": proposal.recipient_id},
+        "offeredCards": [card for card in cards if card.get("side") == "offered"],
+        "requestedCards": [card for card in cards if card.get("side") == "requested"],
+    }
+
+
+async def _expire_trade_proposal(session: DbSession, proposal: TradeProposal) -> bool:
+    if proposal.status != "pending" or _as_utc(proposal.expires_at) > datetime.now(UTC):
+        return False
+    proposal.status = "expired"
+    proposal.responded_at = datetime.now(UTC)
+    await session.execute(delete(TradeLock).where(TradeLock.proposal_id == proposal.id))
+    for user_id in (proposal.proposer_id, proposal.recipient_id):
+        await notify_user_once(
+            session,
+            user_id=user_id,
+            kind="trade_expired",
+            title="카드 거래 제안이 만료됐어요",
+            body="기한 안에 처리되지 않은 카드 거래 제안이 종료됐습니다.",
+            entity_type="trade",
+            entity_id=proposal.id,
+            event_key=f"trade:{proposal.id}:expired:{user_id}",
+        )
+    return True
 
 
 @router.put("/me/collection-visibility")
@@ -184,6 +313,63 @@ async def unfollow_fan(user_id: str, user: FanUser, session: DbSession) -> dict:
     return {"ok": True, "data": {"followingUserId": user_id, "following": False}}
 
 
+@router.get("/fans")
+async def search_fans(
+    user: FanUser,
+    session: DbSession,
+    query: str = Query(default="", max_length=100),
+) -> dict:
+    statement = select(User).where(User.role == Role.FAN, User.id != user.id)
+    normalized_query = query.strip()
+    if normalized_query:
+        pattern = f"%{normalized_query}%"
+        statement = statement.where(
+            or_(
+                User.id.ilike(pattern),
+                User.email.ilike(pattern),
+                User.nickname.ilike(pattern),
+            )
+        )
+    targets = list(await session.scalars(statement.order_by(User.nickname, User.email, User.id)))
+    visible_targets = [
+        target for target in targets if not await _is_blocked(session, user.id, target.id)
+    ]
+    return {
+        "ok": True,
+        "data": {
+            "items": [await _fan_data(session, target, user.id) for target in visible_targets]
+        },
+    }
+
+
+@router.get("/me/follows")
+async def fan_connections(
+    user: FanUser,
+    session: DbSession,
+    kind: str = Query(default="following", pattern="^(following|followers)$"),
+) -> dict:
+    if kind == "followers":
+        statement = (
+            select(User)
+            .join(Follow, Follow.follower_id == User.id)
+            .where(Follow.following_id == user.id)
+        )
+    else:
+        statement = (
+            select(User)
+            .join(Follow, Follow.following_id == User.id)
+            .where(Follow.follower_id == user.id)
+        )
+    targets = list(await session.scalars(statement.order_by(User.nickname, User.email, User.id)))
+    return {
+        "ok": True,
+        "data": {
+            "kind": kind,
+            "items": [await _fan_data(session, target, user.id) for target in targets],
+        },
+    }
+
+
 @router.get("/fans/{user_id}/collection")
 async def public_collection(
     user_id: str,
@@ -207,7 +393,14 @@ async def public_collection(
                 .join(Card, UserCard.card_id == Card.id)
                 .outerjoin(Artist, Card.artist_id == Artist.id)
                 .outerjoin(Member, Card.member_id == Member.id)
-                .where(UserCard.user_id == user_id)
+                .outerjoin(
+                    CardCombinationMaterial,
+                    CardCombinationMaterial.user_card_id == UserCard.id,
+                )
+                .where(
+                    UserCard.user_id == user_id,
+                    CardCombinationMaterial.id.is_(None),
+                )
                 .order_by(UserCard.acquired_at.desc(), UserCard.id)
             )
         ).all()
@@ -216,16 +409,81 @@ async def public_collection(
         _collection_card(user_card, card, artist, member)
         for user_card, card, artist, member in rows
     ]
+    follower_count, following_count, _ = await _fan_counts(session, user_id)
+    is_following = bool(
+        viewer
+        and viewer.id != user_id
+        and await session.scalar(
+            select(Follow.id).where(
+                Follow.follower_id == viewer.id,
+                Follow.following_id == user_id,
+            )
+        )
+    )
     return {
         "ok": True,
         "data": {
             "userId": user_id,
             "nickname": target.nickname,
             "visibility": "public",
-            "summary": {"ownedCount": len(cards)},
+            "isFollowing": is_following,
+            "summary": {
+                "ownedCount": len(cards),
+                "followerCount": follower_count,
+                "followingCount": following_count,
+            },
             "cards": cards,
         },
     }
+
+
+@router.get("/me/trades")
+async def trade_inbox(
+    user: FanUser,
+    session: DbSession,
+    box: str = Query(default="all", pattern="^(all|sent|received)$"),
+    trade_status: str | None = Query(default=None, alias="status"),
+) -> dict:
+    statement = select(TradeProposal)
+    if box == "sent":
+        statement = statement.where(TradeProposal.proposer_id == user.id)
+    elif box == "received":
+        statement = statement.where(TradeProposal.recipient_id == user.id)
+    else:
+        statement = statement.where(
+            or_(TradeProposal.proposer_id == user.id, TradeProposal.recipient_id == user.id)
+        )
+    proposals = list(
+        await session.scalars(
+            statement.order_by(TradeProposal.created_at.desc(), TradeProposal.id.desc())
+        )
+    )
+    expired_any = False
+    for proposal in proposals:
+        expired_any = await _expire_trade_proposal(session, proposal) or expired_any
+    if expired_any:
+        await session.commit()
+    if trade_status:
+        proposals = [proposal for proposal in proposals if proposal.status == trade_status]
+    return {
+        "ok": True,
+        "data": {
+            "box": box,
+            "items": [await _trade_data(session, proposal) for proposal in proposals],
+        },
+    }
+
+
+@router.get("/me/trades/{proposal_id}")
+async def trade_detail(proposal_id: str, user: FanUser, session: DbSession) -> dict:
+    proposal = await session.get(TradeProposal, proposal_id)
+    if not proposal:
+        raise AppError(404, "TRADE_NOT_FOUND", "거래 제안을 찾을 수 없습니다.")
+    if user.id not in {proposal.proposer_id, proposal.recipient_id}:
+        raise AppError(403, "TRADE_NOT_ALLOWED", "이 거래를 확인할 권한이 없습니다.")
+    if await _expire_trade_proposal(session, proposal):
+        await session.commit()
+    return {"ok": True, "data": await _trade_data(session, proposal)}
 
 
 @router.post("/me/trades", status_code=status.HTTP_201_CREATED)
@@ -276,6 +534,16 @@ async def create_trade(
         for item in items
     ]
     session.add_all([proposal, *items, *locks])
+    await notify_user_once(
+        session,
+        user_id=recipient.id,
+        kind="trade_received",
+        title="새 카드 거래 제안이 도착했어요",
+        body="받은 거래함에서 제안 카드를 확인해 보세요.",
+        entity_type="trade",
+        entity_id=proposal.id,
+        event_key=f"trade:{proposal.id}:received",
+    )
     try:
         await session.commit()
     except IntegrityError as error:
@@ -300,9 +568,7 @@ async def _load_pending_proposal(
     if proposal.status != "pending":
         raise AppError(409, "TRADE_NOT_PENDING", "대기 중인 거래만 처리할 수 있습니다.")
     if _as_utc(proposal.expires_at) <= datetime.now(UTC):
-        proposal.status = "expired"
-        proposal.responded_at = datetime.now(UTC)
-        await session.execute(delete(TradeLock).where(TradeLock.proposal_id == proposal.id))
+        await _expire_trade_proposal(session, proposal)
         await session.commit()
         raise AppError(409, "TRADE_EXPIRED", "거래 제안이 만료되었습니다.")
     return proposal
@@ -345,6 +611,7 @@ async def accept_trade(proposal_id: str, user: FanUser, session: DbSession) -> d
                 created_at=now,
             )
         )
+        await notify_followers_of_card(session, user_card=card)
     proposal.status = "accepted"
     proposal.responded_at = now
     await session.execute(delete(TradeLock).where(TradeLock.proposal_id == proposal.id))
@@ -379,6 +646,22 @@ async def _reject_or_cancel(
     proposal.status = status_value
     proposal.responded_at = datetime.now(UTC)
     await session.execute(delete(TradeLock).where(TradeLock.proposal_id == proposal.id))
+    notified_user_id = proposal.proposer_id if status_value == "rejected" else proposal.recipient_id
+    kind = "trade_rejected" if status_value == "rejected" else "trade_cancelled"
+    await notify_user_once(
+        session,
+        user_id=notified_user_id,
+        kind=kind,
+        title="카드 거래 제안이 종료됐어요",
+        body=(
+            "상대방이 카드 거래 제안을 거절했습니다."
+            if status_value == "rejected"
+            else "상대방이 카드 거래 제안을 취소했습니다."
+        ),
+        entity_type="trade",
+        entity_id=proposal.id,
+        event_key=f"trade:{proposal.id}:{status_value}",
+    )
     await session.commit()
     return {"ok": True, "data": {"id": proposal.id, "status": proposal.status}}
 

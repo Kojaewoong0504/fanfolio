@@ -7,7 +7,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.db.session import SessionLocal
-from app.models import Card, UserCard
+from app.models import Card, TradeProposal, UserCard
+from app.services import grant_user_card
 from tests.conftest import assert_error, assert_success
 
 
@@ -167,3 +168,130 @@ def test_private_collection_is_hidden_and_unfollow_is_idempotent(
     assert_success(actors["fan"].post("/api/me/follows/otherFan"), 201)
     assert_success(actors["fan"].delete("/api/me/follows/otherFan"))
     assert_success(actors["fan"].delete("/api/me/follows/otherFan"))
+
+
+def test_fan_search_follow_connections_and_public_collection_summary(
+    app: FastAPI, actors: dict[str, TestClient]
+) -> None:
+    assert_success(actors["fan"].post("/api/me/follows/otherFan"), 201)
+
+    search = assert_success(actors["fan"].get("/api/fans", params={"query": "other"}))
+    found = next(item for item in search["items"] if item["id"] == "otherFan")
+    assert found["isFollowing"] is True
+    assert found["followerCount"] == 1
+
+    following = assert_success(actors["fan"].get("/api/me/follows", params={"kind": "following"}))
+    assert [item["id"] for item in following["items"]] == ["otherFan"]
+
+    followers = assert_success(
+        actors["otherFan"].get("/api/me/follows", params={"kind": "followers"})
+    )
+    assert [item["id"] for item in followers["items"]] == ["fan"]
+
+    public = assert_success(actors["fan"].get("/api/fans/otherFan/collection"))
+    assert public["isFollowing"] is True
+    assert public["summary"]["followerCount"] == 1
+    assert public["summary"]["followingCount"] == 0
+
+
+def test_trade_inbox_detail_reject_cancel_and_expire_notifications(
+    app: FastAPI, actors: dict[str, TestClient]
+) -> None:
+    ids = seed_social_cards()
+
+    created = assert_success(
+        actors["fan"].post(
+            "/api/me/trades",
+            json={
+                "recipientUserId": "otherFan",
+                "offeredUserCardIds": [ids["userCard_tradeable"]],
+                "requestedUserCardIds": [],
+            },
+        ),
+        201,
+    )
+    sent = assert_success(actors["fan"].get("/api/me/trades", params={"box": "sent"}))
+    received = assert_success(actors["otherFan"].get("/api/me/trades", params={"box": "received"}))
+    assert sent["items"][0]["id"] == created["id"]
+    assert received["items"][0]["id"] == created["id"]
+    assert sent["items"][0]["offeredCards"][0]["userCardId"] == ids["userCard_tradeable"]
+
+    detail = assert_success(actors["otherFan"].get(f"/api/me/trades/{created['id']}"))
+    assert detail["proposer"]["id"] == "fan"
+    assert detail["recipient"]["id"] == "otherFan"
+    assert detail["offeredCards"][0]["name"] == "거래 가능 카드"
+
+    rejected = assert_success(actors["otherFan"].post(f"/api/me/trades/{created['id']}/reject"))
+    assert rejected["status"] == "rejected"
+    notifications = assert_success(actors["fan"].get("/api/notifications"))
+    assert any(item["kind"] == "trade_rejected" for item in notifications["items"])
+
+    cancelled_proposal = assert_success(
+        actors["fan"].post(
+            "/api/me/trades",
+            json={
+                "recipientUserId": "otherFan",
+                "offeredUserCardIds": [ids["userCard_tradeable"]],
+                "requestedUserCardIds": [],
+            },
+        ),
+        201,
+    )
+    cancelled = assert_success(
+        actors["fan"].post(f"/api/me/trades/{cancelled_proposal['id']}/cancel")
+    )
+    assert cancelled["status"] == "cancelled"
+    recipient_notifications = assert_success(actors["otherFan"].get("/api/notifications"))
+    assert any(item["kind"] == "trade_cancelled" for item in recipient_notifications["items"])
+
+    expiring = assert_success(
+        actors["fan"].post(
+            "/api/me/trades",
+            json={
+                "recipientUserId": "otherFan",
+                "offeredUserCardIds": [ids["userCard_tradeable"]],
+                "requestedUserCardIds": [],
+            },
+        ),
+        201,
+    )
+
+    async def expire_proposal() -> None:
+        async with SessionLocal() as session:
+            proposal = await session.get(TradeProposal, expiring["id"])
+            assert proposal is not None
+            proposal.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+            await session.commit()
+
+    asyncio.run(expire_proposal())
+    expired = assert_success(actors["otherFan"].get("/api/me/trades", params={"box": "received"}))
+    assert expired["items"][0]["status"] == "expired"
+    expired_notifications = assert_success(actors["fan"].get("/api/notifications"))
+    assert any(item["kind"] == "trade_expired" for item in expired_notifications["items"])
+
+
+def test_followers_are_notified_when_a_public_fan_collects_a_card(
+    app: FastAPI, actors: dict[str, TestClient]
+) -> None:
+    ids = seed_social_cards()
+    assert_success(actors["fan"].post("/api/me/follows/otherFan"), 201)
+
+    async def collect_card() -> None:
+        async with SessionLocal() as session:
+            await grant_user_card(
+                session,
+                user_id="otherFan",
+                card_id=ids["tradeable"],
+                source_type="test_followed_collection",
+                source_id="followed-card-1",
+                acquisition_source="card_pack",
+            )
+            await session.commit()
+
+    asyncio.run(collect_card())
+    notifications = assert_success(actors["fan"].get("/api/notifications"))
+    activity = next(
+        item for item in notifications["items"] if item["kind"] == "following_card_collected"
+    )
+    assert activity["entityType"] == "fan"
+    assert activity["entityId"] == "otherFan"

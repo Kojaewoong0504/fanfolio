@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 const detailSource = await readFile(new URL('../src/components/CardDetail.tsx', import.meta.url), 'utf8')
+const appSource = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
 const collectibleSource = await readFile(new URL('../src/components/InteractiveCollectibleCard.tsx', import.meta.url), 'utf8')
 const apiSource = await readFile(new URL('../src/api/client.ts', import.meta.url), 'utf8')
 const cssSource = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
@@ -34,6 +35,30 @@ test('card detail renders accessible user-controlled voice and video players', (
   assert.match(detailSource, /<video[^>]*controls[^>]*muted[^>]*playsInline/s)
   assert.match(detailSource, /<video[^>]*preload="metadata"/s)
   assert.doesNotMatch(detailSource, /<video[^>]*autoPlay/s)
+  assert.match(detailSource, /onError=\{\(\) => setMediaError\(true\)\}/)
+  assert.match(detailSource, /스페셜 미디어를 불러오지 못했어요/)
+})
+
+test('standalone card detail keeps metadata and history independent from detail loading', () => {
+  assert.match(detailSource, /getUserCardHistory\(card\.userCardId\)/)
+  assert.match(detailSource, /앨범·시즌/)
+  assert.match(detailSource, /카드팩/)
+  assert.match(detailSource, /발행 수량/)
+  assert.match(detailSource, /card-collection-detail-history/)
+  assert.match(detailSource, /카드 정보는 계속 확인할 수 있어요/)
+})
+
+test('standalone card detail labels card-pack acquisitions distinctly', () => {
+  assert.match(detailSource, /detail\?\.acquisitionSource === 'card_pack'/)
+  assert.match(detailSource, /detail\?\.acquisitionSource === 'combination'/)
+  assert.match(detailSource, /detail\?\.acquisitionSource === 'trade'/)
+  assert.match(detailSource, /'카드팩'/)
+})
+
+test('collection cards preserve signature and issue-limit metadata for detail fallbacks', () => {
+  assert.match(appSource, /signatureText: card\.signatureText \?\? undefined/)
+  assert.match(appSource, /issueLimit: card\.issueLimit \?\? undefined/)
+  assert.match(detailSource, /detail\?\.card\.signatureText \?\? card\.signatureText/)
 })
 
 test('card detail applies normalized collectible effects with reduced-motion support', () => {
