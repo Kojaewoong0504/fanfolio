@@ -6163,3 +6163,58 @@ code {
     transition-duration: 0.01ms !important;
   }
 }
+.nav-section-group .nav-subitems {
+  display: grid;
+  gap: 4px;
+  margin: 2px 0 8px 34px;
+  padding-left: 12px;
+  border-left: 1px solid rgba(142, 144, 255, 0.28);
+}
+.nav-subitem {
+  border: 0;
+  background: transparent;
+  color: var(--ink-muted, #8589a8);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  padding: 9px 10px;
+  text-align: left;
+  border-radius: 8px;
+}
+.nav-subitem:hover,
+.nav-subitem.active {
+  background: rgba(102, 83, 255, 0.12);
+  color: #6553ff;
+  font-weight: 700;
+}
+.nav-section-chevron { margin-left: auto; font-size: 18px; }
+.card-operations-layout,
+.card-creation-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+.card-pack-detail-panel { position: sticky; top: 20px; }
+.card-pack-table .table-link { border: 0; background: transparent; color: inherit; cursor: pointer; padding: 0; text-align: left; }
+.card-pack-table .table-link strong,
+.card-pack-table .table-link small { display: block; }
+.card-pack-table .table-link:hover strong { color: #6553ff; }
+.pack-card-selection { border: 1px solid var(--line, #e5e7f4); border-radius: 14px; padding: 14px; display: grid; gap: 8px; }
+.pack-card-selection legend { color: var(--ink, #171a3a); font-weight: 700; padding: 0 6px; }
+.pack-card-choice { display: grid; grid-template-columns: auto minmax(0, 1fr) 92px; gap: 10px; align-items: center; border: 1px solid var(--line, #e5e7f4); border-radius: 10px; padding: 10px; }
+.pack-card-choice span strong,
+.pack-card-choice span small { display: block; }
+.pack-card-choice span small { color: var(--ink-muted, #8589a8); font-size: 11px; margin-top: 3px; }
+.pack-card-probability { width: 100%; }
+.workflow-panel ol { display: grid; gap: 18px; padding-left: 22px; }
+.workflow-panel li strong,
+.workflow-panel li span { display: block; }
+.workflow-panel li span { color: var(--ink-muted, #8589a8); font-size: 12px; margin-top: 4px; }
+.detail-list { display: grid; gap: 0; margin: 20px 0; }
+.detail-list div { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line, #e5e7f4); }
+.detail-list dt { color: var(--ink-muted, #8589a8); }
+.detail-list dd { font-weight: 700; margin: 0; text-align: right; }
+.detail-actions { display: grid; gap: 8px; }
+.odds-total.valid { color: #159467; }
+.odds-total.invalid { color: #d05e4e; }
+@media (max-width: 980px) {
+  .card-operations-layout,
+  .card-creation-layout { grid-template-columns: 1fr; }
+  .card-pack-detail-panel { position: static; }
+}
