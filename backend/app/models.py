@@ -772,6 +772,42 @@ class UserCard(Base):
     trade_locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class FanWishlistItem(Base):
+    """A fan's server-backed bookmark for one owned card type."""
+
+    __tablename__ = "fan_wishlist_items"
+    __table_args__ = (
+        UniqueConstraint("user_id", "card_id", name="uq_fan_wishlist_user_card"),
+        Index("ix_fan_wishlist_user_created", "user_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    card_id: Mapped[str] = mapped_column(ForeignKey("cards.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class CollectionGoal(Base):
+    """One fan-owned collection target tied to a published card pack."""
+
+    __tablename__ = "collection_goals"
+    __table_args__ = (
+        UniqueConstraint("user_id", "pack_id", name="uq_collection_goals_user_pack"),
+        Index("ix_collection_goals_user_created", "user_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    pack_id: Mapped[str] = mapped_column(ForeignKey("card_packs.id", ondelete="CASCADE"))
+    target_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
 class TradeProposal(Base):
     """A pending two-sided fan card exchange."""
 

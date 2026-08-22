@@ -138,7 +138,47 @@ async def grant_user_card(
         )
     )
     await session.flush()
+    await notify_followers_of_card(session, user_card=user_card)
     return user_card
+
+
+async def notify_followers_of_card(session: AsyncSession, *, user_card: UserCard) -> None:
+    """Notify followers once when a public collection receives a card."""
+    visibility = await session.get(CardVisibility, user_card.user_id)
+    if visibility is not None and not visibility.public_enabled:
+        return
+    owner = await session.get(User, user_card.user_id)
+    card = await session.get(Card, user_card.card_id)
+    if owner is None or card is None:
+        return
+    follower_ids = list(
+        await session.scalars(
+            select(Follow.follower_id).where(Follow.following_id == user_card.user_id)
+        )
+    )
+    owner_name = owner.nickname or owner.email or owner.id
+    for follower_id in follower_ids:
+        if await session.scalar(
+            select(UserBlock.id).where(
+                or_(
+                    (UserBlock.blocker_id == follower_id)
+                    & (UserBlock.blocked_id == user_card.user_id),
+                    (UserBlock.blocker_id == user_card.user_id)
+                    & (UserBlock.blocked_id == follower_id),
+                )
+            )
+        ):
+            continue
+        await notify_user_once(
+            session,
+            user_id=follower_id,
+            kind="following_card_collected",
+            title=f"{owner_name}님이 새 카드를 모았어요",
+            body=f"{card.name} 카드가 공개 컬렉션에 추가됐습니다.",
+            entity_type="fan",
+            entity_id=user_card.user_id,
+            event_key=f"following-card:{user_card.user_id}:{user_card.id}:{follower_id}",
+        )
 
 
 def magic_link_token_hash(token: str) -> str:

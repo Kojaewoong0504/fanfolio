@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSPro
 import './App.css'
 import './reference.css'
 import { getUserCardHistory, type UserCardHistoryItem } from './api/client'
-import { ApiError, apiFetch, applyToFanEvent, claimPassTier, claimReward, clearAccessToken, combineCards, connectNotificationStream, getCardCombination, getCardPacks, getCardPackOdds, getFanEvent, getFanEventComments, getFanEvents, getFanHome, getMyEventApplications, getFanPass, getNotificationPreferences, getProgression, oauthStartUrl, openCardPack, postFanEventComment, previewCardCombination, reconcilePassRewards, resolveApiUrl, setAccessToken, updateNotificationPreferences, updateProfileEquipment, type CardCombinationPreview, type CardCombinationRecipe, type CardCombinationResult, type CardDesignConfig, type CardPack, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionSummary, type CurrentUser, type EventPagination, type FanEvent, type FanEventApplication, type FanEventComment, type FanEventStatus, type FanHomeResponse, type FanProgression, type NotificationItem, type ProfileEquipment, type RewardGrant, type UserCardDetail } from './api/client'
+import { ApiError, apiFetch, applyToFanEvent, claimPassTier, claimReward, clearAccessToken, combineCards, connectNotificationStream, createCollectionGoal, deleteCollectionGoal, getCardCombination, getCardPacks, getCardPackOdds, getCollectionGoals, getFanEvent, getFanEventComments, getFanEvents, getFanHome, getMyEventApplications, getFanPass, getNotificationPreferences, getProgression, getWishlist, oauthStartUrl, openCardPack, postFanEventComment, previewCardCombination, reconcilePassRewards, removeWishlistCard, resolveApiUrl, saveWishlistCard, setAccessToken, updateNotificationPreferences, updateProfileEquipment, type CardCombinationPreview, type CardCombinationRecipe, type CardCombinationResult, type CardDesignConfig, type CardPack, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionGoal, type CollectionSummary, type CurrentUser, type EventPagination, type FanEvent, type FanEventApplication, type FanEventComment, type FanEventStatus, type FanHomeResponse, type FanProgression, type NotificationItem, type ProfileEquipment, type RewardGrant, type UserCardDetail } from './api/client'
 import { QrRedeemModal, RedeemIcon } from './components/QrRedeemModal'
 import { CardDetail } from './components/CardDetail'
 import { InteractiveCollectibleCard } from './components/InteractiveCollectibleCard'
@@ -13,7 +13,11 @@ import { FanPassPage } from './components/FanPassPage'
 import { EventDetail } from './components/EventDetail'
 import { EventList } from './components/EventList'
 import { AuthenticatedImage } from './components/AuthenticatedImage'
+import { useAuthenticatedMedia } from './hooks/useAuthenticatedMedia'
 import { PublicCollection } from './components/PublicCollection'
+import { FanSocialHub } from './components/FanSocialHub'
+import { TradeInbox } from './components/TradeInbox'
+import { TradeComposer } from './components/TradeComposer'
 import type { Card } from './types'
 import { demoCardImage, demoMemberImage, keepCardVisual } from './utils/cardVisual'
 import cardYunaImage from './assets/card-yuna-lavender.jpg'
@@ -152,19 +156,6 @@ function isSavedCard(value: unknown): value is Card {
   return 'id' in value && 'title' in value && 'image' in value
 }
 
-function savedCardsStorageKey(userId: string): string {
-  return `fanfolio.saved-card-data:${userId}`
-}
-
-function readSavedCards(userId: string): Card[] {
-  try {
-    const value: unknown = JSON.parse(window.localStorage.getItem(savedCardsStorageKey(userId)) ?? '[]')
-    return Array.isArray(value) ? value.filter(isSavedCard) : []
-  } catch {
-    return []
-  }
-}
-
 function toCollectionCard(card: CollectionCard): Card {
   return {
     id: card.cardId,
@@ -176,6 +167,8 @@ function toCollectionCard(card: CollectionCard): Card {
     rarity: card.rarity ?? undefined,
     seasonName: card.seasonName ?? undefined,
     cardType: card.cardType ?? undefined,
+    signatureText: card.signatureText ?? undefined,
+    issueLimit: card.issueLimit ?? undefined,
     acquisitionSource: card.acquisitionSource ?? undefined,
     acquiredAt: card.acquiredAt,
   }
@@ -290,9 +283,15 @@ function App() {
   const [showNotificationSettings, setShowNotificationSettings] = useState(false)
   const alertsReturnPathRef = useRef<string | null>(null)
   const cardReturnPathRef = useRef<string | null>(null)
-  const savedCardsOwnerRef = useRef<string | null>(null)
-  const savedCardIds = savedCards.map(card => card.userCardId ?? card.id)
-  const publicCollectionUserId = publicCollectionIdFromPath(window.location.pathname)
+  const savedCardIds = savedCards.map(card => card.id)
+  const pathname = window.location.pathname
+  const publicCollectionUserId = publicCollectionIdFromPath(pathname)
+  const showFanSocial = pathname === '/fans'
+  const showTradeInbox = pathname === '/trades'
+  const showTradeComposer = pathname === '/trades/new'
+  const tradeComposerParams = new URLSearchParams(window.location.search)
+  const tradeRecipientUserId = tradeComposerParams.get('recipient') ?? ''
+  const tradeRequestedUserCardIds = tradeComposerParams.getAll('requested').filter(Boolean)
 
   useEffect(() => {
     const favoriteArtistIds = currentUser?.favoriteArtistIds ?? []
@@ -307,27 +306,20 @@ function App() {
   }, [signedIn])
 
   useEffect(() => {
-    const userId = currentUser?.id
-    if (!userId) {
-      savedCardsOwnerRef.current = null
+    if (!currentUser?.id || collectionCards.length === 0) {
       setSavedCards([])
       return
     }
-    savedCardsOwnerRef.current = userId
-    setSavedCards(readSavedCards(userId))
-  }, [currentUser?.id])
-
-  useEffect(() => {
-    // 관심 카드는 서버 컬렉션과 별개인 팬의 개인 북마크입니다. MVP에서는
-    // 브라우저 저장소에 보관해 상세 화면을 새로고침해도 상태를 잃지 않게 합니다.
-    const userId = currentUser?.id
-    if (!userId || savedCardsOwnerRef.current !== userId) return
-    try {
-      window.localStorage.setItem(savedCardsStorageKey(userId), JSON.stringify(savedCards))
-    } catch {
-      // 저장소가 차단된 환경에서도 카드 상세와 컬렉션 자체는 계속 사용할 수 있습니다.
-    }
-  }, [currentUser?.id, savedCards])
+    let cancelled = false
+    void getWishlist().then(result => {
+      if (cancelled) return
+      const savedIds = new Set(result.data.items.map(item => item.cardId))
+      setSavedCards(collectionCards.filter(card => savedIds.has(card.id)))
+    }).catch(() => {
+      if (!cancelled) setSavedCards([])
+    })
+    return () => { cancelled = true }
+  }, [currentUser?.id, collectionCards])
 
   useEffect(() => {
     document.title = !signedIn
@@ -824,10 +816,6 @@ function App() {
     setFanProgression(current => current ? { ...current, equipment: result.data } : current)
   }
 
-  if (publicCollectionUserId) {
-    return <PublicCollection userId={publicCollectionUserId} onBack={() => window.location.assign('/collection')} />
-  }
-
   if (sessionChecking) {
     return <SessionLoading />
   }
@@ -849,6 +837,41 @@ function App() {
 
   if (showOnboarding) {
     return <Onboarding userId={currentUser?.id ?? 'fan'} profileImageUrl={currentUser?.profileImageUrl ?? null} onComplete={() => { setShowOnboarding(false); void refreshUser(); void Promise.allSettled([refreshCollection(), refreshGrowth()]) }} onBack={logout} />
+  }
+
+  if (showFanSocial) {
+    return <FanSocialHub
+      onBack={() => window.location.assign('/discover')}
+      onOpenCollection={userId => window.location.assign(`/fans/${encodeURIComponent(userId)}/collection`)}
+      onOpenTrades={() => window.location.assign('/trades')}
+    />
+  }
+
+  if (showTradeInbox) {
+    return <TradeInbox onBack={() => window.location.assign('/fans')} onFindFans={() => window.location.assign('/fans')} />
+  }
+
+  if (showTradeComposer) {
+    if (!tradeRecipientUserId) {
+      return <FanSocialHub
+        onBack={() => window.location.assign('/discover')}
+        onOpenCollection={userId => window.location.assign(`/fans/${encodeURIComponent(userId)}/collection`)}
+        onOpenTrades={() => window.location.assign('/trades')}
+      />
+    }
+    return <TradeComposer
+      recipientUserId={tradeRecipientUserId}
+      requestedUserCardIds={tradeRequestedUserCardIds}
+      onBack={() => window.location.assign(`/fans/${encodeURIComponent(tradeRecipientUserId)}/collection`)}
+      onCreated={() => window.location.assign('/trades')}
+    />
+  }
+
+  if (publicCollectionUserId) {
+    return <PublicCollection userId={publicCollectionUserId}
+      onBack={() => window.location.assign('/fans')}
+      onTrade={requestedUserCardId => window.location.assign(`/trades/new?recipient=${encodeURIComponent(publicCollectionUserId)}&requested=${encodeURIComponent(requestedUserCardId)}`)}
+    />
   }
 
   if (showFanPassPage) {
@@ -890,7 +913,14 @@ function App() {
   // Card routes are full-screen destinations. Keep the detail view outside
   // the collection shell so `/cards/:id` is not rendered as a backdrop dialog.
   if (selectedCard) {
-    return <CardDetail card={selectedCard} isSaved={savedCardIds.includes(selectedCard.userCardId ?? selectedCard.id)} onClose={closeCard} onToggleSaved={() => { const id = selectedCard.userCardId ?? selectedCard.id; setSavedCards(cards => cards.some(item => (item.userCardId ?? item.id) === id) ? cards.filter(item => (item.userCardId ?? item.id) !== id) : [...cards, selectedCard]) }} onRedeem={() => { closeCard(); openRedeem() }} imageFor={demoCardImage} onImageError={keepCardVisual} cardTypeLabel={cardTypeLabel} />
+    return <CardDetail card={selectedCard} isSaved={savedCardIds.includes(selectedCard.id)} onClose={closeCard} onToggleSaved={() => {
+      const cardId = selectedCard.id
+      const alreadySaved = savedCardIds.includes(cardId)
+      setSavedCards(cards => alreadySaved ? cards.filter(card => card.id !== cardId) : [...cards, selectedCard])
+      void (alreadySaved ? removeWishlistCard(cardId) : saveWishlistCard(cardId)).catch(() => {
+        setSavedCards(cards => alreadySaved ? [...cards, selectedCard] : cards.filter(card => card.id !== cardId))
+      })
+    }} onRedeem={() => { closeCard(); openRedeem() }} imageFor={demoCardImage} onImageError={keepCardVisual} cardTypeLabel={cardTypeLabel} />
   }
 
   return (
@@ -913,7 +943,12 @@ function App() {
         {tab === 'events' && (eventId ? <EventDetail event={selectedEvent} loading={eventDetailLoading} onBack={openEvents} onApply={handleEventApply} comments={eventComments} commentsLoading={eventCommentsLoading} commentSubmitting={eventCommentSubmitting} onLoadComments={loadEventComments} onSubmitComment={handleEventComment} onOpenTarget={target => { if (target.startsWith('/events/')) { const id = decodeURIComponent(target.split('/')[1]?.split('#')[0] ?? ''); const item = fanEvents.find(event => event.id === id); if (item) openEvent(item) } else if (target.startsWith('https://')) window.open(target, '_blank', 'noopener,noreferrer') }} /> : <EventList events={fanEvents} status={fanEventStatus} loading={fanEventsLoading} error={fanEventsError} pagination={fanEventPagination} onStatusChange={handleFanEventStatusChange} onPageChange={setFanEventPage} onOpen={openEvent} />)}
         {tab === 'collection' && <Collection cards={collectionCards} collectionDataReady={collectionDataReady} summary={collectionSummary} benefits={collectionBenefits} rewards={inventoryProgression?.claimedRewards ?? []} loading={collectionLoading} onSelect={openCard} onRedeem={openRedeem} onDiscover={() => navigateTab('discover')} onRewards={openRewardInventory} onCards={openCardCollection} onClaim={claimBenefit} />}
         {tab === 'discover' && <Discover />}
-        {tab === 'alerts' && <Alerts items={notifications} error={notificationError} actionError={notificationActionError} onDismissActionError={() => setNotificationActionError('')} onRetry={() => window.dispatchEvent(new Event('fanfolio:refresh-notifications'))} onRead={markNotificationRead} onReadAll={markAllNotificationsRead} onBack={closeAlerts} onNavigate={navigateTab} />}
+        {tab === 'alerts' && <Alerts items={notifications} error={notificationError} actionError={notificationActionError} onDismissActionError={() => setNotificationActionError('')} onRetry={() => window.dispatchEvent(new Event('fanfolio:refresh-notifications'))} onRead={markNotificationRead} onReadAll={markAllNotificationsRead} onBack={closeAlerts} onNavigate={(destination) => {
+          if (destination === 'rewardInventory') openRewardInventory()
+          else if (destination === 'fanSocial') window.location.assign('/fans')
+          else if (destination === 'tradeInbox') window.location.assign('/trades')
+          else navigateTab(destination)
+        }} />}
         {/* Embedded surfaces stay compact; the dedicated tab uses the full progression view. */}
         {tab === 'growth' && <FanGrowth progression={fanProgression} globalProgression={globalFanProgression} artistScopes={catalogArtists.filter(artist => currentUser?.favoriteArtistIds.includes(artist.id)).map(artist => ({ id: artist.id, name: artist.name, imageUrl: artist.name === '드림스케이프' ? loginDreamscapeGroup : artist.imageUrl }))} selectedArtistId={growthArtistId} onArtistChange={setGrowthArtistId} loading={growthLoading} error={growthError} mode="full" onRetry={refreshGrowth} onClaim={claimGrowthReward} onClaimPassTier={claimGrowthPassTier} onEquip={saveGrowthEquipment} onViewPass={openFanPassPage} onViewGlobalPass={(tierId) => openFanPassPage(tierId, 'global')} fanGrowthMode="full" />}
         {tab === 'settings' && currentUser && <Settings user={currentUser} progression={fanProgression} onUserUpdated={setCurrentUser} onLogout={logout} onEvents={openMyApplications} onNotificationSettings={() => setShowNotificationSettings(true)} />}
@@ -1332,6 +1367,9 @@ type CardCollectionSlot = {
   rarity: 'UR' | 'SR' | 'R' | 'N'
   copies: number
   userCardIds?: string[]
+  acquiredAt?: string
+  cardType?: string | null
+  acquisitionSource?: string | null
   card?: Card
 }
 
@@ -1395,6 +1433,9 @@ function makeCollectionPack(id: string, name: string, prefix: string, owned: num
         number,
         rarity,
         copies: acquired ? [1, 1, 12, 1, 1, 128, 2, 1, 1, 2, 1][index] ?? 1 : 0,
+        acquiredAt: acquired ? '2026-08-19T04:20:00Z' : undefined,
+        cardType: acquired ? 'photo' : undefined,
+        acquisitionSource: acquired ? 'card_pack' : undefined,
         card: acquired ? {
           id: `collection-${id}-${number}`,
           title: name,
@@ -1454,6 +1495,9 @@ function buildRemoteCardCollectionGroups(packs: CardPack[], ownedCards: Collecti
         rarity,
         copies,
         userCardIds: owned.map(card => card.userCardId),
+        acquiredAt: source?.acquiredAt,
+        cardType: source?.cardType,
+        acquisitionSource: source?.acquisitionSource,
         card: copies > 0 ? {
           id: packCard.cardId,
           userCardId: source?.userCardId,
@@ -1469,6 +1513,35 @@ function buildRemoteCardCollectionGroups(packs: CardPack[], ownedCards: Collecti
     group.owned += packOwned
     group.total += slots.length
     grouped.set(groupId, group)
+  }
+  const matchedCardIds = new Set(packs.flatMap(pack => pack.cards.map(card => card.cardId)))
+  const ungroupedCards = ownedCards.filter(card => !matchedCardIds.has(card.cardId))
+  if (ungroupedCards.length > 0) {
+    const groupId = 'registered:direct'
+    const slots = ungroupedCards.map((card, index) => ({
+      number: card.serialNumber || index + 1,
+      rarity: (['UR', 'SR', 'R', 'N'].includes(card.rarity ?? '') ? card.rarity : 'N') as CardCollectionSlot['rarity'],
+      copies: 1,
+      userCardIds: [card.userCardId],
+      acquiredAt: card.acquiredAt,
+      cardType: card.cardType,
+      acquisitionSource: card.acquisitionSource,
+      card: {
+        id: card.cardId,
+        userCardId: card.userCardId,
+        title: card.name,
+        artist: card.artistName ?? 'Fanfolio 아티스트',
+        member: card.memberName ?? '공식 카드',
+        image: demoCardImage(resolveApiUrl(card.imageUrl), `card:${card.cardId}`),
+      },
+    }))
+    grouped.set(groupId, {
+      id: groupId,
+      displayName: '등록 카드',
+      owned: slots.length,
+      total: slots.length,
+      packs: [{ id: groupId, name: '등록 카드', prefix: 'R', owned: slots.length, total: slots.length, slots }],
+    })
   }
   return [...grouped.values()]
 }
@@ -1878,6 +1951,8 @@ function CardCollectionDetail({ item, onBack }: { item: CardCollectionDetailItem
   const [favorite, setFavorite] = useState(false)
   const [detail, setDetail] = useState<UserCardDetail | null>(null)
   const [history, setHistory] = useState<UserCardHistoryItem[]>([])
+  const [mediaError, setMediaError] = useState(false)
+  const [mediaRetryKey, setMediaRetryKey] = useState(0)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState(false)
   const [detailAttempt, setDetailAttempt] = useState(0)
@@ -1887,15 +1962,17 @@ function CardCollectionDetail({ item, onBack }: { item: CardCollectionDetailItem
     setDetail(null)
     setHistory([])
     setDetailError(false)
+    setMediaError(false)
+    setMediaRetryKey(0)
     const hasRemoteDetail = Boolean(item.card.userCardId && !item.card.userCardId.startsWith('user-card-'))
     setDetailLoading(hasRemoteDetail)
     if (!hasRemoteDetail || !item.card.userCardId) return
-    void Promise.all([
-      apiFetch<{ ok: true, data: UserCardDetail }>(`/me/cards/${item.card.userCardId}`),
-      getUserCardHistory(item.card.userCardId),
-    ])
-      .then(([detailResult, historyResult]) => { if (!cancelled) { setDetail(detailResult.data); setHistory(historyResult.data.items); setDetailLoading(false) } })
+    void apiFetch<{ ok: true, data: UserCardDetail }>(`/me/cards/${item.card.userCardId}`)
+      .then(result => { if (!cancelled) { setDetail(result.data); setDetailLoading(false) } })
       .catch(() => { if (!cancelled) { setDetailError(true); setDetailLoading(false) } })
+    void getUserCardHistory(item.card.userCardId)
+      .then(result => { if (!cancelled) setHistory(result.data.items) })
+      .catch(() => { /* optional history must not hide the collection card */ })
     return () => { cancelled = true }
   }, [item.card.userCardId, detailAttempt])
 
@@ -1908,9 +1985,19 @@ function CardCollectionDetail({ item, onBack }: { item: CardCollectionDetailItem
   const acquisitionSource = detail?.acquisitionSource ?? item.acquisitionSource
   const artistMessage = detail?.card.signatureText ?? item.artistMessage
   const futureBenefitPreview = detail?.futureBenefitPreview ?? item.futureBenefitPreview
-  const handwritingImageUrl = detail?.card.handwritingImageUrl ? resolveApiUrl(detail.card.handwritingImageUrl) : ''
-  const voiceAudioUrl = detail?.card.hasVoice && detail.card.voiceAudioUrl ? resolveApiUrl(detail.card.voiceAudioUrl) : ''
-  const videoUrl = detail?.card.hasVideo && detail.card.videoUrl ? resolveApiUrl(detail.card.videoUrl) : ''
+  const handwritingPath = detail?.card.handwritingImageUrl ?? ''
+  const voiceAudioPath = detail?.card.hasVoice && detail.card.voiceAudioUrl ? detail.card.voiceAudioUrl : ''
+  const videoPath = detail?.card.hasVideo && detail.card.videoUrl ? detail.card.videoUrl : ''
+  const handwritingMedia = useAuthenticatedMedia(handwritingPath, mediaRetryKey)
+  const voiceMedia = useAuthenticatedMedia(voiceAudioPath, mediaRetryKey)
+  const videoMedia = useAuthenticatedMedia(videoPath, mediaRetryKey)
+  const handwritingImageUrl = handwritingMedia.url
+  const voiceAudioUrl = voiceMedia.url
+  const videoUrl = videoMedia.url
+  const onRetryMedia = () => {
+    setMediaError(false)
+    setMediaRetryKey(value => value + 1)
+  }
   const acquisitionSourceLabel = acquisitionSource === 'qr' ? 'QR 스캔' : acquisitionSource === 'manual' ? '코드 직접 입력' : acquisitionSource === 'card_pack' ? '카드팩' : acquisitionSource || ''
 
   return <main className="app-shell card-collection-detail-shell">
@@ -1931,7 +2018,9 @@ function CardCollectionDetail({ item, onBack }: { item: CardCollectionDetailItem
         serialLabel={cardCode}
         limitLabel={detail?.card.issueLimit ? `${detail.card.issueLimit.toLocaleString()}장` : `${item.copies}장 보유`}
         sealLabel={detail?.card.id.slice(-8).toUpperCase() ?? 'FANFOLIO'}
-        designConfig={detail?.card.designConfig ?? qaRevealDesignConfig}
+        designConfig={detail?.card.designConfig ?? null}
+        handwritingImageUrl={handwritingImageUrl}
+        handwritingAlt={`${memberName} 손글씨 메시지`}
         lenticularImageUrl={detail?.card.lenticularImageUrl ? resolveApiUrl(detail.card.lenticularImageUrl) : null}
         hiddenMessage={detail?.card.designConfig?.back?.hiddenMessage ?? `${artistName} 공식 컬렉션 카드`}
         badgeLabel={detail?.card.rarity ?? item.rarity}
@@ -1964,11 +2053,14 @@ function CardCollectionDetail({ item, onBack }: { item: CardCollectionDetailItem
         <ol>{history.map(event => <li key={event.id}><strong>{event.action === 'grant' ? '컬렉션에 추가됨' : event.action === 'transfer' ? '소유권 이동' : event.action === 'consume' ? '조합에 사용됨' : event.action}</strong><span>{new Date(event.createdAt).toLocaleString('ko-KR')}</span></li>)}</ol>
       </section>}
       {futureBenefitPreview && <p className="card-collection-detail-benefit"><InlineIcon name="sparkles" />{futureBenefitPreview}</p>}
-      {handwritingImageUrl && <section className="card-collection-detail-special"><h2>손글씨 특전</h2><img src={handwritingImageUrl} alt={`${memberName} 손글씨 메시지`} /></section>}
-      {(voiceAudioUrl || videoUrl) && <section className="card-collection-detail-special" aria-labelledby="collection-special-media-title">
+      {handwritingMedia.loading && <p className="card-collection-detail-loading" role="status">손글씨 레이어를 준비하는 중이에요…</p>}
+      {handwritingImageUrl && <section className="card-collection-detail-special"><h2>손글씨 특전</h2><img src={handwritingImageUrl} alt={`${memberName} 손글씨 메시지`} onError={() => setMediaError(true)} /></section>}
+      {(mediaError || voiceMedia.error || videoMedia.error || handwritingMedia.error) && <div className="card-collection-detail-error" role="status"><p>스페셜 미디어를 불러오지 못했어요. 카드 정보는 계속 확인할 수 있어요.</p><button type="button" onClick={onRetryMedia}>스페셜 미디어 다시 불러오기</button></div>}
+      {(voiceAudioPath || videoPath) && <section className="card-collection-detail-special" aria-labelledby="collection-special-media-title">
         <h2 id="collection-special-media-title">스페셜 미디어</h2>
-        {voiceAudioUrl && <div className="card-collection-detail-player"><b>보이스 메시지</b><audio controls preload="metadata" src={voiceAudioUrl} /></div>}
-        {videoUrl && <div className="card-collection-detail-player"><b>스페셜 비디오</b><video controls muted playsInline preload="metadata" src={videoUrl} /></div>}
+        {voiceMedia.loading && <p className="card-collection-detail-loading" role="status">스페셜 미디어를 준비하는 중이에요…</p>}
+        {voiceAudioUrl && <div className="card-collection-detail-player"><b>보이스 메시지</b><audio controls preload="metadata" src={voiceAudioUrl} onError={() => setMediaError(true)} /></div>}
+        {videoUrl && <div className="card-collection-detail-player"><b>스페셜 비디오</b><video controls muted playsInline preload="metadata" src={videoUrl} onError={() => setMediaError(true)} /></div>}
       </section>}
       {detailError && <div className="card-collection-detail-error"><p>일부 카드 정보를 불러오지 못했어요.</p><button type="button" onClick={() => setDetailAttempt(value => value + 1)}>다시 시도</button></div>}
     </section>
@@ -1984,6 +2076,7 @@ function CardCollectionRepository({ onBack, onNavigate, onOpenCard }: { onBack: 
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [filter, setFilter] = useState<'all' | 'owned' | 'missing' | 'duplicate'>('all')
   const [sort, setSort] = useState<'number' | 'rarity' | 'copies'>('number')
+  const [searchQuery, setSearchQuery] = useState('')
   const [selectedItem, setSelectedItem] = useState<CardCollectionDetailItem | null>(null)
   const [packSheetOpen, setPackSheetOpen] = useState(false)
   const [packOdds, setPackOdds] = useState<{ pack: CardPack, items: CardPack['cards'], totalProbability: number } | null>(null)
@@ -1996,6 +2089,10 @@ function CardCollectionRepository({ onBack, onNavigate, onOpenCard }: { onBack: 
   const [combinationBusy, setCombinationBusy] = useState(false)
   const [combinationError, setCombinationError] = useState('')
   const [combinationRequestKey, setCombinationRequestKey] = useState<string | null>(null)
+  const [selectedCombinationCardIds, setSelectedCombinationCardIds] = useState<string[]>([])
+  const [collectionGoals, setCollectionGoals] = useState<CollectionGoal[]>([])
+  const [collectionGoalBusy, setCollectionGoalBusy] = useState(false)
+  const [collectionGoalError, setCollectionGoalError] = useState('')
   const groups = remoteGroups ?? cardCollectionGroups
   const group = groups.find(item => item.id === groupId) ?? groups[0] ?? { id: 'empty', displayName: '카드 컬렉션', owned: 0, total: 0, packs: [] }
   useEffect(() => {
@@ -2025,18 +2122,76 @@ function CardCollectionRepository({ onBack, onNavigate, onOpenCard }: { onBack: 
     total: group.total,
     slots: group.packs.flatMap(pack => pack.slots.slice(0, pack.total).map(slot => ({ ...slot, sourcePrefix: pack.prefix }))),
   }
-  const activePack = packId === 'all' ? allPack : group.packs.find(item => item.id === packId) ?? group.packs[0]
+  // A new fan can legitimately have no published packs yet. Keep the repository
+  // renderable while the remote request is loading or when the API returns an
+  // empty collection instead of dereferencing an unavailable first pack.
+  const activePack = packId === 'all' ? allPack : group.packs.find(item => item.id === packId) ?? group.packs[0] ?? allPack
   const selectedRemotePack = activePack.id === 'all' ? null : remotePacks.find(pack => pack.id === activePack.id) ?? null
-  const combinationMaterialIds = activePack.slots.flatMap(slot => slot.userCardIds ?? []).slice(0, combinationRecipe?.inputQuantity ?? 0)
+  const activeGoal = collectionGoals.find(goal => goal.packId === activePack.id) ?? null
+  const combinationEligibleCards = activePack.slots
+    .filter(slot => slot.copies > 1 && (slot.userCardIds?.length ?? 0) > 0)
+    .flatMap(slot => (slot.userCardIds ?? []).map((userCardId, index) => ({
+      userCardId,
+      code: `${slot.sourcePrefix ?? activePack.prefix}-${String(slot.number).padStart(2, '0')}`,
+      member: slot.card?.member ?? '멤버 카드',
+      image: slot.card?.image ?? mysteryCardImage,
+      copyNumber: index + 1,
+    })))
+  const combinationMaterialIds = selectedCombinationCardIds
   const canCombine = Boolean(combinationRecipe && combinationMaterialIds.length === combinationRecipe.inputQuantity)
   const rarityOrder = { UR: 4, SR: 3, R: 2, N: 1 }
+  const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase('ko-KR')
   const visibleSlots = [...activePack.slots]
     .filter(slot => filter === 'all' ? true : filter === 'owned' ? Boolean(slot.card) : filter === 'missing' ? !slot.card : slot.copies > 1)
+    .filter(slot => {
+      if (!normalizedSearchQuery) return true
+      const code = `${slot.sourcePrefix ?? activePack.prefix}-${String(slot.number).padStart(2, '0')}`
+      const searchableText = [code, slot.card?.title, slot.card?.member, slot.card?.artist, slot.rarity]
+        .filter(Boolean)
+        .join(' ')
+        .toLocaleLowerCase('ko-KR')
+      return searchableText.includes(normalizedSearchQuery)
+    })
     .sort((a, b) => sort === 'rarity' ? rarityOrder[b.rarity] - rarityOrder[a.rarity] || a.number - b.number : sort === 'copies' ? b.copies - a.copies || a.number - b.number : a.number - b.number)
   const selectGroup = (nextGroup: CardCollectionGroup) => {
     setGroupId(nextGroup.id)
     setPackId(nextGroup.packs[0].id)
     setGroupMenuOpen(false)
+  }
+  useEffect(() => {
+    let cancelled = false
+    void getCollectionGoals().then(result => {
+      if (!cancelled) setCollectionGoals(result.data.items)
+    }).catch(() => {
+      if (!cancelled) setCollectionGoals([])
+    })
+    return () => { cancelled = true }
+  }, [])
+  const createGoalForActivePack = async () => {
+    if (!selectedRemotePack || activeGoal || collectionGoalBusy) return
+    setCollectionGoalBusy(true)
+    setCollectionGoalError('')
+    try {
+      const result = await createCollectionGoal(selectedRemotePack.id)
+      setCollectionGoals(goals => [...goals.filter(goal => goal.id !== result.data.id && goal.packId !== result.data.packId), result.data])
+    } catch (error) {
+      setCollectionGoalError(error instanceof Error ? error.message : '수집 목표를 저장하지 못했어요.')
+    } finally {
+      setCollectionGoalBusy(false)
+    }
+  }
+  const removeActiveGoal = async () => {
+    if (!activeGoal || collectionGoalBusy) return
+    setCollectionGoalBusy(true)
+    setCollectionGoalError('')
+    try {
+      await deleteCollectionGoal(activeGoal.id)
+      setCollectionGoals(goals => goals.filter(goal => goal.id !== activeGoal.id))
+    } catch (error) {
+      setCollectionGoalError(error instanceof Error ? error.message : '수집 목표를 삭제하지 못했어요.')
+    } finally {
+      setCollectionGoalBusy(false)
+    }
   }
   const openPackSheet = async () => {
     if (!selectedRemotePack || !onOpenCard) return
@@ -2068,6 +2223,7 @@ function CardCollectionRepository({ onBack, onNavigate, onOpenCard }: { onBack: 
     setCombinationPreview(null)
     setCombinationResult(null)
     setCombinationRequestKey(`card-combination-${crypto.randomUUID()}`)
+    setSelectedCombinationCardIds([])
     setCombinationSheetOpen(false)
     setCombinationError('')
     if (!selectedRemotePack) return
@@ -2076,18 +2232,31 @@ function CardCollectionRepository({ onBack, onNavigate, onOpenCard }: { onBack: 
       .then(result => { if (!cancelled) setCombinationRecipe(result.data) })
       .catch(() => { if (!cancelled) setCombinationRecipe(null) })
     return () => { cancelled = true }
-  }, [selectedRemotePack?.id])
-  const openCombinationSheet = async () => {
-    if (!combinationRecipe || !canCombine || combinationBusy) return
+  }, [selectedRemotePack])
+  const openCombinationSheet = () => {
+    if (!combinationRecipe || combinationBusy) return
     setCombinationError('')
     setCombinationResult(null)
+    setCombinationPreview(null)
     setCombinationSheetOpen(true)
+  }
+  const previewCombination = async () => {
+    if (!combinationRecipe || !canCombine || combinationBusy) return
+    setCombinationError('')
     try {
       const result = await previewCardCombination(combinationRecipe.id, combinationMaterialIds)
       setCombinationPreview(result.data)
     } catch (error) {
       setCombinationError(error instanceof Error ? error.message : '조합 가능 여부를 확인하지 못했어요.')
     }
+  }
+  const toggleCombinationCard = (userCardId: string) => {
+    if (!combinationRecipe || combinationBusy) return
+    setCombinationPreview(null)
+    setCombinationError('')
+    setSelectedCombinationCardIds(current => current.includes(userCardId)
+      ? current.filter(id => id !== userCardId)
+      : current.length >= combinationRecipe.inputQuantity ? current : [...current, userCardId])
   }
   const submitCombination = async () => {
     if (!combinationRecipe || !combinationPreview || combinationBusy) return
@@ -2132,15 +2301,21 @@ function CardCollectionRepository({ onBack, onNavigate, onOpenCard }: { onBack: 
     </nav>
 
     <section className="card-collection-catalog">
+      <label className="card-collection-search"><span className="sr-only">카드 컬렉션 검색</span><input value={searchQuery} onChange={event => setSearchQuery(event.target.value)} placeholder="카드명·멤버·번호 검색" />{searchQuery && <button type="button" aria-label="검색어 지우기" onClick={() => setSearchQuery('')}>×</button>}</label>
       <div className="card-collection-heading">
         <h2>{activePack.name} 카드 <small>· <strong>{activePack.owned}</strong> / {activePack.total}</small></h2>
         <div>
-          {combinationRecipe && canCombine && <button type="button" className="card-collection-combine" onClick={() => { void openCombinationSheet() }}>중복 카드 조합</button>}
+          {combinationRecipe && combinationEligibleCards.length >= combinationRecipe.inputQuantity && <button type="button" className="card-collection-combine" onClick={openCombinationSheet}>중복 카드 조합</button>}
           {selectedRemotePack && onOpenCard && <button type="button" className="card-collection-open-pack" onClick={() => { void openPackSheet() }}>팩 열기</button>}
           <label><span className="sr-only">카드 정렬</span><select aria-label="카드 정렬" value={sort} onChange={event => setSort(event.target.value as typeof sort)}><option value="number">카드 번호순</option><option value="rarity">희귀도순</option><option value="copies">보유 수량순</option></select></label>
           <button type="button" className={filtersOpen || filter !== 'all' ? 'active' : ''} aria-label="카드 필터" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(open => !open)}><NavIcon name="settings" /></button>
         </div>
       </div>
+      {selectedRemotePack && <section className="collection-goal-card" aria-label="카드팩 수집 목표">
+        <div><span className="collection-goal-eyebrow">수집 목표</span><strong>{activeGoal ? `${activeGoal.ownedCount} / ${activeGoal.targetCount}장` : '이 카드팩을 완성해 보세요'}</strong>{activeGoal && <div className="collection-goal-track"><i style={{ width: `${Math.min(100, Math.max(0, activeGoal.completionRate))}%` }} /></div>}</div>
+        {activeGoal ? <button type="button" onClick={() => { void removeActiveGoal() }} disabled={collectionGoalBusy}>목표 해제</button> : <button type="button" onClick={() => { void createGoalForActivePack() }} disabled={collectionGoalBusy}>목표 설정</button>}
+      </section>}
+      {collectionGoalError && <p className="card-collection-inline-error" role="status">{collectionGoalError}</p>}
       {filtersOpen && <div className="card-collection-filters" role="group" aria-label="보유 상태 필터">{[
         ['all', '전체'], ['owned', '보유'], ['missing', '미획득'], ['duplicate', '중복'],
       ].map(([value, label]) => <button type="button" className={filter === value ? 'active' : ''} aria-pressed={filter === value} key={value} onClick={() => setFilter(value as typeof filter)}>{label}</button>)}</div>}
@@ -2148,7 +2323,7 @@ function CardCollectionRepository({ onBack, onNavigate, onOpenCard }: { onBack: 
         const code = `${slot.sourcePrefix ?? activePack.prefix}-${String(slot.number).padStart(2, '0')}`
         if (!slot.card) return <article className="card-collection-slot missing" key={code} aria-label={`${code} 미획득 카드`}><span className={`card-collection-rarity rarity-${slot.rarity.toLowerCase()}`}>{slot.rarity}</span><img src={mysteryCardImage} alt="" /><b>{code}</b></article>
         const sourcePack = group.packs.find(pack => pack.prefix === (slot.sourcePrefix ?? activePack.prefix)) ?? activePack
-        return <button type="button" className="card-collection-slot owned" key={code} onClick={() => setSelectedItem({ card: slot.card!, code, rarity: slot.rarity, copies: slot.copies, packName: sourcePack.name, groupName: group.displayName, artistMessage: collectionArtistMessages[slot.card!.member], acquiredAt: '2026-08-19T04:20:00Z', cardType: 'photo', acquisitionSource: 'card_pack', futureBenefitPreview: '이 카드는 추후 컬렉션 특전 해금 조건에 사용될 수 있어요.' })} aria-label={`${code} ${slot.card.member} 카드 상세 보기`}>
+        return <button type="button" className="card-collection-slot owned" key={code} onClick={() => setSelectedItem({ card: slot.card!, code, rarity: slot.rarity, copies: slot.copies, packName: sourcePack.name, groupName: group.displayName, artistMessage: collectionArtistMessages[slot.card!.member], acquiredAt: slot.acquiredAt, cardType: slot.cardType ?? undefined, acquisitionSource: slot.acquisitionSource ?? undefined, futureBenefitPreview: '이 카드는 추후 컬렉션 특전 해금 조건에 사용될 수 있어요.' })} aria-label={`${code} ${slot.card.member} 카드 상세 보기`}>
           <span className={`card-collection-rarity rarity-${slot.rarity.toLowerCase()}`}>{slot.rarity}</span>
           <img src={slot.card.image} alt={`${slot.card.member} ${activePack.name} 카드`} />
           <em aria-label={`${slot.copies}장 보유`}>{formatCardCopies(slot.copies)}</em><b>{code}</b>
@@ -2172,9 +2347,23 @@ function CardCollectionRepository({ onBack, onNavigate, onOpenCard }: { onBack: 
         <button type="button" className="card-pack-opening-close" aria-label="중복 카드 조합 닫기" onClick={() => { if (!combinationBusy) setCombinationSheetOpen(false) }}>×</button>
         <span className="eyebrow">CARD COMBINATION</span>
         <div className="card-pack-opening-copy"><h2 id="card-combination-title">중복 카드 조합</h2><p>{selectedRemotePack?.name ?? '카드팩'}에서 보유한 중복 카드 {combinationRecipe.inputQuantity}장을 사용해요.</p></div>
-        <div className="card-combination-materials"><b>사용할 카드</b><span>{combinationPreview?.consumableUserCardIds.length ?? combinationMaterialIds.length}장 선택됨</span></div>
+        <div className="card-combination-material-selection" role="group" aria-label="조합 재료 카드 선택">
+          <div className="card-combination-materials"><b>조합 재료 카드 선택</b><span>{selectedCombinationCardIds.length} / {combinationRecipe.inputQuantity}장</span></div>
+          <div className="card-combination-material-list">
+            {combinationEligibleCards.map(item => {
+              const selected = selectedCombinationCardIds.includes(item.userCardId)
+              return <button type="button" className="card-combination-material" aria-pressed={selected} aria-label={`${item.code} ${item.member} 조합 재료 선택`} key={item.userCardId} onClick={() => toggleCombinationCard(item.userCardId)}>
+                <img src={item.image} alt="" />
+                <span><b>{item.code}</b><small>{item.member} · {item.copyNumber}번째</small></span>
+                <em>{selected ? '선택됨' : '선택'}</em>
+              </button>
+            })}
+          </div>
+          <p className="card-combination-selected-ids">선택한 카드 ID: {selectedCombinationCardIds.length > 0 ? selectedCombinationCardIds.join(', ') : '없음'}</p>
+        </div>
         <div className="card-pack-opening-odds"><div><b>조합 결과 확률</b><strong>{combinationRecipe.probabilityVersion}</strong></div>{combinationRecipe.publicOdds.map(item => <div className="card-pack-opening-odds-row" key={item.cardId}><span><em className={`card-collection-rarity rarity-${(item.rarity ?? 'N').toLowerCase()}`}>{item.rarity ?? 'N'}</em>{item.name}</span><strong>{item.probability}%</strong></div>)}</div>
         {combinationError && <p className="card-pack-opening-error" role="alert">{combinationError}</p>}
+        <button type="button" className="card-pack-opening-preview" disabled={!canCombine || combinationBusy} onClick={() => { void previewCombination() }}>선택한 카드 확인</button>
         <button type="button" className="card-pack-opening-submit" disabled={!combinationPreview || combinationBusy} onClick={() => { void submitCombination() }}>{combinationBusy ? '카드를 조합하고 있어요…' : '조합하기'}</button>
         <small className="card-pack-opening-note">사용한 중복 카드는 소모되고, 결과 카드는 즉시 컬렉션에 추가돼요.</small>
       </section>
@@ -2332,7 +2521,7 @@ function NotificationSettings({ onBack }: { onBack: () => void }) {
 }
 
 function Discover() {
-  return <section className="artist-hub"><div className="artist-hub-heading"><p>좋아하는 아티스트의 모든 정보를 한눈에</p></div><section className="artist-hub-hero"><img src={dreamscapeHero} alt="드림스케이프" /><div className="artist-hub-hero-overlay"><span>추천 아티스트</span><h3>드림스케이프 <VerifiedIcon /></h3><p>4명의 멤버 · 공식 아티스트 공간</p><div className="hub-members">{[cardYunaImage, cardMinhoImage, cardJayImage, cardYunaImage].map((image, index) => <img key={index} src={image} alt="" />)}</div><button type="button">+ 팔로우</button></div></section><nav className="hub-tabs" aria-label="아티스트 정보"><a className="active" href="#artist-home">아티스트 홈</a><a href="#artist-schedule">일정</a><a href="#artist-news">뉴스</a><a href="#artist-cards">카드</a><a href="#artist-events">이벤트</a></nav><section id="artist-schedule" className="hub-section"><div className="section-heading"><h3>다가오는 일정</h3><button type="button">전체 보기 ›</button></div><div className="hub-schedule-grid"><article><b>JUN<br /><strong>28</strong></b><div><span>팬미팅</span><h4>드림스케이프 팬미팅</h4><p>2026.06.28 (일) 17:00</p><small><InlineIcon name="pin" />올림픽공원 올림픽홀</small></div><i className="hub-schedule-bell"><NavIcon name="alerts" /></i></article><article><b>JUL<br /><strong>12</strong></b><div><span>콘서트</span><h4>2026 SUMMER FAN WEEK</h4><p>2026.07.12 (일) 18:00</p><small><InlineIcon name="pin" />KSPO DOME</small></div><i className="hub-schedule-bell"><NavIcon name="alerts" /></i></article></div></section><section id="artist-news" className="hub-section"><div className="section-heading"><h3>드림스케이프 뉴스</h3><button type="button">전체 보기 ›</button></div><div className="hub-news-list"><article><img src={dreamscapeHero} alt="" /><div><b>드림스케이프, 새 앨범 트랙리스트 공개</b><p>타이틀곡 ‘Nebula’ 포함 총 6곡 수록</p><small>1시간 전</small></div><strong>›</strong></article><article><img src={fanWeekLavenderMeet} alt="" /><div><b>드림스케이프, 글로벌 차트 1위!</b><p>신곡 ‘Nebula’ 글로벌 인기 상승</p><small>1일 전</small></div><strong>›</strong></article></div></section><section id="artist-cards" className="hub-section"><div className="section-heading"><h3>새 카드</h3><button type="button">전체 보기 ›</button></div><div className="hub-card-row">{[cardYunaImage, cardMinhoImage, cardJayImage].map((image, index) => <button type="button" key={image} onClick={() => undefined}><img src={image} alt="새 카드" /><b>{['하린', '도윤', '제이'][index]}<br />Nebula Ver.</b><span>{index === 0 ? 'UR' : 'SR'}</span></button>)}</div><div className="hub-card-dots" aria-hidden="true"><b /><i /><i /></div><a className="hub-event-promo" href="/events"><span className="hub-event-promo-icon" aria-hidden="true"><InlineIcon name="gift" /></span><b><small>팬 이벤트</small>드림스케이프 사인 폴라로이드 이벤트<em>참여하고 사인 폴라로이드를 받아보세요!</em></b><strong>참여하기</strong><i>›</i></a></section></section>
+  return <section className="artist-hub"><div className="artist-hub-heading"><p>좋아하는 아티스트의 모든 정보를 한눈에</p></div><section className="fan-community-entry" aria-label="팬 커뮤니티"><div><span className="eyebrow">FAN COMMUNITY</span><h3>다른 팬의 컬렉션을 만나보세요</h3><p>팬을 팔로우하고 공개 컬렉션에서 거래 가능한 카드를 찾아볼 수 있어요.</p></div><div><button type="button" onClick={() => window.location.assign('/fans')}>팬 찾기</button><button type="button" className="secondary" onClick={() => window.location.assign('/trades')}>거래함</button></div></section><section className="artist-hub-hero"><img src={dreamscapeHero} alt="드림스케이프" /><div className="artist-hub-hero-overlay"><span>추천 아티스트</span><h3>드림스케이프 <VerifiedIcon /></h3><p>4명의 멤버 · 공식 아티스트 공간</p><div className="hub-members">{[cardYunaImage, cardMinhoImage, cardJayImage, cardYunaImage].map((image, index) => <img key={index} src={image} alt="" />)}</div><button type="button">+ 팔로우</button></div></section><nav className="hub-tabs" aria-label="아티스트 정보"><a className="active" href="#artist-home">아티스트 홈</a><a href="#artist-schedule">일정</a><a href="#artist-news">뉴스</a><a href="#artist-cards">카드</a><a href="#artist-events">이벤트</a></nav><section id="artist-schedule" className="hub-section"><div className="section-heading"><h3>다가오는 일정</h3><button type="button">전체 보기 ›</button></div><div className="hub-schedule-grid"><article><b>JUN<br /><strong>28</strong></b><div><span>팬미팅</span><h4>드림스케이프 팬미팅</h4><p>2026.06.28 (일) 17:00</p><small><InlineIcon name="pin" />올림픽공원 올림픽홀</small></div><i className="hub-schedule-bell"><NavIcon name="alerts" /></i></article><article><b>JUL<br /><strong>12</strong></b><div><span>콘서트</span><h4>2026 SUMMER FAN WEEK</h4><p>2026.07.12 (일) 18:00</p><small><InlineIcon name="pin" />KSPO DOME</small></div><i className="hub-schedule-bell"><NavIcon name="alerts" /></i></article></div></section><section id="artist-news" className="hub-section"><div className="section-heading"><h3>드림스케이프 뉴스</h3><button type="button">전체 보기 ›</button></div><div className="hub-news-list"><article><img src={dreamscapeHero} alt="" /><div><b>드림스케이프, 새 앨범 트랙리스트 공개</b><p>타이틀곡 ‘Nebula’ 포함 총 6곡 수록</p><small>1시간 전</small></div><strong>›</strong></article><article><img src={fanWeekLavenderMeet} alt="" /><div><b>드림스케이프, 글로벌 차트 1위!</b><p>신곡 ‘Nebula’ 글로벌 인기 상승</p><small>1일 전</small></div><strong>›</strong></article></div></section><section id="artist-cards" className="hub-section"><div className="section-heading"><h3>새 카드</h3><button type="button">전체 보기 ›</button></div><div className="hub-card-row">{[cardYunaImage, cardMinhoImage, cardJayImage].map((image, index) => <button type="button" key={image} onClick={() => undefined}><img src={image} alt="새 카드" /><b>{['하린', '도윤', '제이'][index]}<br />Nebula Ver.</b><span>{index === 0 ? 'UR' : 'SR'}</span></button>)}</div><div className="hub-card-dots" aria-hidden="true"><b /><i /><i /></div><a className="hub-event-promo" href="/events"><span className="hub-event-promo-icon" aria-hidden="true"><InlineIcon name="gift" /></span><b><small>팬 이벤트</small>드림스케이프 사인 폴라로이드 이벤트<em>참여하고 사인 폴라로이드를 받아보세요!</em></b><strong>참여하기</strong><i>›</i></a></section></section>
 }
 
 function notificationTimeLabel(createdAt: string): string {
@@ -2347,13 +2536,19 @@ function notificationTimeLabel(createdAt: string): string {
   return days < 7 ? `${days}일 전` : new Date(createdAt).toLocaleDateString('ko-KR')
 }
 
-function notificationDestination(kind: string): Tab | null {
+type NotificationDestination = Tab | 'rewardInventory' | 'fanSocial' | 'tradeInbox'
+
+function notificationDestination(kind: string): NotificationDestination | null {
   if (kind === 'card_redeemed') return 'collection'
+  if (kind === 'reward_claimed') return 'rewardInventory'
+  if (kind === 'card_combined' || kind === 'trade_accepted') return 'collection'
+  if (kind === 'trade_received' || kind === 'trade_rejected' || kind === 'trade_cancelled' || kind === 'trade_expired') return 'tradeInbox'
+  if (kind === 'following_card_collected') return 'fanSocial'
   if (kind === 'card_published' || kind === 'drop_started') return 'discover'
   return null
 }
 
-function Alerts({ items, error, actionError, onDismissActionError, onRetry, onRead, onReadAll, onBack, onNavigate }: { items: NotificationItem[], error: string, actionError: string, onDismissActionError: () => void, onRetry: () => void, onRead: (id: string) => Promise<void>, onReadAll: () => Promise<void>, onBack: () => void, onNavigate: (tab: Tab) => void }) {
+function Alerts({ items, error, actionError, onDismissActionError, onRetry, onRead, onReadAll, onBack, onNavigate }: { items: NotificationItem[], error: string, actionError: string, onDismissActionError: () => void, onRetry: () => void, onRead: (id: string) => Promise<void>, onReadAll: () => Promise<void>, onBack: () => void, onNavigate: (destination: NotificationDestination) => void }) {
   const [category, setCategory] = useState<'all' | 'activity'>('all')
   const categories = [
     { value: 'all', label: '전체', matches: () => true },
@@ -2390,8 +2585,8 @@ function Alerts({ items, error, actionError, onDismissActionError, onRetry, onRe
   }
 
   const iconName = (kind: string): 'card' | 'gift' | 'calendar' | 'system' => {
-    if (kind === 'card_published' || kind === 'card_redeemed') return 'card'
-    if (kind === 'drop_started') return 'gift'
+    if (kind === 'card_published' || kind === 'card_redeemed' || kind === 'card_combined' || kind === 'trade_accepted') return 'card'
+    if (kind === 'drop_started' || kind === 'reward_claimed') return 'gift'
     if (kind === 'system') return 'calendar'
     return 'system'
   }
@@ -2426,6 +2621,7 @@ function RevealCard({ userCardId, collectionSummary, fanProgression, onClose, on
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const revealTimerRef = useRef<number | null>(null)
   const isRandomReveal = import.meta.env.DEV && userCardId === 'qa-registration-complete'
+  const isFirstCollectionCard = isRandomReveal || collectionSummary.ownedCount <= 1
   const [phase, setPhase] = useState<'mystery' | 'revealing' | 'revealed' | 'complete'>(() => isRandomReveal ? 'mystery' : 'revealed')
   const [detail, setDetail] = useState<UserCardDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(true)
@@ -2511,7 +2707,7 @@ function RevealCard({ userCardId, collectionSummary, fanProgression, onClose, on
         <div className="registration-complete-celebration" aria-hidden="true">
           <img className="registration-complete-celebration-art" src={registrationCompleteCelebration} alt="" />
         </div>
-        <h1 id="registration-complete-title">첫 카드가 컬렉션에 추가됐어요!</h1>
+        <h1 id="registration-complete-title">{isFirstCollectionCard ? '첫 카드가 컬렉션에 추가됐어요!' : '카드가 컬렉션에 추가됐어요!'}</h1>
         <p>{memberName}의 새로운 순간을 보관함에서 만나보세요.</p>
       </section>
 
@@ -2547,8 +2743,8 @@ function RevealCard({ userCardId, collectionSummary, fanProgression, onClose, on
 
       <div className="registration-complete-mission">
         <span><InlineIcon name="calendar" /></span>
-        <b>첫 카드 등록하기</b>
-        <strong>완료&nbsp; +100 XP</strong>
+        <b>{isFirstCollectionCard ? '첫 카드 등록하기' : '새 카드 수집하기'}</b>
+        <strong>{isFirstCollectionCard ? '+100 XP' : '완료'}</strong>
       </div>
 
       <section className="registration-complete-next">
@@ -2647,7 +2843,7 @@ function RevealCard({ userCardId, collectionSummary, fanProgression, onClose, on
       <div><span><InlineIcon name="grid" /></span><small>카드 번호</small><b>{serialNumber}</b></div>
       <div><span><InlineIcon name="gift" /></span><small>획득</small><b>1번째</b></div>
     </section>
-    <div className="card-reveal-bonus"><span><InlineIcon name="gift" /></span><b>첫 카드 등록 보너스</b><strong>+100 XP</strong></div>
+    <div className="card-reveal-bonus"><span><InlineIcon name="gift" /></span><b>{isFirstCollectionCard ? '첫 카드 등록 보너스' : '컬렉션 카드 획득'}</b><strong>{isFirstCollectionCard ? '+100 XP' : '완료'}</strong></div>
     <button type="button" className="primary card-reveal-primary" onClick={completeRegistration} disabled={!detail && !isRandomReveal}>컬렉션에 추가</button>
     <button type="button" className="card-reveal-again" onClick={() => setPhase('mystery')}>다시 확인하기</button>
   </main>

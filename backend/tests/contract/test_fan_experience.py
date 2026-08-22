@@ -707,6 +707,8 @@ def test_collection_returns_live_summary_and_card_metadata(
         "signatureText": "오늘 와줘서 고마워",
         "issueLimit": 500,
         "acquisitionSource": "qr",
+        "expiresAt": None,
+        "tradable": True,
     }
 
 

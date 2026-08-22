@@ -18,6 +18,7 @@ from app.models import (
     Artist,
     Asset,
     Card,
+    CardCombinationMaterial,
     CardEffectVersion,
     CardOwnershipLedger,
     CardPack,
@@ -25,9 +26,12 @@ from app.models import (
     CardPackOpening,
     CollectionBenefitClaim,
     CollectionCampaign,
+    CollectionGoal,
     Drop,
     Event,
     EventApplication,
+    FanWishlistItem,
+    Follow,
     Member,
     Notification,
     RewardCatalog,
@@ -37,6 +41,7 @@ from app.models import (
 )
 from app.rate_limit import enforce_rate_limit
 from app.schemas import (
+    CollectionGoalCreate,
     NotificationPreferencesUpdate,
     ProfileEquipmentUpdate,
     ProfileUpdate,
@@ -144,12 +149,28 @@ def lenticular_storage_path(asset: Asset | None) -> str | None:
 
 
 @router.get("/me")
-async def me(user: FanUser) -> dict:
+async def me(user: FanUser, session: DbSession) -> dict:
     # Until social follow and spendable-point ledgers are introduced, only
     # values with a durable source are exposed. Favorites are the current
     # follow relationship; unknown counters stay zero instead of showing
     # design-fixture numbers.
-    following_count = len(user.favorite_artist_ids or []) + len(user.favorite_member_ids or [])
+    fan_following_count = int(
+        await session.scalar(
+            select(func.count()).select_from(Follow).where(Follow.follower_id == user.id)
+        )
+        or 0
+    )
+    follower_count = int(
+        await session.scalar(
+            select(func.count()).select_from(Follow).where(Follow.following_id == user.id)
+        )
+        or 0
+    )
+    following_count = (
+        len(user.favorite_artist_ids or [])
+        + len(user.favorite_member_ids or [])
+        + fan_following_count
+    )
     return {
         "ok": True,
         "data": {
@@ -162,7 +183,7 @@ async def me(user: FanUser) -> dict:
             "favoriteMemberIds": user.favorite_member_ids,
             "onboardingCompleted": user.onboarding_completed,
             "followingCount": following_count,
-            "followerCount": 0,
+            "followerCount": follower_count,
             "points": 0,
             "hasPassword": bool(user.password_hash),
         },
@@ -204,7 +225,14 @@ async def collection(user: FanUser, session: DbSession) -> dict:
             .join(Card, UserCard.card_id == Card.id)
             .outerjoin(Artist, Card.artist_id == Artist.id)
             .outerjoin(Member, Card.member_id == Member.id)
-            .where(UserCard.user_id == user.id)
+            .outerjoin(
+                CardCombinationMaterial,
+                CardCombinationMaterial.user_card_id == UserCard.id,
+            )
+            .where(
+                UserCard.user_id == user.id,
+                CardCombinationMaterial.id.is_(None),
+            )
         )
     ).all()
     cards = [
@@ -224,6 +252,11 @@ async def collection(user: FanUser, session: DbSession) -> dict:
             "signatureText": card.signature_text,
             "issueLimit": card.issue_limit,
             "acquisitionSource": uc.acquisition_source,
+            "expiresAt": uc.expires_at.isoformat() if uc.expires_at else None,
+            "tradable": bool(card.tradable)
+            and uc.expires_at is None
+            and uc.trade_locked_at is None
+            and uc.acquisition_source != "combination",
             "serialNumber": uc.serial_number,
             "acquiredAt": uc.acquired_at.isoformat(),
         }
@@ -240,6 +273,174 @@ async def collection(user: FanUser, session: DbSession) -> dict:
             "cards": cards,
         },
     }
+
+
+@router.get("/me/wishlist")
+async def wishlist(user: FanUser, session: DbSession) -> dict:
+    """Return the fan's saved card types from durable server state."""
+    card_ids = (
+        await session.scalars(
+            select(FanWishlistItem.card_id)
+            .where(FanWishlistItem.user_id == user.id)
+            .order_by(FanWishlistItem.created_at.desc(), FanWishlistItem.id.desc())
+        )
+    ).all()
+    return {"ok": True, "data": {"items": [{"cardId": card_id} for card_id in card_ids]}}
+
+
+@router.put("/me/wishlist/{card_id}")
+async def add_wishlist(card_id: str, user: FanUser, session: DbSession) -> dict:
+    owned = await session.scalar(
+        select(UserCard.id).where(UserCard.user_id == user.id, UserCard.card_id == card_id)
+    )
+    if owned is None:
+        raise AppError(404, "CARD_NOT_OWNED", "보유한 카드만 관심 카드로 저장할 수 있습니다.")
+    existing = await session.scalar(
+        select(FanWishlistItem).where(
+            FanWishlistItem.user_id == user.id, FanWishlistItem.card_id == card_id
+        )
+    )
+    if existing is None:
+        session.add(
+            FanWishlistItem(id=f"wishlist_{uuid4().hex[:12]}", user_id=user.id, card_id=card_id)
+        )
+        await session.commit()
+    return {"ok": True, "data": {"cardId": card_id, "saved": True}}
+
+
+@router.delete("/me/wishlist/{card_id}")
+async def remove_wishlist(card_id: str, user: FanUser, session: DbSession) -> dict:
+    item = await session.scalar(
+        select(FanWishlistItem).where(
+            FanWishlistItem.user_id == user.id, FanWishlistItem.card_id == card_id
+        )
+    )
+    if item is not None:
+        await session.delete(item)
+        await session.commit()
+    return {"ok": True, "data": {"cardId": card_id, "saved": False}}
+
+
+async def _collection_goal_data(goal: CollectionGoal, user: FanUser, session: DbSession) -> dict:
+    pack = await session.get(CardPack, goal.pack_id)
+    if pack is None:
+        raise AppError(404, "CARD_PACK_NOT_FOUND", "카드팩을 찾을 수 없습니다.")
+    target_count = goal.target_count
+    card_ids = select(CardPackCard.card_id).where(
+        CardPackCard.pack_id == pack.id, CardPackCard.enabled.is_(True)
+    )
+    owned_count = int(
+        await session.scalar(
+            select(func.count(func.distinct(UserCard.card_id)))
+            .select_from(UserCard)
+            .outerjoin(
+                CardCombinationMaterial,
+                CardCombinationMaterial.user_card_id == UserCard.id,
+            )
+            .where(
+                UserCard.user_id == user.id,
+                UserCard.card_id.in_(card_ids),
+                CardCombinationMaterial.id.is_(None),
+            )
+        )
+        or 0
+    )
+    completion_rate = min(100, round(owned_count / target_count * 100)) if target_count else 0
+    if completion_rate == 100 and goal.completed_at is None:
+        goal.completed_at = datetime.now(UTC)
+        await notify_user_once(
+            session,
+            user_id=user.id,
+            kind="collection_goal_completed",
+            title="수집 목표를 달성했어요",
+            body=f"{pack.name} 카드팩 수집 목표를 모두 달성했습니다.",
+            entity_type="collection_goal",
+            entity_id=goal.id,
+            event_key=f"collection-goal-completed:{goal.id}",
+        )
+    return {
+        "id": goal.id,
+        "packId": pack.id,
+        "packName": pack.name,
+        "seasonName": pack.season_name,
+        "targetCount": target_count,
+        "ownedCount": owned_count,
+        "completionRate": completion_rate,
+        "completedAt": goal.completed_at.isoformat() if goal.completed_at else None,
+        "createdAt": goal.created_at.isoformat(),
+    }
+
+
+@router.get("/me/collection-goals")
+async def collection_goals(user: FanUser, session: DbSession) -> dict:
+    goals = (
+        await session.scalars(
+            select(CollectionGoal)
+            .where(CollectionGoal.user_id == user.id)
+            .order_by(CollectionGoal.created_at.desc(), CollectionGoal.id.desc())
+        )
+    ).all()
+    items = [await _collection_goal_data(goal, user, session) for goal in goals]
+    if session.dirty or session.new:
+        await session.commit()
+    return {"ok": True, "data": {"items": items}}
+
+
+@router.post("/me/collection-goals", status_code=status.HTTP_201_CREATED)
+async def create_collection_goal(
+    payload: CollectionGoalCreate, user: FanUser, session: DbSession
+) -> dict:
+    pack = await session.scalar(
+        select(CardPack).where(CardPack.id == payload.pack_id, CardPack.status == "published")
+    )
+    if pack is None:
+        raise AppError(404, "CARD_PACK_NOT_FOUND", "공개된 카드팩을 찾을 수 없습니다.")
+    available_count = int(
+        await session.scalar(
+            select(func.count())
+            .select_from(CardPackCard)
+            .where(CardPackCard.pack_id == pack.id, CardPackCard.enabled.is_(True))
+        )
+        or 0
+    )
+    target_count = payload.target_count or available_count
+    if target_count > available_count:
+        raise AppError(
+            422, "INVALID_COLLECTION_GOAL", "카드팩에 포함된 카드 수를 초과할 수 없습니다."
+        )
+    goal = await session.scalar(
+        select(CollectionGoal).where(
+            CollectionGoal.user_id == user.id, CollectionGoal.pack_id == pack.id
+        )
+    )
+    if goal is None:
+        goal = CollectionGoal(
+            id=f"collection_goal_{uuid4().hex[:12]}",
+            user_id=user.id,
+            pack_id=pack.id,
+            target_count=target_count,
+        )
+        session.add(goal)
+    else:
+        goal.target_count = target_count
+        goal.completed_at = None
+    await session.flush()
+    data = await _collection_goal_data(goal, user, session)
+    await session.commit()
+    return {"ok": True, "data": data}
+
+
+@router.delete("/me/collection-goals/{goal_id}")
+async def delete_collection_goal(goal_id: str, user: FanUser, session: DbSession) -> dict:
+    goal = await session.scalar(
+        select(CollectionGoal).where(
+            CollectionGoal.id == goal_id, CollectionGoal.user_id == user.id
+        )
+    )
+    if goal is not None:
+        await session.delete(goal)
+        await session.commit()
+    return {"ok": True, "data": {"id": goal_id, "deleted": goal is not None}}
 
 
 @router.get("/catalog/card-packs")
@@ -1321,6 +1522,9 @@ async def notifications(user: FanUser, session: DbSession) -> dict:
                     "kind": n.kind,
                     "title": n.title,
                     "body": n.body,
+                    "entityType": n.entity_type,
+                    "entityId": n.entity_id,
+                    "eventKey": n.event_key,
                     "isRead": n.is_read,
                     "readAt": n.read_at.isoformat() if n.read_at else None,
                     "createdAt": n.created_at.isoformat(),
@@ -1352,6 +1556,9 @@ async def notification_stream(user: FanUser, session: DbSession) -> StreamingRes
                     "kind": item.kind,
                     "title": item.title,
                     "body": item.body,
+                    "entityType": item.entity_type,
+                    "entityId": item.entity_id,
+                    "eventKey": item.event_key,
                     "isRead": item.is_read,
                     "readAt": item.read_at.isoformat() if item.read_at else None,
                     "createdAt": item.created_at.isoformat(),

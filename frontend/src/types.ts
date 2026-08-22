@@ -8,6 +8,8 @@ export type Card = {
   rarity?: string
   seasonName?: string
   cardType?: string
+  signatureText?: string
+  issueLimit?: number
   acquisitionSource?: string
   acquiredAt?: string
 }

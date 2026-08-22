@@ -124,6 +124,27 @@ def test_fan_can_combine_duplicates_into_a_weighted_pack_result(
     assert combined["cardId"] == "combination_result_card"
     assert combined["consumedUserCardIds"] == material_ids
 
+    collection = assert_success(actors["fan"].get("/api/me/collection"))
+    assert [card["cardId"] for card in collection["cards"]] == ["combination_result_card"]
+    assert collection["summary"]["ownedCount"] == 1
+
+    public_collection = assert_success(actors["otherFan"].get("/api/fans/fan/collection"))
+    assert [card["cardId"] for card in public_collection["cards"]] == ["combination_result_card"]
+    assert public_collection["cards"][0]["tradable"] is False
+
+    assert_error(
+        actors["fan"].post(
+            "/api/me/trades",
+            json={
+                "recipientUserId": "otherFan",
+                "offeredUserCardIds": [material_ids[0]],
+                "requestedUserCardIds": [],
+            },
+        ),
+        422,
+        "CARD_NOT_TRADABLE",
+    )
+
     repeated = assert_success(
         actors["fan"].post(
             "/api/me/card-combinations",

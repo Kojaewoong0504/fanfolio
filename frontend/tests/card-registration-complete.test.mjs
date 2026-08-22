@@ -71,6 +71,14 @@ test('completion screen reports live collection and fan progression', () => {
   assert.match(appSource, /displayXpLabel/)
 })
 
+test('later acquisitions do not claim a first-card reward', () => {
+  assert.match(appSource, /const isFirstCollectionCard = isRandomReveal \|\| collectionSummary\.ownedCount <= 1/)
+  assert.match(appSource, /isFirstCollectionCard \? '첫 카드가 컬렉션에 추가됐어요!' : '카드가 컬렉션에 추가됐어요!'/)
+  assert.match(appSource, /isFirstCollectionCard \? '첫 카드 등록 보너스' : '컬렉션 카드 획득'/)
+  assert.match(appSource, /isFirstCollectionCard \? '\+100 XP' : '완료'/)
+  assert.match(appSource, /isFirstCollectionCard \? '첫 카드 등록하기' : '새 카드 수집하기'/)
+})
+
 test('collection always exposes the card registration flow', () => {
   assert.match(appSource, /className="collection-register-entry"/)
   assert.match(appSource, /새 카드 등록하기/)

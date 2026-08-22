@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type SyntheticEvent } from 'react'
-import { apiFetch, resolveApiUrl, type UserCardDetail } from '../api/client'
+import { apiFetch, getUserCardHistory, resolveApiUrl, type UserCardDetail, type UserCardHistoryItem } from '../api/client'
 import type { Card } from '../types'
 import { normalizeCardEffects } from '../utils/cardEffects'
 import { InteractiveCollectibleCard } from './InteractiveCollectibleCard'
 import { InlineIcon } from '../App'
+import { useAuthenticatedMedia } from '../hooks/useAuthenticatedMedia'
 
 type CardDetailProps = {
   card: Card
@@ -57,6 +58,9 @@ function useDialogFocus(open: boolean): void {
 
 export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, imageFor, onImageError, cardTypeLabel }: CardDetailProps) {
   const [detail, setDetail] = useState<UserCardDetail | null>(null)
+  const [history, setHistory] = useState<UserCardHistoryItem[]>([])
+  const [mediaError, setMediaError] = useState(false)
+  const [mediaRetryKey, setMediaRetryKey] = useState(0)
   const [detailError, setDetailError] = useState(false)
   const [detailAttempt, setDetailAttempt] = useState(0)
   const cardIdentity = card.userCardId ?? card.id
@@ -68,13 +72,19 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
   useEffect(() => {
     let cancelled = false
     setDetail(null)
+    setHistory([])
     setDetailError(false)
+    setMediaError(false)
+    setMediaRetryKey(0)
     const remoteDetail = Boolean(card.userCardId && !card.userCardId.startsWith('user-card-'))
     setDetailLoading(remoteDetail)
     if (!remoteDetail || !card.userCardId) return
     void apiFetch<{ ok: true, data: UserCardDetail }>(`/me/cards/${card.userCardId}`)
       .then(result => { if (!cancelled) { setDetail(result.data); setDetailLoading(false) } })
       .catch(() => { if (!cancelled) { setDetailError(true); setDetailLoading(false) } })
+    void getUserCardHistory(card.userCardId)
+      .then(result => { if (!cancelled) setHistory(result.data.items) })
+      .catch(() => { /* card details remain usable when the optional history endpoint is unavailable */ })
     return () => { cancelled = true }
   }, [card.userCardId, detailAttempt])
 
@@ -104,9 +114,29 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
     sealLabel: detail?.card.id.slice(-8).toUpperCase() ?? ((card.userCardId ?? card.id).replace(/[^a-zA-Z0-9]/g, '').slice(-8).toUpperCase() || 'OFFICIAL'),
     hiddenMessage: effects.back.hiddenMessage || (detail ? '공식 컬렉션 인증 카드' : '컬렉션 상세를 불러오면 인증 정보가 업데이트됩니다'),
   }
-  const voiceAudioUrl = detail?.card.hasVoice && detail.card.voiceAudioUrl ? resolveApiUrl(detail.card.voiceAudioUrl) : ''
-  const videoUrl = detail?.card.hasVideo && detail.card.videoUrl ? resolveApiUrl(detail.card.videoUrl) : ''
-  const hasSpecialMedia = Boolean(voiceAudioUrl || videoUrl)
+  const voiceAudioPath = detail?.card.hasVoice && detail.card.voiceAudioUrl ? detail.card.voiceAudioUrl : ''
+  const videoPath = detail?.card.hasVideo && detail.card.videoUrl ? detail.card.videoUrl : ''
+  const handwritingPath = detail?.card.handwritingImageUrl ?? ''
+  const handwritingMedia = useAuthenticatedMedia(handwritingPath, mediaRetryKey)
+  const voiceMedia = useAuthenticatedMedia(voiceAudioPath, mediaRetryKey)
+  const videoMedia = useAuthenticatedMedia(videoPath, mediaRetryKey)
+  const onRetryMedia = () => { setMediaError(false); setMediaRetryKey(value => value + 1) }
+  const voiceAudioUrl = voiceMedia.url
+  const videoUrl = videoMedia.url
+  const hasSpecialMedia = Boolean(voiceAudioPath || videoPath)
+  const acquisitionSourceLabel = detail?.acquisitionSource === 'qr'
+    ? 'QR 스캔'
+    : detail?.acquisitionSource === 'manual'
+      ? '코드 직접 입력'
+      : detail?.acquisitionSource === 'card_pack'
+        ? '카드팩'
+        : detail?.acquisitionSource === 'combination'
+          ? '카드 조합'
+          : detail?.acquisitionSource === 'trade'
+            ? '거래'
+            : detail?.acquisitionSource === 'content_code'
+              ? '콘텐츠 코드'
+              : detail?.acquisitionSource || '콘텐츠 코드'
 
   return <main className="app-shell card-detail-screen detail-reference-panel" aria-labelledby="card-detail-title">
       <div className="detail-topbar">
@@ -130,6 +160,7 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
         hiddenMessage={safeBackDetail.hiddenMessage}
         designConfig={detail?.card.designConfig}
         lenticularImageUrl={detail?.card.lenticularImageUrl ? resolveApiUrl(detail.card.lenticularImageUrl) : null}
+        handwritingImageUrl={handwritingMedia.url}
         onImageError={imageError}
         enableDeviceMotion
       />
@@ -142,33 +173,43 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
         <div className="detail-meta-secondary"><dt>아티스트</dt><dd>{detail?.card.artistName ?? card.artist}</dd></div>
         <div className="detail-meta-secondary"><dt>멤버</dt><dd>{detail?.card.memberName ?? card.member}</dd></div>
         {detail && <>
+          <div className="detail-meta-secondary"><dt>앨범·시즌</dt><dd>{detail.card.seasonName ?? '정보 없음'}</dd></div>
+          <div className="detail-meta-secondary"><dt>카드팩</dt><dd>{detail.drop?.name ?? '직접 등록 카드'}</dd></div>
           <div className="detail-meta-secondary"><dt>카드 유형</dt><dd>{cardTypeLabel(detail.card.cardType)}</dd></div>
-          <div className="detail-meta-secondary"><dt>획득 경로</dt><dd>{detail.acquisitionSource === 'qr' ? 'QR 스캔' : detail.acquisitionSource === 'manual' ? '코드 직접 입력' : '콘텐츠 코드'}</dd></div>
+          <div className="detail-meta-secondary"><dt>발행 수량</dt><dd>{detail.card.issueLimit ? `${detail.card.issueLimit.toLocaleString()}장` : '제한 없음'}</dd></div>
+          <div className="detail-meta-secondary"><dt>획득 경로</dt><dd>{acquisitionSourceLabel}</dd></div>
         </>}
       </dl>
+      {history.length > 0 && <section className="card-collection-detail-history" aria-label="카드 획득 기록">
+        <div><h2>획득 기록</h2><small>이 카드의 발급·소유권 변경 기록</small></div>
+        <ol>{history.map(event => <li key={event.id}><strong>{event.action === 'grant' ? '컬렉션에 추가됨' : event.action === 'transfer' ? '소유권 이동' : event.action === 'consume' ? '조합에 사용됨' : event.action}</strong><span>{new Date(event.createdAt).toLocaleString('ko-KR')}</span></li>)}</ol>
+      </section>}
       <p className="detail-motion-hint"><InlineIcon name="motion" />카드를 움직여 특별한 효과를 확인해보세요.</p>
-      {detail?.card.signatureText && <p className="detail-hint">“{detail.card.signatureText}”</p>}
+      {(detail?.card.signatureText ?? card.signatureText) && <p className="detail-hint">“{detail?.card.signatureText ?? card.signatureText}”</p>}
       {detail?.futureBenefitPreview && <div className="notice">{detail.futureBenefitPreview}</div>}
-      {detail?.card.handwritingImageUrl && <div className="handwriting-special"><p className="detail-badge">손글씨 특전</p><img src={resolveApiUrl(detail.card.handwritingImageUrl)} alt="손글씨 특전" /></div>}
+      {handwritingPath && handwritingMedia.loading && <p className="detail-hint" role="status">손글씨 특전을 준비하는 중이에요…</p>}
+      {handwritingPath && handwritingMedia.url && <div className="handwriting-special"><p className="detail-badge">손글씨 특전</p><img src={handwritingMedia.url} alt="손글씨 특전" /></div>}
+      {(mediaError || handwritingMedia.error || voiceMedia.error || videoMedia.error) && <div className="detail-media-error" role="status"><p className="detail-hint error-message">스페셜 미디어를 불러오지 못했어요. 카드 정보는 계속 확인할 수 있어요.</p><button className="outline" type="button" onClick={onRetryMedia}>스페셜 미디어 다시 불러오기</button></div>}
       {hasSpecialMedia && <section className="special-media-section" aria-labelledby="special-media-title">
         <div className="special-media-heading">
           <span>스페셜 미디어</span>
           <small>팬 전용 특전을 직접 재생해 보세요.</small>
         </div>
         <h3 id="special-media-title">스페셜 미디어</h3>
+        {(voiceMedia.loading || videoMedia.loading) && <p className="detail-hint" role="status">스페셜 미디어를 준비하는 중이에요…</p>}
         {voiceAudioUrl && <div className="special-player voice-player">
           <div>
             <b>보이스 메시지</b>
             <small>재생 버튼을 눌러 아티스트 음성을 들어보세요.</small>
           </div>
-          <audio controls preload="metadata" src={voiceAudioUrl} aria-label="보이스 메시지 재생" />
+          <audio controls preload="metadata" src={voiceAudioUrl} aria-label="보이스 메시지 재생" onError={() => setMediaError(true)} />
         </div>}
         {videoUrl && <div className="special-player video-player">
           <div>
             <b>스페셜 비디오</b>
             <small>음소거된 미리보기로 열리며 컨트롤에서 소리를 켤 수 있어요.</small>
           </div>
-          <video controls muted playsInline loop preload="metadata" src={videoUrl} aria-label="스페셜 비디오 재생" />
+          <video controls muted playsInline loop preload="metadata" src={videoUrl} aria-label="스페셜 비디오 재생" onError={() => setMediaError(true)} />
         </div>}
       </section>}
       {detailError && <div className="detail-error-actions"><p className="detail-hint error-message">카드 상세 정보를 불러오지 못했어요.</p><button className="outline" onClick={() => setDetailAttempt(value => value + 1)}>다시 시도</button></div>}

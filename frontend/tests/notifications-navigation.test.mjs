@@ -18,3 +18,12 @@ test('notification screen uses compact utility sizing', () => {
   assert.match(cssSource, /\.notification-day \.alert-card\{grid-template-columns:46px/)
   assert.match(cssSource, /\.notification-empty-illustration\{width:92px;height:92px/)
 })
+
+test('reward, combination, and trade notifications open a useful fan destination', () => {
+  assert.match(appSource, /kind === 'reward_claimed'\) return 'rewardInventory'/)
+  assert.match(appSource, /kind === 'card_combined' \|\| kind === 'trade_accepted'\) return 'collection'/)
+  assert.match(appSource, /if \(destination === 'rewardInventory'\) openRewardInventory\(\)/)
+  assert.match(appSource, /else if \(destination === 'fanSocial'\) window\.location\.assign\('\/fans'\)/)
+  assert.match(appSource, /else if \(destination === 'tradeInbox'\) window\.location\.assign\('\/trades'\)/)
+  assert.match(appSource, /else navigateTab\(destination\)/)
+})

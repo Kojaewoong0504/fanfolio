@@ -8,6 +8,7 @@ the provider with S3/MinIO does not require changing the domain services.
 from pathlib import Path
 from typing import Protocol
 
+from fastapi import HTTPException
 from fastapi.responses import FileResponse, Response
 
 
@@ -246,6 +247,8 @@ def storage_response(
     cache_control: str | None = None,
 ) -> Response:
     """Serve either a local file or a remote object through one route helper."""
+    if not storage.exists(storage_path):
+        raise HTTPException(status_code=404, detail="저장된 미디어를 찾을 수 없습니다.")
     if storage_path.startswith("s3://"):
         headers = {}
         if filename:
