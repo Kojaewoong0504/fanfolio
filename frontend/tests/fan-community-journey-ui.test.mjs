@@ -33,8 +33,7 @@ test('fan discovery opens a dedicated public fan profile before collection', () 
 })
 
 test('public collection supports discovery filters and a clear trade path', () => {
-  assert.match(publicCollectionSource, /정규 1집 · DREAMSCAPE/)
-  assert.match(publicCollectionSource, /Nebula Ver\./)
+  assert.match(publicCollectionSource, /versionOptions/)
   assert.match(publicCollectionSource, /교환 가능/)
   assert.match(tradeComposerSource, /컬렉션 매칭/)
   assert.match(publicCollectionSource, /공개 컬렉션/)
@@ -55,6 +54,28 @@ test('public collection supports discovery filters and a clear trade path', () =
   assert.match(fanProfileSource, /collection\.summary\.followerCount/)
   assert.match(fanProfileSource, /collection\.summary\.ownedCount/)
   assert.doesNotMatch(tradeComposerSource, /[◆▣⬡]/)
+})
+
+test('public fan profile derives artist and pack display from backend collection data', () => {
+  assert.doesNotMatch(fanProfileSource, /login\/dreamscape-group|card-pack-dreamscape-generated/)
+  assert.doesNotMatch(fanProfileSource, /정규 1집 · DREAMSCAPE|DREAMSCAPE/)
+  assert.match(fanProfileSource, /const representativeCard = cards\.find\(card => card\.artistId \|\| card\.artistName \|\| card\.seasonName\) \?\? cards\[0\]/)
+  assert.match(fanProfileSource, /const primaryArtistName = representativeCard\?\.artistName \?\? '아티스트'/)
+  assert.match(fanProfileSource, /const primaryPackLabel = representativeCard\?\.seasonName \?\? representativeCard\?\.name \?\? '컬렉션'/)
+  assert.match(fanProfileSource, /const representativeImage = resolveApiUrl\(representativeCard\?\.imageUrl\) \|\| avatarFallback/)
+  assert.match(fanProfileSource, /const primaryPackCount = representativeCard/)
+  assert.doesNotMatch(fanProfileSource, /ownedCount \/ 40|ownedCount\}\/40/)
+})
+
+test('public collection derives owner badge and featured pack from backend collection cards', () => {
+  assert.doesNotMatch(publicCollectionSource, /card-pack-dreamscape-generated/)
+  assert.doesNotMatch(publicCollectionSource, /드림스케이프|정규 1집 · DREAMSCAPE/)
+  assert.match(publicCollectionSource, /const representativeCard = collection\.cards\.find\(card => card\.seasonName \|\| card\.artistName \|\| card\.name\) \?\? collection\.cards\[0\]/)
+  assert.match(publicCollectionSource, /const ownerBadgeLabel = representativeCard\?\.artistName \?\? representativeCard\?\.seasonName \?\? '공개 컬렉션'/)
+  assert.match(publicCollectionSource, /const featuredPackLabel = representativeCard\?\.seasonName \?\? representativeCard\?\.name \?\? '카드팩 보기'/)
+  assert.match(publicCollectionSource, /const featuredPackImage = resolveApiUrl\(representativeCard\?\.imageUrl\) \|\| ''/)
+  assert.match(publicCollectionSource, /map\(card => card\.seasonName\)/)
+  assert.doesNotMatch(publicCollectionSource, /Math\.max\(40, collection\.summary\.ownedCount\)/)
 })
 
 test('discover preview follows the selected recommendation dashboard layout', () => {

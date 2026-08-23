@@ -617,6 +617,10 @@ main.discover-shell .discover-fans-section .section-heading button {
   object-fit: cover;
 }
 
+.public-collection-pack-tabs {
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+}
+
 .discover-collection-empty {
   display: grid;
   place-items: center;

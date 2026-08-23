@@ -829,26 +829,63 @@ async def missions(
         period_key = mission_period_key(
             mission.recurrence, event_time, mission.starts_at, mission.ends_at
         )
-        progress = await session.scalar(
+        current_progress = await session.scalar(
             select(MissionProgress).where(
                 MissionProgress.user_id == user.id,
                 MissionProgress.mission_id == mission.id,
                 MissionProgress.period_key == period_key,
             )
         )
+        progress = current_progress
+        unclaimed_grant_id = await session.scalar(
+            select(RewardGrant.id)
+            .where(
+                RewardGrant.user_id == user.id,
+                RewardGrant.rule_key == f"mission:{mission.id}:{period_key}",
+                RewardGrant.claimed_at.is_(None),
+            )
+            .limit(1)
+        )
+        if not (
+            progress
+            and progress.completed_at
+            and progress.claimed_at is None
+            and unclaimed_grant_id
+        ):
+            historical_progresses = list(
+                await session.scalars(
+                    select(MissionProgress)
+                    .where(
+                        MissionProgress.user_id == user.id,
+                        MissionProgress.mission_id == mission.id,
+                        MissionProgress.completed_at.is_not(None),
+                        MissionProgress.claimed_at.is_(None),
+                        MissionProgress.period_key != period_key,
+                    )
+                    .order_by(MissionProgress.completed_at.desc(), MissionProgress.id)
+                )
+            )
+            for historical_progress in historical_progresses:
+                historical_grant_id = await session.scalar(
+                    select(RewardGrant.id)
+                    .where(
+                        RewardGrant.user_id == user.id,
+                        RewardGrant.rule_key
+                        == f"mission:{mission.id}:{historical_progress.period_key}",
+                        RewardGrant.claimed_at.is_(None),
+                    )
+                    .limit(1)
+                )
+                if historical_grant_id:
+                    progress = historical_progress
+                    period_key = historical_progress.period_key
+                    unclaimed_grant_id = historical_grant_id
+                    break
         claimable = bool(
             progress
             and progress.completed_at
             and progress.claimed_at is None
-            and await session.scalar(
-                select(RewardGrant.id)
-                .where(
-                    RewardGrant.user_id == user.id,
-                    RewardGrant.rule_key == f"mission:{mission.id}:{period_key}",
-                    RewardGrant.claimed_at.is_(None),
-                )
-                .limit(1)
-            )
+            and unclaimed_grant_id
         )
         item = {
             "id": mission.id,

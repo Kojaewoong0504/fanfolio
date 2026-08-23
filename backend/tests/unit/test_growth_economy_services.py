@@ -194,3 +194,102 @@ def test_duplicate_point_grant_race_increments_balance_once(tmp_path: Path) -> N
         await engine.dispose()
 
     asyncio.run(scenario())
+
+
+def test_concurrent_first_time_point_grants_share_created_balance(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'points.db'}")
+
+        @event.listens_for(engine.sync_engine, "connect")
+        def enable_foreign_keys(connection, _) -> None:  # type: ignore[no-untyped-def]
+            connection.execute("PRAGMA foreign_keys=ON")
+
+        async with engine.begin() as connection:
+            await connection.run_sync(models.Base.metadata.create_all)
+
+        delayed_grant_started = asyncio.Event()
+        winning_grant_committed = asyncio.Event()
+
+        class StaleFirstBalanceSession(AsyncSession):
+            waited_before_writes = False
+            returned_stale_balance = False
+
+            async def scalar(self, statement, *args, **kwargs):  # type: ignore[no-untyped-def]
+                if not self.waited_before_writes:
+                    self.waited_before_writes = True
+                    delayed_grant_started.set()
+                    await winning_grant_committed.wait()
+                result = await super().scalar(statement, *args, **kwargs)
+                if isinstance(result, models.PointBalance) and not self.returned_stale_balance:
+                    self.returned_stale_balance = True
+                    return None
+                return result
+
+        session_factory = async_sessionmaker(engine, expire_on_commit=False)
+        stale_session_factory = async_sessionmaker(
+            engine,
+            class_=StaleFirstBalanceSession,
+            expire_on_commit=False,
+        )
+        async with session_factory() as session:
+            session.add(models.User(id="fan", email="fan@example.com", role=models.Role.FAN))
+            await session.commit()
+            session.add_all(
+                [
+                    models.EngagementEvent(
+                        id="event_points_a",
+                        user_id="fan",
+                        kind="mission_completed",
+                        source_type="mission",
+                        source_id="mission_a",
+                    ),
+                    models.EngagementEvent(
+                        id="event_points_b",
+                        user_id="fan",
+                        kind="mission_completed",
+                        source_type="mission",
+                        source_id="mission_b",
+                    ),
+                ]
+            )
+            await session.commit()
+
+        async with stale_session_factory() as delayed, session_factory() as winner:
+            delayed_task = asyncio.create_task(
+                services.grant_points(
+                    delayed,
+                    user_id="fan",
+                    source_event_id="event_points_a",
+                    rule_key="mission:a",
+                    amount=25,
+                )
+            )
+            await delayed_grant_started.wait()
+            winning_ledger = await services.grant_points(
+                winner,
+                user_id="fan",
+                source_event_id="event_points_b",
+                rule_key="mission:b",
+                amount=30,
+            )
+            await winner.commit()
+            winning_grant_committed.set()
+            delayed_ledger = await delayed_task
+            await delayed.commit()
+
+        async with session_factory() as session:
+            balance = await session.get(models.PointBalance, "fan")
+            ledgers = list(
+                await session.scalars(
+                    select(models.PointLedger).order_by(models.PointLedger.source_event_id)
+                )
+            )
+            assert len(ledgers) == 2
+            assert {delayed_ledger.id, winning_ledger.id} == {ledger.id for ledger in ledgers}
+            assert [ledger.balance_after for ledger in ledgers] == [55, 30]
+            assert balance is not None
+            assert balance.balance == 55
+
+        await engine.dispose()
+
+    asyncio.run(scenario())

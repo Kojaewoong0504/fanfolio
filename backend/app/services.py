@@ -370,6 +370,30 @@ async def level_for_total_xp(session: AsyncSession, *, total_xp: int) -> int:
     return int(threshold_level or 1)
 
 
+async def _get_or_create_point_balance_for_update(
+    session: AsyncSession, *, user_id: str
+) -> PointBalance:
+    balance = await session.scalar(
+        select(PointBalance).where(PointBalance.user_id == user_id).with_for_update()
+    )
+    if balance is not None:
+        return balance
+
+    balance = PointBalance(user_id=user_id)
+    try:
+        async with session.begin_nested():
+            session.add(balance)
+            await session.flush()
+    except IntegrityError:
+        balance = await session.scalar(
+            select(PointBalance).where(PointBalance.user_id == user_id).with_for_update()
+        )
+        if balance is not None:
+            return balance
+        raise
+    return balance
+
+
 async def grant_points(
     session: AsyncSession,
     *,
@@ -420,13 +444,7 @@ async def grant_points(
         if existing:
             return existing
         raise
-    balance = await session.scalar(
-        select(PointBalance).where(PointBalance.user_id == user_id).with_for_update()
-    )
-    if balance is None:
-        balance = PointBalance(user_id=user_id)
-        session.add(balance)
-        await session.flush()
+    balance = await _get_or_create_point_balance_for_update(session, user_id=user_id)
     balance.balance += amount
     ledger.balance_after = balance.balance
     return ledger
