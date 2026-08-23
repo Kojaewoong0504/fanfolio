@@ -917,6 +917,42 @@ class EngagementEvent(Base):
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class AnalyticsEvent(Base):
+    """Immutable product analytics event used for scoped operational statistics."""
+
+    __tablename__ = "analytics_events"
+    __table_args__ = (
+        UniqueConstraint("dedupe_key", name="uq_analytics_events_dedupe_key"),
+        Index("ix_analytics_events_name_created", "event_name", "created_at"),
+        Index("ix_analytics_events_scope_created", "organization_id", "artist_id", "created_at"),
+        Index("ix_analytics_events_user_created", "user_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    event_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    organization_id: Mapped[str | None] = mapped_column(
+        ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True
+    )
+    artist_id: Mapped[str | None] = mapped_column(
+        ForeignKey("artists.id", ondelete="SET NULL"), nullable=True
+    )
+    card_id: Mapped[str | None] = mapped_column(
+        ForeignKey("cards.id", ondelete="SET NULL"), nullable=True
+    )
+    pack_id: Mapped[str | None] = mapped_column(
+        ForeignKey("card_packs.id", ondelete="SET NULL"), nullable=True
+    )
+    source: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    dedupe_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
 class AchievementDefinition(Base):
     __tablename__ = "achievement_definitions"
 

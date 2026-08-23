@@ -210,6 +210,7 @@ def test_alembic_upgrade_creates_the_current_schema(tmp_path: Path) -> None:
         }
         assert {
             "engagement_events",
+            "analytics_events",
             "achievement_definitions",
             "achievement_progress",
             "reward_catalog",

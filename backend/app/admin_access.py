@@ -34,6 +34,7 @@ ROOT_ACTIONS = frozenset(
         "codes:manage",
         "users:manage",
         "audit:read",
+        "statistics:read",
         "engagement:manage_global",
         "engagement:approve_global",
     }
@@ -72,6 +73,7 @@ PARTNER_ACTIONS = {
             "engagement:write",
             "engagement:approve",
             "audit:read",
+            "statistics:read",
         }
     ),
     "manager": frozenset(
@@ -91,6 +93,7 @@ PARTNER_ACTIONS = {
             "codes:write",
             "engagement:write",
             "audit:read",
+            "statistics:read",
         }
     ),
     "editor": frozenset(
@@ -107,10 +110,19 @@ PARTNER_ACTIONS = {
             "codes:read",
             "engagement:write",
             "audit:read",
+            "statistics:read",
         }
     ),
     "viewer": frozenset(
-        {"artists:read", "cards:read", "drops:read", "events:read", "codes:read", "audit:read"}
+        {
+            "artists:read",
+            "cards:read",
+            "drops:read",
+            "events:read",
+            "codes:read",
+            "audit:read",
+            "statistics:read",
+        }
     ),
 }
 PARTNER_SCOPED_ACTIONS = frozenset().union(*PARTNER_ACTIONS.values(), PLATFORM_ACTIONS)

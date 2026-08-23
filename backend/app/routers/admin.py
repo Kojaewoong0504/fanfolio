@@ -1,7 +1,7 @@
 import asyncio
 import csv
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from io import BytesIO, StringIO
 from secrets import token_urlsafe
 from uuid import uuid4
@@ -10,7 +10,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 import qrcode
 from fastapi import APIRouter, Query, status
 from fastapi.responses import Response, StreamingResponse
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import and_, delete, func, or_, select, update
 
 from app.admin_access import AdminContext
 from app.dependencies import CurrentAdmin, DbSession, RootAdminUser
@@ -19,6 +19,7 @@ from app.errors import AppError
 from app.models import (
     AchievementDefinition,
     AdminMembership,
+    AnalyticsEvent,
     Artist,
     ArtistProfile,
     Asset,
@@ -34,6 +35,7 @@ from app.models import (
     EngagementEvent,
     Member,
     Notification,
+    Organization,
     OrganizationArtist,
     PassSeason,
     PassTier,
@@ -158,6 +160,448 @@ async def admin_me(context: CurrentAdmin, session: DbSession) -> dict:
             "organization": organization,
             "assignedArtists": artists,
             "allowedActions": sorted(context.allowed_actions),
+        },
+    }
+
+
+def _statistics_change(current: float, previous: float) -> float:
+    if previous == 0:
+        return 100.0 if current else 0.0
+    return round((current - previous) / previous * 100, 1)
+
+
+@router.get("/statistics")
+async def admin_statistics(
+    context: CurrentAdmin,
+    session: DbSession,
+    period: int = Query(default=30),
+    compare: bool = Query(default=True),
+    organization_id: str | None = Query(default=None, alias="organizationId"),
+    artist_id: str | None = Query(default=None, alias="artistId"),
+    pack_id: str | None = Query(default=None, alias="packId"),
+) -> dict:
+    """Return durable, permission-scoped statistics for the production admin UI."""
+    context.require_action("statistics:read")
+    if period not in {7, 30, 90}:
+        raise AppError(
+            422, "INVALID_STATISTICS_PERIOD", "조회 기간은 7일, 30일, 90일만 지원합니다."
+        )
+    if not context.is_root:
+        own_organization_id = context.membership.organization_id
+        if organization_id and organization_id != own_organization_id:
+            raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
+        organization_id = own_organization_id
+    if artist_id:
+        context.require_artist(artist_id)
+
+    scoped_organization_artist_ids: set[str] | None = None
+    if artist_id:
+        scoped_organization_artist_ids = {artist_id}
+    elif organization_id:
+        scoped_organization_artist_ids = set(
+            await session.scalars(
+                select(OrganizationArtist.artist_id).where(
+                    OrganizationArtist.organization_id == organization_id
+                )
+            )
+        )
+    elif not context.is_root:
+        scoped_organization_artist_ids = set(context.assigned_artist_ids)
+
+    pack_filters: list[object] = []
+    if organization_id and context.is_root:
+        legacy_pack_scope = (
+            CardPack.artist_id.in_(scoped_organization_artist_ids)
+            if scoped_organization_artist_ids
+            else CardPack.id == "__no_scoped_pack__"
+        )
+        pack_filters.append(
+            or_(
+                CardPack.organization_id == organization_id,
+                and_(CardPack.organization_id.is_(None), legacy_pack_scope),
+            )
+        )
+    if artist_id:
+        pack_filters.append(CardPack.artist_id == artist_id)
+    if not context.is_root:
+        pack_filters.extend(
+            [
+                CardPack.artist_id.in_(context.assigned_artist_ids),
+                or_(
+                    CardPack.organization_id == context.membership.organization_id,
+                    CardPack.organization_id.is_(None),
+                ),
+            ]
+        )
+    if pack_id:
+        selected_pack = await session.scalar(
+            select(CardPack).where(CardPack.id == pack_id, *pack_filters)
+        )
+        if selected_pack is None:
+            raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
+
+    now = datetime.now(UTC)
+    today_start = datetime.combine(now.date(), datetime.min.time(), tzinfo=UTC)
+    current_start = today_start - timedelta(days=period - 1)
+    previous_start = current_start - timedelta(days=period)
+    card_filters = _card_scope_filters(context)
+    if organization_id and context.is_root:
+        legacy_card_scope = (
+            Card.artist_id.in_(scoped_organization_artist_ids)
+            if scoped_organization_artist_ids
+            else Card.id == "__no_scoped_card__"
+        )
+        card_filters.append(
+            or_(
+                Card.organization_id == organization_id,
+                and_(Card.organization_id.is_(None), legacy_card_scope),
+            )
+        )
+    if artist_id:
+        card_filters.append(Card.artist_id == artist_id)
+
+    async def range_snapshot(start_at: datetime, end_at: datetime) -> dict:
+        user_card_stmt = (
+            select(UserCard.user_id, UserCard.acquired_at, UserCard.redeem_code_id)
+            .join(Card, UserCard.card_id == Card.id)
+            .where(
+                *card_filters,
+                UserCard.acquired_at >= start_at,
+                UserCard.acquired_at < end_at,
+            )
+        )
+        if pack_id:
+            user_card_stmt = user_card_stmt.join(
+                CardPackOpening, CardPackOpening.user_card_id == UserCard.id
+            ).where(CardPackOpening.pack_id == pack_id)
+        user_cards = list((await session.execute(user_card_stmt)).all())
+
+        opening_stmt = (
+            select(
+                CardPackOpening.user_id,
+                CardPackOpening.created_at,
+                CardPackOpening.pack_id,
+                CardPackOpening.card_id,
+            )
+            .join(Card, CardPackOpening.card_id == Card.id)
+            .where(
+                *card_filters,
+                CardPackOpening.created_at >= start_at,
+                CardPackOpening.created_at < end_at,
+            )
+        )
+        if pack_id:
+            opening_stmt = opening_stmt.where(CardPackOpening.pack_id == pack_id)
+        openings = list((await session.execute(opening_stmt)).all())
+
+        analytics_filters: list[object] = [
+            AnalyticsEvent.created_at >= start_at,
+            AnalyticsEvent.created_at < end_at,
+        ]
+        if organization_id:
+            legacy_analytics_scope = (
+                AnalyticsEvent.artist_id.in_(scoped_organization_artist_ids)
+                if scoped_organization_artist_ids
+                else AnalyticsEvent.id == "__no_scoped_analytics__"
+            )
+            analytics_filters.append(
+                or_(
+                    AnalyticsEvent.organization_id == organization_id,
+                    and_(
+                        AnalyticsEvent.organization_id.is_(None),
+                        legacy_analytics_scope,
+                    ),
+                )
+            )
+        if artist_id:
+            analytics_filters.append(AnalyticsEvent.artist_id == artist_id)
+        elif not context.is_root:
+            analytics_filters.append(AnalyticsEvent.artist_id.in_(context.assigned_artist_ids))
+        if pack_id:
+            analytics_filters.append(AnalyticsEvent.pack_id == pack_id)
+        analytics = list(
+            (
+                await session.execute(
+                    select(
+                        AnalyticsEvent.event_name,
+                        AnalyticsEvent.user_id,
+                        AnalyticsEvent.created_at,
+                        AnalyticsEvent.metadata_json,
+                    ).where(*analytics_filters)
+                )
+            ).all()
+        )
+        xp_stmt = (
+            select(XpLedger.user_id, XpLedger.created_at, EngagementEvent.payload)
+            .join(EngagementEvent, EngagementEvent.id == XpLedger.event_id)
+            .where(XpLedger.created_at >= start_at, XpLedger.created_at < end_at)
+        )
+        xp_rows = list((await session.execute(xp_stmt)).all())
+        if scoped_organization_artist_ids is not None:
+            xp_rows = [
+                row
+                for row in xp_rows
+                if (row.payload or {}).get("artistId") in scoped_organization_artist_ids
+            ]
+        active_users = {row.user_id for row in user_cards if row.user_id}
+        active_users.update(row.user_id for row in openings if row.user_id)
+        active_users.update(row.user_id for row in analytics if row.user_id)
+        active_users.update(row.user_id for row in xp_rows if row.user_id)
+        return {
+            "userCards": user_cards,
+            "openings": openings,
+            "analytics": analytics,
+            "xpRows": xp_rows,
+            "activeFans": len(active_users),
+        }
+
+    current = await range_snapshot(current_start, now)
+    previous = (
+        await range_snapshot(previous_start, current_start)
+        if compare
+        else {
+            "userCards": [],
+            "openings": [],
+            "analytics": [],
+            "activeFans": 0,
+        }
+    )
+
+    current_events = [row.event_name for row in current["analytics"]]
+    previous_events = [row.event_name for row in previous["analytics"]]
+    recognized = current_events.count("redemption.recognized")
+    registered = sum(1 for row in current["userCards"] if row.redeem_code_id)
+    viewed = current_events.count("collection.card_viewed")
+    pack_openings = len(current["openings"])
+    previous_pack_openings = len(previous["openings"])
+    issued_cards = len(current["userCards"])
+    previous_issued_cards = len(previous["userCards"])
+    registration_rate = round(registered / recognized * 100, 1) if recognized else 0.0
+    previous_recognized = previous_events.count("redemption.recognized")
+    previous_registered = sum(1 for row in previous["userCards"] if row.redeem_code_id)
+    previous_registration_rate = (
+        round(previous_registered / previous_recognized * 100, 1) if previous_recognized else 0.0
+    )
+
+    trend_days = [current_start.date() + timedelta(days=index) for index in range(period)]
+    trend = []
+    for day in trend_days:
+        next_day = day + timedelta(days=1)
+        day_users = {
+            row.user_id for row in current["userCards"] if day <= row.acquired_at.date() < next_day
+        }
+        day_users.update(
+            row.user_id for row in current["openings"] if day <= row.created_at.date() < next_day
+        )
+        day_users.update(
+            row.user_id for row in current["xpRows"] if day <= row.created_at.date() < next_day
+        )
+        trend.append(
+            {
+                "date": day.isoformat(),
+                "activeFans": len(day_users),
+                "packOpenings": sum(
+                    1 for row in current["openings"] if day <= row.created_at.date() < next_day
+                ),
+            }
+        )
+
+    packs = list(
+        (
+            await session.scalars(
+                select(CardPack).where(*pack_filters).order_by(CardPack.name, CardPack.version)
+            )
+        ).all()
+    )
+    if pack_id:
+        packs = [pack for pack in packs if pack.id == pack_id]
+    current_openings_by_pack: dict[str, int] = {}
+    previous_openings_by_pack: dict[str, int] = {}
+    for row in current["openings"]:
+        current_openings_by_pack[row.pack_id] = current_openings_by_pack.get(row.pack_id, 0) + 1
+    for row in previous["openings"]:
+        previous_openings_by_pack[row.pack_id] = previous_openings_by_pack.get(row.pack_id, 0) + 1
+    pack_performance = [
+        {
+            "id": pack.id,
+            "name": pack.name,
+            "artistId": pack.artist_id,
+            "seasonName": pack.season_name,
+            "openings": current_openings_by_pack.get(pack.id, 0),
+            "registrationRate": 100.0 if current_openings_by_pack.get(pack.id, 0) else 0.0,
+            "change": _statistics_change(
+                current_openings_by_pack.get(pack.id, 0),
+                previous_openings_by_pack.get(pack.id, 0),
+            ),
+        }
+        for pack in packs
+    ]
+
+    odds_stmt = (
+        select(Card.rarity, CardPackCard.probability)
+        .join(CardPackCard, CardPackCard.card_id == Card.id)
+        .join(CardPack, CardPack.id == CardPackCard.pack_id)
+        .where(*card_filters, *pack_filters, CardPackCard.enabled.is_(True))
+    )
+    if pack_id:
+        odds_stmt = odds_stmt.where(CardPackCard.pack_id == pack_id)
+    odds_rows = list((await session.execute(odds_stmt)).all())
+    published_by_rarity: dict[str, float] = {}
+    for rarity, probability in odds_rows:
+        key = rarity or "N"
+        published_by_rarity[key] = published_by_rarity.get(key, 0.0) + float(probability)
+    published_total = sum(published_by_rarity.values()) or 1.0
+    opening_card_counts: dict[str, int] = {}
+    for row in current["openings"]:
+        opening_card_counts[row.card_id] = opening_card_counts.get(row.card_id, 0) + 1
+    actual_by_rarity: dict[str, int] = {}
+    if opening_card_counts:
+        rarity_rows = list(
+            (
+                await session.execute(
+                    select(Card.id, Card.rarity).where(Card.id.in_(opening_card_counts))
+                )
+            ).all()
+        )
+        for card_row_id, rarity in rarity_rows:
+            key = rarity or "N"
+            actual_by_rarity[key] = actual_by_rarity.get(key, 0) + opening_card_counts[card_row_id]
+    actual_total = sum(actual_by_rarity.values()) or 1
+    odds_integrity = []
+    for rarity in ("UR", "SR", "R", "N"):
+        published = round(published_by_rarity.get(rarity, 0.0) / published_total * 100, 2)
+        actual = round(actual_by_rarity.get(rarity, 0) / actual_total * 100, 2)
+        odds_integrity.append(
+            {
+                "rarity": rarity,
+                "published": published,
+                "actual": actual,
+                "variance": round(actual - published, 2),
+            }
+        )
+
+    organizations = list(
+        (
+            await session.scalars(
+                select(Organization)
+                .where(
+                    Organization.status == "active",
+                    *(
+                        []
+                        if context.is_root
+                        else [Organization.id == context.membership.organization_id]
+                    ),
+                )
+                .order_by(Organization.name)
+            )
+        ).all()
+    )
+    artist_stmt = select(Artist)
+    if artist_id:
+        artist_stmt = artist_stmt.where(Artist.id == artist_id)
+    elif organization_id:
+        artist_stmt = artist_stmt.join(
+            OrganizationArtist, OrganizationArtist.artist_id == Artist.id
+        ).where(OrganizationArtist.organization_id == organization_id)
+    elif not context.is_root:
+        artist_stmt = artist_stmt.where(Artist.id.in_(context.assigned_artist_ids))
+    artists = list((await session.scalars(artist_stmt.order_by(Artist.name))).all())
+    tracking_filters: list[object] = []
+    if organization_id:
+        legacy_tracking_scope = (
+            AnalyticsEvent.artist_id.in_(scoped_organization_artist_ids)
+            if scoped_organization_artist_ids
+            else AnalyticsEvent.id == "__no_scoped_tracking__"
+        )
+        tracking_filters.append(
+            or_(
+                AnalyticsEvent.organization_id == organization_id,
+                and_(AnalyticsEvent.organization_id.is_(None), legacy_tracking_scope),
+            )
+        )
+    if artist_id:
+        tracking_filters.append(AnalyticsEvent.artist_id == artist_id)
+    elif not context.is_root:
+        tracking_filters.append(AnalyticsEvent.artist_id.in_(context.assigned_artist_ids))
+    if pack_id:
+        tracking_filters.append(AnalyticsEvent.pack_id == pack_id)
+    tracking_since = await session.scalar(
+        select(func.min(AnalyticsEvent.created_at)).where(*tracking_filters)
+    )
+    failed_count = current_events.count("redemption.failed")
+    funnel_base = recognized or 1
+    return {
+        "ok": True,
+        "data": {
+            "scope": {
+                "kind": "root" if context.is_root else "partner",
+                "organizationId": organization_id,
+                "artistId": artist_id,
+                "packId": pack_id,
+            },
+            "period": {"days": period, "compare": compare},
+            "trackingSince": (tracking_since or now).isoformat(),
+            "filters": {
+                "organizations": [
+                    {"id": organization.id, "name": organization.name}
+                    for organization in organizations
+                ],
+                "artists": [{"id": artist.id, "name": artist.name} for artist in artists],
+                "packs": [
+                    {"id": pack.id, "name": pack.name, "artistId": pack.artist_id} for pack in packs
+                ],
+            },
+            "kpis": {
+                "activeFans": {
+                    "current": current["activeFans"],
+                    "previous": previous["activeFans"],
+                    "change": _statistics_change(current["activeFans"], previous["activeFans"]),
+                },
+                "issuedCards": {
+                    "current": issued_cards,
+                    "previous": previous_issued_cards,
+                    "change": _statistics_change(issued_cards, previous_issued_cards),
+                },
+                "packOpenings": {
+                    "current": pack_openings,
+                    "previous": previous_pack_openings,
+                    "change": _statistics_change(pack_openings, previous_pack_openings),
+                },
+                "registrationRate": {
+                    "current": registration_rate,
+                    "previous": previous_registration_rate,
+                    "change": round(registration_rate - previous_registration_rate, 1),
+                },
+            },
+            "trend": trend,
+            "funnel": [
+                {"key": "recognized", "label": "인증번호 인식", "count": recognized, "rate": 100.0},
+                {
+                    "key": "registered",
+                    "label": "카드 등록",
+                    "count": registered,
+                    "rate": round(registered / funnel_base * 100, 1),
+                },
+                {
+                    "key": "collectionViewed",
+                    "label": "컬렉션 확인",
+                    "count": viewed,
+                    "rate": round(viewed / funnel_base * 100, 1),
+                },
+            ],
+            "packPerformance": pack_performance,
+            "operationHealth": {
+                "redemptionFailures": failed_count,
+                "duplicateAttempts": sum(
+                    1
+                    for row in current["analytics"]
+                    if (row.metadata_json or {}).get("errorCode") == "REDEEM_CODE_ALREADY_USED"
+                ),
+                "oddsStatus": "attention"
+                if any(abs(item["variance"]) >= 1 for item in odds_integrity)
+                else "normal",
+            },
+            "oddsIntegrity": odds_integrity,
         },
     }
 

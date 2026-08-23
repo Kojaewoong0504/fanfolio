@@ -35,6 +35,12 @@ const state = {
   notificationPanelOpen: false,
   metrics: null,
   operationalMetrics: null,
+  statistics: null,
+  statisticsPeriod: "30",
+  statisticsCompare: true,
+  statisticsOrganization: "all",
+  statisticsArtist: "all",
+  statisticsPack: "all",
   recentActivity: [],
   notifications: [],
   unreadNotificationCount: 0,
@@ -307,6 +313,7 @@ function title() {
     users: "서비스 사용자",
     audit: "감사 로그",
     guide: "운영 가이드",
+    statistics: "통계",
   }[state.view];
 }
 
@@ -324,6 +331,9 @@ function navItems() {
     { id: "cards", label: "카드", icon: "style" },
     ...(can("events:read")
       ? [{ id: "events", label: "이벤트", icon: "campaign" }]
+      : []),
+    ...(can("statistics:read")
+      ? [{ id: "statistics", label: "통계", icon: "monitoring" }]
       : []),
     ...(canViewFanGrowth()
       ? [{ id: "fan-growth", label: "팬 성장", icon: "workspace_premium" }]
@@ -417,6 +427,7 @@ function currentView() {
     "fan-growth": fanGrowthView,
     users: usersView,
     audit: auditView,
+    statistics: statisticsView,
     guide: guideView,
   }[state.view]?.() || dashboardView();
 }
@@ -2034,6 +2045,28 @@ async function loginAdmin(event) {
     layout();
   }
 }
+
+async function loadStatistics(renderAfter = true) {
+  if (!can("statistics:read")) {
+    state.statistics = null;
+    return;
+  }
+  const params = new URLSearchParams({
+    period: state.statisticsPeriod,
+    compare: String(state.statisticsCompare),
+  });
+  if (state.statisticsOrganization !== "all")
+    params.set("organizationId", state.statisticsOrganization);
+  if (state.statisticsArtist !== "all")
+    params.set("artistId", state.statisticsArtist);
+  if (state.statisticsPack !== "all")
+    params.set("packId", state.statisticsPack);
+  const result = await api(`/admin/statistics?${params}`);
+  state.statistics = result.data;
+  state.error = "";
+  if (renderAfter) layout();
+}
+
 async function loadData() {
   state.error = "";
   try {
@@ -2056,7 +2089,7 @@ async function loadData() {
     if (state.auditQuery.trim()) auditParams.set("q", state.auditQuery.trim());
     if (state.auditAction !== "all")
       auditParams.set("action", state.auditAction);
-    const [dashboard, cards, cardPacks, auditLogs, catalog, notifications, operationalMetrics] = await Promise.all([
+    const [dashboard, cards, cardPacks, auditLogs, catalog, notifications, operationalMetrics, statistics] = await Promise.all([
       api("/admin/dashboard"),
       api("/admin/cards"),
       can("cards:read")
@@ -2066,6 +2099,9 @@ async function loadData() {
       api("/admin/catalog"),
       api("/admin/notifications"),
       loadOptionalOperationalMetrics(),
+      can("statistics:read")
+        ? loadStatistics(false).then(() => ({ data: state.statistics }))
+        : Promise.resolve({ data: null }),
     ]);
     state.metrics = dashboard.data.metrics;
     state.operationalMetrics = operationalMetrics.data;
@@ -2078,6 +2114,7 @@ async function loadData() {
     state.catalog = catalog.data;
     state.notifications = notifications.data.items || [];
     state.unreadNotificationCount = notifications.data.unreadCount || 0;
+    state.statistics = statistics.data;
     await loadFanGrowth(false);
 
     if (can("events:read")) await loadEvents(false);
@@ -3446,7 +3483,34 @@ function bind() {
       state.accountMenuOpen = false;
       layout();
       if (state.view === "events") void loadEvents(true);
+      if (state.view === "statistics") void loadStatistics(true);
     });
+  });
+  document.querySelectorAll("[data-production-statistics-period]").forEach((button) =>
+    button.addEventListener("click", () => {
+      state.statisticsPeriod = button.dataset.productionStatisticsPeriod;
+      void loadStatistics(true);
+    }),
+  );
+  document.querySelectorAll("[data-production-statistics-filter]").forEach((select) =>
+    select.addEventListener("change", () => {
+      const key = select.dataset.productionStatisticsFilter;
+      if (key === "organization") {
+        state.statisticsOrganization = select.value;
+        state.statisticsArtist = "all";
+        state.statisticsPack = "all";
+      } else if (key === "artist") {
+        state.statisticsArtist = select.value;
+        state.statisticsPack = "all";
+      } else {
+        state.statisticsPack = select.value;
+      }
+      void loadStatistics(true);
+    }),
+  );
+  document.querySelector("[data-production-statistics-compare]")?.addEventListener("change", (event) => {
+    state.statisticsCompare = event.currentTarget.checked;
+    void loadStatistics(true);
   });
   document.querySelector("#open-card-pack-create")?.addEventListener("click", () => {
     state.view = "card-pack-create";
@@ -4542,16 +4606,17 @@ function statisticsFormatNumber(value) {
 }
 
 function statisticsMetricCard({ iconName, label, value, unit = "", delta, tone = "violet", description }) {
-  return `<article class="statistics-kpi-card"><div class="statistics-kpi-icon ${tone}">${icon(iconName)}</div><div class="statistics-kpi-copy"><span>${label}</span><strong>${value}<small>${unit}</small></strong><p><em class="${delta.startsWith("-") ? "negative" : "positive"}">${delta}</em>${description}</p></div></article>`;
+  const comparison = delta ? `<em class="${delta.startsWith("-") ? "negative" : "positive"}">${delta}</em>${description}` : "선택 기간";
+  return `<article class="statistics-kpi-card"><div class="statistics-kpi-icon ${tone}">${icon(iconName)}</div><div class="statistics-kpi-copy"><span>${label}</span><strong>${value}<small>${unit}</small></strong><p>${comparison}</p></div></article>`;
 }
 
-function statisticsTrendChart(primary, secondary, labels) {
+function statisticsTrendChart(primary, secondary, labels, showComparison = statisticsPreviewState.compare) {
   const width = 680;
   const height = 220;
   const primaryPoints = statisticsChartPoints(primary, width, height);
   const secondaryPoints = statisticsChartPoints(secondary, width, height);
   const areaPoints = primaryPoints ? `0,${height} ${primaryPoints} ${width},${height}` : "";
-  return `<div class="statistics-trend-chart"><div class="statistics-chart-legend"><span class="primary">현재 기간</span>${statisticsPreviewState.compare ? '<span class="secondary">이전 기간</span>' : ""}</div><svg viewBox="0 0 ${width} ${height + 28}" role="img" aria-label="기간별 팬 성장과 카드팩 개봉 추이"><defs><linearGradient id="statisticsTrendFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#6657ed" stop-opacity=".24"/><stop offset="100%" stop-color="#6657ed" stop-opacity="0"/></linearGradient></defs><g class="statistics-chart-grid"><line x1="0" y1="0" x2="${width}" y2="0"/><line x1="0" y1="73" x2="${width}" y2="73"/><line x1="0" y1="146" x2="${width}" y2="146"/><line x1="0" y1="220" x2="${width}" y2="220"/></g><polygon class="statistics-chart-area" points="${areaPoints}"/><polyline class="statistics-chart-line primary" points="${primaryPoints}"/>${statisticsPreviewState.compare ? `<polyline class="statistics-chart-line secondary" points="${secondaryPoints}"/>` : ""}${primaryPoints.split(" ").map((point) => { const [x, y] = point.split(","); return `<circle class="statistics-chart-dot" cx="${x}" cy="${y}" r="4"/>`; }).join("")}<g class="statistics-chart-labels">${labels.map((label, index) => `<text x="${(index / Math.max(1, labels.length - 1)) * width}" y="246" text-anchor="${index === 0 ? "start" : index === labels.length - 1 ? "end" : "middle"}">${label}</text>`).join("")}</g></svg></div>`;
+  return `<div class="statistics-trend-chart"><div class="statistics-chart-legend"><span class="primary">현재 기간</span>${showComparison ? '<span class="secondary">이전 기간</span>' : ""}</div><svg viewBox="0 0 ${width} ${height + 28}" role="img" aria-label="기간별 팬 성장과 카드팩 개봉 추이"><defs><linearGradient id="statisticsTrendFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#6657ed" stop-opacity=".24"/><stop offset="100%" stop-color="#6657ed" stop-opacity="0"/></linearGradient></defs><g class="statistics-chart-grid"><line x1="0" y1="0" x2="${width}" y2="0"/><line x1="0" y1="73" x2="${width}" y2="73"/><line x1="0" y1="146" x2="${width}" y2="146"/><line x1="0" y1="220" x2="${width}" y2="220"/></g><polygon class="statistics-chart-area" points="${areaPoints}"/><polyline class="statistics-chart-line primary" points="${primaryPoints}"/>${showComparison ? `<polyline class="statistics-chart-line secondary" points="${secondaryPoints}"/>` : ""}${primaryPoints.split(" ").map((point) => { const [x, y] = point.split(","); return `<circle class="statistics-chart-dot" cx="${x}" cy="${y}" r="4"/>`; }).join("")}<g class="statistics-chart-labels">${labels.map((label, index) => `<text x="${(index / Math.max(1, labels.length - 1)) * width}" y="246" text-anchor="${index === 0 ? "start" : index === labels.length - 1 ? "end" : "middle"}">${label}</text>`).join("")}</g></svg></div>`;
 }
 
 function statisticsOddsComparison(rows) {
@@ -4560,6 +4625,51 @@ function statisticsOddsComparison(rows) {
 
 function statisticsPerformanceTable(rows, partner = false) {
   return `<div class="statistics-table-wrap"><table class="statistics-table"><thead><tr><th>카드팩</th><th>아티스트</th><th>개봉</th><th>${partner ? "컬렉션 등록" : "등록 전환"}</th><th>전기 대비</th></tr></thead><tbody>${rows.map((row) => `<tr><td><span class="statistics-pack-cell"><i style="--pack-color:${row.color}"></i><span><strong>${row.pack}</strong><small>${row.season}</small></span></span></td><td>${row.artist}</td><td><strong>${statisticsFormatNumber(row.opens)}</strong></td><td>${row.conversion}%</td><td><em class="statistics-table-delta ${row.delta < 0 ? "negative" : "positive"}">${row.delta > 0 ? "+" : ""}${row.delta}%</em></td></tr>`).join("")}</tbody></table></div>`;
+}
+
+function statisticsDelta(value, suffix = "%") {
+  if (value === null || value === undefined) return "";
+  const number = Number(value || 0);
+  return `${number > 0 ? "+" : ""}${number.toFixed(1)}${suffix}`;
+}
+
+function statisticsOptions(items, selected, allLabel) {
+  return `<option value="all">${allLabel}</option>${items.map((item) => `<option value="${escapeHtml(item.id)}" ${selected === item.id ? "selected" : ""}>${escapeHtml(item.name)}</option>`).join("")}`;
+}
+
+function statisticsSampleTrend(rows, maximumPoints = 8) {
+  if (rows.length <= maximumPoints) return rows;
+  const step = Math.ceil((rows.length - 1) / (maximumPoints - 1));
+  const sampled = rows.filter((_, index) => index % step === 0);
+  const last = rows.at(-1);
+  if (sampled.at(-1) !== last) sampled.push(last);
+  return sampled;
+}
+
+function statisticsView() {
+  if (!can("statistics:read")) return dashboardView();
+  const data = state.statistics;
+  if (!data) {
+    return `<div class="page-heading"><div><p class="eyebrow">INSIGHTS</p><h2>통계</h2><p>운영 통계를 불러오는 중입니다.</p></div></div><section class="panel empty">통계 데이터를 준비하고 있습니다.</section>`;
+  }
+  const rootScope = data.scope.kind === "root";
+  const comparisonEnabled = Boolean(data.period.compare);
+  const kpis = Object.fromEntries(
+    Object.entries(data.kpis).map(([key, metric]) => [key, { ...metric, change: comparisonEnabled ? metric.change : null }]),
+  );
+  const packRows = data.packPerformance.map((row, index) => ({
+    pack: row.name,
+    season: row.seasonName || "시즌 미지정",
+    artist: data.filters.artists.find((artist) => artist.id === row.artistId)?.name || row.artistId,
+    opens: row.openings,
+    conversion: Number(row.registrationRate || 0),
+    delta: Number(row.change || 0),
+    color: ["#6657ed", "#5ca9ef", "#e56bb0", "#172a66"][index % 4],
+  }));
+  const sampledTrend = statisticsSampleTrend(data.trend);
+  const trendValues = sampledTrend.map((row) => Number(row.activeFans || 0));
+  const health = data.operationHealth;
+  return `<div class="statistics-production"><div class="statistics-hero"><div><nav>통계 <span>›</span> <strong>${rootScope ? "서비스 전체" : "파트너 성과"}</strong></nav><h2>${rootScope ? "서비스 운영 통계" : "파트너 성과 통계"}</h2><p>${rootScope ? "팬 활동부터 카드 발급 무결성까지 실제 서비스 데이터를 확인합니다." : "내 조직과 배정 아티스트 범위의 실제 성과를 확인합니다."}</p></div><span class="scope-chip ${rootScope ? "root-scope" : "company-scope"}">${icon(rootScope ? "shield_person" : "domain")}<span>${rootScope ? "ROOT 전체 범위" : "파트너 전용 범위"}</span></span></div><div class="statistics-filter-bar"><div class="statistics-periods" role="group" aria-label="조회 기간">${["7", "30", "90"].map((period) => `<button type="button" data-production-statistics-period="${period}" class="${state.statisticsPeriod === period ? "active" : ""}">${period}일</button>`).join("")}</div><div class="statistics-selects">${rootScope ? `<select aria-label="파트너 필터" data-production-statistics-filter="organization">${statisticsOptions(data.filters.organizations, state.statisticsOrganization, "전체 파트너")}</select>` : ""}<select aria-label="아티스트 필터" data-production-statistics-filter="artist">${statisticsOptions(data.filters.artists, state.statisticsArtist, "전체 아티스트")}</select><select aria-label="카드팩 필터" data-production-statistics-filter="pack">${statisticsOptions(data.filters.packs, state.statisticsPack, "전체 카드팩")}</select><label class="statistics-compare-toggle"><input type="checkbox" data-production-statistics-compare ${state.statisticsCompare ? "checked" : ""}/><span></span>전기 비교</label></div></div><section class="statistics-kpi-grid">${statisticsMetricCard({ iconName: "groups", label: rootScope ? "전체 활성 팬" : "파트너 활성 팬", value: statisticsFormatNumber(kpis.activeFans.current), unit: "명", delta: statisticsDelta(kpis.activeFans.change), tone: "violet", description: " 이전 기간 대비" })}${statisticsMetricCard({ iconName: "playing_cards", label: "카드 발급", value: statisticsFormatNumber(kpis.issuedCards.current), unit: "장", delta: statisticsDelta(kpis.issuedCards.change), tone: "blue", description: " 현재 범위" })}${statisticsMetricCard({ iconName: "inventory_2", label: "카드팩 개봉", value: statisticsFormatNumber(kpis.packOpenings.current), unit: "회", delta: statisticsDelta(kpis.packOpenings.change), tone: "mint", description: " 공개 카드팩 기준" })}${statisticsMetricCard({ iconName: "verified", label: "등록 완료율", value: Number(kpis.registrationRate.current).toFixed(1), unit: "%", delta: statisticsDelta(kpis.registrationRate.change, "%p"), tone: "amber", description: " 인식 대비 등록" })}</section><section class="statistics-dashboard-grid"><article class="statistics-panel statistics-trend-panel"><div class="statistics-panel-heading"><div><p class="eyebrow">ACTIVITY TREND</p><h3>일별 활성 팬 추이</h3></div><span class="statistics-panel-caption">${data.period.days}일 실제 기록</span></div>${statisticsTrendChart(trendValues, [], sampledTrend.map((row) => row.date.slice(5)), false)}</article><article class="statistics-panel"><div class="statistics-panel-heading"><div><p class="eyebrow">REGISTRATION FUNNEL</p><h3>카드 등록 퍼널</h3></div><span class="statistics-panel-caption">추적 시작 ${escapeHtml(data.trackingSince.slice(0, 10))}</span></div><div class="statistics-funnel">${data.funnel.map((row, index) => `<div style="--funnel-width:${Math.max(4, row.rate)}%"><span><b>${index + 1}</b>${escapeHtml(row.label)}</span><strong>${statisticsFormatNumber(row.count)}<small>${Number(row.rate).toFixed(1)}%</small></strong></div>`).join("")}</div></article><article class="statistics-panel statistics-wide-panel"><div class="statistics-panel-heading"><div><p class="eyebrow">PACK PERFORMANCE</p><h3>카드팩 성과</h3></div><span class="statistics-panel-caption">${packRows.length}개 카드팩</span></div>${packRows.length ? statisticsPerformanceTable(packRows, !rootScope) : '<div class="empty">선택한 범위에 카드팩 개봉 기록이 없습니다.</div>'}</article><article class="statistics-panel"><div class="statistics-panel-heading"><div><p class="eyebrow">OPERATION HEALTH</p><h3>운영 이상 징후</h3></div><span class="statistics-live-chip"><i></i> 실데이터</span></div><div class="statistics-alert-list"><div class="${health.redemptionFailures ? "warning" : "safe"}">${icon(health.redemptionFailures ? "error" : "check_circle")}<span><strong>등록 실패</strong><small>선택 기간 ${statisticsFormatNumber(health.redemptionFailures)}건</small></span><em>${health.redemptionFailures ? "확인 필요" : "정상"}</em></div><div>${icon("content_copy")}<span><strong>중복 등록 시도</strong><small>${statisticsFormatNumber(health.duplicateAttempts)}건</small></span><em>${health.duplicateAttempts ? "관찰" : "정상"}</em></div><div class="${health.oddsStatus === "normal" ? "safe" : "warning"}">${icon("fact_check")}<span><strong>확률 편차</strong><small>공개 확률 대비 실제 발급</small></span><em>${health.oddsStatus === "normal" ? "정상" : "확인"}</em></div></div></article><article class="statistics-panel statistics-wide-panel"><div class="statistics-panel-heading"><div><p class="eyebrow">ODDS INTEGRITY</p><h3>공개 확률 대비 실제 발급</h3></div><span class="statistics-panel-caption">선택 범위 기준</span></div>${statisticsOddsComparison(data.oddsIntegrity)}</article></section></div>`;
 }
 
 function rootStatisticsPreview() {
