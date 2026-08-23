@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from app.admin_access import (
     PARTNER_ACTIONS,
     PLATFORM_ACTIONS,
+    ROOT_ACTIONS,
     AdminContext,
     load_admin_context,
 )
@@ -51,6 +52,10 @@ PNG_1X1 = base64.b64decode(
 ORGANIZATION_LOGO_BYTES = PNG_1X1 + b"organization-logo"
 FIRST_LOGO_BYTES = PNG_1X1 + b"first-logo"
 SECOND_LOGO_BYTES = PNG_1X1 + b"second-logo"
+
+
+def test_root_actions_expose_redeem_code_read_and_write_contract() -> None:
+    assert {"codes:read", "codes:write"} <= ROOT_ACTIONS
 
 
 def create_partner(
