@@ -430,6 +430,50 @@ async def grant_points(
     return ledger
 
 
+async def spend_points(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    source_event_id: str,
+    rule_key: str,
+    amount: int,
+    description: str | None = None,
+    metadata: dict | None = None,
+) -> PointLedger:
+    if amount <= 0:
+        raise AppError(422, "INVALID_POINT_AMOUNT", "point amount must be positive")
+    existing = await session.scalar(
+        select(PointLedger).where(
+            PointLedger.user_id == user_id,
+            PointLedger.source_event_id == source_event_id,
+            PointLedger.rule_key == rule_key,
+        )
+    )
+    if existing:
+        return existing
+
+    balance = await session.scalar(
+        select(PointBalance).where(PointBalance.user_id == user_id).with_for_update()
+    )
+    if balance is None or balance.balance < amount:
+        raise AppError(409, "INSUFFICIENT_POINTS", "포인트가 부족합니다.")
+    balance.balance -= amount
+    ledger = PointLedger(
+        id=f"point_{uuid4().hex[:12]}",
+        user_id=user_id,
+        source_event_id=source_event_id,
+        rule_key=rule_key,
+        transaction_type="spend",
+        amount=-amount,
+        balance_after=balance.balance,
+        description=description,
+        metadata_json=metadata or {},
+    )
+    session.add(ledger)
+    await session.flush()
+    return ledger
+
+
 def base_xp_for(event: EngagementEvent) -> int:
     if event.kind == "card_collected":
         return 30
@@ -702,6 +746,15 @@ async def deliver_mission_reward(
             amount=points,
             description=f"Mission reward: {mission.title}",
             metadata={"missionId": mission.id, "periodKey": period_key},
+        )
+    reward_id = reward_payload.get("rewardId")
+    if reward_id:
+        await grant_reward(
+            session,
+            user_id=event.user_id,
+            reward_id=str(reward_id),
+            source_event_id=event.id,
+            rule_key=rule_key,
         )
     await notify_mission_once(
         session,

@@ -52,6 +52,21 @@ def pass_season_payload(**overrides: Any) -> dict[str, Any]:
     return payload
 
 
+def mission_payload(**overrides: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "title": "댓글로 응원하기",
+        "description": "아티스트 이벤트에 댓글을 남겨 보세요.",
+        "artistId": "artist_nova3",
+        "eventKind": "event_commented",
+        "targetValue": 1,
+        "recurrence": "daily",
+        "conditionPayload": {"eventType": "comment"},
+        "rewardPayload": {"xp": 20, "points": 5},
+    }
+    payload.update(overrides)
+    return payload
+
+
 def seed_dashboard_growth_scope(org_id: str) -> None:
     async def seed() -> None:
         async with SessionLocal() as session:
@@ -489,6 +504,58 @@ def test_company_super_admin_can_publish_company_achievement(
     )
     assert published["status"] == "published"
     assert published["organizationId"] is not None
+
+
+def test_partner_manager_can_create_and_submit_scoped_mission_and_company_admin_can_publish(
+    actors: dict[str, TestClient], app: Any, seeded: dict[str, Any]
+) -> None:
+    organization, manager_member = create_partner(
+        actors["admin"],
+        email="mission-manager@starwave.com",
+        access_level="manager",
+    )
+    manager = login_partner(app, manager_member)
+
+    draft = assert_success(
+        manager.post("/api/admin/engagement/missions", json=mission_payload()),
+        201,
+    )
+    assert draft["status"] == "draft"
+    assert draft["eventKind"] == "event_commented"
+    assert draft["organizationId"] is not None
+
+    updated = assert_success(
+        manager.patch(
+            f"/api/admin/engagement/missions/{draft['id']}",
+            json={"title": "댓글로 더 크게 응원하기", "targetValue": 3},
+        )
+    )
+    assert updated["title"] == "댓글로 더 크게 응원하기"
+    assert updated["targetValue"] == 3
+
+    pending = assert_success(manager.post(f"/api/admin/engagement/missions/{draft['id']}/submit"))
+    assert pending["status"] == "pending_review"
+
+    company_admin_member = assert_success(
+        actors["admin"].post(
+            f"/api/admin/organizations/{organization['id']}/members",
+            json={
+                "email": "mission-company-admin@starwave.com",
+                "displayName": "starwave 회사 관리자",
+                "accessLevel": "company_admin",
+                "artistIds": ["artist_nova3"],
+            },
+        ),
+        201,
+    )
+    company_admin = login_partner(app, company_admin_member)
+    published = assert_success(
+        company_admin.post(f"/api/admin/engagement/missions/{draft['id']}/approve")
+    )
+    assert published["status"] == "published"
+
+    listed = assert_success(company_admin.get("/api/admin/engagement/missions"))["items"]
+    assert any(item["id"] == draft["id"] for item in listed)
 
 
 def test_achievement_review_status_transitions_are_constrained(

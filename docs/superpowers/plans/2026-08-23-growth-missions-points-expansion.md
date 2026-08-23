@@ -301,7 +301,7 @@ Commit intent: `Connect real fan actions to growth processing`
 - Modify: `backend/app/routers/fan.py`
 - Test: `backend/tests/contract/test_fan_growth_economy.py`
 
-- [ ] **Step 1: Write failing API contract tests**
+- [x] **Step 1: Write failing API contract tests**
 
 ```python
 def test_fan_can_read_missions_points_and_exchange_ticket(actors, published_mission, ticket_reward):
@@ -315,13 +315,13 @@ def test_fan_can_read_missions_points_and_exchange_ticket(actors, published_miss
     assert exchanged.json()["data"]["balance"] == points["balance"] - ticket_reward.point_cost
 ```
 
-- [ ] **Step 2: Run and verify 404/missing balance failures**
+- [x] **Step 2: Run and verify 404/missing balance failures**
 
 Run: `backend/.venv/bin/pytest -q backend/tests/contract/test_fan_growth_economy.py`
 
 Expected: FAIL.
 
-- [ ] **Step 3: Add fan APIs**
+- [x] **Step 3: Add fan APIs**
 
 - `GET /api/me/missions?status=active|completed|ended`
 - `POST /api/me/missions/{mission_id}/claim`
@@ -332,19 +332,19 @@ Expected: FAIL.
 
 Mission reward claim is idempotent. Point exchange locks the balance and grants the configured non-transferable reward in one transaction.
 
-- [ ] **Step 4: Replace `/api/me` point placeholder with the real balance**
+- [x] **Step 4: Replace `/api/me` point placeholder with the real balance**
 
 ```python
 "points": await current_point_balance(session, user.id)
 ```
 
-- [ ] **Step 5: Run fan contracts**
+- [x] **Step 5: Run fan contracts**
 
 Run: `backend/.venv/bin/pytest -q backend/tests/contract/test_fan_growth_economy.py backend/tests/contract/test_fan_growth.py`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Commit intent: `Expose missions and service points to fans`
 
@@ -357,17 +357,17 @@ Commit intent: `Expose missions and service points to fans`
 - Test: `backend/tests/contract/test_engagement_admin.py`
 - Create: `backend/tests/contract/test_growth_economy_admin.py`
 
-- [ ] **Step 1: Write failing role and workflow tests**
+- [x] **Step 1: Write failing role and workflow tests**
 
 Cover root/global policy access, partner-scoped mission drafts, cross-organization denial, submit/approve/publish transitions, immutable published policies, manual adjustment reason, and failed event retry audit.
 
-- [ ] **Step 2: Run and observe missing endpoints**
+- [x] **Step 2: Run and observe missing endpoints**
 
 Run: `backend/.venv/bin/pytest -q backend/tests/contract/test_growth_economy_admin.py`
 
 Expected: FAIL.
 
-- [ ] **Step 3: Add mission and policy APIs**
+- [x] **Step 3: Add mission and policy APIs**
 
 - `GET/POST/PATCH /api/admin/engagement/missions`
 - `POST /api/admin/engagement/missions/{id}/submit`
@@ -378,17 +378,17 @@ Expected: FAIL.
 - `GET /api/admin/engagement/events?status=failed`
 - `POST /api/admin/engagement/events/{id}/retry`
 
-- [ ] **Step 4: Enforce organization and approval scope**
+- [x] **Step 4: Enforce organization and approval scope**
 
 Published definitions are immutable. Partner managers can draft and submit in assigned organization/artist scope; platform approvers publish; only root/platform finance-like permission can manually adjust points.
 
-- [ ] **Step 5: Run admin contracts**
+- [x] **Step 5: Run admin contracts**
 
 Run: `backend/.venv/bin/pytest -q backend/tests/contract/test_growth_economy_admin.py backend/tests/contract/test_engagement_admin.py`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Commit intent: `Let scoped operators govern missions and points`
 
@@ -404,25 +404,25 @@ Commit intent: `Let scoped operators govern missions and points`
 - Create: `frontend/src/components/FanGrowthEconomy.css`
 - Create: `frontend/tests/fan-missions-points.test.mjs`
 
-- [ ] **Step 1: Write failing source-contract and route tests**
+- [x] **Step 1: Write failing source-contract and route tests**
 
 Assert real API paths, no fixture point constant, `/growth/missions` and `/points` routes, status filtering, claim/exchange commands, and loading/error/empty states.
 
-- [ ] **Step 2: Run and observe source-contract failures**
+- [x] **Step 2: Run and observe source-contract failures**
 
 Run: `node --test frontend/tests/fan-missions-points.test.mjs`
 
 Expected: FAIL.
 
-- [ ] **Step 3: Add typed API methods and route components**
+- [x] **Step 3: Add typed API methods and route components**
 
 Use existing `apiRequest`, `AppShell`, header, bottom navigation, chip, card, loading, and empty-state patterns. Do not add a sixth bottom-navigation item.
 
-- [ ] **Step 4: Connect summaries and profile balance**
+- [x] **Step 4: Connect summaries and profile balance**
 
 `FanGrowth` shows active missions and point balance from progression/economy APIs. `Settings` continues to display `me.points`, now backed by the ledger.
 
-- [ ] **Step 5: Run frontend tests, lint, and build**
+- [x] **Step 5: Run frontend tests, lint, and build**
 
 Run: `node --test frontend/tests/fan-missions-points.test.mjs frontend/tests/fan-growth.test.mjs frontend/tests/fan-growth-loading.test.mjs`
 
@@ -430,7 +430,7 @@ Run: `cd frontend && npm run lint && npm run build`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Commit intent: `Show real missions and points in the fan app`
 
@@ -441,31 +441,31 @@ Commit intent: `Show real missions and points in the fan app`
 - Modify: `admin_app/styles.css`
 - Create: `admin_app/tests/growth-economy-management.test.mjs`
 
-- [ ] **Step 1: Write failing admin UI contract tests**
+- [x] **Step 1: Write failing admin UI contract tests**
 
 Assert navigation, mission list/builder, recurrence and scope fields, reward inputs, validation and review actions, level threshold preview, point exchange catalog, failed-event retry, and permission-dependent controls.
 
-- [ ] **Step 2: Run and observe missing UI contracts**
+- [x] **Step 2: Run and observe missing UI contracts**
 
 Run: `node --test admin_app/tests/growth-economy-management.test.mjs`
 
 Expected: FAIL.
 
-- [ ] **Step 3: Implement API-backed views using existing design tokens**
+- [x] **Step 3: Implement API-backed views using existing design tokens**
 
 Add subnavigation under `팬 성장`: `미션`, `업적`, `XP·레벨`, `포인트`, `처리 상태`. Forms use full-page creation/edit flows where policy creation is complex; table detail uses the same aligned master-detail pattern as card operations.
 
-- [ ] **Step 4: Add client-side validation without duplicating server authority**
+- [x] **Step 4: Add client-side validation without duplicating server authority**
 
 Validate required fields, positive targets, recurrence periods, point costs and level threshold order. Server error codes remain the source of truth.
 
-- [ ] **Step 5: Run admin tests**
+- [x] **Step 5: Run admin tests**
 
 Run: `node --test admin_app/tests/growth-economy-management.test.mjs admin_app/tests/fan-growth-management.test.mjs`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Commit intent: `Operate growth missions and points from the admin web`
 

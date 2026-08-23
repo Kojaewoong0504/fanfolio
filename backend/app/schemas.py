@@ -87,6 +87,11 @@ class RedemptionRequest(BaseModel):
     source: Literal["qr", "manual"]
 
 
+class PointExchangeRequest(BaseModel):
+    reward_id: str = Field(alias="rewardId", min_length=1)
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class ProfileUpdate(BaseModel):
     nickname: str = Field(min_length=1, max_length=40)
     favorite_artist_ids: list[str] = Field(default_factory=list, alias="favoriteArtistIds")
@@ -617,6 +622,79 @@ class AchievementDefinitionCreate(BaseModel):
         if self.starts_at and self.ends_at and self.ends_at <= self.starts_at:
             raise ValueError("업적 종료 시각은 시작 시각 이후로 선택해 주세요.")
         return self
+
+
+class MissionDefinitionCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    description: str | None = Field(default=None, max_length=500)
+    organization_id: str | None = Field(default=None, alias="organizationId")
+    artist_id: str | None = Field(default=None, alias="artistId")
+    event_kind: str = Field(alias="eventKind", min_length=1, max_length=80)
+    target_value: int = Field(default=1, alias="targetValue", ge=1)
+    recurrence: Literal["once", "daily", "weekly", "season"] = "once"
+    condition_payload: dict = Field(default_factory=dict, alias="conditionPayload")
+    reward_payload: dict = Field(default_factory=dict, alias="rewardPayload")
+    starts_at: datetime | None = Field(default=None, alias="startsAt")
+    ends_at: datetime | None = Field(default=None, alias="endsAt")
+    model_config = ConfigDict(populate_by_name=True)
+
+    @model_validator(mode="after")
+    def validate_period(self) -> "MissionDefinitionCreate":
+        if self.starts_at and self.ends_at and self.ends_at <= self.starts_at:
+            raise ValueError("미션 종료 시각은 시작 시각 이후로 선택해 주세요.")
+        return self
+
+
+class MissionDefinitionUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=160)
+    description: str | None = Field(default=None, max_length=500)
+    organization_id: str | None = Field(default=None, alias="organizationId")
+    artist_id: str | None = Field(default=None, alias="artistId")
+    event_kind: str | None = Field(default=None, alias="eventKind", min_length=1, max_length=80)
+    target_value: int | None = Field(default=None, alias="targetValue", ge=1)
+    recurrence: Literal["once", "daily", "weekly", "season"] | None = None
+    condition_payload: dict | None = Field(default=None, alias="conditionPayload")
+    reward_payload: dict | None = Field(default=None, alias="rewardPayload")
+    starts_at: datetime | None = Field(default=None, alias="startsAt")
+    ends_at: datetime | None = Field(default=None, alias="endsAt")
+    model_config = ConfigDict(populate_by_name=True)
+
+    @model_validator(mode="after")
+    def validate_period(self) -> "MissionDefinitionUpdate":
+        if self.starts_at and self.ends_at and self.ends_at <= self.starts_at:
+            raise ValueError("미션 종료 시각은 시작 시각 이후로 선택해 주세요.")
+        return self
+
+
+class LevelThresholdInput(BaseModel):
+    level: int = Field(ge=1)
+    required_xp: int = Field(alias="requiredXp", ge=0)
+    label: str | None = Field(default=None, max_length=100)
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class LevelPolicyCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    thresholds: list[LevelThresholdInput] = Field(min_length=1, max_length=100)
+    effective_at: datetime | None = Field(default=None, alias="effectiveAt")
+    model_config = ConfigDict(populate_by_name=True)
+
+    @model_validator(mode="after")
+    def validate_thresholds(self) -> "LevelPolicyCreate":
+        levels = [item.level for item in self.thresholds]
+        if len(levels) != len(set(levels)):
+            raise ValueError("레벨 번호는 중복될 수 없습니다.")
+        if levels != sorted(levels):
+            raise ValueError("레벨 번호는 오름차순이어야 합니다.")
+        return self
+
+
+class PointAdjustmentRequest(BaseModel):
+    user_id: str = Field(alias="userId", min_length=1)
+    amount: int
+    reason: str = Field(min_length=1, max_length=500)
+    idempotency_key: str | None = Field(default=None, alias="idempotencyKey", max_length=160)
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class RewardCatalogCreate(BaseModel):

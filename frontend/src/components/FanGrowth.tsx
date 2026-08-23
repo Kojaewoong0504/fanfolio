@@ -4,6 +4,8 @@ import './FanGrowth.css'
 import './FanGrowthReference.css'
 import milestoneSprite from '../assets/fan-level-milestones.png'
 import { AuthenticatedImage } from './AuthenticatedImage'
+import { FanMissions } from './FanMissions'
+import { FanPoints } from './FanPoints'
 
 type FanGrowthMode = 'summary' | 'full'
 type FanGrowthSheet = 'achievements' | 'equipment' | null
@@ -302,6 +304,9 @@ export function FanGrowth({ progression, globalProgression = null, artistScopes 
           <b aria-hidden="true">›</b>
         </button>
       </section>
+
+      <FanMissions />
+      <FanPoints />
 
       <section className="fan-growth-reference-section fan-growth-milestone-section">
         <div className="fan-growth-reference-title"><h2>레벨 마일스톤</h2>{currentSeason && <button type="button" onClick={() => onViewPass()}>전체 보기 <b aria-hidden="true">›</b></button>}</div>

@@ -529,6 +529,64 @@ export type FanProgression = {
   debugEvents?: Array<{ kind: string; sourceUserCardId?: string; status: string }>
 }
 
+export type FanMission = {
+  id: string
+  title: string
+  description: string | null
+  eventKind: string
+  targetValue: number
+  recurrence: string
+  periodKey: string
+  currentValue: number
+  completed: boolean
+  completedAt: string | null
+  reward: Record<string, unknown>
+}
+
+export type PointLedgerItem = {
+  id: string
+  type: string
+  amount: number
+  balanceAfter: number
+  description: string
+  createdAt: string
+}
+
+export type PointExchange = {
+  id: string
+  name: string
+  type: RewardType
+  pointCost: number
+  metadata: Record<string, unknown>
+}
+
+export type FanPoints = { balance: number; items: PointLedgerItem[] }
+
+export function getFanMissions(status?: 'active' | 'completed' | 'ended'): Promise<{ ok: true; data: { items: FanMission[] } }> {
+  const query = status ? `?status=${status}` : ''
+  return apiFetch<{ ok: true; data: { items: FanMission[] } }>(`/me/missions${query}`)
+}
+
+export function claimFanMission(missionId: string): Promise<{ ok: true; data: { items: RewardGrant[] } }> {
+  return apiFetch<{ ok: true; data: { items: RewardGrant[] } }>(`/me/missions/${encodeURIComponent(missionId)}/claim`, { method: 'POST' })
+}
+
+export function getFanPoints(): Promise<{ ok: true; data: FanPoints }> {
+  return apiFetch<{ ok: true; data: FanPoints }>('/me/points')
+}
+
+export function getPointExchanges(): Promise<{ ok: true; data: { items: PointExchange[] } }> {
+  return apiFetch<{ ok: true; data: { items: PointExchange[] } }>('/catalog/point-exchanges')
+}
+
+export function exchangePoints(rewardId: string, idempotencyKey = crypto.randomUUID()): Promise<{ ok: true; data: { grantId: string; rewardId: string; points: number; balance: number; replayed?: boolean } }> {
+  return apiFetch<{ ok: true; data: { grantId: string; rewardId: string; points: number; balance: number; replayed?: boolean } }>('/me/points/exchange', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': idempotencyKey },
+    body: JSON.stringify({ rewardId }),
+  })
+}
+
 export type CardMaterial = 'matte' | 'pearl' | 'chrome'
 export type FoilPattern =
   | 'aurora-wave'

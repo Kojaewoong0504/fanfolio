@@ -20,6 +20,8 @@ from app.models import (
     PassProgress,
     PassSeason,
     PassTier,
+    PointBalance,
+    PointLedger,
     ProfileEquipment,
     RewardCatalog,
     RewardGrant,
@@ -1056,3 +1058,72 @@ def test_progression_can_be_read_for_one_artist_without_mixing_other_artist_xp(
     assert all_progression["level"]["totalXp"] == 70
     assert nova_progression["level"]["totalXp"] == 0
     assert luminous_progression["level"]["totalXp"] == 70
+
+
+def test_fan_points_and_exchange_are_backed_by_balance_ledger_and_idempotent_grant(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    async def seed_point_reward() -> None:
+        async with SessionLocal() as session:
+            session.add(
+                RewardCatalog(
+                    id="reward_point_exchange_card",
+                    artist_id="artist_nova3",
+                    reward_type="digital_bonus",
+                    name="Point Exchange Ticket",
+                    metadata_={"pointCost": 10},
+                    status="published",
+                )
+            )
+            session.add(PointBalance(user_id="fan", balance=20))
+            await session.commit()
+
+    asyncio.run(seed_point_reward())
+
+    profile = assert_success(actors["fan"].get("/api/me"))
+    assert profile["points"] == 20
+    points = assert_success(actors["fan"].get("/api/me/points"))
+    assert points["balance"] == 20
+    assert points["items"] == []
+
+    first = assert_success(
+        actors["fan"].post(
+            "/api/me/points/exchange",
+            json={"rewardId": "reward_point_exchange_card"},
+            headers={"Idempotency-Key": "fan-point-exchange-1"},
+        ),
+        201,
+    )
+    replay = assert_success(
+        actors["fan"].post(
+            "/api/me/points/exchange",
+            json={"rewardId": "reward_point_exchange_card"},
+            headers={"Idempotency-Key": "fan-point-exchange-1"},
+        ),
+        201,
+    )
+
+    assert first["points"] == 10
+    assert replay["replayed"] is True
+    assert replay["grantId"] == first["grantId"]
+
+    async def load_spend_rows() -> tuple[list[PointLedger], list[RewardGrant]]:
+        async with SessionLocal() as session:
+            ledgers = list(
+                await session.scalars(
+                    select(PointLedger).where(
+                        PointLedger.user_id == "fan",
+                        PointLedger.transaction_type == "spend",
+                    )
+                )
+            )
+            grants = list(
+                await session.scalars(select(RewardGrant).where(RewardGrant.user_id == "fan"))
+            )
+            return ledgers, grants
+
+    spend_rows, grants = asyncio.run(load_spend_rows())
+    assert len(spend_rows) == 1
+    assert spend_rows[0].amount == -10
+    assert spend_rows[0].balance_after == 10
+    assert len(grants) == 1
