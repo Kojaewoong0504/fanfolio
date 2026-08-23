@@ -262,9 +262,10 @@ async def main() -> None:
     session_b = f"integration-session-b-{suffix}"
     card_id = f"integration-card-{suffix}"
     drop_id = f"integration-drop-{suffix}"
-    code = f"integration-same-{suffix}"
-    code_a = f"integration-a-{suffix}"
-    code_b = f"integration-b-{suffix}"
+    normalized_suffix = suffix.upper()
+    code = f"INTEGRATION-SAME-{normalized_suffix}"
+    code_a = f"INTEGRATION-A-{normalized_suffix}"
+    code_b = f"INTEGRATION-B-{normalized_suffix}"
 
     async with SessionLocal() as session:
         session.add_all(
