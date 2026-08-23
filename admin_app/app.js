@@ -53,6 +53,11 @@ const state = {
   cardThumbnailUrls: {},
   drops: [],
   batches: [],
+  issuanceQuery: "",
+  issuanceStatus: "all",
+  issuanceType: "all",
+  issuancePeriod: "all",
+  selectedBatchId: null,
   events: [],
   eventPagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
   eventQuery: "",
@@ -1720,28 +1725,71 @@ async function saveCardPackComposition(event) {
   }
 }
 
+function issuanceBatchViewModel(batch) {
+  const card = state.cards.find((item) => item.id === batch.cardId) || null;
+  const drop = state.drops.find((item) => item.id === batch.dropId) || null;
+  const quantity = Number(batch.codeCount ?? batch.quantity ?? 0);
+  const registered = Number(batch.usedCount || 0);
+  const remaining = Math.max(0, quantity - registered);
+  const expired = Boolean(batch.expiresAt && new Date(batch.expiresAt) <= new Date());
+  const status = expired ? "만료" : remaining === 0 ? "등록 완료" : registered > 0 ? "발급 중" : "예약";
+  const type = Number(batch.maxUsesPerCode || 1) === 1 ? "한정 특전" : "다회 사용 코드";
+  return {
+    batch,
+    card,
+    drop,
+    quantity,
+    registered,
+    remaining,
+    expired,
+    status,
+    type,
+    title: card?.name || `${batch.prefix || "CARD"} 인증번호 배치`,
+  };
+}
+
+function issuanceBatchRows(items, selectedBatchId = state.selectedBatchId) {
+  if (!items.length) {
+    return '<tr><td colspan="8" class="empty">조건에 맞는 발급 배치가 없습니다.</td></tr>';
+  }
+  return items.map((item) => {
+    const imageUrl = item.card ? state.cardThumbnailUrls[item.card.id] : "";
+    const selected = item.batch.id === selectedBatchId;
+    const statusClass = item.status === "등록 완료" ? "success-badge" : item.status === "만료" ? "draft" : "warning-badge";
+    return `<tr tabindex="0" data-batch-id="${escapeHtml(item.batch.id)}" class="${selected ? "selected-preview-row" : ""}"><td><div class="code-batch-name">${imageUrl ? `<span class="preview-card-thumb"><img src="${escapeHtml(imageUrl)}" alt="" /></span>` : `<span class="preview-card-thumb batch-placeholder">${icon("confirmation_number")}</span>`}<div><strong title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</strong><small>${escapeHtml(item.batch.prefix || item.batch.id)}</small></div></div></td><td>${escapeHtml(item.type)}</td><td>${item.quantity.toLocaleString()}장</td><td>${item.registered.toLocaleString()}장</td><td>${item.remaining.toLocaleString()}장</td><td><span class="badge success-badge">생성 완료</span></td><td><span class="badge ${statusClass}">${escapeHtml(item.status)}</span></td><td>${escapeHtml(formatDate(item.batch.expiresAt))}</td></tr>`;
+  }).join("");
+}
+
 function batchesView() {
   const published = state.cards.filter((card) => card.status === "published");
-  const availableArtists = scopedArtists();
-  const artistOptions = [{ value: "", label: "아티스트 선택" }, ...availableArtists.map((artist) => ({ value: artist.id, label: artist.name }))];
-  const cardOptions = published.length
-    ? published.map((card) => ({ value: card.id, label: card.name }))
-    : [{ value: "", label: "공개 카드가 없습니다." }];
-  const dropOptions = state.drops.length
-    ? state.drops.map((drop) => ({ value: drop.id, label: `${drop.name} · ${drop.status}` }))
-    : [{ value: "", label: "먼저 드롭을 만드세요." }];
-  const canCreateDrop = can("drops:write") && availableArtists.length;
-  const canCreateBatch = can("codes:write") && published.length && state.drops.some((drop) => drop.status === "live");
-  return `<div class="page-heading"><div><p class="eyebrow">ISSUANCE</p><h2>발급·인증번호</h2><p>카드 발급 배치와 인증번호 상태를 관리합니다.</p></div><button class="primary" type="button" data-view="issuance-create" ${canCreateBatch ? "" : "disabled"}>${icon("add")} 추가 발급 배치 만들기</button></div><div class="batch-layout"><div class="panel"><h2>새 드롭 만들기</h2><form class="form" id="drop-form"><label class="field">드롭 이름<input name="name" placeholder="예: 2026 봄 컴백" required /></label><label class="field">대상 아티스트${adminSelect({ id: "drop-artist", name: "artistId", value: "", label: "대상 아티스트", className: "form-select", options: artistOptions })}</label><label class="field">시작 시각<input name="startsAt" type="datetime-local" /></label><label class="field">종료 시각<input name="endsAt" type="datetime-local" /></label><button class="primary" type="submit" ${canCreateDrop ? "" : "disabled"}>드롭 초안 생성</button></form><div class="table-wrap"><table class="table"><thead><tr><th>드롭</th><th>상태</th><th>기간</th><th>관리</th></tr></thead><tbody>${dropRows()}</tbody></table></div></div></div>${issuanceDetailView(state.batch)}${codeBatchPanel()}<div class="panel"><h2>생성된 코드 배치</h2><p class="hint">코드 수와 실제 사용 수를 확인하고 필요한 파일을 다시 내려받을 수 있습니다.</p><div class="table-wrap"><table class="table"><thead><tr><th>배치</th><th>생성 수</th><th>사용 수</th><th>만료</th><th>다운로드</th><th>관리</th></tr></thead><tbody>${batchRows()}</tbody></table></div></div>`;
+  const liveDrops = state.drops.filter((drop) => drop.status === "live");
+  const canCreateBatch = can("codes:write") && published.length && liveDrops.length;
+  const query = state.issuanceQuery.trim().toLowerCase();
+  const items = state.batches.map(issuanceBatchViewModel);
+  const visibleItems = items.filter((item) => {
+    const searchable = [item.title, item.batch.id, item.batch.prefix, item.card?.name, item.drop?.name].filter(Boolean).join(" ").toLowerCase();
+    const statusMatches = state.issuanceStatus === "all" || item.status === state.issuanceStatus;
+    const typeMatches = state.issuanceType === "all" || item.type === state.issuanceType;
+    const periodMatches = state.issuancePeriod === "all" || (state.issuancePeriod === "active" ? !item.expired : item.expired);
+    return (!query || searchable.includes(query)) && statusMatches && typeMatches && periodMatches;
+  });
+  const selected = items.find((item) => item.batch.id === state.selectedBatchId) || visibleItems[0] || items[0] || null;
+  const reservedCount = items.filter((item) => item.status === "예약").length;
+  const issuingCount = items.filter((item) => item.status === "발급 중").length;
+  const completedCount = items.filter((item) => item.status === "등록 완료").length;
+  const remainingCount = items.reduce((sum, item) => sum + item.remaining, 0);
+  return `<section class="card-ops-page issue-code-preview production-issuance-page"><div class="card-ops-heading"><div><p class="eyebrow">ISSUANCE</p><h2>발급·인증번호</h2><p>카드 발급 배치와 인증번호 상태를 관리합니다.</p></div><button class="primary" type="button" data-view="issuance-create" ${canCreateBatch ? "" : "disabled"}>${icon("add")} 추가 발급 배치 만들기</button></div><div class="card-ops-stats issue-stats"><article><span>${icon("calendar_month")}</span><small>예약 배치</small><strong>${reservedCount.toLocaleString()}개</strong></article><article><span>${icon("inventory_2")}</span><small>발급 중 배치</small><strong>${issuingCount.toLocaleString()}개</strong></article><article><span>${icon("check_circle")}</span><small>등록 완료 배치</small><strong>${completedCount.toLocaleString()}개</strong></article><article><span>${icon("schedule")}</span><small>잔여 수량</small><strong>${remainingCount.toLocaleString()}장</strong></article></div><div class="card-ops-master-detail issuance-master-detail"><section class="panel card-ops-table-panel"><div class="card-ops-toolbar"><label class="search-field">${icon("search")}<input id="issuance-search" value="${escapeHtml(state.issuanceQuery)}" placeholder="배치명, 카드명 검색" /></label><select data-issuance-filter="status"><option value="all" ${state.issuanceStatus === "all" ? "selected" : ""}>전체 상태</option><option value="예약" ${state.issuanceStatus === "예약" ? "selected" : ""}>예약</option><option value="발급 중" ${state.issuanceStatus === "발급 중" ? "selected" : ""}>발급 중</option><option value="등록 완료" ${state.issuanceStatus === "등록 완료" ? "selected" : ""}>등록 완료</option><option value="만료" ${state.issuanceStatus === "만료" ? "selected" : ""}>만료</option></select><select data-issuance-filter="type"><option value="all" ${state.issuanceType === "all" ? "selected" : ""}>전체 카드 유형</option><option value="한정 특전" ${state.issuanceType === "한정 특전" ? "selected" : ""}>한정 특전</option><option value="다회 사용 코드" ${state.issuanceType === "다회 사용 코드" ? "selected" : ""}>다회 사용 코드</option></select><select data-issuance-filter="period"><option value="all" ${state.issuancePeriod === "all" ? "selected" : ""}>전체 기간</option><option value="active" ${state.issuancePeriod === "active" ? "selected" : ""}>만료 전</option><option value="expired" ${state.issuancePeriod === "expired" ? "selected" : ""}>만료됨</option></select></div><div class="table-wrap"><table class="table"><thead><tr><th>배치명</th><th>카드 유형</th><th>수량</th><th>등록 완료</th><th>잔여 수량</th><th>인증번호 상태</th><th>상태</th><th>만료일</th></tr></thead><tbody>${issuanceBatchRows(visibleItems, selected?.batch.id)}</tbody></table></div><footer class="preview-table-footer"><strong>총 ${visibleItems.length.toLocaleString()}개</strong><span class="pagination-control">‹ <b>1</b> ›</span></footer></section>${issuanceDetailView(selected)}</div>${codeBatchPanel()}</section>`;
 }
 
 function issuanceCreationView() {
   return `<section class="card-ops-page issuance-creation-preview"><div class="page-heading"><div><p class="eyebrow">ISSUANCE</p><h2>새 발급 배치 만들기</h2><p>발급 대상과 수량, 인증번호 생성 방식을 등록합니다.</p></div><button class="secondary" type="button" data-view="batches">목록으로</button></div></section>`;
 }
 
-function issuanceDetailView(batch) {
-  if (!batch) return "";
-  return `<section class="panel issuance-detail-preview"><p class="eyebrow">배치 상세</p><h2>${escapeHtml(batch.id)}</h2></section>`;
+function issuanceDetailView(item) {
+  if (!item) return "";
+  const { batch, card, drop, quantity, registered, remaining, status, type, title } = item.batch ? item : issuanceBatchViewModel(item);
+  const statusClass = status === "등록 완료" ? "success-badge" : status === "만료" ? "draft" : "warning-badge";
+  return `<aside class="panel issuance-detail-preview"><div class="detail-panel-heading"><div><small>배치 상세</small><h3>${escapeHtml(title)}</h3><p><span class="badge draft">${escapeHtml(type)}</span> <span class="badge ${statusClass}">${escapeHtml(status)}</span></p></div></div><section><h4>기본 정보</h4><dl><div><dt>배치 번호</dt><dd>${escapeHtml(batch.id)}</dd></div><div><dt>카드</dt><dd>${escapeHtml(card?.name || batch.cardId)}</dd></div><div><dt>연결 드롭</dt><dd>${escapeHtml(drop?.name || batch.dropId)}</dd></div><div><dt>수량</dt><dd>${quantity.toLocaleString()}장</dd></div><div><dt>코드당 사용 한도</dt><dd>${Number(batch.maxUsesPerCode || 1).toLocaleString()}회</dd></div><div><dt>만료일</dt><dd>${escapeHtml(formatDateTime(batch.expiresAt))}</dd></div></dl></section><section><h4>발급 현황</h4><dl><div><dt>등록 완료</dt><dd>${registered.toLocaleString()}장</dd></div><div><dt>잔여 수량</dt><dd>${remaining.toLocaleString()}장</dd></div></dl></section><section><h4>인증번호 상태</h4><dl><div><dt>생성 방식</dt><dd>사전 생성</dd></div><div><dt>생성 수</dt><dd>${quantity.toLocaleString()}개</dd></div><div><dt>상태</dt><dd><span class="badge success-badge">생성 완료</span></dd></div></dl></section><div class="detail-actions"><button class="secondary" data-batch-csv="${escapeHtml(batch.id)}" type="button">${icon("download")} CSV 내보내기</button><button class="secondary" data-batch-qr="${escapeHtml(batch.id)}" type="button">${icon("qr_code_2")} QR ZIP</button><button class="primary" data-open-batch-codes="${escapeHtml(batch.id)}" type="button">${icon("manage_search")} 인증번호 관리</button></div></aside>`;
 }
 function codeStatusLabel(status) {
   return (
@@ -4079,6 +4127,52 @@ function bind() {
   document
     .querySelector("#download-qr-zip")
     ?.addEventListener("click", () => void downloadBatchQrZip());
+  document.querySelector("#issuance-search")?.addEventListener("input", (event) => {
+    state.issuanceQuery = event.currentTarget.value;
+    const position = event.currentTarget.selectionStart;
+    layout();
+    const input = document.querySelector("#issuance-search");
+    input?.focus();
+    input?.setSelectionRange(position, position);
+  });
+  document.querySelectorAll("[data-issuance-filter]").forEach((select) =>
+    select.addEventListener("change", () => {
+      const key = select.dataset.issuanceFilter;
+      if (key === "status") state.issuanceStatus = select.value;
+      if (key === "type") state.issuanceType = select.value;
+      if (key === "period") state.issuancePeriod = select.value;
+      layout();
+    }),
+  );
+  document.querySelectorAll("[data-batch-id]").forEach((row) => {
+    const selectBatch = () => {
+      state.selectedBatchId = row.dataset.batchId;
+      state.batch = state.batches.find((batch) => batch.id === row.dataset.batchId) || null;
+      layout();
+    };
+    row.addEventListener("click", selectBatch);
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        selectBatch();
+      }
+    });
+  });
+  document.querySelectorAll("[data-batch-csv]").forEach((button) =>
+    button.addEventListener("click", () => {
+      state.batch = state.batches.find((batch) => batch.id === button.dataset.batchCsv) || null;
+      void downloadBatchCsv();
+    }),
+  );
+  document.querySelectorAll("[data-batch-qr]").forEach((button) =>
+    button.addEventListener("click", () => {
+      state.batch = state.batches.find((batch) => batch.id === button.dataset.batchQr) || null;
+      void downloadBatchQrZip();
+    }),
+  );
+  document.querySelectorAll("[data-open-batch-codes]").forEach((button) =>
+    button.addEventListener("click", () => void openCodeBatch(button.dataset.openBatchCodes)),
+  );
   document
     .querySelectorAll(".code-batch")
     .forEach((button) =>

@@ -4293,6 +4293,34 @@ button.top-avatar {
   cursor: pointer;
 }
 
+.production-issuance-page .table tbody tr:hover,
+.production-issuance-page .table tbody tr.selected-preview-row {
+  background: #f6f4ff;
+}
+
+.production-issuance-page .table th {
+  height: 43px;
+  color: #888ca0;
+  font-size: 10px;
+  background: #fafafe;
+}
+
+.production-issuance-page .table td {
+  height: 74px;
+  color: #4f5367;
+  font-size: 11px;
+}
+
+.batch-placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--purple);
+}
+
+.batch-placeholder .material-symbols-rounded {
+  font-size: 20px;
+}
+
 .card-library-master-detail > .card-ops-table-panel,
 .card-library-master-detail > .card-detail-preview {
   align-self: start;
