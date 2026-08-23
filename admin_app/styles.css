@@ -4394,6 +4394,27 @@ button.top-avatar {
   margin-top: 0;
 }
 
+.production-issuance-creation .issuance-creation-note {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.production-issuance-creation .issuance-creation-note .material-symbols-rounded {
+  flex: 0 0 auto;
+  font-size: 18px;
+}
+
+.production-issuance-creation .issuance-creation-note.ready {
+  color: #13795b;
+  background: #eefaf5;
+}
+
+.production-issuance-creation .issuance-creation-note.blocked {
+  color: #9a6700;
+  background: #fff8e6;
+}
+
 .pack-creation-guide ol,
 .issuance-creation-guide ol {
   display: grid;

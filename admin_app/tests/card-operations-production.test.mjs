@@ -55,3 +55,15 @@ test('production issuance list restores operational tracking controls', () => {
   assert.match(extractFunction('issuanceDetailView'), /CSV 내보내기/)
   assert.match(extractFunction('issuanceBatchRows'), /data-batch-id/)
 })
+
+test('production issuance creation collects the backend batch contract', () => {
+  const view = extractFunction('issuanceCreationView')
+  assert.match(view, /id="batch-form"/)
+  assert.match(view, /name="cardId"/)
+  assert.match(view, /name="dropId"/)
+  assert.match(view, /name="quantity"/)
+  assert.match(view, /name="maxUsesPerCode"/)
+  assert.match(view, /name="expiresAt"/)
+  assert.match(view, /name="prefix"/)
+  assert.match(extractFunction('createBatch'), /state\.view = "batches"/)
+})
