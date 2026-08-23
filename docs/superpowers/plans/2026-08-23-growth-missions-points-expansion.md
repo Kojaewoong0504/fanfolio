@@ -39,7 +39,7 @@
 - Modify: `backend/app/routers/fan.py`
 - Test: `backend/tests/contract/test_card_packs.py`
 
-- [ ] **Step 1: Write the failing pack-growth test**
+- [x] **Step 1: Write the failing pack-growth test**
 
 ```python
 def test_opening_pack_processes_growth_once(actors, published_pack):
@@ -59,13 +59,13 @@ def test_opening_pack_processes_growth_once(actors, published_pack):
     assert actors["fan"].get("/api/me/progression").json()["data"]["level"]["totalXp"] == before + 30
 ```
 
-- [ ] **Step 2: Run the test and observe the missing XP failure**
+- [x] **Step 2: Run the test and observe the missing XP failure**
 
 Run: `backend/.venv/bin/pytest -q backend/tests/contract/test_card_packs.py -k growth_once`
 
 Expected: FAIL because the created engagement event remains pending.
 
-- [ ] **Step 3: Inject `BackgroundTasks` and enqueue after the transaction**
+- [x] **Step 3: Inject `BackgroundTasks` and enqueue after the transaction**
 
 ```python
 @router.post("/me/card-packs/{pack_id}/open", status_code=status.HTTP_201_CREATED)
@@ -83,13 +83,13 @@ async def open_card_pack(
 
 The idempotent replay branch must not enqueue a second event.
 
-- [ ] **Step 4: Run pack and growth regression tests**
+- [x] **Step 4: Run pack and growth regression tests**
 
 Run: `backend/.venv/bin/pytest -q backend/tests/contract/test_card_packs.py backend/tests/contract/test_fan_growth.py`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Commit intent: `Ensure pack rewards reach the growth ledger`
 
@@ -101,7 +101,7 @@ Commit intent: `Ensure pack rewards reach the growth ledger`
 - Test: `backend/tests/unit/test_migrations.py`
 - Create: `backend/tests/unit/test_growth_economy_services.py`
 
-- [ ] **Step 1: Write failing model and migration tests**
+- [x] **Step 1: Write failing model and migration tests**
 
 ```python
 def test_growth_economy_migration_creates_required_tables(upgraded_table_names):
@@ -119,13 +119,13 @@ async def test_point_ledger_deduplicates_source_rule(async_session):
     assert await point_balance(async_session, "fan") == 100
 ```
 
-- [ ] **Step 2: Run the tests and verify missing symbols/tables**
+- [x] **Step 2: Run the tests and verify missing symbols/tables**
 
 Run: `backend/.venv/bin/pytest -q backend/tests/unit/test_migrations.py backend/tests/unit/test_growth_economy_services.py`
 
 Expected: FAIL because the models and helpers do not exist.
 
-- [ ] **Step 3: Add additive models and unique constraints**
+- [x] **Step 3: Add additive models and unique constraints**
 
 ```python
 class MissionDefinition(Base):
@@ -146,11 +146,11 @@ class MissionDefinition(Base):
 
 `MissionProgress` is unique on `(user_id, mission_id, period_key)`. `PointLedger` is unique on `(user_id, source_event_id, rule_key)` and stores signed `amount`, transaction type, expiration and reversal source. `PointBalance` is keyed by user. `LevelThreshold` is unique on `(policy_version_id, level)`.
 
-- [ ] **Step 4: Add migration 0050 and model imports**
+- [x] **Step 4: Add migration 0050 and model imports**
 
 The migration must be additive, point to `0049_analytics_events`, and add nullable `error_code`, `error_message`, and `attempt_count` columns to `engagement_events`.
 
-- [ ] **Step 5: Implement minimal point helpers and configurable level lookup**
+- [x] **Step 5: Implement minimal point helpers and configurable level lookup**
 
 ```python
 async def grant_points(...):
@@ -166,7 +166,7 @@ async def grant_points(...):
     return row
 ```
 
-- [ ] **Step 6: Run migration and unit tests**
+- [x] **Step 6: Run migration and unit tests**
 
 Run: `backend/.venv/bin/alembic upgrade head`
 
@@ -174,7 +174,7 @@ Run: `backend/.venv/bin/pytest -q backend/tests/unit/test_migrations.py backend/
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 Commit intent: `Create durable mission and point accounting`
 
@@ -185,7 +185,7 @@ Commit intent: `Create durable mission and point accounting`
 - Modify: `backend/app/tasks.py`
 - Test: `backend/tests/unit/test_growth_economy_services.py`
 
-- [ ] **Step 1: Write failing recurrence, scope, and reward tests**
+- [x] **Step 1: Write failing recurrence, scope, and reward tests**
 
 ```python
 @pytest.mark.parametrize("recurrence,period_key", [("daily", "2026-08-23"), ("weekly", "2026-W34")])
@@ -208,17 +208,17 @@ async def test_completed_mission_grants_xp_points_and_reward_once(async_session)
     assert await reward_grant_count(async_session, mission.id) == 1
 ```
 
-- [ ] **Step 2: Verify expected failures**
+- [x] **Step 2: Verify expected failures**
 
 Run: `backend/.venv/bin/pytest -q backend/tests/unit/test_growth_economy_services.py`
 
 Expected: FAIL because mission processing is absent.
 
-- [ ] **Step 3: Implement period keys, scope matching, and mission progress**
+- [x] **Step 3: Implement period keys, scope matching, and mission progress**
 
 `once` uses `once`, `daily` uses UTC date, `weekly` uses ISO week, and `season` uses the configured mission start/end version key. Scope matching checks organization, artist, pack, card and event IDs from server-authored payload.
 
-- [ ] **Step 4: Extend the event processor**
+- [x] **Step 4: Extend the event processor**
 
 ```python
 try:
@@ -235,13 +235,13 @@ except Exception as exc:
     raise
 ```
 
-- [ ] **Step 5: Run service and existing growth tests**
+- [x] **Step 5: Run service and existing growth tests**
 
 Run: `backend/.venv/bin/pytest -q backend/tests/unit/test_growth_economy_services.py backend/tests/unit/test_engagement_services.py backend/tests/contract/test_fan_growth.py`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Commit intent: `Make verified actions advance repeatable missions`
 
@@ -254,7 +254,7 @@ Commit intent: `Make verified actions advance repeatable missions`
 - Modify: `backend/app/routers/combinations.py`
 - Test: `backend/tests/contract/test_growth_action_events.py`
 
-- [ ] **Step 1: Write parameterized failing action tests**
+- [x] **Step 1: Write parameterized failing action tests**
 
 ```python
 @pytest.mark.parametrize(
@@ -274,23 +274,23 @@ def test_successful_action_emits_one_processed_growth_event(action, event_kind, 
     assert events[0]["status"] == "processed"
 ```
 
-- [ ] **Step 2: Run and verify missing events**
+- [x] **Step 2: Run and verify missing events**
 
 Run: `backend/.venv/bin/pytest -q backend/tests/contract/test_growth_action_events.py`
 
 Expected: FAIL for every action not yet connected.
 
-- [ ] **Step 3: Add transaction-local event recording and post-commit enqueue**
+- [x] **Step 3: Add transaction-local event recording and post-commit enqueue**
 
 Every successful domain command records one event using a stable source row ID. Existing idempotent branches return the original source and do not create another event. Deletions and failed validations do not emit positive events.
 
-- [ ] **Step 4: Run action, social, event and combination contracts**
+- [x] **Step 4: Run action, social, event and combination contracts**
 
 Run: `backend/.venv/bin/pytest -q backend/tests/contract/test_growth_action_events.py backend/tests/contract/test_event_comments.py backend/tests/contract/test_event_applications.py backend/tests/contract/test_social_trading.py backend/tests/contract/test_card_combinations.py`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Commit intent: `Connect real fan actions to growth processing`
 

@@ -3,7 +3,7 @@
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, BackgroundTasks, Query, status
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 
@@ -26,7 +26,8 @@ from app.models import (
     UserCard,
 )
 from app.schemas import CollectionVisibilityUpdate, TradeProposalCreate
-from app.services import notify_followers_of_card, notify_user_once
+from app.services import notify_followers_of_card, notify_user_once, record_engagement_event
+from app.tasks import enqueue_engagement_event
 
 router = APIRouter(prefix="/api", tags=["social"])
 
@@ -288,7 +289,12 @@ async def update_collection_visibility(
 
 
 @router.post("/me/follows/{user_id}", status_code=status.HTTP_201_CREATED)
-async def follow_fan(user_id: str, user: FanUser, session: DbSession) -> dict:
+async def follow_fan(
+    user_id: str,
+    user: FanUser,
+    session: DbSession,
+    background_tasks: BackgroundTasks,
+) -> dict:
     if user_id == user.id:
         raise AppError(422, "SELF_FOLLOW_NOT_ALLOWED", "자기 자신은 팔로우할 수 없습니다.")
     target = await session.get(User, user_id)
@@ -299,8 +305,18 @@ async def follow_fan(user_id: str, user: FanUser, session: DbSession) -> dict:
     )
     if existing:
         return {"ok": True, "data": {"followingUserId": user_id, "following": True}}
-    session.add(Follow(id=str(uuid4()), follower_id=user.id, following_id=user_id))
+    follow = Follow(id=str(uuid4()), follower_id=user.id, following_id=user_id)
+    session.add(follow)
+    engagement_event = await record_engagement_event(
+        session,
+        user_id=user.id,
+        kind="fan_followed",
+        source_type="follow",
+        source_id=follow.id,
+        payload={"followingUserId": user_id},
+    )
     await session.commit()
+    enqueue_engagement_event(engagement_event.id, background_tasks)
     return {"ok": True, "data": {"followingUserId": user_id, "following": True}}
 
 
@@ -575,7 +591,12 @@ async def _load_pending_proposal(
 
 
 @router.post("/me/trades/{proposal_id}/accept")
-async def accept_trade(proposal_id: str, user: FanUser, session: DbSession) -> dict:
+async def accept_trade(
+    proposal_id: str,
+    user: FanUser,
+    session: DbSession,
+    background_tasks: BackgroundTasks,
+) -> dict:
     proposal = await _load_pending_proposal(proposal_id, user, session, "recipient")
     items = list(
         await session.scalars(select(TradeItem).where(TradeItem.proposal_id == proposal.id))
@@ -635,7 +656,26 @@ async def accept_trade(proposal_id: str, user: FanUser, session: DbSession) -> d
         entity_id=proposal.id,
         event_key=f"trade:{proposal.id}:recipient",
     )
+    trade_events = []
+    for participant_id in {proposal.proposer_id, proposal.recipient_id}:
+        trade_events.append(
+            await record_engagement_event(
+                session,
+                user_id=participant_id,
+                kind="trade_completed",
+                source_type="trade",
+                source_id=proposal.id,
+                payload={
+                    "tradeId": proposal.id,
+                    "participantRole": (
+                        "proposer" if participant_id == proposal.proposer_id else "recipient"
+                    ),
+                },
+            )
+        )
     await session.commit()
+    for engagement_event in trade_events:
+        enqueue_engagement_event(engagement_event.id, background_tasks)
     return {"ok": True, "data": {"id": proposal.id, "status": proposal.status}}
 
 

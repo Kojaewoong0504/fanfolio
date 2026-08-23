@@ -2,7 +2,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from fastapi import APIRouter, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Query, Response, status
 from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.exc import IntegrityError
 
@@ -37,8 +37,9 @@ from app.schemas import (
     EventReviewRequest,
     EventUpdateRequest,
 )
-from app.services import record_audit
+from app.services import record_audit, record_engagement_event
 from app.storage import configured_asset_storage, storage_response
+from app.tasks import enqueue_engagement_event
 
 router = APIRouter(prefix="/api", tags=["events"])
 admin_router = APIRouter(prefix="/api/admin", tags=["admin-events"])
@@ -435,6 +436,7 @@ async def create_event_comment(
     payload: EventCommentCreateRequest,
     user: FanUser,
     session: DbSession,
+    background_tasks: BackgroundTasks,
 ) -> dict:
     event, now = await _require_public_event(event_id, session)
     if event.event_type != "comment":
@@ -456,14 +458,31 @@ async def create_event_comment(
         body=body,
     )
     session.add(comment)
+    engagement_event = await record_engagement_event(
+        session,
+        user_id=user.id,
+        kind="event_commented",
+        source_type="event_comment",
+        source_id=comment.id,
+        payload={
+            "eventId": event.id,
+            "organizationId": event.organization_id,
+            "artistId": event.artist_id,
+        },
+    )
     await session.commit()
     await session.refresh(comment)
+    enqueue_engagement_event(engagement_event.id, background_tasks)
     return {"ok": True, "data": _comment_data(comment, user)}
 
 
 @router.post("/events/{event_id}/applications", status_code=status.HTTP_201_CREATED)
 async def apply_to_event(
-    event_id: str, response: Response, user: FanUser, session: DbSession
+    event_id: str,
+    response: Response,
+    user: FanUser,
+    session: DbSession,
+    background_tasks: BackgroundTasks,
 ) -> dict:
     event = await session.get(Event, event_id)
     now = datetime.now(UTC)
@@ -504,6 +523,18 @@ async def apply_to_event(
         status="submitted",
     )
     session.add(application)
+    engagement_event = await record_engagement_event(
+        session,
+        user_id=user.id,
+        kind="event_applied",
+        source_type="event_application",
+        source_id=application.id,
+        payload={
+            "eventId": event.id,
+            "organizationId": event.organization_id,
+            "artistId": event.artist_id,
+        },
+    )
     notification_key = f"event_application_submitted:{event.id}:{user.id}"
     notification = await session.scalar(
         select(Notification).where(
@@ -551,6 +582,7 @@ async def apply_to_event(
             },
         }
     await session.refresh(application)
+    enqueue_engagement_event(engagement_event.id, background_tasks)
     return {
         "ok": True,
         "data": {

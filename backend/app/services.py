@@ -1699,7 +1699,7 @@ async def process_engagement_event(event_id: str) -> None:
                     rule_key=event.kind,
                     amount=amount,
                 )
-            if source_is_eligible:
+            if event.kind != "card_collected" or source_is_eligible:
                 for mission in await published_missions_for_event(session, event):
                     await update_mission_progress(session, event=event, mission=mission)
             for definition in await published_definitions_for_event(session, event):
