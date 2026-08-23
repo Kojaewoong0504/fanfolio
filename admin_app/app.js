@@ -307,7 +307,8 @@ function title() {
     "card-packs": "카드팩 관리",
     "card-pack-create": "새 카드팩 만들기",
     "card-pack-composition": "카드 구성 편집",
-    batches: "드롭·코드",
+    batches: "발급·인증번호",
+    "issuance-create": "새 발급 배치 만들기",
     events: "이벤트",
     "fan-growth": "팬 성장",
     users: "서비스 사용자",
@@ -376,7 +377,7 @@ function navigationView() {
   const person = state.adminContext?.user || {};
   const role = isRoot() ? "루트 관리자" : `${state.adminContext?.accessLevel || "viewer"} · ${scopeLabel()}`;
   const navToggleLabel = state.navCollapsed ? "내비게이션 펼치기" : "내비게이션 접기";
-  const cardSection = `<div class="nav-section-group"><button type="button" data-view="cards" class="nav-item ${["cards", "card-packs", "card-pack-create", "card-pack-composition", "batches"].includes(state.view) ? "active" : ""}" aria-label="카드" title="카드">${icon("style")}<span>카드</span>${icon("expand_more", "nav-section-chevron")}</button><div class="nav-subitems"><button type="button" data-view="cards" class="nav-subitem ${state.view === "cards" ? "active" : ""}">카드 관리</button>${can("cards:read") ? `<button type="button" data-view="card-packs" class="nav-subitem ${["card-packs", "card-pack-create", "card-pack-composition"].includes(state.view) ? "active" : ""}">카드팩 관리</button>` : ""}${can("codes:read") ? `<button type="button" data-view="batches" class="nav-subitem ${state.view === "batches" ? "active" : ""}">발급·인증번호</button>` : ""}</div></div>`;
+  const cardSection = `<div class="nav-section-group"><button type="button" data-view="cards" class="nav-item ${["cards", "card-packs", "card-pack-create", "card-pack-composition", "batches", "issuance-create"].includes(state.view) ? "active" : ""}" aria-label="카드" title="카드">${icon("style")}<span>카드</span>${icon("expand_more", "nav-section-chevron")}</button><div class="nav-subitems"><button type="button" data-view="cards" class="nav-subitem ${state.view === "cards" ? "active" : ""}">카드 관리</button>${can("cards:read") ? `<button type="button" data-view="card-packs" class="nav-subitem ${["card-packs", "card-pack-create", "card-pack-composition"].includes(state.view) ? "active" : ""}">카드팩 관리</button>` : ""}${can("codes:read") ? `<button type="button" data-view="batches" class="nav-subitem ${["batches", "issuance-create"].includes(state.view) ? "active" : ""}">발급·인증번호</button>` : ""}</div></div>`;
   const items = navItems().map((item) => item.id === "cards" ? cardSection : `<button type="button" data-view="${item.id}" class="nav-item ${state.view === item.id ? "active" : ""}" aria-current="${state.view === item.id ? "page" : "false"}" aria-label="${escapeHtml(item.label)}" title="${escapeHtml(item.label)}">${icon(item.icon)}<span>${item.label}</span></button>`).join("");
   return `<aside class="app-nav ${state.mobileNavOpen ? "open" : ""}" aria-label="관리자 주요 메뉴"><div class="nav-brand"><span class="nav-brand-mark"><img src="./assets/fanfolio-app-icon-192.png" alt="Fanfolio 서비스 아이콘" /></span><span class="nav-brand-copy"><strong>FANFOLIO</strong><small>OPERATIONS</small></span><button class="icon-button nav-toggle" id="desktop-nav-toggle" type="button" aria-label="${navToggleLabel}" title="${navToggleLabel}">${icon(state.navCollapsed ? "keyboard_double_arrow_right" : "keyboard_double_arrow_left")}</button></div><nav>${items}</nav><div class="nav-account"><span class="account-avatar">${escapeHtml((person.displayName || person.email || "관").slice(0, 1))}</span><div class="nav-account-copy"><strong>${escapeHtml(person.displayName || "관리자")}</strong><small>${escapeHtml(role)}</small></div><button class="icon-button" id="logout" type="button" aria-label="로그아웃" title="로그아웃">${icon("logout")}</button></div></aside>`;
 }
@@ -423,6 +424,7 @@ function currentView() {
     "card-pack-create": cardPackCreateView,
     "card-pack-composition": cardPackCompositionView,
     batches: batchesView,
+    "issuance-create": issuanceCreationView,
     events: eventsView,
     "fan-growth": fanGrowthView,
     users: usersView,
@@ -1730,7 +1732,16 @@ function batchesView() {
     : [{ value: "", label: "먼저 드롭을 만드세요." }];
   const canCreateDrop = can("drops:write") && availableArtists.length;
   const canCreateBatch = can("codes:write") && published.length && state.drops.some((drop) => drop.status === "live");
-  return `<div class="page-heading"><div><p class="eyebrow">DROP & REDEEM CODE</p><h2>드롭과 카드 코드를 운영합니다</h2><p>담당 아티스트의 공개 카드에만 코드를 발행하고, 매니저는 초안을 발행 요청으로 전달합니다.</p></div></div><div class="batch-layout"><div class="panel"><h2>새 드롭 만들기</h2><form class="form" id="drop-form"><label class="field">드롭 이름<input name="name" placeholder="예: 2026 봄 컴백" required /></label><label class="field">대상 아티스트${adminSelect({ id: "drop-artist", name: "artistId", value: "", label: "대상 아티스트", className: "form-select", options: artistOptions })}</label><label class="field">시작 시각<input name="startsAt" type="datetime-local" /></label><label class="field">종료 시각<input name="endsAt" type="datetime-local" /></label><button class="primary" type="submit" ${canCreateDrop ? "" : "disabled"}>드롭 초안 생성</button></form><div class="table-wrap"><table class="table"><thead><tr><th>드롭</th><th>상태</th><th>기간</th><th>관리</th></tr></thead><tbody>${dropRows()}</tbody></table></div></div><div class="panel"><h2>새 코드 배치 만들기</h2><form class="form" id="batch-form"><label class="field">카드 선택${adminSelect({ id: "batch-card", name: "cardId", value: cardOptions[0].value, label: "카드 선택", className: "form-select", options: cardOptions })}</label><label class="field">드롭 선택${adminSelect({ id: "batch-drop", name: "dropId", value: dropOptions[0].value, label: "드롭 선택", className: "form-select", options: dropOptions })}</label><label class="field">생성 수량<input name="quantity" type="number" min="1" value="1000" required /></label><label class="field">코드 최대 사용 횟수<input name="maxUsesPerCode" type="number" min="1" value="1" required /></label><label class="field">만료 시각<input name="expiresAt" type="datetime-local" required /></label><label class="field">코드 접두사<input name="prefix" value="FANFOLIO" maxlength="30" required /></label><button class="primary" type="submit" ${canCreateBatch ? "" : "disabled"}>코드 배치 생성</button></form>${state.batch ? `<div class="notice success">배치 ${escapeHtml(state.batch.id)}가 생성되었습니다. <button class="text-link" id="download-csv">CSV 다운로드</button> <button class="text-link" id="download-qr-zip">QR ZIP 다운로드</button></div>` : ""}</div></div>${codeBatchPanel()}<div class="panel"><h2>생성된 코드 배치</h2><p class="hint">코드 수와 실제 사용 수를 확인하고 필요한 파일을 다시 내려받을 수 있습니다.</p><div class="table-wrap"><table class="table"><thead><tr><th>배치</th><th>생성 수</th><th>사용 수</th><th>만료</th><th>다운로드</th><th>관리</th></tr></thead><tbody>${batchRows()}</tbody></table></div></div>`;
+  return `<div class="page-heading"><div><p class="eyebrow">ISSUANCE</p><h2>발급·인증번호</h2><p>카드 발급 배치와 인증번호 상태를 관리합니다.</p></div><button class="primary" type="button" data-view="issuance-create" ${canCreateBatch ? "" : "disabled"}>${icon("add")} 추가 발급 배치 만들기</button></div><div class="batch-layout"><div class="panel"><h2>새 드롭 만들기</h2><form class="form" id="drop-form"><label class="field">드롭 이름<input name="name" placeholder="예: 2026 봄 컴백" required /></label><label class="field">대상 아티스트${adminSelect({ id: "drop-artist", name: "artistId", value: "", label: "대상 아티스트", className: "form-select", options: artistOptions })}</label><label class="field">시작 시각<input name="startsAt" type="datetime-local" /></label><label class="field">종료 시각<input name="endsAt" type="datetime-local" /></label><button class="primary" type="submit" ${canCreateDrop ? "" : "disabled"}>드롭 초안 생성</button></form><div class="table-wrap"><table class="table"><thead><tr><th>드롭</th><th>상태</th><th>기간</th><th>관리</th></tr></thead><tbody>${dropRows()}</tbody></table></div></div></div>${issuanceDetailView(state.batch)}${codeBatchPanel()}<div class="panel"><h2>생성된 코드 배치</h2><p class="hint">코드 수와 실제 사용 수를 확인하고 필요한 파일을 다시 내려받을 수 있습니다.</p><div class="table-wrap"><table class="table"><thead><tr><th>배치</th><th>생성 수</th><th>사용 수</th><th>만료</th><th>다운로드</th><th>관리</th></tr></thead><tbody>${batchRows()}</tbody></table></div></div>`;
+}
+
+function issuanceCreationView() {
+  return `<section class="card-ops-page issuance-creation-preview"><div class="page-heading"><div><p class="eyebrow">ISSUANCE</p><h2>새 발급 배치 만들기</h2><p>발급 대상과 수량, 인증번호 생성 방식을 등록합니다.</p></div><button class="secondary" type="button" data-view="batches">목록으로</button></div></section>`;
+}
+
+function issuanceDetailView(batch) {
+  if (!batch) return "";
+  return `<section class="panel issuance-detail-preview"><p class="eyebrow">배치 상세</p><h2>${escapeHtml(batch.id)}</h2></section>`;
 }
 function codeStatusLabel(status) {
   return (

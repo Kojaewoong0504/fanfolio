@@ -30,3 +30,10 @@ test('production issuance screen remains connected to batch creation and exports
   assert.match(source, /csvExportUrl/)
   assert.match(source, /qrZipUrl/)
 })
+
+test('production issuance uses dedicated list and creation views', () => {
+  assert.match(source, /"issuance-create": issuanceCreationView/)
+  assert.match(source, /data-view="issuance-create"/)
+  assert.match(source, /function issuanceCreationView\(/)
+  assert.match(source, /function issuanceDetailView\(/)
+})
