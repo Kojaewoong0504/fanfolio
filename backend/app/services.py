@@ -29,6 +29,8 @@ from app.models import (
     BackgroundRemovalJob,
     Card,
     CardOwnershipLedger,
+    CardPack,
+    CardPackCard,
     CardReviewDecision,
     CardReviewRequest,
     CardVisibility,
@@ -69,7 +71,7 @@ from app.models import (
     UserCard,
     XpLedger,
 )
-from app.passwords import hash_password
+from app.passwords import hash_password, verify_password
 from app.storage import configured_asset_storage
 
 logger = logging.getLogger(__name__)
@@ -1846,6 +1848,165 @@ async def ensure_demo_catalog(session: AsyncSession) -> None:
             )
         )
     await session.commit()
+
+
+async def ensure_fan_community_demo(session: AsyncSession, *, password: str) -> dict[str, object]:
+    """Create isolated local accounts and inventory for the real social flow.
+
+    The seed is deliberately explicit and non-destructive: it only owns IDs
+    prefixed with ``local_demo_`` and never resets or deletes existing data.
+    Hosted environments cannot invoke it.
+    """
+    if get_settings().is_hosted:
+        raise RuntimeError("FAN_COMMUNITY_DEMO_LOCAL_ONLY")
+    if len(password) < 12:
+        raise ValueError("The local fan community demo password must be at least 12 characters")
+
+    await ensure_demo_catalog(session)
+
+    user_specs = (
+        {
+            "id": "local_demo_fan",
+            "email": "demo.fan@example.com",
+            "nickname": "팬포리오",
+            "profile_image_url": "/src/assets/profile-avatar-generated.png",
+            "favorite_member_ids": ["member_yuna"],
+        },
+        {
+            "id": "local_demo_collector",
+            "email": "demo.collector@example.com",
+            "nickname": "별빛수집가",
+            "profile_image_url": "/src/assets/card-yuna-lavender.jpg",
+            "favorite_member_ids": ["member_minho", "member_jei"],
+        },
+    )
+    for spec in user_specs:
+        user = await session.get(User, spec["id"])
+        if user is None:
+            user = User(id=spec["id"], role=Role.FAN)
+            session.add(user)
+        elif user.role != Role.FAN:
+            raise RuntimeError(f"FAN_COMMUNITY_DEMO_ID_CONFLICT:{spec['id']}")
+        user.email = str(spec["email"])
+        user.nickname = str(spec["nickname"])
+        user.profile_image_url = str(spec["profile_image_url"])
+        user.favorite_artist_ids = ["artist_nova3"]
+        user.favorite_member_ids = list(spec["favorite_member_ids"])
+        user.onboarding_completed = True
+        if not verify_password(password, user.password_hash):
+            user.password_hash = hash_password(password)
+
+    card_specs = (
+        {
+            "id": "local_demo_card_harin",
+            "name": "Nebula Harin Ver.",
+            "member_id": "member_yuna",
+            "rarity": "UR",
+            "image_url": "/src/assets/collection-card-harin-generated.png",
+        },
+        {
+            "id": "local_demo_card_doyun",
+            "name": "Nebula Doyun Ver.",
+            "member_id": "member_minho",
+            "rarity": "SR",
+            "image_url": "/src/assets/collection-card-doyun-generated.png",
+        },
+        {
+            "id": "local_demo_card_minjae",
+            "name": "Starlight Minjae Ver.",
+            "member_id": "member_jei",
+            "rarity": "R",
+            "image_url": "/src/assets/collection-card-minjae-generated.png",
+        },
+        {
+            "id": "local_demo_card_jay",
+            "name": "Midnight Jay Ver.",
+            "member_id": "member_yuna",
+            "rarity": "N",
+            "image_url": "/src/assets/collection-card-jay-generated.png",
+        },
+    )
+    for spec in card_specs:
+        card = await session.get(Card, spec["id"])
+        if card is None:
+            card = Card(id=spec["id"], name=str(spec["name"]))
+            session.add(card)
+        card.name = str(spec["name"])
+        card.status = "published"
+        card.release_policy = "partner_and_platform"
+        card.release_status = "published"
+        card.is_official = True
+        card.artist_id = "artist_nova3"
+        card.member_id = str(spec["member_id"])
+        card.season_name = "정규 1집 · DREAMSCAPE"
+        card.rarity = str(spec["rarity"])
+        card.image_url = str(spec["image_url"])
+        card.tradable = True
+
+    await session.flush()
+    pack_id = "local_demo_pack_dreamscape"
+    pack = await session.get(CardPack, pack_id)
+    if pack is None:
+        pack = CardPack(id=pack_id, artist_id="artist_nova3", name="DREAMSCAPE Nebula Ver.")
+        session.add(pack)
+    pack.artist_id = "artist_nova3"
+    pack.name = "DREAMSCAPE Nebula Ver."
+    pack.season_name = "정규 1집 · DREAMSCAPE"
+    pack.version = "v1.0"
+    pack.image_url = "/src/assets/card-pack-dreamscape-generated.png"
+    pack.description = "드림스케이프 정규 1집의 공개 카드를 확인하고 수집해보세요."
+    pack.status = "published"
+    pack.published_at = pack.published_at or now()
+    await session.flush()
+    for position, spec in enumerate(card_specs, start=1):
+        link_id = f"local_demo_pack_card_{position}"
+        link = await session.get(CardPackCard, link_id)
+        if link is None:
+            link = CardPackCard(id=link_id, pack_id=pack_id, card_id=str(spec["id"]))
+            session.add(link)
+        link.pack_id = pack_id
+        link.card_id = str(spec["id"])
+        link.position = position
+        link.probability = 25.0
+        link.enabled = True
+
+    await session.flush()
+    for user_id in ("local_demo_fan", "local_demo_collector"):
+        visibility = await session.get(CardVisibility, user_id)
+        if visibility is None:
+            session.add(CardVisibility(user_id=user_id, public_enabled=True))
+        else:
+            visibility.public_enabled = True
+
+    inventory_specs = {
+        "local_demo_fan": ("local_demo_card_harin", "local_demo_card_jay"),
+        "local_demo_collector": (
+            "local_demo_card_doyun",
+            "local_demo_card_minjae",
+            "local_demo_card_harin",
+        ),
+    }
+    inventory: dict[str, list[str]] = {}
+    for user_id, card_ids in inventory_specs.items():
+        inventory[user_id] = []
+        for position, card_id in enumerate(card_ids, start=1):
+            user_card = await grant_user_card(
+                session,
+                user_id=user_id,
+                card_id=card_id,
+                source_type="fan_community_demo",
+                source_id=f"{user_id}:{position}:{card_id}",
+                acquisition_source="card_pack",
+            )
+            inventory[user_id].append(user_card.id)
+
+    await session.commit()
+    return {
+        "fanUserId": "local_demo_fan",
+        "collectorUserId": "local_demo_collector",
+        "fanUserCardIds": inventory["local_demo_fan"],
+        "collectorUserCardIds": inventory["local_demo_collector"],
+    }
 
 
 async def ensure_demo_card_asset(session: AsyncSession) -> None:

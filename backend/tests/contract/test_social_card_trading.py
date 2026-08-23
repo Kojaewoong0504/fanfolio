@@ -295,3 +295,118 @@ def test_followers_are_notified_when_a_public_fan_collects_a_card(
     )
     assert activity["entityType"] == "fan"
     assert activity["entityId"] == "otherFan"
+
+
+def test_local_demo_seed_drives_real_auth_search_collection_and_trade_apis(
+    app: FastAPI, seeded: dict[str, object]
+) -> None:
+    from app import services
+
+    ensure_demo = getattr(services, "ensure_fan_community_demo", None)
+    assert callable(ensure_demo), "로컬 팬 커뮤니티 시드 서비스가 필요합니다."
+
+    password = "Fanfolio-demo-2026"
+
+    async def seed_twice() -> tuple[dict[str, object], dict[str, object]]:
+        async with SessionLocal() as session:
+            first = await ensure_demo(session, password=password)
+        async with SessionLocal() as session:
+            second = await ensure_demo(session, password=password)
+        return first, second
+
+    first, second = asyncio.run(seed_twice())
+    assert first == second
+
+    fan = TestClient(app)
+    fan_login = assert_success(
+        fan.post(
+            "/api/auth/fan/login",
+            headers={"X-Fanfolio-Client": "fan"},
+            json={"email": "demo.fan@example.com", "password": password},
+        )
+    )
+    fan_headers = {
+        "Authorization": f"Bearer {fan_login['accessToken']}",
+        "X-Fanfolio-Client": "fan",
+    }
+
+    search = assert_success(fan.get("/api/fans", headers=fan_headers))
+    collector = next(item for item in search["items"] if item["id"] == "local_demo_collector")
+    assert collector["nickname"] == "별빛수집가"
+    assert collector["ownedCount"] >= 2
+    assert collector["tradableCount"] >= 2
+    assert collector["favoriteArtists"] == [
+        {
+            "id": "artist_nova3",
+            "name": "드림스케이프",
+            "imageUrl": collector["favoriteArtists"][0]["imageUrl"],
+        }
+    ]
+    assert len(collector["previewCards"]) >= 2
+    assert all(card["imageUrl"] for card in collector["previewCards"])
+    assert collector["latestCardAt"]
+    assert collector["matchingWishlistCount"] == 0
+
+    card_search = assert_success(
+        fan.get("/api/fans", headers=fan_headers, params={"query": "Minjae"})
+    )
+    assert [item["id"] for item in card_search["items"]] == ["local_demo_collector"]
+
+    public = assert_success(
+        fan.get("/api/fans/local_demo_collector/collection", headers=fan_headers)
+    )
+    assert public["profileImageUrl"]
+    packs = assert_success(fan.get("/api/catalog/card-packs", headers=fan_headers))
+    demo_pack = next(pack for pack in packs["items"] if pack["id"] == "local_demo_pack_dreamscape")
+    assert public["featuredPackId"] == demo_pack["id"]
+    assert {card["cardId"] for card in demo_pack["cards"]} == {
+        "local_demo_card_harin",
+        "local_demo_card_doyun",
+        "local_demo_card_minjae",
+        "local_demo_card_jay",
+    }
+    requested = next(card for card in public["cards"] if card["tradable"])
+    mine = assert_success(fan.get("/api/me/collection", headers=fan_headers))
+    offered = next(card for card in mine["cards"] if card["tradable"])
+
+    proposal = assert_success(
+        fan.post(
+            "/api/me/trades",
+            headers=fan_headers,
+            json={
+                "recipientUserId": "local_demo_collector",
+                "offeredUserCardIds": [offered["userCardId"]],
+                "requestedUserCardIds": [requested["userCardId"]],
+            },
+        ),
+        201,
+    )
+    sent = assert_success(fan.get("/api/me/trades", headers=fan_headers, params={"box": "sent"}))
+    assert sent["items"][0]["id"] == proposal["id"]
+
+    collector_client = TestClient(app)
+    collector_login = assert_success(
+        collector_client.post(
+            "/api/auth/fan/login",
+            headers={"X-Fanfolio-Client": "fan"},
+            json={"email": "demo.collector@example.com", "password": password},
+        )
+    )
+    collector_headers = {
+        "Authorization": f"Bearer {collector_login['accessToken']}",
+        "X-Fanfolio-Client": "fan",
+    }
+    accepted = assert_success(
+        collector_client.post(
+            f"/api/me/trades/{proposal['id']}/accept",
+            headers=collector_headers,
+        )
+    )
+    assert accepted["status"] == "accepted"
+
+    fan_after = assert_success(fan.get("/api/me/collection", headers=fan_headers))
+    collector_after = assert_success(
+        collector_client.get("/api/me/collection", headers=collector_headers)
+    )
+    assert requested["userCardId"] in {card["userCardId"] for card in fan_after["cards"]}
+    assert offered["userCardId"] in {card["userCardId"] for card in collector_after["cards"]}

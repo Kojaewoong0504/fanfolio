@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from 'react'
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type FormEvent } from 'react'
 import './App.css'
 import './reference.css'
+import './fan-community-reference.css'
 import { getUserCardHistory, type UserCardHistoryItem } from './api/client'
-import { ApiError, apiFetch, applyToFanEvent, claimPassTier, claimReward, clearAccessToken, combineCards, connectNotificationStream, createCollectionGoal, deleteCollectionGoal, getCardCombination, getCardPacks, getCardPackOdds, getCollectionGoals, getFanEvent, getFanEventComments, getFanEvents, getFanHome, getMyEventApplications, getFanPass, getNotificationPreferences, getProgression, getWishlist, oauthStartUrl, openCardPack, postFanEventComment, previewCardCombination, reconcilePassRewards, removeWishlistCard, resolveApiUrl, saveWishlistCard, setAccessToken, updateNotificationPreferences, updateProfileEquipment, type CardCombinationPreview, type CardCombinationRecipe, type CardCombinationResult, type CardDesignConfig, type CardPack, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionGoal, type CollectionSummary, type CurrentUser, type EventPagination, type FanEvent, type FanEventApplication, type FanEventComment, type FanEventStatus, type FanHomeResponse, type FanProgression, type NotificationItem, type ProfileEquipment, type RewardGrant, type UserCardDetail } from './api/client'
+import { ApiError, apiFetch, applyToFanEvent, claimPassTier, claimReward, clearAccessToken, combineCards, connectNotificationStream, createCollectionGoal, deleteCollectionGoal, followFan, getCardCombination, getCardPacks, getCardPackOdds, getCollectionGoals, getFanEvent, getFanEventComments, getFanEvents, getFanHome, getMyEventApplications, getFanPass, getNotificationPreferences, getProgression, getWishlist, oauthStartUrl, openCardPack, postFanEventComment, previewCardCombination, reconcilePassRewards, removeWishlistCard, resolveApiUrl, saveWishlistCard, searchFans, setAccessToken, unfollowFan, updateNotificationPreferences, updateProfileEquipment, type CardCombinationPreview, type CardCombinationRecipe, type CardCombinationResult, type CardDesignConfig, type CardPack, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionGoal, type CollectionSummary, type CurrentUser, type EventPagination, type FanEvent, type FanEventApplication, type FanEventComment, type FanEventStatus, type FanHomeResponse, type FanMission, type FanProgression, type FanSummary, type NotificationItem, type ProfileEquipment, type PublicCollection as PublicCollectionData, type RewardGrant, type UserCardDetail } from './api/client'
 import { QrRedeemModal, RedeemIcon } from './components/QrRedeemModal'
 import { CardDetail } from './components/CardDetail'
 import { InteractiveCollectibleCard } from './components/InteractiveCollectibleCard'
@@ -18,6 +19,8 @@ import { PublicCollection } from './components/PublicCollection'
 import { FanSocialHub } from './components/FanSocialHub'
 import { TradeInbox } from './components/TradeInbox'
 import { TradeComposer } from './components/TradeComposer'
+import { FanPublicProfile } from './components/FanPublicProfile'
+import { FanMissionPage } from './components/FanMissionPage'
 import type { Card } from './types'
 import { demoCardImage, demoMemberImage, keepCardVisual } from './utils/cardVisual'
 import cardYunaImage from './assets/card-yuna-lavender.jpg'
@@ -44,6 +47,23 @@ import fanLevelStar from './assets/fan-level-star-v2.png'
 type Tab = 'home' | 'discover' | 'collection' | 'growth' | 'settings' | 'alerts' | 'events'
 
 const cardRoutePreviewKey = 'fanfolio.card-route-preview'
+
+function safeAppReturnPath(value: string | null, fallback: string): string {
+  if (!value || !value.startsWith('/') || value.startsWith('//')) return fallback
+  try {
+    const target = new URL(value, window.location.origin)
+    if (target.origin !== window.location.origin) return fallback
+    return `${target.pathname}${target.search}${target.hash}`
+  } catch {
+    return fallback
+  }
+}
+
+function routeWithReturnTo(path: string, returnTo: string): string {
+  const target = new URL(path, window.location.origin)
+  target.searchParams.set('returnTo', safeAppReturnPath(returnTo, '/discover'))
+  return `${target.pathname}${target.search}${target.hash}`
+}
 
 function mergeProgressionsForInventory(...progressions: Array<FanProgression | null>): FanProgression | null {
   const available = progressions.filter((progression): progression is FanProgression => progression !== null)
@@ -91,6 +111,38 @@ const fanGrowthPreviewProgression: FanProgression = {
   equipment: { titleRewardId: null, badgeRewardIds: ['preview-grant-1'], frameRewardId: null, themeRewardId: null, publicProfileEnabled: true },
 }
 
+const fanMissionPreviewItems: FanMission[] = [
+  { id: 'mission-news-comment', title: '아티스트 뉴스에 댓글 남기기', description: '새로운 소식에 응원 댓글을 남겨보세요.', eventKind: 'artist_news_commented', targetValue: 3, recurrence: 'daily', periodKey: '2026-08-23', currentValue: 2, completed: false, completedAt: null, reward: { xp: 30, points: 100 } },
+  { id: 'mission-pack-open', title: '카드팩 1회 열기', description: '새 카드팩을 열고 컬렉션을 채워보세요.', eventKind: 'card_pack_opened', targetValue: 1, recurrence: 'daily', periodKey: '2026-08-23', currentValue: 1, completed: true, completedAt: null, reward: { xp: 50, points: 200 } },
+  { id: 'mission-event-visit', title: '이벤트 페이지 방문하기', description: '오늘 진행되는 팬 이벤트를 확인해보세요.', eventKind: 'event_viewed', targetValue: 1, recurrence: 'weekly', periodKey: '2026-W34', currentValue: 0, completed: false, completedAt: null, reward: { xp: 20 } },
+  { id: 'mission-completed-pack', title: '카드팩 1회 열기', description: '카드팩 보상을 획득했어요.', eventKind: 'card_pack_opened', targetValue: 1, recurrence: 'weekly', periodKey: '2026-W34', currentValue: 1, completed: true, completedAt: '2026-08-22T10:00:00Z', reward: { xp: 50, points: 200 } },
+]
+
+const fanCommunityPreviewCards: CollectionCard[] = [
+  { userCardId: 'preview-user-card-1', cardId: 'preview-card-1', name: 'Nebula Ver.', imageUrl: collectionCardHarinGenerated, isOfficial: true, serialNumber: 12, acquiredAt: '2026-08-20T10:00:00Z', artistId: 'dreamscape', artistName: '드림스케이프', memberId: 'harin', memberName: '하린', rarity: 'UR', seasonName: '정규 1집 · DREAMSCAPE', cardType: 'photo', acquisitionSource: 'card_pack', tradable: true },
+  { userCardId: 'preview-user-card-2', cardId: 'preview-card-2', name: 'Nebula Ver.', imageUrl: collectionCardDoyunGenerated, isOfficial: true, serialNumber: 37, acquiredAt: '2026-08-19T10:00:00Z', artistId: 'dreamscape', artistName: '드림스케이프', memberId: 'doyun', memberName: '도윤', rarity: 'SR', seasonName: '정규 1집 · DREAMSCAPE', cardType: 'photo', acquisitionSource: 'card_pack', tradable: true },
+  { userCardId: 'preview-user-card-3', cardId: 'preview-card-3', name: 'Starlight Ver.', imageUrl: collectionCardMinjaeGenerated, isOfficial: true, serialNumber: 81, acquiredAt: '2026-08-18T10:00:00Z', artistId: 'dreamscape', artistName: '드림스케이프', memberId: 'minjae', memberName: '민재', rarity: 'R', seasonName: '정규 1집 · DREAMSCAPE', cardType: 'photo', acquisitionSource: 'card_pack', tradable: false },
+  { userCardId: 'preview-user-card-4', cardId: 'preview-card-4', name: 'Midnight Ver.', imageUrl: collectionCardJayGenerated, isOfficial: true, serialNumber: 104, acquiredAt: '2026-08-17T10:00:00Z', artistId: 'dreamscape', artistName: '드림스케이프', memberId: 'jay', memberName: '제이', rarity: 'N', seasonName: '2026 SUMMER', cardType: 'photo', acquisitionSource: 'event', tradable: true },
+]
+
+const fanCommunityPreviewCollection: PublicCollectionData = {
+  userId: 'preview-fan-luna',
+  nickname: '별빛수집가',
+  visibility: 'public',
+  isFollowing: false,
+  summary: { ownedCount: 28, followerCount: 132, followingCount: 48 },
+  cards: fanCommunityPreviewCards.map(card => ({ ...card, tradable: card.tradable !== false })),
+}
+
+const fanCommunityPreviewArtist: CatalogArtist = { id: 'artist_nova3', name: '드림스케이프', imageUrl: dreamscapeHero }
+
+const fanCommunityPreviewFans: FanSummary[] = [
+  { id: 'preview-fan-luna', nickname: '별빛드림', profileImageUrl: cardYunaImage, isFollowing: false, followerCount: 132, followingCount: 48, ownedCount: 28, tradableCount: 16, favoriteArtists: [fanCommunityPreviewArtist], sharedFavoriteArtists: [fanCommunityPreviewArtist], previewCards: fanCommunityPreviewCards.slice(0, 3), matchingWishlistCount: 2, latestCardAt: '2026-08-20T10:00:00Z' },
+  { id: 'preview-fan-cloud', nickname: '포포러버', profileImageUrl: cardMinhoImage, isFollowing: false, followerCount: 86, followingCount: 31, ownedCount: 19, tradableCount: 9, favoriteArtists: [fanCommunityPreviewArtist], sharedFavoriteArtists: [fanCommunityPreviewArtist], previewCards: fanCommunityPreviewCards.slice(1, 4), matchingWishlistCount: 1, latestCardAt: '2026-08-19T10:00:00Z' },
+  { id: 'preview-fan-purple', nickname: '오로라해', profileImageUrl: cardJayImage, isFollowing: true, followerCount: 57, followingCount: 22, ownedCount: 34, tradableCount: 21, favoriteArtists: [fanCommunityPreviewArtist], sharedFavoriteArtists: [fanCommunityPreviewArtist], previewCards: fanCommunityPreviewCards.slice(0, 3), matchingWishlistCount: 3, latestCardAt: '2026-08-18T10:00:00Z' },
+  { id: 'preview-fan-cat', nickname: '캣냥이', profileImageUrl: collectionCardHarinGenerated, isFollowing: false, followerCount: 41, followingCount: 17, ownedCount: 11, tradableCount: 7, favoriteArtists: [fanCommunityPreviewArtist], sharedFavoriteArtists: [fanCommunityPreviewArtist], previewCards: fanCommunityPreviewCards.slice(1, 4), matchingWishlistCount: 0, latestCardAt: '2026-08-17T10:00:00Z' },
+]
+
 function FanGrowthPreview() {
   const previewMode = new URLSearchParams(window.location.search).get('preview')
   const [showPass, setShowPass] = useState(() => previewMode === 'fan-pass' || previewMode === 'fan-global-pass')
@@ -105,6 +157,7 @@ function FanGrowthPreview() {
     onClaim: async () => ({ id: 'preview', rewardId: 'preview', type: 'badge' as const, name: '미리보기', grantedAt: null, claimedAt: null }),
     onClaimPassTier: async () => ({ seasonId: 'preview-season', tierId: 'preview-tier-1', claimedAt: null, rewardGrant: null }),
     onEquip: async () => {},
+    onViewMissions: () => window.location.assign('/?preview=fan-missions'),
   }
   return <main className="app-shell growth-shell">
     <div className="app-header">
@@ -234,8 +287,9 @@ function App() {
   const [selectedCard, setSelectedCard] = useState<Card | null>(() => readCardRoutePreview(window.location.pathname))
   const [showRedeem, setShowRedeem] = useState(() => window.location.pathname === '/redeem')
   const [showFanPassPage, setShowFanPassPage] = useState(() => window.location.pathname === '/growth/pass' || window.location.pathname === '/growth/global-pass')
+  const [showMissionPage, setShowMissionPage] = useState(() => window.location.pathname === '/growth/missions')
   const [showRewardInventory, setShowRewardInventory] = useState(() => window.location.pathname === '/collection/rewards')
-  const [showCardCollection, setShowCardCollection] = useState(() => window.location.pathname === '/collection/cards')
+  const [showCardCollection, setShowCardCollection] = useState(() => window.location.pathname === '/collection/cards' || window.location.pathname === '/discover/packs' || discoverPackIdFromPath(window.location.pathname) !== null)
   const [passScope, setPassScope] = useState<'artist' | 'global'>(() => window.location.pathname === '/growth/global-pass' ? 'global' : 'artist')
   const [passTargetTierId, setPassTargetTierId] = useState<string | undefined>()
   const [signedIn, setSignedIn] = useState(false)
@@ -283,15 +337,30 @@ function App() {
   const [showNotificationSettings, setShowNotificationSettings] = useState(false)
   const alertsReturnPathRef = useRef<string | null>(null)
   const cardReturnPathRef = useRef<string | null>(null)
+  const cardCollectionReturnPathRef = useRef<string | null>(null)
   const savedCardIds = savedCards.map(card => card.id)
   const pathname = window.location.pathname
+  const currentRelativePath = `${pathname}${window.location.search}${window.location.hash}`
   const publicCollectionUserId = publicCollectionIdFromPath(pathname)
+  const publicFanProfileUserId = publicFanProfileIdFromPath(pathname)
+  const discoverArtistSlug = discoverArtistSlugFromPath(pathname)
+  const discoverPackId = discoverPackIdFromPath(pathname)
+  const showDiscoverPackCatalog = pathname === '/discover/packs'
   const showFanSocial = pathname === '/fans'
   const showTradeInbox = pathname === '/trades'
   const showTradeComposer = pathname === '/trades/new'
   const tradeComposerParams = new URLSearchParams(window.location.search)
   const tradeRecipientUserId = tradeComposerParams.get('recipient') ?? ''
   const tradeRequestedUserCardIds = tradeComposerParams.getAll('requested').filter(Boolean)
+  const fanSearchQuery = tradeComposerParams.get('q') ?? ''
+  const requestedCollectionFilter = tradeComposerParams.get('filter') === 'tradable' ? 'tradable' : tradeComposerParams.get('filter') === 'wanted' ? 'wanted' : 'owned'
+  const routeReturnPath = tradeComposerParams.get('returnTo')
+
+  useEffect(() => {
+    if (!signedIn || !showTradeComposer || tradeRecipientUserId) return
+    window.history.replaceState({}, '', '/fans')
+    window.dispatchEvent(new PopStateEvent('popstate'))
+  }, [signedIn, showTradeComposer, tradeRecipientUserId])
 
   useEffect(() => {
     const favoriteArtistIds = currentUser?.favoriteArtistIds ?? []
@@ -328,6 +397,8 @@ function App() {
         ? 'Fanfolio · 최초 설정'
         : showCardCollection
           ? 'Fanfolio · 카드 컬렉션'
+        : showMissionPage
+          ? 'Fanfolio · 미션'
         : showRewardInventory
           ? 'Fanfolio · 패스 보상'
         : showRedeem
@@ -335,13 +406,14 @@ function App() {
           : revealedCardId
             ? 'Fanfolio · 카드 공개'
         : `Fanfolio · ${tabTitle(tab)}`
-  }, [revealedCardId, sessionChecking, showCardCollection, showOnboarding, showRedeem, showRewardInventory, signedIn, tab])
+  }, [revealedCardId, sessionChecking, showCardCollection, showMissionPage, showOnboarding, showRedeem, showRewardInventory, signedIn, tab])
 
   const navigateTab = (nextTab: Tab) => {
     setTab(nextTab)
     setSelectedCard(null)
     setShowRedeem(false)
     setShowFanPassPage(false)
+    setShowMissionPage(false)
     setShowRewardInventory(false)
     setShowCardCollection(false)
     setRevealedCardId(null)
@@ -507,6 +579,18 @@ function App() {
     setTab('growth')
   }
 
+  const openMissionPage = () => {
+    setTab('growth')
+    setShowMissionPage(true)
+    window.history.pushState({}, '', '/growth/missions')
+  }
+
+  const closeMissionPage = () => {
+    setShowMissionPage(false)
+    window.history.replaceState({}, '', '/growth')
+    setTab('growth')
+  }
+
   const openRewardInventory = () => {
     setTab('collection')
     setShowRewardInventory(true)
@@ -520,15 +604,19 @@ function App() {
   }
 
   const openCardCollection = () => {
+    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`
+    if (window.location.pathname !== '/collection/cards') cardCollectionReturnPathRef.current = currentPath
     setTab('collection')
     setShowCardCollection(true)
     window.history.pushState({}, '', '/collection/cards')
   }
 
   const closeCardCollection = () => {
+    const returnPath = cardCollectionReturnPathRef.current ?? '/collection'
+    cardCollectionReturnPathRef.current = null
     setShowCardCollection(false)
-    window.history.replaceState({}, '', '/collection')
-    setTab('collection')
+    window.history.replaceState({}, '', returnPath)
+    setTab(tabFromPath(new URL(returnPath, window.location.origin).pathname))
   }
 
   useEffect(() => {
@@ -538,8 +626,9 @@ function App() {
       setEventId(eventIdFromPath(path))
       setShowRedeem(path === '/redeem')
       setShowFanPassPage(path === '/growth/pass' || path === '/growth/global-pass')
+      setShowMissionPage(path === '/growth/missions')
       setShowRewardInventory(path === '/collection/rewards')
-      setShowCardCollection(path === '/collection/cards')
+      setShowCardCollection(path === '/collection/cards' || path === '/discover/packs' || discoverPackIdFromPath(path) !== null)
       setPassScope(path === '/growth/global-pass' ? 'global' : 'artist')
       setRevealedCardId(revealIdFromPath(path))
       setSelectedCard(path.startsWith('/cards/') ? readCardRoutePreview(path) : null)
@@ -593,6 +682,7 @@ function App() {
     setShowOnboarding(false)
     setSelectedCard(null)
     setShowRedeem(false)
+    setShowMissionPage(false)
     setShowRewardInventory(false)
     setRevealedCardId(null)
     setCollectionCards([])
@@ -824,8 +914,17 @@ function App() {
     const preview = new URLSearchParams(window.location.search).get('preview')
     if (preview === 'fan-pass' || preview === 'fan-global-pass') return <FanPassPage progression={fanGrowthPreviewProgression} loading={false} error="" onRetry={() => {}} onBack={() => { window.history.pushState({}, '', '/?preview=fan-growth'); window.dispatchEvent(new PopStateEvent('popstate')) }} onClaimPassTier={async () => ({})} onNavigate={tab => window.location.assign(pathForTab(tab))} isGlobal={preview === 'fan-global-pass'} />
     if (preview === 'fan-growth') return <FanGrowthPreview />
+    if (preview === 'fan-missions') return <FanMissionPage onBack={() => window.location.assign('/?preview=fan-growth')} initialMissions={fanMissionPreviewItems} />
+    if (preview === 'discover-hub') return <main className="app-shell discover-shell"><div className="app-header"><div className="app-header-copy"><span className="eyebrow">FANFOLIO</span><h1>탐색</h1></div><div className="header-actions"><button className="header-alert-button" aria-label="알림"><NavIcon name="alerts" /></button><button className="header-profile-button" aria-label="프로필 및 설정"><ProfileAvatar imageUrl={null} fallback="배" alt="프로필 이미지" /></button></div></div><section className="screen"><Discover onFindFans={() => window.location.assign('/?preview=fan-social')} onOpenFanProfile={() => window.location.assign('/?preview=fan-profile')} onOpenPublicCollection={() => window.location.assign('/?preview=public-collection')} onOpenEvent={() => window.location.assign('/?preview=discover-event')} onOpenArtist={() => window.location.assign('/?preview=discover-artist')} onOpenPackCatalog={() => window.location.assign('/?preview=card-collection')} onOpenPack={() => window.location.assign('/?preview=discover-pack')} featuredArtist={{ id: 'artist_nova3', name: '드림스케이프', imageUrl: dreamscapeHero }} featuredEvent={fallbackHomeEvent} initialFans={fanCommunityPreviewFans} /></section><BottomNavigation active="discover" onNavigate={() => {}} /></main>
+    if (preview === 'discover-artist') return <ArtistHubDetail artist={{ id: 'artist_nova3', name: '드림스케이프', imageUrl: dreamscapeHero }} onBack={() => window.location.assign('/?preview=discover-hub')} onOpenEvents={() => {}} onOpenCollection={() => window.location.assign('/?preview=collection-inventory-entry')} onOpenCard={() => {}} />
+    if (preview === 'discover-pack') return <CardCollectionRepository initialPackId="nebula" usePreviewData onBack={() => window.location.assign('/?preview=discover-hub')} onNavigate={tab => window.location.assign(pathForTab(tab))} />
+    if (preview === 'discover-event') return <EventDetail event={fallbackHomeEvent} loading={false} onBack={() => window.location.assign('/?preview=discover-hub')} onOpenTarget={() => {}} onApply={() => {}} comments={[]} commentsLoading={false} commentSubmitting={false} onLoadComments={() => {}} onSubmitComment={() => {}} />
+    if (preview === 'fan-social') return <FanSocialHub onBack={() => window.location.assign('/?preview=discover-hub')} onOpenProfile={() => window.location.assign('/?preview=fan-profile')} onOpenCollection={() => window.location.assign('/?preview=public-collection')} onOpenTrades={() => window.location.assign('/?preview=trade-composer')} initialItems={fanCommunityPreviewFans} />
+    if (preview === 'fan-profile') return <FanPublicProfile userId={fanCommunityPreviewCollection.userId} initialCollection={fanCommunityPreviewCollection} onBack={() => window.location.assign('/?preview=fan-social')} onOpenArtist={() => window.location.assign('/?preview=discover-artist')} onOpenCollection={() => window.location.assign('/?preview=public-collection')} onTrade={() => window.location.assign('/?preview=trade-composer')} />
+    if (preview === 'public-collection') return <PublicCollection userId={fanCommunityPreviewCollection.userId} initialCollection={fanCommunityPreviewCollection} onBack={() => window.location.assign('/?preview=fan-profile')} onOpenPackCatalog={() => window.location.assign('/?preview=discover-pack')} onTrade={() => window.location.assign('/?preview=trade-composer')} />
+    if (preview === 'trade-composer') return <TradeComposer recipientUserId={fanCommunityPreviewCollection.userId} requestedUserCardIds={[fanCommunityPreviewCards[0].userCardId]} initialCards={fanCommunityPreviewCards.slice(1)} initialRequestedCards={[fanCommunityPreviewCards[0]]} onBack={() => window.location.assign('/?preview=public-collection')} onCreated={() => window.location.assign('/?preview=fan-social')} />
     if (preview === 'reward-inventory') return <RewardInventoryPreview />
-    if (preview === 'card-collection') return <CardCollectionRepository onBack={() => window.location.assign('/?preview=collection-inventory-entry')} onNavigate={tab => window.location.assign(pathForTab(tab))} />
+    if (preview === 'card-collection') return <CardCollectionRepository usePreviewData onBack={() => window.location.assign('/?preview=discover-hub')} onNavigate={tab => window.location.assign(pathForTab(tab))} />
     if (preview === 'collection-inventory-entry') return <main className="app-shell collection-shell"><header className={'app-header'}><div className="app-header-copy"><span className="eyebrow">FANFOLIO</span><h1>보관함</h1><p className="app-header-description">내가 수집한 모든 카드와 컬렉션을 관리해요.</p></div><div className="header-actions"><button className="header-alert-button" aria-label="알림"><NavIcon name="alerts" /></button><button className="header-profile-button" aria-label="프로필 및 설정"><ProfileAvatar imageUrl={null} fallback="테" alt="프로필 이미지" /></button></div></header><section className="screen"><Collection cards={fallbackCollectionCards} collectionDataReady summary={{ ownedCount: 5, totalSlots: 9, completionRate: 56 }} benefits={[]} rewards={fanGrowthPreviewProgression.claimedRewards} loading={false} onSelect={() => {}} onRedeem={() => {}} onDiscover={() => {}} onRewards={() => window.location.assign('/?preview=reward-inventory')} onCards={() => window.location.assign('/?preview=card-collection')} onClaim={async () => {}} /></section><BottomNavigation active="collection" onNavigate={() => {}} /></main>
   }
 
@@ -840,10 +939,13 @@ function App() {
   }
 
   if (showFanSocial) {
+    const fanSocialReturnPath = safeAppReturnPath(routeReturnPath, '/discover')
     return <FanSocialHub
-      onBack={() => window.location.assign('/discover')}
-      onOpenCollection={userId => window.location.assign(`/fans/${encodeURIComponent(userId)}/collection`)}
-      onOpenTrades={() => window.location.assign('/trades')}
+      onBack={() => window.location.assign(fanSocialReturnPath)}
+      onOpenProfile={userId => window.location.assign(routeWithReturnTo(`/fans/${encodeURIComponent(userId)}`, currentRelativePath))}
+      onOpenCollection={userId => window.location.assign(routeWithReturnTo(`/fans/${encodeURIComponent(userId)}/collection`, currentRelativePath))}
+      onOpenTrades={userId => window.location.assign(routeWithReturnTo(`/fans/${encodeURIComponent(userId)}/collection?filter=tradable`, currentRelativePath))}
+      initialQuery={fanSearchQuery}
     />
   }
 
@@ -853,29 +955,48 @@ function App() {
 
   if (showTradeComposer) {
     if (!tradeRecipientUserId) {
-      return <FanSocialHub
-        onBack={() => window.location.assign('/discover')}
-        onOpenCollection={userId => window.location.assign(`/fans/${encodeURIComponent(userId)}/collection`)}
-        onOpenTrades={() => window.location.assign('/trades')}
-      />
+      return <main className="app-shell fan-social-shell"><p role="status">팬 찾기로 이동하는 중...</p></main>
     }
+    const tradeReturnPath = safeAppReturnPath(routeReturnPath, `/fans/${encodeURIComponent(tradeRecipientUserId)}/collection`)
     return <TradeComposer
       recipientUserId={tradeRecipientUserId}
       requestedUserCardIds={tradeRequestedUserCardIds}
-      onBack={() => window.location.assign(`/fans/${encodeURIComponent(tradeRecipientUserId)}/collection`)}
+      onBack={() => window.location.assign(tradeReturnPath)}
       onCreated={() => window.location.assign('/trades')}
     />
   }
 
+  if (publicFanProfileUserId) {
+    const profileReturnPath = safeAppReturnPath(routeReturnPath, '/fans')
+    return <FanPublicProfile
+      userId={publicFanProfileUserId}
+      onBack={() => window.location.assign(profileReturnPath)}
+      onOpenArtist={artistId => window.location.assign(routeWithReturnTo(`/discover/artists/${encodeURIComponent(artistId)}`, currentRelativePath))}
+      onOpenCollection={() => window.location.assign(routeWithReturnTo(`/fans/${encodeURIComponent(publicFanProfileUserId)}/collection`, currentRelativePath))}
+      onTrade={requestedUserCardId => window.location.assign(requestedUserCardId ? routeWithReturnTo(`/trades/new?recipient=${encodeURIComponent(publicFanProfileUserId)}&requested=${encodeURIComponent(requestedUserCardId)}`, currentRelativePath) : routeWithReturnTo(`/fans/${encodeURIComponent(publicFanProfileUserId)}/collection`, currentRelativePath))}
+    />
+  }
+
   if (publicCollectionUserId) {
+    const collectionReturnPath = safeAppReturnPath(routeReturnPath, `/fans/${encodeURIComponent(publicCollectionUserId)}`)
+    const openPublicPackCatalog = (packId?: string) => {
+      const path = packId ? `/discover/packs/${encodeURIComponent(packId)}` : '/discover/packs'
+      window.location.assign(routeWithReturnTo(path, currentRelativePath))
+    }
     return <PublicCollection userId={publicCollectionUserId}
-      onBack={() => window.location.assign('/fans')}
-      onTrade={requestedUserCardId => window.location.assign(`/trades/new?recipient=${encodeURIComponent(publicCollectionUserId)}&requested=${encodeURIComponent(requestedUserCardId)}`)}
+      initialFilter={requestedCollectionFilter}
+      onBack={() => window.location.assign(collectionReturnPath)}
+      onOpenPackCatalog={openPublicPackCatalog}
+      onTrade={requestedUserCardId => window.location.assign(routeWithReturnTo(`/trades/new?recipient=${encodeURIComponent(publicCollectionUserId)}&requested=${encodeURIComponent(requestedUserCardId)}`, currentRelativePath))}
     />
   }
 
   if (showFanPassPage) {
     return <FanPassPage progression={passScope === 'global' ? globalFanProgression : fanProgression} loading={growthLoading} error={growthError} onRetry={refreshGrowth} onBack={closeFanPassPage} onClaimPassTier={claimGrowthPassTier} onNavigate={navigateTab} initialTierId={passTargetTierId} isGlobal={passScope === 'global'} />
+  }
+
+  if (showMissionPage) {
+    return <FanMissionPage onBack={closeMissionPage} onClaimed={refreshGrowth} />
   }
 
   if (showRewardInventory) {
@@ -894,8 +1015,15 @@ function App() {
     />
   }
 
+  if (discoverArtistSlug) {
+    const artist = catalogArtists.find(item => item.id === discoverArtistSlug) ?? null
+    const artistReturnPath = safeAppReturnPath(routeReturnPath, '/discover')
+    return <ArtistHubDetail artist={artist} onBack={() => window.location.assign(artistReturnPath)} onOpenEvents={openEvents} onOpenCollection={openCardCollection} onOpenCard={openCard} />
+  }
+
   if (showCardCollection) {
-    return <CardCollectionRepository onBack={closeCardCollection} onNavigate={navigateTab} onOpenCard={handleCardPackOpened} />
+    const packReturnPath = safeAppReturnPath(routeReturnPath, '/discover')
+    return <CardCollectionRepository initialPackId={discoverPackId ?? undefined} onBack={discoverPackId || showDiscoverPackCatalog ? () => window.location.assign(packReturnPath) : closeCardCollection} onNavigate={navigateTab} onOpenCard={handleCardPackOpened} />
   }
 
   if (showApplicationComplete) {
@@ -942,7 +1070,7 @@ function App() {
         {tab === 'home' && <Home nickname={currentUser?.nickname ?? '팬'} cards={collectionCards} collectionDataReady={collectionDataReady} savedCards={savedCards} summary={collectionSummary} loading={collectionLoading} eventHome={fanHome} onSelect={openCard} onDiscover={() => navigateTab('discover')} onCollection={() => navigateTab('collection')} onRedeem={openRedeem} onEvents={openEvents} onEvent={openEvent} />}
         {tab === 'events' && (eventId ? <EventDetail event={selectedEvent} loading={eventDetailLoading} onBack={openEvents} onApply={handleEventApply} comments={eventComments} commentsLoading={eventCommentsLoading} commentSubmitting={eventCommentSubmitting} onLoadComments={loadEventComments} onSubmitComment={handleEventComment} onOpenTarget={target => { if (target.startsWith('/events/')) { const id = decodeURIComponent(target.split('/')[1]?.split('#')[0] ?? ''); const item = fanEvents.find(event => event.id === id); if (item) openEvent(item) } else if (target.startsWith('https://')) window.open(target, '_blank', 'noopener,noreferrer') }} /> : <EventList events={fanEvents} status={fanEventStatus} loading={fanEventsLoading} error={fanEventsError} pagination={fanEventPagination} onStatusChange={handleFanEventStatusChange} onPageChange={setFanEventPage} onOpen={openEvent} />)}
         {tab === 'collection' && <Collection cards={collectionCards} collectionDataReady={collectionDataReady} summary={collectionSummary} benefits={collectionBenefits} rewards={inventoryProgression?.claimedRewards ?? []} loading={collectionLoading} onSelect={openCard} onRedeem={openRedeem} onDiscover={() => navigateTab('discover')} onRewards={openRewardInventory} onCards={openCardCollection} onClaim={claimBenefit} />}
-        {tab === 'discover' && <Discover />}
+        {tab === 'discover' && <Discover onFindFans={query => window.location.assign(routeWithReturnTo(query ? `/fans?q=${encodeURIComponent(query)}` : '/fans', '/discover'))} onOpenFanProfile={userId => window.location.assign(routeWithReturnTo(`/fans/${encodeURIComponent(userId)}`, '/discover'))} onOpenPublicCollection={userId => window.location.assign(routeWithReturnTo(`/fans/${encodeURIComponent(userId)}/collection`, '/discover'))} onOpenEvent={event => { if (event) openEvent(event); else openEvents() }} onOpenArtist={artistId => window.location.assign(routeWithReturnTo(`/discover/artists/${encodeURIComponent(artistId)}`, '/discover'))} onOpenPackCatalog={() => window.location.assign(routeWithReturnTo('/discover/packs', '/discover'))} onOpenPack={packId => window.location.assign(routeWithReturnTo(`/discover/packs/${encodeURIComponent(packId)}`, '/discover'))} featuredArtist={catalogArtists.find(artist => artist.name === '드림스케이프') ?? catalogArtists[0] ?? null} featuredEvent={fanHome?.featuredEvent ?? fanHome?.upcomingEvents[0] ?? null} />}
         {tab === 'alerts' && <Alerts items={notifications} error={notificationError} actionError={notificationActionError} onDismissActionError={() => setNotificationActionError('')} onRetry={() => window.dispatchEvent(new Event('fanfolio:refresh-notifications'))} onRead={markNotificationRead} onReadAll={markAllNotificationsRead} onBack={closeAlerts} onNavigate={(destination) => {
           if (destination === 'rewardInventory') openRewardInventory()
           else if (destination === 'fanSocial') window.location.assign('/fans')
@@ -950,7 +1078,7 @@ function App() {
           else navigateTab(destination)
         }} />}
         {/* Embedded surfaces stay compact; the dedicated tab uses the full progression view. */}
-        {tab === 'growth' && <FanGrowth progression={fanProgression} globalProgression={globalFanProgression} artistScopes={catalogArtists.filter(artist => currentUser?.favoriteArtistIds.includes(artist.id)).map(artist => ({ id: artist.id, name: artist.name, imageUrl: artist.name === '드림스케이프' ? loginDreamscapeGroup : artist.imageUrl }))} selectedArtistId={growthArtistId} onArtistChange={setGrowthArtistId} loading={growthLoading} error={growthError} mode="full" onRetry={refreshGrowth} onClaim={claimGrowthReward} onClaimPassTier={claimGrowthPassTier} onEquip={saveGrowthEquipment} onViewPass={openFanPassPage} onViewGlobalPass={(tierId) => openFanPassPage(tierId, 'global')} fanGrowthMode="full" />}
+        {tab === 'growth' && <FanGrowth progression={fanProgression} globalProgression={globalFanProgression} artistScopes={catalogArtists.filter(artist => currentUser?.favoriteArtistIds.includes(artist.id)).map(artist => ({ id: artist.id, name: artist.name, imageUrl: artist.name === '드림스케이프' ? loginDreamscapeGroup : artist.imageUrl }))} selectedArtistId={growthArtistId} onArtistChange={setGrowthArtistId} loading={growthLoading} error={growthError} mode="full" onRetry={refreshGrowth} onClaim={claimGrowthReward} onClaimPassTier={claimGrowthPassTier} onEquip={saveGrowthEquipment} onViewPass={openFanPassPage} onViewGlobalPass={(tierId) => openFanPassPage(tierId, 'global')} onViewMissions={openMissionPage} fanGrowthMode="full" />}
         {tab === 'settings' && currentUser && <Settings user={currentUser} progression={fanProgression} onUserUpdated={setCurrentUser} onLogout={logout} onEvents={openMyApplications} onNotificationSettings={() => setShowNotificationSettings(true)} />}
       </section>
 
@@ -966,11 +1094,12 @@ function tabFromPath(pathname: string): Tab {
   // `/home` so OAuth/magic-link completion never drops fans into the archive.
   if (pathname === '/' || pathname === '') return 'home'
   if (pathname === '/home') return 'home'
-  if (pathname === '/discover') return 'discover'
+  if (pathname === '/discover' || pathname.startsWith('/discover/')) return 'discover'
   if (pathname === '/collection') return 'collection'
   if (pathname === '/collection/rewards') return 'collection'
   if (pathname === '/collection/cards') return 'collection'
   if (pathname === '/growth') return 'growth'
+  if (pathname === '/growth/missions') return 'growth'
   if (pathname === '/growth/pass' || pathname === '/growth/global-pass') return 'growth'
   if (pathname === '/notifications') return 'alerts'
   if (pathname === '/events' || pathname.startsWith('/events/')) return 'events'
@@ -993,6 +1122,21 @@ function eventIdFromPath(pathname: string): string | null {
 
 function publicCollectionIdFromPath(pathname: string): string | null {
   const match = pathname.match(/^\/fans\/([^/]+)\/collection$/)
+  return match ? decodeURIComponent(match[1]) : null
+}
+
+function publicFanProfileIdFromPath(pathname: string): string | null {
+  const match = pathname.match(/^\/fans\/([^/]+)$/)
+  return match ? decodeURIComponent(match[1]) : null
+}
+
+function discoverArtistSlugFromPath(pathname: string): string | null {
+  const match = pathname.match(/^\/discover\/artists\/([^/]+)$/)
+  return match ? decodeURIComponent(match[1]) : null
+}
+
+function discoverPackIdFromPath(pathname: string): string | null {
+  const match = pathname.match(/^\/discover\/packs\/([^/]+)$/)
   return match ? decodeURIComponent(match[1]) : null
 }
 
@@ -2067,11 +2211,11 @@ function CardCollectionDetail({ item, onBack }: { item: CardCollectionDetailItem
   </main>
 }
 
-function CardCollectionRepository({ onBack, onNavigate, onOpenCard }: { onBack: () => void, onNavigate: (tab: Tab) => void, onOpenCard?: (userCardId: string) => Promise<void> | void }) {
+function CardCollectionRepository({ initialPackId, usePreviewData = false, onBack, onNavigate, onOpenCard }: { initialPackId?: string, usePreviewData?: boolean, onBack: () => void, onNavigate: (tab: Tab) => void, onOpenCard?: (userCardId: string) => Promise<void> | void }) {
   const [remoteGroups, setRemoteGroups] = useState<CardCollectionGroup[] | null>(null)
   const [remotePacks, setRemotePacks] = useState<CardPack[]>([])
   const [groupId, setGroupId] = useState(cardCollectionGroups[0].id)
-  const [packId, setPackId] = useState(cardCollectionGroups[0].packs[0].id)
+  const [packId, setPackId] = useState(initialPackId ?? cardCollectionGroups[0].packs[0].id)
   const [groupMenuOpen, setGroupMenuOpen] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [filter, setFilter] = useState<'all' | 'owned' | 'missing' | 'duplicate'>('all')
@@ -2096,6 +2240,7 @@ function CardCollectionRepository({ onBack, onNavigate, onOpenCard }: { onBack: 
   const groups = remoteGroups ?? cardCollectionGroups
   const group = groups.find(item => item.id === groupId) ?? groups[0] ?? { id: 'empty', displayName: '카드 컬렉션', owned: 0, total: 0, packs: [] }
   useEffect(() => {
+    if (usePreviewData) return
     let cancelled = false
     void Promise.all([
       getCardPacks(),
@@ -2106,14 +2251,17 @@ function CardCollectionRepository({ onBack, onNavigate, onOpenCard }: { onBack: 
       const nextGroups = buildRemoteCardCollectionGroups(packs.data.items, collection.data.cards)
       setRemoteGroups(nextGroups)
       if (nextGroups[0]) {
-        setGroupId(nextGroups[0].id)
-        setPackId(nextGroups[0].packs[0]?.id ?? 'all')
+        const requestedPack = initialPackId ? nextGroups.flatMap(group => group.packs).find(pack => pack.id === initialPackId) : null
+        const requestedGroup = requestedPack ? nextGroups.find(group => group.packs.some(pack => pack.id === requestedPack.id)) : null
+        const nextGroup = requestedGroup ?? nextGroups[0]
+        setGroupId(nextGroup.id)
+        setPackId(requestedPack?.id ?? nextGroup.packs[0]?.id ?? 'all')
       }
     }).catch(() => {
       if (!cancelled) setRemoteGroups([])
     })
     return () => { cancelled = true }
-  }, [])
+  }, [initialPackId, usePreviewData])
   const allPack: CardCollectionPack = {
     id: 'all',
     name: '전체 팩',
@@ -2520,8 +2668,99 @@ function NotificationSettings({ onBack }: { onBack: () => void }) {
   </main>
 }
 
-function Discover() {
-  return <section className="artist-hub"><div className="artist-hub-heading"><p>좋아하는 아티스트의 모든 정보를 한눈에</p></div><section className="fan-community-entry" aria-label="팬 커뮤니티"><div><span className="eyebrow">FAN COMMUNITY</span><h3>다른 팬의 컬렉션을 만나보세요</h3><p>팬을 팔로우하고 공개 컬렉션에서 거래 가능한 카드를 찾아볼 수 있어요.</p></div><div><button type="button" onClick={() => window.location.assign('/fans')}>팬 찾기</button><button type="button" className="secondary" onClick={() => window.location.assign('/trades')}>거래함</button></div></section><section className="artist-hub-hero"><img src={dreamscapeHero} alt="드림스케이프" /><div className="artist-hub-hero-overlay"><span>추천 아티스트</span><h3>드림스케이프 <VerifiedIcon /></h3><p>4명의 멤버 · 공식 아티스트 공간</p><div className="hub-members">{[cardYunaImage, cardMinhoImage, cardJayImage, cardYunaImage].map((image, index) => <img key={index} src={image} alt="" />)}</div><button type="button">+ 팔로우</button></div></section><nav className="hub-tabs" aria-label="아티스트 정보"><a className="active" href="#artist-home">아티스트 홈</a><a href="#artist-schedule">일정</a><a href="#artist-news">뉴스</a><a href="#artist-cards">카드</a><a href="#artist-events">이벤트</a></nav><section id="artist-schedule" className="hub-section"><div className="section-heading"><h3>다가오는 일정</h3><button type="button">전체 보기 ›</button></div><div className="hub-schedule-grid"><article><b>JUN<br /><strong>28</strong></b><div><span>팬미팅</span><h4>드림스케이프 팬미팅</h4><p>2026.06.28 (일) 17:00</p><small><InlineIcon name="pin" />올림픽공원 올림픽홀</small></div><i className="hub-schedule-bell"><NavIcon name="alerts" /></i></article><article><b>JUL<br /><strong>12</strong></b><div><span>콘서트</span><h4>2026 SUMMER FAN WEEK</h4><p>2026.07.12 (일) 18:00</p><small><InlineIcon name="pin" />KSPO DOME</small></div><i className="hub-schedule-bell"><NavIcon name="alerts" /></i></article></div></section><section id="artist-news" className="hub-section"><div className="section-heading"><h3>드림스케이프 뉴스</h3><button type="button">전체 보기 ›</button></div><div className="hub-news-list"><article><img src={dreamscapeHero} alt="" /><div><b>드림스케이프, 새 앨범 트랙리스트 공개</b><p>타이틀곡 ‘Nebula’ 포함 총 6곡 수록</p><small>1시간 전</small></div><strong>›</strong></article><article><img src={fanWeekLavenderMeet} alt="" /><div><b>드림스케이프, 글로벌 차트 1위!</b><p>신곡 ‘Nebula’ 글로벌 인기 상승</p><small>1일 전</small></div><strong>›</strong></article></div></section><section id="artist-cards" className="hub-section"><div className="section-heading"><h3>새 카드</h3><button type="button">전체 보기 ›</button></div><div className="hub-card-row">{[cardYunaImage, cardMinhoImage, cardJayImage].map((image, index) => <button type="button" key={image} onClick={() => undefined}><img src={image} alt="새 카드" /><b>{['하린', '도윤', '제이'][index]}<br />Nebula Ver.</b><span>{index === 0 ? 'UR' : 'SR'}</span></button>)}</div><div className="hub-card-dots" aria-hidden="true"><b /><i /><i /></div><a className="hub-event-promo" href="/events"><span className="hub-event-promo-icon" aria-hidden="true"><InlineIcon name="gift" /></span><b><small>팬 이벤트</small>드림스케이프 사인 폴라로이드 이벤트<em>참여하고 사인 폴라로이드를 받아보세요!</em></b><strong>참여하기</strong><i>›</i></a></section></section>
+function Discover({ onFindFans, onOpenFanProfile, onOpenPublicCollection, onOpenEvent, onOpenArtist, onOpenPackCatalog, onOpenPack, featuredArtist, featuredEvent, initialFans }: { onFindFans: (query?: string) => void; onOpenFanProfile: (userId: string) => void; onOpenPublicCollection: (userId: string) => void; onOpenEvent: (event: FanEvent | null) => void; onOpenArtist: (artistId: string) => void; onOpenPackCatalog: () => void; onOpenPack: (packId: string) => void; featuredArtist?: CatalogArtist | null; featuredEvent?: FanEvent | null; initialFans?: FanSummary[] }) {
+  const [activeCategory, setActiveCategory] = useState<'recommend' | 'artists' | 'packs' | 'community'>('recommend')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [packs, setPacks] = useState<CardPack[]>([])
+  const [fans, setFans] = useState<FanSummary[]>(initialFans ?? [])
+  useEffect(() => {
+    let cancelled = false
+    void getCardPacks().then(result => { if (!cancelled) setPacks(result.data.items) }).catch(() => { if (!cancelled) setPacks([]) })
+    return () => { cancelled = true }
+  }, [])
+  useEffect(() => {
+    if (initialFans) { setFans(initialFans); return }
+    let cancelled = false
+    void searchFans('').then(result => {
+      if (!cancelled) setFans([...result.data.items].sort((first, second) => second.ownedCount - first.ownedCount || second.followerCount - first.followerCount || first.nickname.localeCompare(second.nickname, 'ko')))
+    }).catch(() => { if (!cancelled) setFans([]) })
+    return () => { cancelled = true }
+  }, [initialFans])
+  const featuredPack = packs[0]
+  const featuredFans = fans.slice(0, 2)
+  const featuredFan = featuredFans[0]
+  const openFeaturedPack = () => {
+    if (featuredPack) {
+      onOpenPack(featuredPack.id)
+      return
+    }
+    onOpenPackCatalog()
+  }
+  const submitDiscoverSearch = (event: FormEvent) => {
+    event.preventDefault()
+    const query = searchQuery.trim()
+    if (!query) return
+    const normalizedQuery = query.toLocaleLowerCase('ko-KR')
+    const artistName = featuredArtist?.name.toLocaleLowerCase('ko-KR') ?? ''
+    const packName = `${featuredPack?.name ?? ''} ${featuredPack?.seasonName ?? ''}`.toLocaleLowerCase('ko-KR')
+    if (featuredArtist && (activeCategory === 'artists' || artistName.includes(normalizedQuery))) {
+      onOpenArtist(featuredArtist.id)
+      return
+    }
+    if (activeCategory === 'packs' || packName.includes(normalizedQuery)) {
+      openFeaturedPack()
+      return
+    }
+    onFindFans(query)
+  }
+  const toggleDiscoverFollow = async (fan: FanSummary) => {
+    if (initialFans) {
+      setFans(current => current.map(item => item.id === fan.id ? { ...item, isFollowing: !item.isFollowing } : item))
+      return
+    }
+    try {
+      const result = fan.isFollowing ? await unfollowFan(fan.id) : await followFan(fan.id)
+      setFans(current => current.map(item => item.id === fan.id ? { ...item, isFollowing: result.data.following } : item))
+    } catch {
+      // The full fan search page exposes the detailed retry state.
+    }
+  }
+  const categories = [
+    { id: 'recommend', label: '추천' },
+    { id: 'artists', label: '아티스트' },
+    { id: 'packs', label: '카드팩' },
+    { id: 'community', label: '팬' },
+  ] as const
+  const show = (section: typeof activeCategory) => activeCategory === 'recommend' || activeCategory === section
+
+  return <section className="discover-hub">
+    <div className="discover-hub-intro"><p>좋아하는 아티스트와 새로운 팬 활동을 발견해보세요.</p></div>
+    <form className="discover-global-search" role="search" onSubmit={submitDiscoverSearch}><button type="submit" aria-label="탐색 검색"><InlineIcon name="search" /></button><input type="search" value={searchQuery} onChange={event => setSearchQuery(event.target.value)} placeholder="아티스트, 카드팩, 팬을 검색해보세요" /></form>
+    <nav className="discover-categories" role="tablist" aria-label="탐색 카테고리">{categories.map(category => <button type="button" role="tab" aria-selected={activeCategory === category.id} className={activeCategory === category.id ? 'active' : ''} key={category.id} onClick={() => setActiveCategory(category.id)}>{category.label}</button>)}</nav>
+    {show('community') && <section className="discover-featured-section discover-fans-section"><div className="section-heading"><h2>추천 팬</h2><button type="button" onClick={() => onFindFans()}>더보기 <InlineIcon name="chevron" /></button></div>{featuredFans.length > 0 ? <div className="discover-fan-list">{featuredFans.map((fan, index) => <article key={fan.id}><button type="button" className="discover-fan-profile" onClick={() => onOpenFanProfile(fan.id)}><ProfileAvatar imageUrl={resolveApiUrl(fan.profileImageUrl) || null} fallback={fan.nickname} alt={`${fan.nickname} 프로필`} /><span><strong>{fan.nickname} <VerifiedIcon /></strong><small>공유 아티스트 <b>드림스케이프</b></small><em><InlineIcon name="star" /> {index === 0 ? `공개 카드 ${fan.ownedCount}장을 보유하고 있어요` : `팔로워 ${fan.followerCount}명이 함께하고 있어요`}</em></span></button><button type="button" className={fan.isFollowing ? 'following' : ''} onClick={() => void toggleDiscoverFollow(fan)}>{fan.isFollowing ? '팔로잉' : '팔로우'}</button></article>)}</div> : <button type="button" className="discover-community-empty" onClick={() => onFindFans()}>함께할 팬을 찾아보세요 <InlineIcon name="chevron" /></button>}</section>}
+    {show('community') && featuredFan && <section className="discover-featured-section discover-public-preview"><div className="section-heading"><h2>공개 컬렉션</h2><button type="button" onClick={() => onOpenPublicCollection(featuredFan.id)}>더보기 <InlineIcon name="chevron" /></button></div><button type="button" className="discover-collection-entry" onClick={() => onOpenPublicCollection(featuredFan.id)}><span className="discover-collection-cards">{[collectionCardHarinGenerated, collectionCardDoyunGenerated, collectionCardMinjaeGenerated].map((image, index) => <img src={image} alt="" key={image} style={{ '--stack-index': index } as CSSProperties} />)}</span><span><strong>드림스케이프 공개 컬렉션</strong><small className="discover-collection-ownerline"><ProfileAvatar imageUrl={resolveApiUrl(featuredFan.profileImageUrl) || null} fallback={featuredFan.nickname} alt={`${featuredFan.nickname} 프로필`} />{featuredFan.nickname} <VerifiedIcon /></small><i><em style={{ width: `${Math.min(100, Math.round((featuredFan.ownedCount / 90) * 100))}%` }} /></i></span><b>{featuredFan.ownedCount} / 90장</b></button></section>}
+    {activeCategory === 'artists' && <section className="discover-featured-section"><div className="section-heading"><h2>추천 아티스트</h2></div><button type="button" className="discover-artist-entry" disabled={!featuredArtist} onClick={() => { if (featuredArtist) onOpenArtist(featuredArtist.id) }}><img src={resolveApiUrl(featuredArtist?.imageUrl) || dreamscapeHero} alt={featuredArtist?.name ?? '아티스트'} /><span><small>OFFICIAL ARTIST</small><strong>{featuredArtist?.name ?? '아티스트를 불러오는 중'} <VerifiedIcon /></strong><em>일정, 뉴스, 카드와 이벤트를 한곳에서 확인해요.</em></span><i><InlineIcon name="chevron" /></i></button></section>}
+    {show('packs') && <section className="discover-featured-section"><div className="section-heading"><h2>새 카드팩</h2><button type="button" onClick={onOpenPackCatalog}>전체 보기 <InlineIcon name="chevron" /></button></div><button type="button" className="discover-pack-entry" onClick={openFeaturedPack}><img src={resolveApiUrl(featuredPack?.imageUrl) || dreamscapeCardPack} alt="" /><span><small>{featuredPack?.seasonName ?? '카드팩 카탈로그'}</small><strong>{featuredPack?.name ?? '카드팩 전체 보기'}</strong><em>공개 확률표와 포함 카드를 확인하고 카드팩을 열어보세요.</em></span><i><InlineIcon name="chevron" /></i></button></section>}
+    {show('recommend') && <button type="button" className="discover-event-entry" onClick={() => onOpenEvent(featuredEvent ?? null)}><img src={resolveApiUrl(featuredEvent?.heroUrl) || fanWeekNightStage} alt="" /><span><small>{featuredEvent ? '진행 중인 이벤트' : '이벤트'}</small><strong>{featuredEvent?.title ?? '이벤트 전체 보기'}</strong><em>{featuredEvent?.summary ?? '진행 중인 이벤트와 참여 조건을 확인해보세요.'}</em></span><b>{featuredEvent?.status === 'active' ? 'NOW' : '더보기'}</b><i><InlineIcon name="chevron" /></i></button>}
+  </section>
+}
+
+function ArtistHubDetail({ artist, onBack, onOpenEvents, onOpenCollection, onOpenCard }: { artist: CatalogArtist | null; onBack: () => void; onOpenEvents: () => void; onOpenCollection: () => void; onOpenCard: (card: Card) => void }) {
+  const [activeHubTab, setActiveHubTab] = useState('home')
+  const [following, setFollowing] = useState(true)
+  const tabs = [{ id: 'home', label: '아티스트 홈' }, { id: 'schedule', label: '일정' }, { id: 'news', label: '뉴스' }, { id: 'cards', label: '카드' }, { id: 'events', label: '이벤트' }]
+  const cards: Card[] = [
+    { id: 'discover-nebula-harin', title: 'Nebula Ver.', artist: artist?.name ?? '드림스케이프', member: '하린', image: cardYunaImage, rarity: 'UR' },
+    { id: 'discover-nebula-doyun', title: 'Nebula Ver.', artist: artist?.name ?? '드림스케이프', member: '도윤', image: cardMinhoImage, rarity: 'SR' },
+    { id: 'discover-nebula-jay', title: 'Nebula Ver.', artist: artist?.name ?? '드림스케이프', member: '제이', image: cardJayImage, rarity: 'SR' },
+  ]
+  const activateTab = (id: string) => {
+    setActiveHubTab(id)
+    if (id === 'events') { onOpenEvents(); return }
+    if (id === 'cards') { onOpenCollection(); return }
+    document.getElementById(`artist-${id === 'home' ? 'schedule' : id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+  return <main className="app-shell discover-artist-shell"><header className="discover-detail-topbar"><button type="button" onClick={onBack} aria-label="탐색으로 돌아가기"><InlineIcon name="back" /></button><h1>아티스트 홈</h1><span aria-hidden="true" /></header><section className="artist-hub"><section className="artist-hub-hero"><img src={dreamscapeHero} alt="드림스케이프" /><div className="artist-hub-hero-overlay"><span>공식 아티스트</span><h3>드림스케이프 <VerifiedIcon /></h3><p>4명의 멤버 · 공식 아티스트 공간</p><div className="hub-members">{[cardYunaImage, cardMinhoImage, cardJayImage, cardYunaImage].map((image, index) => <img key={index} src={image} alt="" />)}</div><button type="button" className={following ? 'is-following' : ''} onClick={() => setFollowing(value => !value)}>{following ? '✓ 팔로우 중' : '+ 팔로우'}</button></div></section><nav className="hub-tabs" aria-label="아티스트 정보" role="tablist">{tabs.map(tab => <button key={tab.id} type="button" role="tab" aria-selected={activeHubTab === tab.id} className={activeHubTab === tab.id ? 'active' : ''} onClick={() => activateTab(tab.id)}>{tab.label}</button>)}</nav><section id="artist-schedule" className="hub-section"><div className="section-heading"><h3>다가오는 일정</h3><button type="button" onClick={() => onOpenEvents()}>전체 보기 ›</button></div><div className="hub-schedule-grid"><article><b>AUG<br /><strong>28</strong></b><div><span>팬미팅</span><h4>드림스케이프 팬미팅</h4><p>2026.08.28 (금) 17:00</p><small><InlineIcon name="pin" />올림픽공원 올림픽홀</small></div><i className="hub-schedule-bell"><NavIcon name="alerts" /></i></article><article><b>SEP<br /><strong>12</strong></b><div><span>콘서트</span><h4>2026 AUTUMN FAN WEEK</h4><p>2026.09.12 (토) 18:00</p><small><InlineIcon name="pin" />KSPO DOME</small></div><i className="hub-schedule-bell"><NavIcon name="alerts" /></i></article></div></section><section id="artist-news" className="hub-section"><div className="section-heading"><h3>드림스케이프 뉴스</h3><button type="button" onClick={() => setActiveHubTab('news')}>전체 보기 ›</button></div><div className="hub-news-list"><article><img src={dreamscapeHero} alt="" /><div><b>드림스케이프, 새 앨범 트랙리스트 공개</b><p>타이틀곡 ‘Nebula’ 포함 총 6곡 수록</p><small>1시간 전</small></div><strong>›</strong></article><article><img src={fanWeekLavenderMeet} alt="" /><div><b>드림스케이프, 글로벌 차트 1위!</b><p>신곡 ‘Nebula’ 글로벌 인기 상승</p><small>1일 전</small></div><strong>›</strong></article></div></section><section id="artist-cards" className="hub-section"><div className="section-heading"><h3>새 카드</h3><button type="button" onClick={onOpenCollection}>전체 보기 ›</button></div><div className="hub-card-row">{cards.map(card => <button type="button" key={card.id} onClick={() => onOpenCard(card)}><img src={card.image} alt={`${card.member} ${card.title}`} /><b>{card.member}<br />{card.title}</b><span>{card.rarity}</span></button>)}</div><div className="hub-card-dots" aria-hidden="true"><b /><i /><i /></div><button type="button" id="artist-events" className="hub-event-promo" onClick={() => onOpenEvents()}><span className="hub-event-promo-icon" aria-hidden="true"><InlineIcon name="gift" /></span><b><small>팬 이벤트</small>드림스케이프 사인 폴라로이드 이벤트<em>참여하고 사인 폴라로이드를 받아보세요!</em></b><strong>참여하기</strong><i>›</i></button></section></section></main>
 }
 
 function notificationTimeLabel(createdAt: string): string {
@@ -2879,7 +3118,7 @@ function FavoriteControl({ active = false, ariaLabel, className, interactive = f
   return <button type="button" className={classes} aria-label={ariaLabel} aria-pressed={active} onClick={onClick}><InlineIcon name="heart" /></button>
 }
 
-export function InlineIcon({ name }: { name: 'search' | 'card' | 'system' | 'dot' | 'plus' | 'list' | 'grid' | 'back' | 'heart' | 'chevron' | 'gift' | 'clock' | 'pin' | 'share' | 'calendar' | 'users' | 'check' | 'camera' | 'star' | 'rotate' | 'sparkles' | 'motion' | 'settings' | 'bell' }) {
+export function InlineIcon({ name }: { name: 'search' | 'card' | 'system' | 'dot' | 'plus' | 'list' | 'grid' | 'back' | 'heart' | 'chevron' | 'gift' | 'clock' | 'pin' | 'share' | 'calendar' | 'users' | 'check' | 'camera' | 'star' | 'rotate' | 'sparkles' | 'puzzle' | 'shield' | 'lock' | 'motion' | 'settings' | 'bell' }) {
   const paths = {
     search: 'm20 20-4.2-4.2M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z',
     card: 'M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5v-11ZM8 9h8M8 13h5',
@@ -2902,6 +3141,9 @@ export function InlineIcon({ name }: { name: 'search' | 'card' | 'system' | 'dot
     star: 'm12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z',
     rotate: 'M5 9a7.5 7.5 0 0 1 12.8-3.8L20 7.4M20 7.4V3.8M20 7.4h-3.6M19 15a7.5 7.5 0 0 1-12.8 3.8L4 16.6M4 16.6v3.6M4 16.6h3.6',
     sparkles: 'm12 3 1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3ZM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15ZM5 15l.6 1.4L7 17l-1.4.6L5 19l-.6-1.4L3 17l1.4-.6L5 15Z',
+    puzzle: 'M8 4h3a2 2 0 1 0 4 0h3v5a2 2 0 1 1 0 4v7h-5a2 2 0 1 0-4 0H5v-7a2 2 0 1 1 0-4V4h3Z',
+    shield: 'M12 3 20 6v5c0 5-3.4 8.4-8 10-4.6-1.6-8-5-8-10V6l8-3Zm-4 9 2.5 2.5L16.5 10',
+    lock: 'M6 10h12v10H6zM8 10V7a4 4 0 0 1 8 0v3',
     motion: 'M8 5H5v3M5 8a8 8 0 0 1 13.6-3.6M16 19h3v-3M19 16a8 8 0 0 1-13.6 3.6',
     settings: 'M12 3.5 14 5l2.5-.2 1.1 2.2 2.2 1.1-.2 2.5 1.5 2-1.5 2 .2 2.5-2.2 1.1-1.1 2.2-2.5-.2-2 1.5-2-1.5-2.5.2-1.1-2.2-2.2-1.1.2-2.5-1.5-2 1.5-2-.2-2.5 2.2-1.1 1.1-2.2L10 5l2-1.5ZM12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z',
     bell: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4',

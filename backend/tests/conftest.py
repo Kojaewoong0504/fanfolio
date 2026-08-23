@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import asyncio
 import os
+import tempfile
 from importlib import import_module
+from pathlib import Path
 from typing import Any
 
 # VSCode's test runner may not forward python.testing.env consistently.
 # The fixture API is test-only, so the test process must opt into it before
 # importing app.main (which decides whether to register that router).
 os.environ.setdefault("APP_ENV", "test")
+if "DATABASE_URL" not in os.environ:
+    test_database_path = Path(tempfile.gettempdir()) / f"fanfolio-pytest-{os.getpid()}.db"
+    os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{test_database_path}"
 
 import pytest
 from fastapi import FastAPI

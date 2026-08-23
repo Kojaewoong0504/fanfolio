@@ -829,6 +829,8 @@ export function combineCards(recipeId: string, materialUserCardIds: string[], id
 export type PublicCollection = {
   userId: string
   nickname: string | null
+  profileImageUrl?: string | null
+  featuredPackId?: string | null
   visibility: 'public'
   isFollowing: boolean
   summary: { ownedCount: number; followerCount: number; followingCount: number }
@@ -843,6 +845,12 @@ export type FanSummary = {
   followerCount: number
   followingCount: number
   ownedCount: number
+  tradableCount: number
+  favoriteArtists: CatalogArtist[]
+  sharedFavoriteArtists: CatalogArtist[]
+  previewCards: CollectionCard[]
+  matchingWishlistCount: number
+  latestCardAt: string | null
 }
 
 export type TradeProposal = {
