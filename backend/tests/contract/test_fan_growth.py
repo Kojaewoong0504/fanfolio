@@ -16,6 +16,8 @@ from app.models import (
     Drop,
     EngagementEvent,
     FanLevel,
+    MissionDefinition,
+    MissionProgress,
     Notification,
     PassProgress,
     PassSeason,
@@ -31,6 +33,83 @@ from app.models import (
 from app.routers import fan as fan_router
 from app.services import claim_reward_grant, now, process_engagement_event, record_engagement_event
 from tests.conftest import assert_error, assert_success
+
+
+def test_completed_unclaimed_mission_stays_claimable_until_reward_is_claimed(
+    actors: dict[str, TestClient],
+) -> None:
+    async def seed_claimable_mission() -> None:
+        async with SessionLocal() as session:
+            reward = RewardCatalog(
+                id="reward_mission_claimable",
+                artist_id="artist_nova3",
+                reward_type="badge",
+                name="Mission Badge",
+                status="published",
+            )
+            mission = MissionDefinition(
+                id="mission_claimable",
+                title="Claimable mission",
+                event_kind="event_viewed",
+                target_value=1,
+                recurrence="once",
+                reward_payload={"rewardId": reward.id},
+                status="published",
+            )
+            session.add_all([reward, mission])
+            await session.flush()
+            event_row = EngagementEvent(
+                id="evt_mission_claimable",
+                user_id="fan",
+                kind="event_viewed",
+                source_type="event",
+                source_id="event_claimable",
+                status="processed",
+                processed_at=now(),
+            )
+            session.add(event_row)
+            await session.flush()
+            session.add_all(
+                [
+                    MissionProgress(
+                        id="mission_progress_claimable",
+                        user_id="fan",
+                        mission_id=mission.id,
+                        period_key="once",
+                        current_value=1,
+                        completed_at=now(),
+                    ),
+                    RewardGrant(
+                        id="reward_grant_mission_claimable",
+                        user_id="fan",
+                        reward_id=reward.id,
+                        source_event_id=event_row.id,
+                        rule_key="mission:mission_claimable:once",
+                    ),
+                ]
+            )
+            await session.commit()
+
+    asyncio.run(seed_claimable_mission())
+
+    active_before = assert_success(actors["fan"].get("/api/me/missions?status=active"))
+    claimable = next(item for item in active_before["items"] if item["id"] == "mission_claimable")
+    assert claimable["completed"] is True
+    assert claimable["claimable"] is True
+    assert claimable["claimedAt"] is None
+
+    claimed = assert_success(actors["fan"].post("/api/me/missions/mission_claimable/claim"))
+    assert claimed["missionId"] == "mission_claimable"
+    assert [grant["id"] for grant in claimed["grants"]] == ["reward_grant_mission_claimable"]
+
+    active_after = assert_success(actors["fan"].get("/api/me/missions?status=active"))
+    assert "mission_claimable" not in {item["id"] for item in active_after["items"]}
+    completed = assert_success(actors["fan"].get("/api/me/missions?status=completed"))
+    completed_mission = next(
+        item for item in completed["items"] if item["id"] == "mission_claimable"
+    )
+    assert completed_mission["claimable"] is False
+    assert completed_mission["claimedAt"] is not None
 
 
 def load_fan_growth_events() -> list[EngagementEvent]:

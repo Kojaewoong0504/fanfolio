@@ -836,6 +836,20 @@ async def missions(
                 MissionProgress.period_key == period_key,
             )
         )
+        claimable = bool(
+            progress
+            and progress.completed_at
+            and progress.claimed_at is None
+            and await session.scalar(
+                select(RewardGrant.id)
+                .where(
+                    RewardGrant.user_id == user.id,
+                    RewardGrant.rule_key == f"mission:{mission.id}:{period_key}",
+                    RewardGrant.claimed_at.is_(None),
+                )
+                .limit(1)
+            )
+        )
         item = {
             "id": mission.id,
             "title": mission.title,
@@ -849,11 +863,15 @@ async def missions(
             "completedAt": progress.completed_at.isoformat()
             if progress and progress.completed_at
             else None,
+            "claimable": claimable,
+            "claimedAt": progress.claimed_at.isoformat()
+            if progress and progress.claimed_at
+            else None,
             "reward": mission.reward_payload or {},
         }
         if status_filter == "completed" and not item["completed"]:
             continue
-        if status_filter == "active" and item["completed"]:
+        if status_filter == "active" and item["completed"] and not item["claimable"]:
             continue
         items.append(item)
     return {"ok": True, "data": {"items": items}}
@@ -1055,6 +1073,18 @@ async def claim_mission_rewards(mission_id: str, user: FanUser, session: DbSessi
     claimed = []
     for grant in grants:
         claimed.append(await claim_reward_grant(session, user_id=user.id, grant_id=grant.id))
+    claimed_at = datetime.now(UTC)
+    await session.execute(
+        update(MissionProgress)
+        .where(
+            MissionProgress.user_id == user.id,
+            MissionProgress.mission_id == mission_id,
+            MissionProgress.completed_at.is_not(None),
+            MissionProgress.claimed_at.is_(None),
+        )
+        .values(claimed_at=claimed_at)
+    )
+    await session.commit()
     return {"ok": True, "data": {"missionId": mission_id, "grants": claimed}}
 
 

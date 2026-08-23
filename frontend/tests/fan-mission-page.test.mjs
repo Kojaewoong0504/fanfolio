@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 
 const appSource = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
+const clientSource = await readFile(new URL('../src/api/client.ts', import.meta.url), 'utf8')
 const growthSource = await readFile(new URL('../src/components/FanGrowth.tsx', import.meta.url), 'utf8')
 const missionSource = await readFile(new URL('../src/components/FanMissionPage.tsx', import.meta.url), 'utf8').catch(() => '')
 
@@ -21,6 +22,11 @@ test('mission page supports status tabs, progress, and reward claiming', () => {
   assert.match(missionSource, /완료/)
   assert.match(missionSource, /종료/)
   assert.match(missionSource, /보상 받기/)
+  assert.match(missionSource, /mission\.claimable/)
+  assert.match(clientSource, /claimable:\s*boolean/)
+  assert.match(clientSource, /claimedAt:\s*string \| null/)
+  assert.match(clientSource, /data:\s*\{\s*missionId:\s*string;\s*grants:\s*RewardGrant\[\]\s*\}/)
+  assert.doesNotMatch(clientSource, /claimFanMission[\s\S]*data:\s*\{\s*items:\s*RewardGrant\[\]\s*\}/)
 })
 
 test('mission detail header only keeps back navigation and the centered title', () => {

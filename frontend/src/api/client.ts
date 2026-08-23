@@ -540,6 +540,8 @@ export type FanMission = {
   currentValue: number
   completed: boolean
   completedAt: string | null
+  claimable: boolean
+  claimedAt: string | null
   reward: Record<string, unknown>
 }
 
@@ -567,8 +569,8 @@ export function getFanMissions(status?: 'active' | 'completed' | 'ended'): Promi
   return apiFetch<{ ok: true; data: { items: FanMission[] } }>(`/me/missions${query}`)
 }
 
-export function claimFanMission(missionId: string): Promise<{ ok: true; data: { items: RewardGrant[] } }> {
-  return apiFetch<{ ok: true; data: { items: RewardGrant[] } }>(`/me/missions/${encodeURIComponent(missionId)}/claim`, { method: 'POST' })
+export function claimFanMission(missionId: string): Promise<{ ok: true; data: { missionId: string; grants: RewardGrant[] } }> {
+  return apiFetch<{ ok: true; data: { missionId: string; grants: RewardGrant[] } }>(`/me/missions/${encodeURIComponent(missionId)}/claim`, { method: 'POST' })
 }
 
 export function getFanPoints(): Promise<{ ok: true; data: FanPoints }> {

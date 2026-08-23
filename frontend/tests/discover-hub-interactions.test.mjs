@@ -3,6 +3,9 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 
 const source = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
+const discoverSource = source.slice(source.indexOf('function Discover('), source.indexOf('function ArtistHubDetail('))
+const artistHubSource = source.slice(source.indexOf('function ArtistHubDetail('), source.indexOf('function notificationTimeLabel('))
+const liveArtistRoute = source.slice(source.indexOf('if (discoverArtistSlug)'), source.indexOf('if (showCardCollection)'))
 
 test('discover hub exposes working category and destination controls', () => {
   assert.match(source, /function Discover\(\{ onFindFans, onOpenFanProfile, onOpenPublicCollection, onOpenEvent, onOpenArtist, onOpenPackCatalog, onOpenPack, featuredArtist, featuredEvent, initialFans/)
@@ -36,4 +39,25 @@ test('discover destinations use dedicated routes and detail surfaces', () => {
   assert.match(source, /preview === 'discover-event'/)
   assert.match(source, /preview === 'public-collection'/)
   assert.match(source, /preview === 'card-collection'.*usePreviewData/s)
+})
+
+test('authenticated discovery renders fan and collection metadata returned by the API', () => {
+  assert.match(discoverSource, /fan\.sharedFavoriteArtists\[0\]\?\.name/)
+  assert.match(discoverSource, /featuredFan\.previewCards\.slice\(0, 3\)/)
+  assert.match(discoverSource, /featuredFan\.previewCards\.length/)
+  assert.doesNotMatch(discoverSource, /공유 아티스트 <b>드림스케이프<\/b>/)
+  assert.doesNotMatch(discoverSource, /\[collectionCardHarinGenerated, collectionCardDoyunGenerated, collectionCardMinjaeGenerated\]/)
+  assert.doesNotMatch(discoverSource, /드림스케이프 공개 컬렉션/)
+})
+
+test('authenticated artist hub loads packs and events for the selected backend artist', () => {
+  assert.match(artistHubSource, /getCardPacks\(artist\.id\)/)
+  assert.match(artistHubSource, /getFanEvents\(\{ artistId: artist\.id, status: 'all'/)
+  assert.match(artistHubSource, /pack\.cards/)
+  assert.match(artistHubSource, /artistEvent/)
+  assert.match(source, /preview === 'discover-artist'.*usePreviewData/s)
+  assert.match(liveArtistRoute, /return <ArtistHubDetail artist=\{artist\}/)
+  assert.doesNotMatch(liveArtistRoute, /usePreviewData/)
+  assert.match(artistHubSource, /const visibleEvents = usePreviewData \? previewEvents : artistEvents/)
+  assert.doesNotMatch(artistHubSource, /<h3>드림스케이프/)
 })

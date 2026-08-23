@@ -617,6 +617,18 @@ main.discover-shell .discover-fans-section .section-heading button {
   object-fit: cover;
 }
 
+.discover-collection-empty {
+  display: grid;
+  place-items: center;
+  height: 78px;
+  border-radius: 12px;
+  background: #f4f1ff;
+  color: #6a58d8;
+  font-size: 10px;
+  font-weight: 800;
+  text-align: center;
+}
+
 /* Final alignment for the current preview DOM. Keep the avatar, identity,
    affinity, stats and card rail in the same columns as the supplied reference. */
 .fan-social-card-preview {

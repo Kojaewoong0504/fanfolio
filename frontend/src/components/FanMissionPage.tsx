@@ -55,7 +55,7 @@ export function FanMissionPage({ onBack, onClaimed, initialMissions }: FanMissio
     setLoading(true)
     setMessage('')
     if (initialMissions) {
-      setMissions(initialMissions.filter(mission => status === 'active' ? !mission.completedAt : status === 'completed' ? Boolean(mission.completedAt) : false))
+      setMissions(initialMissions.filter(mission => status === 'active' ? !mission.completedAt || mission.claimable : status === 'completed' ? Boolean(mission.completedAt) : false))
       setLoading(false)
       return
     }
@@ -114,7 +114,7 @@ export function FanMissionPage({ onBack, onClaimed, initialMissions }: FanMissio
           return <article className={`mission-page-card ${mission.completed ? 'is-complete' : ''}`} key={mission.id}>
             <span className="mission-page-card-icon"><MissionGlyph kind={index % 3 === 0 ? 'comment' : index % 3 === 1 ? 'pack' : 'calendar'} /></span>
             <div className="mission-page-card-copy"><h3>{mission.title}</h3><span className="mission-page-card-count">{progress} / {mission.targetValue}</span><MissionReward mission={mission} /><div className="mission-page-progress"><i style={{ width: `${percent}%` }} /></div></div>
-            <div className="mission-page-card-action">{status === 'active' && mission.completed ? <button type="button" onClick={() => void claim(mission)} disabled={claimingId === mission.id}>{claimingId === mission.id ? '받는 중…' : '보상 받기'}</button> : <em>{mission.completed ? '완료' : status === 'ended' ? '종료' : progress === 0 ? '시작하기' : '진행 중'}</em>}</div>
+            <div className="mission-page-card-action">{mission.claimable ? <button type="button" onClick={() => void claim(mission)} disabled={claimingId === mission.id}>{claimingId === mission.id ? '받는 중…' : '보상 받기'}</button> : <em>{mission.completed ? '완료' : status === 'ended' ? '종료' : progress === 0 ? '시작하기' : '진행 중'}</em>}</div>
           </article>
         })}
       </section>

@@ -393,14 +393,6 @@ async def grant_points(
     if existing:
         return existing
 
-    balance = await session.scalar(
-        select(PointBalance).where(PointBalance.user_id == user_id).with_for_update()
-    )
-    if balance is None:
-        balance = PointBalance(user_id=user_id)
-        session.add(balance)
-        await session.flush()
-    balance.balance += amount
     ledger = PointLedger(
         id=f"point_{uuid4().hex[:12]}",
         user_id=user_id,
@@ -408,7 +400,7 @@ async def grant_points(
         rule_key=rule_key,
         transaction_type="earn",
         amount=amount,
-        balance_after=balance.balance,
+        balance_after=0,
         description=description,
         expires_at=expires_at,
         metadata_json=metadata or {},
@@ -418,7 +410,6 @@ async def grant_points(
             session.add(ledger)
             await session.flush()
     except IntegrityError:
-        await session.refresh(balance)
         existing = await session.scalar(
             select(PointLedger).where(
                 PointLedger.user_id == user_id,
@@ -429,6 +420,15 @@ async def grant_points(
         if existing:
             return existing
         raise
+    balance = await session.scalar(
+        select(PointBalance).where(PointBalance.user_id == user_id).with_for_update()
+    )
+    if balance is None:
+        balance = PointBalance(user_id=user_id)
+        session.add(balance)
+        await session.flush()
+    balance.balance += amount
+    ledger.balance_after = balance.balance
     return ledger
 
 

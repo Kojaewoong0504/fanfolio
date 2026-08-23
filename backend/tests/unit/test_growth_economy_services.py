@@ -1,11 +1,12 @@
 import asyncio
+from pathlib import Path
 
 import pytest
-from sqlalchemy import event
+from sqlalchemy import event, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app import models
+from app import models, services
 
 
 def test_growth_economy_models_define_storage_contracts() -> None:
@@ -107,6 +108,88 @@ def test_point_balance_rejects_negative_cached_balance() -> None:
             session.add(models.PointBalance(user_id="fan", balance=-1))
             with pytest.raises(IntegrityError):
                 await session.commit()
+
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_duplicate_point_grant_race_increments_balance_once(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'points.db'}")
+
+        @event.listens_for(engine.sync_engine, "connect")
+        def enable_foreign_keys(connection, _) -> None:  # type: ignore[no-untyped-def]
+            connection.execute("PRAGMA foreign_keys=ON")
+
+        async with engine.begin() as connection:
+            await connection.run_sync(models.Base.metadata.create_all)
+
+        first_check_finished = asyncio.Event()
+        winning_grant_committed = asyncio.Event()
+
+        class PausingSession(AsyncSession):
+            paused = False
+
+            async def scalar(self, statement, *args, **kwargs):  # type: ignore[no-untyped-def]
+                result = await super().scalar(statement, *args, **kwargs)
+                if not self.paused:
+                    self.paused = True
+                    first_check_finished.set()
+                    await winning_grant_committed.wait()
+                return result
+
+        session_factory = async_sessionmaker(engine, expire_on_commit=False)
+        pausing_session_factory = async_sessionmaker(
+            engine,
+            class_=PausingSession,
+            expire_on_commit=False,
+        )
+        async with session_factory() as session:
+            session.add(models.User(id="fan", email="fan@example.com", role=models.Role.FAN))
+            await session.commit()
+            session.add(
+                models.EngagementEvent(
+                    id="event_points",
+                    user_id="fan",
+                    kind="mission_completed",
+                    source_type="mission",
+                    source_id="mission_daily",
+                )
+            )
+            await session.commit()
+
+        async with pausing_session_factory() as delayed, session_factory() as winner:
+            delayed_task = asyncio.create_task(
+                services.grant_points(
+                    delayed,
+                    user_id="fan",
+                    source_event_id="event_points",
+                    rule_key="mission:daily",
+                    amount=25,
+                )
+            )
+            await first_check_finished.wait()
+            winning_ledger = await services.grant_points(
+                winner,
+                user_id="fan",
+                source_event_id="event_points",
+                rule_key="mission:daily",
+                amount=25,
+            )
+            await winner.commit()
+            winning_grant_committed.set()
+            delayed_ledger = await delayed_task
+            await delayed.commit()
+
+        async with session_factory() as session:
+            balance = await session.get(models.PointBalance, "fan")
+            ledgers = list(await session.scalars(select(models.PointLedger)))
+            assert delayed_ledger.id == winning_ledger.id
+            assert len(ledgers) == 1
+            assert ledgers[0].balance_after == 25
+            assert balance is not None
+            assert balance.balance == 25
 
         await engine.dispose()
 

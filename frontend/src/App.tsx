@@ -112,10 +112,10 @@ const fanGrowthPreviewProgression: FanProgression = {
 }
 
 const fanMissionPreviewItems: FanMission[] = [
-  { id: 'mission-news-comment', title: '아티스트 뉴스에 댓글 남기기', description: '새로운 소식에 응원 댓글을 남겨보세요.', eventKind: 'artist_news_commented', targetValue: 3, recurrence: 'daily', periodKey: '2026-08-23', currentValue: 2, completed: false, completedAt: null, reward: { xp: 30, points: 100 } },
-  { id: 'mission-pack-open', title: '카드팩 1회 열기', description: '새 카드팩을 열고 컬렉션을 채워보세요.', eventKind: 'card_pack_opened', targetValue: 1, recurrence: 'daily', periodKey: '2026-08-23', currentValue: 1, completed: true, completedAt: null, reward: { xp: 50, points: 200 } },
-  { id: 'mission-event-visit', title: '이벤트 페이지 방문하기', description: '오늘 진행되는 팬 이벤트를 확인해보세요.', eventKind: 'event_viewed', targetValue: 1, recurrence: 'weekly', periodKey: '2026-W34', currentValue: 0, completed: false, completedAt: null, reward: { xp: 20 } },
-  { id: 'mission-completed-pack', title: '카드팩 1회 열기', description: '카드팩 보상을 획득했어요.', eventKind: 'card_pack_opened', targetValue: 1, recurrence: 'weekly', periodKey: '2026-W34', currentValue: 1, completed: true, completedAt: '2026-08-22T10:00:00Z', reward: { xp: 50, points: 200 } },
+  { id: 'mission-news-comment', title: '아티스트 뉴스에 댓글 남기기', description: '새로운 소식에 응원 댓글을 남겨보세요.', eventKind: 'artist_news_commented', targetValue: 3, recurrence: 'daily', periodKey: '2026-08-23', currentValue: 2, completed: false, completedAt: null, claimable: false, claimedAt: null, reward: { xp: 30, points: 100 } },
+  { id: 'mission-pack-open', title: '카드팩 1회 열기', description: '새 카드팩을 열고 컬렉션을 채워보세요.', eventKind: 'card_pack_opened', targetValue: 1, recurrence: 'daily', periodKey: '2026-08-23', currentValue: 1, completed: true, completedAt: null, claimable: true, claimedAt: null, reward: { xp: 50, points: 200 } },
+  { id: 'mission-event-visit', title: '이벤트 페이지 방문하기', description: '오늘 진행되는 팬 이벤트를 확인해보세요.', eventKind: 'event_viewed', targetValue: 1, recurrence: 'weekly', periodKey: '2026-W34', currentValue: 0, completed: false, completedAt: null, claimable: false, claimedAt: null, reward: { xp: 20 } },
+  { id: 'mission-completed-pack', title: '카드팩 1회 열기', description: '카드팩 보상을 획득했어요.', eventKind: 'card_pack_opened', targetValue: 1, recurrence: 'weekly', periodKey: '2026-W34', currentValue: 1, completed: true, completedAt: '2026-08-22T10:00:00Z', claimable: false, claimedAt: '2026-08-22T10:05:00Z', reward: { xp: 50, points: 200 } },
 ]
 
 const fanCommunityPreviewCards: CollectionCard[] = [
@@ -916,7 +916,7 @@ function App() {
     if (preview === 'fan-growth') return <FanGrowthPreview />
     if (preview === 'fan-missions') return <FanMissionPage onBack={() => window.location.assign('/?preview=fan-growth')} initialMissions={fanMissionPreviewItems} />
     if (preview === 'discover-hub') return <main className="app-shell discover-shell"><div className="app-header"><div className="app-header-copy"><span className="eyebrow">FANFOLIO</span><h1>탐색</h1></div><div className="header-actions"><button className="header-alert-button" aria-label="알림"><NavIcon name="alerts" /></button><button className="header-profile-button" aria-label="프로필 및 설정"><ProfileAvatar imageUrl={null} fallback="배" alt="프로필 이미지" /></button></div></div><section className="screen"><Discover onFindFans={() => window.location.assign('/?preview=fan-social')} onOpenFanProfile={() => window.location.assign('/?preview=fan-profile')} onOpenPublicCollection={() => window.location.assign('/?preview=public-collection')} onOpenEvent={() => window.location.assign('/?preview=discover-event')} onOpenArtist={() => window.location.assign('/?preview=discover-artist')} onOpenPackCatalog={() => window.location.assign('/?preview=card-collection')} onOpenPack={() => window.location.assign('/?preview=discover-pack')} featuredArtist={{ id: 'artist_nova3', name: '드림스케이프', imageUrl: dreamscapeHero }} featuredEvent={fallbackHomeEvent} initialFans={fanCommunityPreviewFans} /></section><BottomNavigation active="discover" onNavigate={() => {}} /></main>
-    if (preview === 'discover-artist') return <ArtistHubDetail artist={{ id: 'artist_nova3', name: '드림스케이프', imageUrl: dreamscapeHero }} onBack={() => window.location.assign('/?preview=discover-hub')} onOpenEvents={() => {}} onOpenCollection={() => window.location.assign('/?preview=collection-inventory-entry')} onOpenCard={() => {}} />
+    if (preview === 'discover-artist') return <ArtistHubDetail artist={{ id: 'artist_nova3', name: '드림스케이프', imageUrl: dreamscapeHero }} usePreviewData onBack={() => window.location.assign('/?preview=discover-hub')} onOpenEvents={() => window.location.assign('/?preview=discover-event')} onOpenEvent={() => window.location.assign('/?preview=discover-event')} onOpenCollection={() => window.location.assign('/?preview=collection-inventory-entry')} onOpenCard={() => {}} />
     if (preview === 'discover-pack') return <CardCollectionRepository initialPackId="nebula" usePreviewData onBack={() => window.location.assign('/?preview=discover-hub')} onNavigate={tab => window.location.assign(pathForTab(tab))} />
     if (preview === 'discover-event') return <EventDetail event={fallbackHomeEvent} loading={false} onBack={() => window.location.assign('/?preview=discover-hub')} onOpenTarget={() => {}} onApply={() => {}} comments={[]} commentsLoading={false} commentSubmitting={false} onLoadComments={() => {}} onSubmitComment={() => {}} />
     if (preview === 'fan-social') return <FanSocialHub onBack={() => window.location.assign('/?preview=discover-hub')} onOpenProfile={() => window.location.assign('/?preview=fan-profile')} onOpenCollection={() => window.location.assign('/?preview=public-collection')} onOpenTrades={() => window.location.assign('/?preview=trade-composer')} initialItems={fanCommunityPreviewFans} />
@@ -1018,7 +1018,7 @@ function App() {
   if (discoverArtistSlug) {
     const artist = catalogArtists.find(item => item.id === discoverArtistSlug) ?? null
     const artistReturnPath = safeAppReturnPath(routeReturnPath, '/discover')
-    return <ArtistHubDetail artist={artist} onBack={() => window.location.assign(artistReturnPath)} onOpenEvents={openEvents} onOpenCollection={openCardCollection} onOpenCard={openCard} />
+    return <ArtistHubDetail artist={artist} onBack={() => window.location.assign(artistReturnPath)} onOpenEvents={openEvents} onOpenEvent={event => { if (event) openEvent(event); else openEvents() }} onOpenCollection={openCardCollection} onOpenCard={openCard} />
   }
 
   if (showCardCollection) {
@@ -2689,6 +2689,20 @@ function Discover({ onFindFans, onOpenFanProfile, onOpenPublicCollection, onOpen
   const featuredPack = packs[0]
   const featuredFans = fans.slice(0, 2)
   const featuredFan = featuredFans[0]
+  const featuredCollectionCards = featuredFan ? featuredFan.previewCards.slice(0, 3) : []
+  const featuredCollectionArtist = featuredCollectionCards.find(card => card.artistName)?.artistName
+    ?? featuredFan?.sharedFavoriteArtists[0]?.name
+    ?? featuredFan?.favoriteArtists[0]?.name
+    ?? '팬'
+  const featuredCollectionProgress = featuredFan?.ownedCount
+    ? Math.min(100, Math.round((featuredFan.tradableCount / featuredFan.ownedCount) * 100))
+    : 0
+  const sharedArtistName = (fan: FanSummary) => fan.sharedFavoriteArtists[0]?.name ?? fan.favoriteArtists[0]?.name ?? '공통 아티스트 없음'
+  const fanHighlight = (fan: FanSummary) => {
+    if (fan.matchingWishlistCount > 0) return `내가 찾는 카드 ${fan.matchingWishlistCount}장을 보유하고 있어요`
+    if (fan.tradableCount > 0) return `거래 가능한 카드 ${fan.tradableCount}장을 보유하고 있어요`
+    return `공개 카드 ${fan.ownedCount}장을 보유하고 있어요`
+  }
   const openFeaturedPack = () => {
     if (featuredPack) {
       onOpenPack(featuredPack.id)
@@ -2737,30 +2751,110 @@ function Discover({ onFindFans, onOpenFanProfile, onOpenPublicCollection, onOpen
     <div className="discover-hub-intro"><p>좋아하는 아티스트와 새로운 팬 활동을 발견해보세요.</p></div>
     <form className="discover-global-search" role="search" onSubmit={submitDiscoverSearch}><button type="submit" aria-label="탐색 검색"><InlineIcon name="search" /></button><input type="search" value={searchQuery} onChange={event => setSearchQuery(event.target.value)} placeholder="아티스트, 카드팩, 팬을 검색해보세요" /></form>
     <nav className="discover-categories" role="tablist" aria-label="탐색 카테고리">{categories.map(category => <button type="button" role="tab" aria-selected={activeCategory === category.id} className={activeCategory === category.id ? 'active' : ''} key={category.id} onClick={() => setActiveCategory(category.id)}>{category.label}</button>)}</nav>
-    {show('community') && <section className="discover-featured-section discover-fans-section"><div className="section-heading"><h2>추천 팬</h2><button type="button" onClick={() => onFindFans()}>더보기 <InlineIcon name="chevron" /></button></div>{featuredFans.length > 0 ? <div className="discover-fan-list">{featuredFans.map((fan, index) => <article key={fan.id}><button type="button" className="discover-fan-profile" onClick={() => onOpenFanProfile(fan.id)}><ProfileAvatar imageUrl={resolveApiUrl(fan.profileImageUrl) || null} fallback={fan.nickname} alt={`${fan.nickname} 프로필`} /><span><strong>{fan.nickname} <VerifiedIcon /></strong><small>공유 아티스트 <b>드림스케이프</b></small><em><InlineIcon name="star" /> {index === 0 ? `공개 카드 ${fan.ownedCount}장을 보유하고 있어요` : `팔로워 ${fan.followerCount}명이 함께하고 있어요`}</em></span></button><button type="button" className={fan.isFollowing ? 'following' : ''} onClick={() => void toggleDiscoverFollow(fan)}>{fan.isFollowing ? '팔로잉' : '팔로우'}</button></article>)}</div> : <button type="button" className="discover-community-empty" onClick={() => onFindFans()}>함께할 팬을 찾아보세요 <InlineIcon name="chevron" /></button>}</section>}
-    {show('community') && featuredFan && <section className="discover-featured-section discover-public-preview"><div className="section-heading"><h2>공개 컬렉션</h2><button type="button" onClick={() => onOpenPublicCollection(featuredFan.id)}>더보기 <InlineIcon name="chevron" /></button></div><button type="button" className="discover-collection-entry" onClick={() => onOpenPublicCollection(featuredFan.id)}><span className="discover-collection-cards">{[collectionCardHarinGenerated, collectionCardDoyunGenerated, collectionCardMinjaeGenerated].map((image, index) => <img src={image} alt="" key={image} style={{ '--stack-index': index } as CSSProperties} />)}</span><span><strong>드림스케이프 공개 컬렉션</strong><small className="discover-collection-ownerline"><ProfileAvatar imageUrl={resolveApiUrl(featuredFan.profileImageUrl) || null} fallback={featuredFan.nickname} alt={`${featuredFan.nickname} 프로필`} />{featuredFan.nickname} <VerifiedIcon /></small><i><em style={{ width: `${Math.min(100, Math.round((featuredFan.ownedCount / 90) * 100))}%` }} /></i></span><b>{featuredFan.ownedCount} / 90장</b></button></section>}
+    {show('community') && <section className="discover-featured-section discover-fans-section"><div className="section-heading"><h2>추천 팬</h2><button type="button" onClick={() => onFindFans()}>더보기 <InlineIcon name="chevron" /></button></div>{featuredFans.length > 0 ? <div className="discover-fan-list">{featuredFans.map(fan => <article key={fan.id}><button type="button" className="discover-fan-profile" onClick={() => onOpenFanProfile(fan.id)}><ProfileAvatar imageUrl={resolveApiUrl(fan.profileImageUrl) || null} fallback={fan.nickname} alt={`${fan.nickname} 프로필`} /><span><strong>{fan.nickname} <VerifiedIcon /></strong><small>공유 아티스트 <b>{sharedArtistName(fan)}</b></small><em><InlineIcon name="star" /> {fanHighlight(fan)}</em></span></button><button type="button" className={fan.isFollowing ? 'following' : ''} onClick={() => void toggleDiscoverFollow(fan)}>{fan.isFollowing ? '팔로잉' : '팔로우'}</button></article>)}</div> : <button type="button" className="discover-community-empty" onClick={() => onFindFans()}>함께할 팬을 찾아보세요 <InlineIcon name="chevron" /></button>}</section>}
+    {show('community') && featuredFan && <section className="discover-featured-section discover-public-preview"><div className="section-heading"><h2>공개 컬렉션</h2><button type="button" onClick={() => onOpenPublicCollection(featuredFan.id)}>더보기 <InlineIcon name="chevron" /></button></div><button type="button" className="discover-collection-entry" onClick={() => onOpenPublicCollection(featuredFan.id)}><span className="discover-collection-cards">{featuredFan.previewCards.length > 0 ? featuredCollectionCards.map((card, index) => <img src={resolveApiUrl(card.imageUrl)} alt={`${card.memberName ?? card.name} 카드`} key={card.userCardId} style={{ '--stack-index': index } as CSSProperties} />) : <span className="discover-collection-empty">공개 카드 보기</span>}</span><span><strong>{featuredCollectionArtist} 공개 컬렉션</strong><small className="discover-collection-ownerline"><ProfileAvatar imageUrl={resolveApiUrl(featuredFan.profileImageUrl) || null} fallback={featuredFan.nickname} alt={`${featuredFan.nickname} 프로필`} />{featuredFan.nickname} <VerifiedIcon /></small><i aria-label={`거래 가능 카드 ${featuredFan.tradableCount}장`}><em style={{ width: `${featuredCollectionProgress}%` }} /></i></span><b>{featuredFan.ownedCount}장</b></button></section>}
     {activeCategory === 'artists' && <section className="discover-featured-section"><div className="section-heading"><h2>추천 아티스트</h2></div><button type="button" className="discover-artist-entry" disabled={!featuredArtist} onClick={() => { if (featuredArtist) onOpenArtist(featuredArtist.id) }}><img src={resolveApiUrl(featuredArtist?.imageUrl) || dreamscapeHero} alt={featuredArtist?.name ?? '아티스트'} /><span><small>OFFICIAL ARTIST</small><strong>{featuredArtist?.name ?? '아티스트를 불러오는 중'} <VerifiedIcon /></strong><em>일정, 뉴스, 카드와 이벤트를 한곳에서 확인해요.</em></span><i><InlineIcon name="chevron" /></i></button></section>}
     {show('packs') && <section className="discover-featured-section"><div className="section-heading"><h2>새 카드팩</h2><button type="button" onClick={onOpenPackCatalog}>전체 보기 <InlineIcon name="chevron" /></button></div><button type="button" className="discover-pack-entry" onClick={openFeaturedPack}><img src={resolveApiUrl(featuredPack?.imageUrl) || dreamscapeCardPack} alt="" /><span><small>{featuredPack?.seasonName ?? '카드팩 카탈로그'}</small><strong>{featuredPack?.name ?? '카드팩 전체 보기'}</strong><em>공개 확률표와 포함 카드를 확인하고 카드팩을 열어보세요.</em></span><i><InlineIcon name="chevron" /></i></button></section>}
     {show('recommend') && <button type="button" className="discover-event-entry" onClick={() => onOpenEvent(featuredEvent ?? null)}><img src={resolveApiUrl(featuredEvent?.heroUrl) || fanWeekNightStage} alt="" /><span><small>{featuredEvent ? '진행 중인 이벤트' : '이벤트'}</small><strong>{featuredEvent?.title ?? '이벤트 전체 보기'}</strong><em>{featuredEvent?.summary ?? '진행 중인 이벤트와 참여 조건을 확인해보세요.'}</em></span><b>{featuredEvent?.status === 'active' ? 'NOW' : '더보기'}</b><i><InlineIcon name="chevron" /></i></button>}
   </section>
 }
 
-function ArtistHubDetail({ artist, onBack, onOpenEvents, onOpenCollection, onOpenCard }: { artist: CatalogArtist | null; onBack: () => void; onOpenEvents: () => void; onOpenCollection: () => void; onOpenCard: (card: Card) => void }) {
+function ArtistHubDetail({ artist, usePreviewData = false, onBack, onOpenEvents, onOpenEvent, onOpenCollection, onOpenCard }: { artist: CatalogArtist | null; usePreviewData?: boolean; onBack: () => void; onOpenEvents: () => void; onOpenEvent: (event: FanEvent | null) => void; onOpenCollection: () => void; onOpenCard: (card: Card) => void }) {
   const [activeHubTab, setActiveHubTab] = useState('home')
   const [following, setFollowing] = useState(true)
+  const [packs, setPacks] = useState<CardPack[]>([])
+  const [artistEvents, setArtistEvents] = useState<FanEvent[]>([])
+  const [loading, setLoading] = useState(!usePreviewData)
+  const [loadError, setLoadError] = useState('')
   const tabs = [{ id: 'home', label: '아티스트 홈' }, { id: 'schedule', label: '일정' }, { id: 'news', label: '뉴스' }, { id: 'cards', label: '카드' }, { id: 'events', label: '이벤트' }]
-  const cards: Card[] = [
+
+  useEffect(() => {
+    if (usePreviewData) {
+      setPacks([])
+      setArtistEvents([])
+      setLoading(false)
+      setLoadError('')
+      return
+    }
+    if (!artist) {
+      setPacks([])
+      setArtistEvents([])
+      setLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setLoading(true)
+    setLoadError('')
+    void Promise.allSettled([
+      getCardPacks(artist.id),
+      getFanEvents({ artistId: artist.id, status: 'all', pageSize: 12 }),
+    ]).then(([packResult, eventResult]) => {
+      if (cancelled) return
+      setPacks(packResult.status === 'fulfilled' ? packResult.value.data.items : [])
+      setArtistEvents(eventResult.status === 'fulfilled' ? eventResult.value.data.items : [])
+      if (packResult.status === 'rejected' || eventResult.status === 'rejected') setLoadError('일부 아티스트 소식을 불러오지 못했어요.')
+    }).finally(() => {
+      if (!cancelled) setLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [artist, usePreviewData])
+
+  const artistName = artist?.name ?? (usePreviewData ? '드림스케이프' : '아티스트')
+  const artistHero = resolveApiUrl(artist?.imageUrl) || (usePreviewData ? dreamscapeHero : '')
+  const previewCards: Card[] = [
     { id: 'discover-nebula-harin', title: 'Nebula Ver.', artist: artist?.name ?? '드림스케이프', member: '하린', image: cardYunaImage, rarity: 'UR' },
     { id: 'discover-nebula-doyun', title: 'Nebula Ver.', artist: artist?.name ?? '드림스케이프', member: '도윤', image: cardMinhoImage, rarity: 'SR' },
     { id: 'discover-nebula-jay', title: 'Nebula Ver.', artist: artist?.name ?? '드림스케이프', member: '제이', image: cardJayImage, rarity: 'SR' },
   ]
+  const remoteCards = packs.flatMap(pack => pack.cards.map(card => ({
+    id: card.cardId,
+    title: pack.version || pack.name,
+    artist: artistName,
+    member: card.name,
+    image: demoCardImage(resolveApiUrl(card.imageUrl), `member:${card.memberId ?? card.cardId}`),
+    rarity: card.rarity ?? undefined,
+    seasonName: pack.seasonName ?? undefined,
+  } satisfies Card)))
+  const cards = usePreviewData ? previewCards : [...new Map(remoteCards.map(card => [card.id, card])).values()].slice(0, 3)
+  const previewEvents: FanEvent[] = [
+    { ...fallbackHomeEvent, id: 'preview-artist-meet', title: '드림스케이프 팬미팅', summary: '팬과 함께하는 특별한 만남', startsAt: '2026-08-28T08:00:00Z', venue: '올림픽공원 올림픽홀' },
+    { ...fallbackHomeEvent, id: 'preview-artist-week', title: '2026 AUTUMN FAN WEEK', summary: '가을 팬 위크 콘서트', status: 'upcoming', startsAt: '2026-09-12T09:00:00Z', heroUrl: fanWeekLavenderMeet, venue: 'KSPO DOME' },
+  ]
+  const visibleEvents = usePreviewData ? previewEvents : artistEvents
+  const scheduleEvents = visibleEvents.filter(event => event.status !== 'ended').sort((first, second) => new Date(first.startsAt).getTime() - new Date(second.startsAt).getTime()).slice(0, 2)
+  const newsEvents = [...visibleEvents].sort((first, second) => new Date(second.startsAt).getTime() - new Date(first.startsAt).getTime()).slice(0, 2)
+  const artistEvent = visibleEvents.find(event => event.status === 'active') ?? visibleEvents.find(event => event.status === 'upcoming') ?? visibleEvents[0] ?? null
+  const remoteMemberImages = [...new Map(packs.flatMap(pack => pack.cards).map(card => [card.memberId ?? card.cardId, resolveApiUrl(card.imageUrl)])).values()].filter(Boolean).slice(0, 4)
+  const memberImages = usePreviewData ? [cardYunaImage, cardMinhoImage, cardJayImage, collectionCardHarinGenerated] : remoteMemberImages
+  const memberCount = memberImages.length
+  const eventTypeLabel = (event: FanEvent) => event.eventType === 'card_drop' || event.eventType === 'card' ? '카드 드롭' : event.eventType === 'announcement' ? '소식' : '팬 이벤트'
+  const eventDate = (value: string) => {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return { month: 'EVENT', day: '--', full: '일정 확인 중' }
+    return {
+      month: date.toLocaleString('en-US', { month: 'short', timeZone: 'Asia/Seoul' }).toUpperCase(),
+      day: date.toLocaleString('en-US', { day: '2-digit', timeZone: 'Asia/Seoul' }),
+      full: date.toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Seoul' }),
+    }
+  }
   const activateTab = (id: string) => {
     setActiveHubTab(id)
     if (id === 'events') { onOpenEvents(); return }
     if (id === 'cards') { onOpenCollection(); return }
     document.getElementById(`artist-${id === 'home' ? 'schedule' : id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
-  return <main className="app-shell discover-artist-shell"><header className="discover-detail-topbar"><button type="button" onClick={onBack} aria-label="탐색으로 돌아가기"><InlineIcon name="back" /></button><h1>아티스트 홈</h1><span aria-hidden="true" /></header><section className="artist-hub"><section className="artist-hub-hero"><img src={dreamscapeHero} alt="드림스케이프" /><div className="artist-hub-hero-overlay"><span>공식 아티스트</span><h3>드림스케이프 <VerifiedIcon /></h3><p>4명의 멤버 · 공식 아티스트 공간</p><div className="hub-members">{[cardYunaImage, cardMinhoImage, cardJayImage, cardYunaImage].map((image, index) => <img key={index} src={image} alt="" />)}</div><button type="button" className={following ? 'is-following' : ''} onClick={() => setFollowing(value => !value)}>{following ? '✓ 팔로우 중' : '+ 팔로우'}</button></div></section><nav className="hub-tabs" aria-label="아티스트 정보" role="tablist">{tabs.map(tab => <button key={tab.id} type="button" role="tab" aria-selected={activeHubTab === tab.id} className={activeHubTab === tab.id ? 'active' : ''} onClick={() => activateTab(tab.id)}>{tab.label}</button>)}</nav><section id="artist-schedule" className="hub-section"><div className="section-heading"><h3>다가오는 일정</h3><button type="button" onClick={() => onOpenEvents()}>전체 보기 ›</button></div><div className="hub-schedule-grid"><article><b>AUG<br /><strong>28</strong></b><div><span>팬미팅</span><h4>드림스케이프 팬미팅</h4><p>2026.08.28 (금) 17:00</p><small><InlineIcon name="pin" />올림픽공원 올림픽홀</small></div><i className="hub-schedule-bell"><NavIcon name="alerts" /></i></article><article><b>SEP<br /><strong>12</strong></b><div><span>콘서트</span><h4>2026 AUTUMN FAN WEEK</h4><p>2026.09.12 (토) 18:00</p><small><InlineIcon name="pin" />KSPO DOME</small></div><i className="hub-schedule-bell"><NavIcon name="alerts" /></i></article></div></section><section id="artist-news" className="hub-section"><div className="section-heading"><h3>드림스케이프 뉴스</h3><button type="button" onClick={() => setActiveHubTab('news')}>전체 보기 ›</button></div><div className="hub-news-list"><article><img src={dreamscapeHero} alt="" /><div><b>드림스케이프, 새 앨범 트랙리스트 공개</b><p>타이틀곡 ‘Nebula’ 포함 총 6곡 수록</p><small>1시간 전</small></div><strong>›</strong></article><article><img src={fanWeekLavenderMeet} alt="" /><div><b>드림스케이프, 글로벌 차트 1위!</b><p>신곡 ‘Nebula’ 글로벌 인기 상승</p><small>1일 전</small></div><strong>›</strong></article></div></section><section id="artist-cards" className="hub-section"><div className="section-heading"><h3>새 카드</h3><button type="button" onClick={onOpenCollection}>전체 보기 ›</button></div><div className="hub-card-row">{cards.map(card => <button type="button" key={card.id} onClick={() => onOpenCard(card)}><img src={card.image} alt={`${card.member} ${card.title}`} /><b>{card.member}<br />{card.title}</b><span>{card.rarity}</span></button>)}</div><div className="hub-card-dots" aria-hidden="true"><b /><i /><i /></div><button type="button" id="artist-events" className="hub-event-promo" onClick={() => onOpenEvents()}><span className="hub-event-promo-icon" aria-hidden="true"><InlineIcon name="gift" /></span><b><small>팬 이벤트</small>드림스케이프 사인 폴라로이드 이벤트<em>참여하고 사인 폴라로이드를 받아보세요!</em></b><strong>참여하기</strong><i>›</i></button></section></section></main>
+  return <main className="app-shell discover-artist-shell">
+    <header className="discover-detail-topbar"><button type="button" onClick={onBack} aria-label="탐색으로 돌아가기"><InlineIcon name="back" /></button><h1>아티스트 홈</h1><span aria-hidden="true" /></header>
+    <section className="artist-hub">
+      <section className="artist-hub-hero">{artistHero ? <img src={artistHero} alt={artistName} /> : <span className="artist-hub-hero-fallback" aria-hidden="true">{artistName.slice(0, 1)}</span>}<div className="artist-hub-hero-overlay"><span>공식 아티스트</span><h3>{artistName} <VerifiedIcon /></h3><p>{memberCount > 0 ? `${memberCount}명의 멤버 · ` : ''}공식 아티스트 공간</p>{memberImages.length > 0 && <div className="hub-members">{memberImages.map((image, index) => <img key={`${image}-${index}`} src={image} alt="" />)}</div>}<button type="button" className={following ? 'is-following' : ''} onClick={() => setFollowing(value => !value)}>{following ? '✓ 팔로우 중' : '+ 팔로우'}</button></div></section>
+      <nav className="hub-tabs" aria-label="아티스트 정보" role="tablist">{tabs.map(tab => <button key={tab.id} type="button" role="tab" aria-selected={activeHubTab === tab.id} className={activeHubTab === tab.id ? 'active' : ''} onClick={() => activateTab(tab.id)}>{tab.label}</button>)}</nav>
+      {loadError && <p className="hub-load-note" role="status">{loadError}</p>}
+      <section id="artist-schedule" className="hub-section"><div className="section-heading"><h3>다가오는 일정</h3><button type="button" onClick={onOpenEvents}>전체 보기 ›</button></div>{scheduleEvents.length > 0 ? <div className="hub-schedule-grid">{scheduleEvents.map(event => { const date = eventDate(event.startsAt); return <article key={event.id} role="button" tabIndex={0} aria-label={`${event.title} 상세 보기`} onClick={() => onOpenEvent(event)} onKeyDown={keyEvent => { if (keyEvent.key === 'Enter' || keyEvent.key === ' ') onOpenEvent(event) }}><b>{date.month}<br /><strong>{date.day}</strong></b><div><span>{eventTypeLabel(event)}</span><h4>{event.title}</h4><p>{date.full}</p><small><InlineIcon name="pin" />{event.venue ?? '온라인 이벤트'}</small></div><i className="hub-schedule-bell"><NavIcon name="alerts" /></i></article> })}</div> : <p className="hub-empty">{loading ? '일정을 불러오는 중이에요.' : '등록된 일정이 없어요.'}</p>}</section>
+      <section id="artist-news" className="hub-section"><div className="section-heading"><h3>{artistName} 소식</h3><button type="button" onClick={onOpenEvents}>전체 보기 ›</button></div>{newsEvents.length > 0 ? <div className="hub-news-list">{newsEvents.map(event => <article key={event.id} role="button" tabIndex={0} aria-label={`${event.title} 상세 보기`} onClick={() => onOpenEvent(event)} onKeyDown={keyEvent => { if (keyEvent.key === 'Enter' || keyEvent.key === ' ') onOpenEvent(event) }}><img src={resolveApiUrl(event.heroUrl) || artistHero} alt="" /><div><b>{event.title}</b><p>{event.summary}</p><small>{eventDate(event.startsAt).full}</small></div><strong>›</strong></article>)}</div> : <p className="hub-empty">{loading ? '소식을 불러오는 중이에요.' : '등록된 소식이 없어요.'}</p>}</section>
+      <section id="artist-cards" className="hub-section"><div className="section-heading"><h3>새 카드</h3><button type="button" onClick={onOpenCollection}>전체 보기 ›</button></div>{cards.length > 0 ? <><div className="hub-card-row">{cards.map(card => <button type="button" key={card.id} onClick={() => onOpenCard(card)}><img src={card.image} alt={`${card.member} ${card.title}`} /><b>{card.member}<br />{card.title}</b>{card.rarity && <span>{card.rarity}</span>}</button>)}</div><div className="hub-card-dots" aria-hidden="true"><b /><i /><i /></div></> : <p className="hub-empty">{loading ? '카드를 불러오는 중이에요.' : '공개된 카드가 없어요.'}</p>}{artistEvent && <button type="button" id="artist-events" className="hub-event-promo" onClick={() => onOpenEvent(artistEvent)}><span className="hub-event-promo-icon" aria-hidden="true"><InlineIcon name="gift" /></span><b><small>팬 이벤트</small>{artistEvent.title}<em>{artistEvent.summary}</em></b><strong>{artistEvent.ctaLabel ?? '참여하기'}</strong><i>›</i></button>}</section>
+    </section>
+  </main>
 }
 
 function notificationTimeLabel(createdAt: string): string {
