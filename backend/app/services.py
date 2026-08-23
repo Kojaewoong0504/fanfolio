@@ -21,6 +21,7 @@ from app.models import (
     AchievementProgress,
     AdminArtistAssignment,
     AdminMembership,
+    AnalyticsEvent,
     Artist,
     ArtistProfile,
     Asset,
@@ -229,6 +230,53 @@ async def record_engagement_event(
         )
         if existing:
             return existing
+        raise
+    return event
+
+
+async def record_analytics_event(
+    session: AsyncSession,
+    *,
+    event_name: str,
+    user_id: str | None = None,
+    organization_id: str | None = None,
+    artist_id: str | None = None,
+    card_id: str | None = None,
+    pack_id: str | None = None,
+    source: str | None = None,
+    dedupe_key: str | None = None,
+    metadata: dict | None = None,
+) -> AnalyticsEvent:
+    """Record an analytics event without duplicating retried lifecycle actions."""
+    if dedupe_key:
+        existing = await session.scalar(
+            select(AnalyticsEvent).where(AnalyticsEvent.dedupe_key == dedupe_key)
+        )
+        if existing:
+            return existing
+    event = AnalyticsEvent(
+        id=f"analytics_{uuid4().hex[:12]}",
+        event_name=event_name,
+        user_id=user_id,
+        organization_id=organization_id,
+        artist_id=artist_id,
+        card_id=card_id,
+        pack_id=pack_id,
+        source=source,
+        dedupe_key=dedupe_key,
+        metadata_json=metadata or {},
+    )
+    try:
+        async with session.begin_nested():
+            session.add(event)
+            await session.flush()
+    except IntegrityError:
+        if dedupe_key:
+            existing = await session.scalar(
+                select(AnalyticsEvent).where(AnalyticsEvent.dedupe_key == dedupe_key)
+            )
+            if existing:
+                return existing
         raise
     return event
 

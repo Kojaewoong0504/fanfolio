@@ -34,6 +34,7 @@ from app.models import (
     Follow,
     Member,
     Notification,
+    RedeemCode,
     RewardCatalog,
     Role,
     User,
@@ -56,6 +57,7 @@ from app.services import (
     grant_user_card,
     notify_user_once,
     reconcile_claimed_global_pass_reward_grants,
+    record_analytics_event,
     record_audit,
     record_engagement_event,
     redeem,
@@ -199,9 +201,52 @@ async def create_redemption(
     session: DbSession,
 ) -> dict:
     user_id = user.id
+    normalized_code = payload.code.strip().upper()
     client_host = request.client.host if request.client else "unknown"
     await enforce_rate_limit(f"redemption:{user_id}:{client_host}", limit=10, window_seconds=60)
-    redeemed, engagement_event_id = await redeem(session, user, payload.code, payload.source)
+    try:
+        redeemed, engagement_event_id = await redeem(session, user, normalized_code, payload.source)
+    except AppError as error:
+        await session.rollback()
+        redeem_code = await session.scalar(
+            select(RedeemCode).where(RedeemCode.code == normalized_code)
+        )
+        failed_card = await session.get(Card, redeem_code.card_id) if redeem_code else None
+        await record_analytics_event(
+            session,
+            event_name="redemption.failed",
+            user_id=user_id,
+            organization_id=failed_card.organization_id if failed_card else None,
+            artist_id=failed_card.artist_id if failed_card else None,
+            card_id=failed_card.id if failed_card else None,
+            source=payload.source,
+            metadata={"errorCode": error.code},
+        )
+        await session.commit()
+        raise
+    redeemed_card = await session.get(Card, redeemed["cardId"])
+    analytics_scope = {
+        "user_id": user_id,
+        "organization_id": redeemed_card.organization_id if redeemed_card else None,
+        "artist_id": redeemed_card.artist_id if redeemed_card else None,
+        "card_id": redeemed["cardId"],
+        "source": payload.source,
+    }
+    await record_analytics_event(
+        session,
+        event_name="redemption.recognized",
+        dedupe_key=f"redemption-recognized:{user_id}:{normalized_code}",
+        metadata={"userCardId": redeemed["userCardId"]},
+        **analytics_scope,
+    )
+    await record_analytics_event(
+        session,
+        event_name="redemption.succeeded",
+        dedupe_key=f"redemption-succeeded:{user_id}:{normalized_code}",
+        metadata={"userCardId": redeemed["userCardId"]},
+        **analytics_scope,
+    )
+    await session.commit()
     try:
         enqueue_engagement_event(engagement_event_id, background_tasks)
     except Exception:
@@ -645,6 +690,18 @@ async def open_card_pack(
             entity_type="user_card",
             entity_id=user_card.id,
             event_key=f"pack-opening:{opening.id}",
+        )
+        await record_analytics_event(
+            session,
+            event_name="card_pack.opened",
+            user_id=user_id,
+            organization_id=pack.organization_id or locked_card.organization_id,
+            artist_id=pack.artist_id,
+            card_id=locked_card.id,
+            pack_id=pack.id,
+            source="card_pack",
+            dedupe_key=f"card-pack-opened:{opening.id}",
+            metadata={"userCardId": user_card.id, "openingId": opening.id},
         )
     return {
         "ok": True,
@@ -1195,6 +1252,18 @@ async def card_detail(user_card_id: str, user: FanUser, session: DbSession) -> d
         )
         if lenticular_path and configured_asset_storage().exists(lenticular_path):
             lenticular_image_url = f"/api/me/cards/{uc.id}/lenticular?client=fan"
+    await record_analytics_event(
+        session,
+        event_name="collection.card_viewed",
+        user_id=user.id,
+        organization_id=card.organization_id,
+        artist_id=card.artist_id,
+        card_id=card.id,
+        source="card_detail",
+        dedupe_key=f"collection-card-viewed:{user.id}:{uc.id}",
+        metadata={"userCardId": uc.id},
+    )
+    await session.commit()
     return {
         "ok": True,
         "data": {

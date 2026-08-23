@@ -22,20 +22,27 @@ def upgrade() -> None:
     if inspector.has_table("cards") and "tradable" not in {
         column["name"] for column in inspector.get_columns("cards")
     }:
-        with op.batch_alter_table("cards", recreate="always") as batch:
-            batch.add_column(
-                sa.Column("tradable", sa.Boolean(), nullable=False, server_default=sa.true())
-            )
+        tradable = sa.Column("tradable", sa.Boolean(), nullable=False, server_default=sa.true())
+        if bind.dialect.name == "sqlite":
+            with op.batch_alter_table("cards", recreate="always") as batch:
+                batch.add_column(tradable)
+        else:
+            op.add_column("cards", tradable)
 
     if inspector.has_table("user_cards"):
         columns = {column["name"] for column in inspector.get_columns("user_cards")}
-        with op.batch_alter_table("user_cards", recreate="always") as batch:
-            if "expires_at" not in columns:
-                batch.add_column(sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True))
-            if "trade_locked_at" not in columns:
-                batch.add_column(
-                    sa.Column("trade_locked_at", sa.DateTime(timezone=True), nullable=True)
-                )
+        missing_columns = [
+            sa.Column(name, sa.DateTime(timezone=True), nullable=True)
+            for name in ("expires_at", "trade_locked_at")
+            if name not in columns
+        ]
+        if bind.dialect.name == "sqlite" and missing_columns:
+            with op.batch_alter_table("user_cards", recreate="always") as batch:
+                for column in missing_columns:
+                    batch.add_column(column)
+        else:
+            for column in missing_columns:
+                op.add_column("user_cards", column)
 
     if not inspector.has_table("follows"):
         op.create_table(
@@ -171,8 +178,14 @@ def downgrade() -> None:
         "follows",
     ):
         op.drop_table(table)
-    with op.batch_alter_table("user_cards", recreate="always") as batch:
-        batch.drop_column("trade_locked_at")
-        batch.drop_column("expires_at")
-    with op.batch_alter_table("cards", recreate="always") as batch:
-        batch.drop_column("tradable")
+    bind = op.get_bind()
+    if bind.dialect.name == "sqlite":
+        with op.batch_alter_table("user_cards", recreate="always") as batch:
+            batch.drop_column("trade_locked_at")
+            batch.drop_column("expires_at")
+        with op.batch_alter_table("cards", recreate="always") as batch:
+            batch.drop_column("tradable")
+    else:
+        op.drop_column("user_cards", "trade_locked_at")
+        op.drop_column("user_cards", "expires_at")
+        op.drop_column("cards", "tradable")

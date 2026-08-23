@@ -219,6 +219,7 @@ def test_partner_action_map_includes_company_admin_and_drop_code_scope() -> None
             "events:write",
             "events:submit",
             "audit:read",
+            "statistics:read",
         }
     )
     assert {"drops:read", "drops:write", "drops:submit"} <= PARTNER_ACTIONS["manager"]
@@ -231,6 +232,7 @@ def test_partner_action_map_includes_company_admin_and_drop_code_scope() -> None
     assert "drops:submit" not in PARTNER_ACTIONS["editor"]
     assert "codes:write" not in PARTNER_ACTIONS["editor"]
     assert "codes:read" in PARTNER_ACTIONS["viewer"]
+    assert "statistics:read" in PARTNER_ACTIONS["viewer"]
     assert "codes:write" not in PARTNER_ACTIONS["viewer"]
     assert "drops:write" not in PARTNER_ACTIONS["viewer"]
 
@@ -273,6 +275,7 @@ def test_platform_operator_can_review_platform_stage_but_not_manage_partners() -
     assert "organizations:manage" not in PLATFORM_ACTIONS
     assert "codes:manage" not in PLATFORM_ACTIONS
     assert "audit:read" not in PLATFORM_ACTIONS
+    assert "statistics:read" not in PLATFORM_ACTIONS
 
 
 def test_platform_operator_membership_must_not_belong_to_an_organization() -> None:
