@@ -553,6 +553,7 @@ async def catalog_card_pack_odds(pack_id: str, session: DbSession) -> dict:
 @router.post("/me/card-packs/{pack_id}/open", status_code=status.HTTP_201_CREATED)
 async def open_card_pack(
     pack_id: str,
+    background_tasks: BackgroundTasks,
     user: FanUser,
     session: DbSession,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
@@ -702,6 +703,18 @@ async def open_card_pack(
             source="card_pack",
             dedupe_key=f"card-pack-opened:{opening.id}",
             metadata={"userCardId": user_card.id, "openingId": opening.id},
+        )
+    try:
+        enqueue_engagement_event(event.id, background_tasks)
+    except Exception:
+        logger.exception(
+            "Could not enqueue engagement event after card pack opening commit",
+            extra={
+                "engagement_event_id": event.id,
+                "opening_id": opening.id,
+                "user_card_id": user_card.id,
+                "user_id": user_id,
+            },
         )
     return {
         "ok": True,
