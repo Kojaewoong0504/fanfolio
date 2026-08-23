@@ -122,9 +122,10 @@ test('form custom selects preserve a hidden form value and do not collapse label
   assert.match(source, /hiddenValue\.value = option\.dataset\.value/)
 })
 
-test('drop and code forms use the reusable form select with client-side empty-state feedback', () => {
-  assert.match(source, /id: "drop-artist", name: "artistId"/)
+test('drop connection and code forms use the reusable form select with client-side empty-state feedback', () => {
+  assert.match(source, /id: "drop-link-drop", name: "dropId"/)
   assert.match(source, /id: "batch-card", name: "cardId"/)
+  assert.match(source, /id: "batch-drop", name: "dropId"/)
   assert.match(source, /공개 카드와 라이브 드롭을 각각 선택해 주세요/)
 })
 

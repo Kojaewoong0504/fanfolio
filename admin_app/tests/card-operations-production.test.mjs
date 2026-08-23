@@ -59,8 +59,8 @@ test('production issuance list restores operational tracking controls', () => {
 test('production issuance creation collects the backend batch contract', () => {
   const view = extractFunction('issuanceCreationView')
   assert.match(view, /id="batch-form"/)
-  assert.match(view, /name="cardId"/)
-  assert.match(view, /name="dropId"/)
+  assert.match(view, /id: "batch-card", name: "cardId"/)
+  assert.match(view, /id: "batch-drop", name: "dropId"/)
   assert.match(view, /name="quantity"/)
   assert.match(view, /name="maxUsesPerCode"/)
   assert.match(view, /name="expiresAt"/)

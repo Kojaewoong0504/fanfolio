@@ -1790,9 +1790,17 @@ function issuanceCreationView() {
   const canCreateBatch = can("codes:write") && publishedCards.length > 0 && liveDrops.length > 0;
   const cardOptions = publishedCards.map((card) => {
     const artist = state.catalog.artists.find((item) => item.id === card.artistId);
-    return `<option value="${escapeHtml(card.id)}">${escapeHtml(card.name)} · ${escapeHtml(artist?.name || card.artistId || "아티스트 미지정")}</option>`;
-  }).join("");
-  const dropOptions = liveDrops.map((drop) => `<option value="${escapeHtml(drop.id)}">${escapeHtml(drop.name)} · ${escapeHtml(drop.artistId || "아티스트 미지정")}</option>`).join("");
+    return {
+      value: card.id,
+      label: `${card.name} · ${artist?.name || card.artistId || "아티스트 미지정"}`,
+    };
+  });
+  if (!cardOptions.length) cardOptions.push({ value: "", label: "공개 카드를 준비해 주세요." });
+  const dropOptions = liveDrops.map((drop) => ({
+    value: drop.id,
+    label: `${drop.name} · ${drop.artistId || "아티스트 미지정"}`,
+  }));
+  if (!dropOptions.length) dropOptions.push({ value: "", label: "공개 중인 드롭을 준비해 주세요." });
   const readinessMessage = !can("codes:write")
     ? "발급 배치를 만들 권한이 없습니다."
     : !publishedCards.length
@@ -1803,8 +1811,8 @@ function issuanceCreationView() {
   return `<section class="card-ops-page issuance-creation-preview production-issuance-creation">
     <div class="card-ops-heading"><div><nav>카드 <span>›</span> <strong>발급·인증번호</strong> <span>›</span> <strong>새 발급 배치 만들기</strong></nav><h2>새 발급 배치 만들기</h2><p>한정 특전과 이벤트 카드의 발급 대상, 수량, 인증번호 정책을 등록합니다.</p></div><span class="badge draft">초안</span></div>
     <div class="issuance-creation-layout"><form class="panel issuance-creation-form" id="batch-form"><div class="panel-heading"><div><p class="eyebrow">ISSUANCE BATCH</p><h3>배치 기본 정보</h3><p>등록 후 발급 현황과 인증번호 상태를 한 화면에서 추적할 수 있습니다.</p></div></div>
-      <label class="field"><span>발급 카드</span><select name="cardId" required ${publishedCards.length ? "" : "disabled"}><option value="">공개 카드를 선택하세요</option>${cardOptions}</select><small class="field-help">검수 승인 후 공개된 카드만 발급할 수 있습니다.</small></label>
-      <label class="field"><span>연결 드롭</span><select name="dropId" required ${liveDrops.length ? "" : "disabled"}><option value="">공개 중인 드롭을 선택하세요</option>${dropOptions}</select><small class="field-help">팬이 인증번호를 등록할 때 적용할 이벤트 또는 드롭입니다.</small></label>
+      <label class="field"><span>발급 카드</span>${adminSelect({ id: "batch-card", name: "cardId", value: cardOptions[0].value, label: "발급 카드", className: "form-select", options: cardOptions })}<small class="field-help">검수 승인 후 공개된 카드만 발급할 수 있습니다.</small></label>
+      <label class="field"><span>연결 드롭</span>${adminSelect({ id: "batch-drop", name: "dropId", value: dropOptions[0].value, label: "연결 드롭", className: "form-select", options: dropOptions })}<small class="field-help">팬이 인증번호를 등록할 때 적용할 이벤트 또는 드롭입니다.</small></label>
       <div class="form-grid"><label class="field"><span>생성 수량</span><input name="quantity" type="number" min="1" max="100000" step="1" value="100" required /></label><label class="field"><span>코드당 사용 한도</span><input name="maxUsesPerCode" type="number" min="1" step="1" value="1" required /><small class="field-help">한정 특전은 1회를 권장합니다.</small></label></div>
       <div class="form-grid"><label class="field"><span>만료 일시</span><input name="expiresAt" type="datetime-local" value="${defaultExpiryValue}" required /></label><label class="field"><span>인증번호 접두어</span><input name="prefix" value="FANFOLIO" maxlength="24" pattern="[A-Za-z0-9_-]+" required /><small class="field-help">영문, 숫자, 하이픈, 밑줄만 사용할 수 있습니다.</small></label></div>
       <div class="issuance-creation-note ${canCreateBatch ? "ready" : "blocked"}">${icon(canCreateBatch ? "verified_user" : "info")}<span>${escapeHtml(readinessMessage)}</span></div>
