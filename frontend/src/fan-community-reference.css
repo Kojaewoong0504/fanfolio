@@ -1,0 +1,1115 @@
+/* Faithful mock styling for the fan discovery, profile, collection and trade references. */
+.social-reference-topbar{height:74px;display:grid;grid-template-columns:44px 1fr 44px;align-items:center;padding:0 22px;border-bottom:1px solid #eceaf4;background:#fff}.social-reference-topbar h1{margin:0;text-align:center;font-size:20px;letter-spacing:-.045em}.social-reference-topbar button{width:38px;height:38px;border:0;background:transparent;color:#171b38;font-size:34px;line-height:1;cursor:pointer}.fan-social-reference,.fan-profile-reference,.public-collection-reference,.trade-composer-reference{width:min(100%,430px);min-height:100dvh;margin:0 auto;background:#fbfbff;color:#171a38}.fan-social-content,.fan-profile-content,.trade-composer-content{padding:22px 20px 44px}
+.fan-search-reference{height:54px;display:flex;align-items:center;gap:12px;padding:0 17px;border:1px solid #ded9f1;border-radius:28px;background:#fff}.fan-search-reference span{font-size:27px;color:#777b99}.fan-search-reference input{width:100%;border:0;outline:0;background:transparent;color:#252944;font-size:14px}.fan-search-reference input::placeholder{color:#a0a3b4}.fan-social-reference .fan-recommendation-filters{display:grid;grid-template-columns:1.25fr 1fr 1.25fr .88fr;gap:9px;margin:17px 0 20px}.fan-social-reference .fan-recommendation-filters button{height:43px;padding:0 8px;border-radius:14px;font-size:12px}.fan-result-count{margin:0 0 12px;color:#74798e;font-size:12px;font-weight:750}.fan-social-list{display:grid;gap:10px}.fan-social-card-preview{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 76px;gap:10px;padding:14px;border:1px solid #e0dcef;border-radius:18px;background:#fff}.fan-social-card-preview>.fan-social-profile{display:grid;grid-template-columns:64px minmax(0,1fr);align-items:start;gap:12px;padding:0;border:0;background:transparent;text-align:left;cursor:pointer}.fan-social-card-preview .profile-avatar{width:64px;height:64px}.fan-social-copy{display:grid;gap:6px;min-width:0}.fan-social-copy>strong{font-size:15px}.fan-social-copy>strong em{margin-left:6px;padding:4px 7px;border-radius:8px;background:#f0edff;color:#7562da;font-size:10px}.fan-social-tags{display:flex;gap:5px;flex-wrap:wrap}.fan-social-tags i{padding:4px 7px;border:1px solid #e2deef;border-radius:7px;color:#6f7388;font-size:9px;font-style:normal}.fan-social-tags i b{margin-left:3px;color:#3789e9}.fan-social-copy mark{padding:6px 8px;border-radius:8px;background:#f6f3ff;color:#6256b2;font-size:10px}.fan-social-card-preview>button:not(.fan-social-profile){height:36px;border:0;border-radius:18px;background:linear-gradient(135deg,#7357ed,#543de2);color:#fff;font-size:11px;font-weight:800}.fan-social-card-preview>button.following{border:1px solid #6b53e8;background:#fff;color:#634cdd}.fan-social-card-preview .fan-social-stats{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;padding:9px 0 0;border-top:1px solid #ece9f4}.fan-social-stats button{border:0;background:transparent;color:#818598;font-size:10px}.fan-social-stats b{color:#5f4ee0}.fan-social-card-previews{grid-column:1/-1;display:flex;gap:7px;padding-left:76px}.fan-social-card-previews span{position:relative;width:64px;height:45px;overflow:hidden;border:2px solid #7a5ee8;border-radius:7px}.fan-social-card-previews img{width:100%;height:100%;object-fit:cover}.fan-social-card-previews b{position:absolute;left:2px;bottom:1px;color:#fff;font-size:9px}
+.fan-profile-reference{padding:0;background:#fafaff}.fan-profile-reference .fan-profile-content{gap:14px}.fan-profile-reference .fan-profile-hero{display:grid;grid-template-columns:1fr;gap:14px;padding:18px;border:1px solid #e1ddef;border-radius:20px;background:#fff}.fan-profile-identity{display:flex;gap:15px;align-items:center}.fan-profile-identity>img{width:92px;height:92px;border-radius:50%;object-fit:cover}.fan-profile-identity h2{margin:0 0 5px;font-size:24px}.fan-profile-identity p{margin:0 0 9px;color:#85899e;font-size:12px}.fan-profile-identity span{display:inline-block;padding:5px 8px;border-radius:999px;background:#f0edff;color:#694fe4;font-size:11px;font-weight:800}.fan-profile-identity small{display:block;margin-top:9px;color:#676b80;font-size:11px}.fan-profile-identity small i{display:inline-block;width:1px;height:12px;margin:0 8px;background:#ddd9e9;vertical-align:middle}.fan-profile-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}.fan-profile-actions button{height:46px;border:1px solid #6c53e7;border-radius:13px;background:#fff;color:#6249df;font-size:13px;font-weight:850}.fan-profile-actions button:first-child{background:linear-gradient(135deg,#7658ed,#573ee3);color:#fff}.fan-profile-artist{display:grid;gap:8px;padding-top:12px;border-top:1px solid #ece9f4}.fan-profile-artist>span{color:#85899c;font-size:11px}.fan-profile-artist button{display:flex;align-items:center;gap:9px;padding:8px 10px;border:1px solid #e2deef;border-radius:999px;background:#fff}.fan-profile-artist img{width:36px;height:36px;border-radius:50%;object-fit:cover}.fan-profile-artist b{font-size:12px}.fan-profile-artist b i{color:#3d8bea;font-style:normal}.fan-profile-artist em{margin-left:auto;color:#979aac;font-size:22px;font-style:normal}.fan-profile-reference .fan-profile-panel{padding:15px;border-radius:18px}.fan-profile-reference .fan-profile-featured-cards{grid-template-columns:repeat(4,1fr);gap:8px}.fan-profile-reference .fan-profile-featured-cards button,.fan-profile-tradable-cards button{position:relative;padding:0;border:0;border-radius:10px;overflow:hidden;background:#eeeaf8}.fan-profile-reference .fan-profile-featured-cards img,.fan-profile-tradable-cards img{display:block;width:100%;aspect-ratio:2/3;object-fit:cover}.fan-profile-reference .fan-profile-featured-cards span,.fan-profile-reference .fan-profile-featured-cards em,.fan-profile-tradable-cards b,.fan-profile-tradable-cards em{position:absolute;bottom:5px;color:#fff;font-size:9px;font-style:normal;font-weight:850}.fan-profile-reference .fan-profile-featured-cards span,.fan-profile-tradable-cards b{left:5px}.fan-profile-reference .fan-profile-featured-cards em,.fan-profile-tradable-cards em{right:5px}.fan-profile-progress-row{display:grid;grid-template-columns:42px minmax(0,1fr) auto 20px;align-items:center;gap:9px;padding:10px;border:1px solid #ebe8f4;border-radius:12px}.fan-profile-progress-row+.fan-profile-progress-row{margin-top:8px}.fan-profile-progress-row img{width:42px;height:52px;border-radius:6px;object-fit:cover}.fan-profile-progress-row span{display:grid;gap:7px}.fan-profile-progress-row b{font-size:11px;color:#5b4cd1}.fan-profile-progress-row i{height:6px;overflow:hidden;border-radius:999px;background:#ece9f5}.fan-profile-progress-row i em{display:block;height:100%;background:#6750e5}.fan-profile-progress-row strong{font-size:12px}.fan-profile-progress-row button{border:0;background:transparent;color:#7d8195;font-size:20px}.fan-profile-tradable-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.fan-profile-tradable-cards .more{display:grid;place-items:center;color:#6d57dd;font-size:24px}.fan-profile-tradable-cards .more small{font-size:9px;line-height:1.4}.fan-profile-summary{display:grid;grid-template-columns:1fr 1fr;padding:15px;border:1px solid #e1ddef;border-radius:18px;background:#fff}.fan-profile-summary>div{display:flex;justify-content:center;align-items:center;gap:10px}.fan-profile-summary>div+div{border-left:1px solid #ebe8f4}.fan-profile-summary span{font-size:24px;color:#6650df}.fan-profile-summary small{display:grid;color:#85899c;font-size:10px}.fan-profile-summary strong{color:#222641;font-size:18px}
+.public-collection-reference{padding:0 20px 108px}.public-collection-reference .social-reference-topbar{margin:0 -20px}.public-collection-owner{display:grid;grid-template-columns:58px minmax(0,1fr) auto;align-items:center;gap:12px;margin-top:18px;padding:15px;border:1px solid #e1ddef;border-radius:18px;background:#fff}.public-collection-owner>img{width:58px;height:58px;border-radius:50%;object-fit:cover}.public-collection-owner h2{margin:0 0 7px;font-size:14px}.public-collection-owner span{display:inline-flex;gap:5px;padding:5px 8px;border-radius:999px;background:#f1edff;color:#6852df;font-size:9px}.public-collection-owner strong{display:grid;text-align:right;font-size:17px}.public-collection-owner strong>b{color:#654be1;font-size:22px}.public-collection-owner strong small{color:#9598a9;font-size:9px;font-weight:600}.public-collection-season{display:grid;grid-template-columns:34px 1fr auto;align-items:center;gap:12px;margin-top:18px;padding:13px 16px;border:1px solid #8067f0;border-radius:12px;background:#fff;color:#6650df}.public-collection-season img{width:28px;height:43px;object-fit:cover}.public-collection-season b{font-size:13px}.public-collection-pack-tabs{display:grid;grid-template-columns:repeat(3,1fr);margin-top:18px;border:1px solid #e2deef;border-radius:12px;background:#fff;overflow:hidden}.public-collection-pack-tabs button{height:42px;border:0;background:#fff;color:#85899b;font-size:11px;font-weight:750}.public-collection-pack-tabs button+button{border-left:1px solid #ece9f4}.public-collection-pack-tabs button.active{background:linear-gradient(135deg,#7658ed,#573ee3);color:#fff}.public-collection-filter-pills{display:flex;gap:9px;margin:17px 0}.public-collection-filter-pills button{height:36px;padding:0 13px;border:1px solid #e0dced;border-radius:999px;background:#fff;color:#7c8093;font-size:10px;font-weight:750}.public-collection-filter-pills button.active{border-color:#6a50e7;background:#684fe7;color:#fff}.public-collection-reference .public-collection-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px 10px;padding:0}.public-collection-slot{position:relative;aspect-ratio:2/3;overflow:hidden;border:1px solid #ddd8ed;border-radius:10px;background:#f2effb}.public-collection-slot.owned{padding:0;cursor:pointer}.public-collection-slot img{width:100%;height:100%;object-fit:cover}.public-collection-slot>b{position:absolute;left:0;bottom:0;padding:5px 7px;border-radius:0 8px 0 0;background:#7151e9;color:#fff;font-size:10px}.public-collection-slot small{position:absolute;right:7px;bottom:6px;color:#fff;font-size:9px}.public-collection-slot em{position:absolute;top:0;right:0;padding:4px 6px;border-radius:0 0 0 7px;background:#6b4de8;color:#fff;font-size:8px;font-style:normal}.public-collection-slot.missing{display:grid;place-items:center;background:linear-gradient(145deg,#f2effc,#faf9ff);color:#a9a2cd}.public-collection-slot.missing span{font-size:33px}.public-collection-slot.missing small{color:#9993bb}.public-collection-trade-bar{position:sticky;bottom:10px;z-index:4;display:grid;grid-template-columns:1fr 142px;align-items:center;gap:12px;margin-top:20px;padding:9px 9px 9px 15px;border:1px solid #e5e1f1;border-radius:17px;background:#fff;box-shadow:0 12px 35px #2f275428}.public-collection-trade-bar span{font-size:11px}.public-collection-trade-bar b{color:#6349df;font-size:15px}.public-collection-trade-bar button{height:45px;border:0;border-radius:13px;background:linear-gradient(135deg,#7658ed,#573ee3);color:#fff;font-size:12px;font-weight:850}
+.trade-composer-reference{padding:0;background:#fbfbff}.trade-composer-reference .trade-composer-content{padding-bottom:30px}.trade-match-hero{display:flex;align-items:center;gap:15px;padding:18px;border:1px solid #e1dcf3;border-radius:18px;background:linear-gradient(135deg,#f5f2ff,#fff)}.trade-match-hero>span{display:grid;place-items:center;width:62px;height:62px;border-radius:50%;background:#ece7ff;color:#6049e2;font-size:28px}.trade-match-hero h2{margin:0 0 7px;font-size:16px}.trade-match-hero p{margin:0;color:#7f8396;font-size:11px}.trade-match-panel{margin-top:18px;padding:18px 12px;border:1px solid #e0dcef;border-radius:18px;background:#fff}.trade-match-cards{display:grid;grid-template-columns:1fr 32px 1fr;align-items:center;gap:8px}.trade-match-cards>article{min-width:0}.trade-match-cards h3{margin:0 0 11px;text-align:center;color:#624be0;font-size:12px}.trade-match-cards article>div{padding:10px;border:1px solid #e3dff0;border-radius:12px}.trade-match-cards img{display:block;width:100%;aspect-ratio:2/3;border-radius:8px;object-fit:cover}.trade-match-cards>i{text-align:center;color:#624be0;font-size:23px;font-style:normal}.trade-match-cards article>b{display:flex;align-items:center;gap:7px;margin:10px 5px 7px;font-size:12px}.trade-match-cards article>b span{padding:4px 5px;border-radius:4px;background:#694de4;color:#fff;font-size:9px}.trade-match-cards article>p{margin:0 5px;color:#777c91;font-size:10px;line-height:1.6}.trade-match-cards article>small{display:flex;justify-content:space-between;margin:9px 5px;padding:7px 8px;border-radius:7px;background:#f7f5ff;color:#777c91;font-size:9px}.trade-match-cards article>button{border:0;background:transparent;color:#654cde;font-size:10px;font-weight:800}.trade-match-table{display:grid;grid-template-columns:1fr 1fr;margin-top:14px;border:1px solid #e5e1ee;border-radius:11px;overflow:hidden}.trade-match-table dl{margin:0;padding:10px}.trade-match-table dl+dl{border-left:1px solid #e8e4f1}.trade-match-table dl div{display:flex;justify-content:space-between;padding:5px 0;font-size:9px}.trade-match-table dt{color:#85899c}.trade-match-table dd{margin:0;color:#2c3048}.trade-condition-details{margin-top:14px;border:1px solid #e0dcef;border-radius:14px;background:#fff}.trade-condition-details summary{display:flex;justify-content:space-between;padding:15px;color:#33374f;font-size:11px;font-weight:800;cursor:pointer;list-style:none}.trade-condition-details p{margin:0;padding:0 15px 14px;color:#85899c;font-size:9px}.trade-safety-note{display:flex;gap:12px;margin-top:14px;padding:15px;border:1px solid #e2ddf4;border-radius:14px;background:#f7f4ff}.trade-safety-note>span{font-size:24px;color:#624be0}.trade-safety-note b{font-size:11px}.trade-safety-note p{margin:5px 0 0;color:#7f8397;font-size:9px}.trade-confirm-check{display:flex;align-items:center;gap:10px;margin-top:14px;padding:14px;border:1px solid #e2deef;border-radius:12px;background:#fff;font-size:10px}.trade-confirm-check input{position:absolute;opacity:0}.trade-confirm-check span{width:22px;height:22px;border:2px solid #6a50e6;border-radius:6px}.trade-confirm-check input:checked+span{background:#654ce1;box-shadow:inset 0 0 0 5px #fff}.trade-match-actions{display:grid;grid-template-columns:1fr 1.35fr;gap:10px;margin-top:14px}.trade-match-actions button{height:48px;border:1px solid #6c54e7;border-radius:13px;background:#fff;color:#6049df;font-size:12px;font-weight:850}.trade-match-actions button:last-child{background:linear-gradient(135deg,#7658ed,#573ee3);color:#fff}.trade-match-actions button:disabled{opacity:.42}
+main.discover-shell .discover-hub{display:grid;gap:18px;padding:0 20px 110px}.discover-hub-intro p{margin:0;color:#85899c;font-size:12px}.discover-global-search{height:52px;display:flex;align-items:center;gap:12px;padding:0 16px;border:1px solid #dfdaf1;border-radius:26px;background:#fff}.discover-global-search span{color:#777b9b;font-size:26px}.discover-global-search input{width:100%;border:0;outline:0;background:transparent;font-size:13px}.discover-categories{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #e0dcef;border-radius:14px;background:#fff;padding:4px}.discover-categories button{height:38px;border:0;border-radius:11px;background:transparent;color:#676b81;font-size:11px;font-weight:800}.discover-categories button.active{background:linear-gradient(135deg,#7658ed,#573ee3);color:#fff}.discover-featured-section{display:grid;gap:10px}.discover-featured-section .section-heading{display:flex;align-items:center;justify-content:space-between}.discover-featured-section .section-heading h2{margin:0;font-size:16px}.discover-featured-section .section-heading button{border:0;background:transparent;color:#654cdd;font-size:10px}.discover-hub .inline-icon{display:inline-block;width:14px;height:14px;vertical-align:-2px;flex:0 0 14px}.discover-fan-list{display:grid;gap:10px}.discover-fan-list article{display:grid;grid-template-columns:66px minmax(0,1fr) 78px;align-items:center;gap:12px;padding:13px;border:1px solid #e1ddef;border-radius:18px;background:#fff}.discover-fan-list .profile-avatar{width:66px;height:66px}.discover-fan-list article>span{display:grid;gap:5px}.discover-fan-list strong{font-size:14px}.discover-fan-list small{color:#85899c;font-size:10px}.discover-fan-list small b{color:#654ce0}.discover-fan-list em{padding:5px 7px;border-radius:8px;background:#f5f2ff;color:#7168a9;font-size:9px;font-style:normal}.discover-fan-list article>button{height:36px;border:1px solid #6a52e7;border-radius:18px;background:#fff;color:#6249df;font-size:10px;font-weight:800}.discover-collection-entry,.discover-pack-entry,.discover-event-entry,.discover-artist-entry{width:100%;display:grid;align-items:center;gap:13px;padding:13px;border:1px solid #e1ddef;border-radius:18px;background:#fff;text-align:left}.discover-collection-entry{grid-template-columns:126px minmax(0,1fr) auto}.discover-collection-cards{position:relative;height:78px}.discover-collection-cards img{position:absolute;left:calc(var(--stack-index) * 34px);top:3px;width:54px;height:72px;border:2px solid #fff;border-radius:8px;object-fit:cover;transform:rotate(calc((var(--stack-index) - 1) * 5deg))}.discover-collection-entry>span:nth-child(2){display:grid;gap:5px}.discover-collection-entry strong{font-size:13px}.discover-collection-entry small{font-size:9px;color:#777c91}.discover-collection-entry i{height:6px;border-radius:999px;background:#ece9f4;overflow:hidden}.discover-collection-entry i em{display:block;height:100%;background:#654ce0}.discover-collection-entry>b{color:#73778c;font-size:11px}.discover-pack-entry,.discover-event-entry,.discover-artist-entry{grid-template-columns:90px minmax(0,1fr) auto}.discover-pack-entry>img,.discover-event-entry>img,.discover-artist-entry>img{width:90px;height:90px;border-radius:12px;object-fit:cover}.discover-pack-entry>span,.discover-event-entry>span,.discover-artist-entry>span{display:grid;gap:5px}.discover-pack-entry small,.discover-event-entry small,.discover-artist-entry small{color:#654ce0;font-size:9px;font-weight:800}.discover-pack-entry strong,.discover-event-entry strong,.discover-artist-entry strong{font-size:14px}.discover-pack-entry em,.discover-event-entry em,.discover-artist-entry em{color:#85899c;font-size:9px;font-style:normal}.discover-event-entry>b{display:grid;place-items:center;width:45px;height:45px;border-radius:50%;background:linear-gradient(135deg,#7658ed,#573ee3);color:#fff;font-size:12px}.discover-event-entry>i,.discover-pack-entry>i,.discover-artist-entry>i{color:#8b8fa1;font-size:21px;font-style:normal}
+@media (max-width:390px){.fan-social-content,.fan-profile-content,.trade-composer-content{padding-left:15px;padding-right:15px}.fan-social-reference .fan-recommendation-filters{gap:5px}.fan-social-reference .fan-recommendation-filters button{font-size:10px}.public-collection-reference{padding-left:15px;padding-right:15px}.public-collection-reference .social-reference-topbar{margin-left:-15px;margin-right:-15px}.public-collection-reference .public-collection-grid{gap:9px 7px}.fan-profile-identity>img{width:78px;height:78px}}
+
+/* Reference fidelity corrections for circular fan portraits and the four-part event row. */
+.fan-social-card-preview .profile-avatar{border-radius:50%;object-fit:cover}
+.discover-event-entry{grid-template-columns:90px minmax(0,1fr) 45px 18px}
+.discover-event-entry>i{justify-self:end}
+.public-collection-owner strong{display:flex;flex-direction:column;align-items:flex-end;white-space:nowrap}.public-collection-owner strong>span{display:flex;align-items:baseline;gap:3px}.public-collection-owner strong>span>b{color:#654be1;font-size:22px}
+main.discover-shell .discover-event-entry{display:flex;align-items:center;gap:12px}main.discover-shell .discover-event-entry>img{width:90px;height:82px;flex:0 0 90px}main.discover-shell .discover-event-entry>span{min-width:0;flex:1}main.discover-shell .discover-event-entry>b{flex:0 0 45px}main.discover-shell .discover-event-entry>i{flex:0 0 auto;margin-left:0}
+
+/* Keep reference screens flush with the shared mobile shell; inner content owns the one gutter. */
+main.discover-shell {
+  padding-inline: 0;
+}
+main.app-shell.discover-shell > header.app-header {
+  width: calc(100% - 32px) !important;
+  margin: 0 16px 8px !important;
+}
+main.app-shell.discover-shell > div.app-header {
+  width: calc(100% - 32px) !important;
+  margin: 0 16px 8px !important;
+}
+main.discover-shell > .screen {
+  padding-inline: 0;
+}
+main.discover-shell .discover-hub {
+  padding: 0 16px 110px;
+  gap: 16px;
+}
+main.discover-shell .discover-global-search > button {
+  display: grid;
+  flex: 0 0 28px;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #777b9b;
+  cursor: pointer;
+}
+main.discover-shell .discover-global-search > button .inline-icon {
+  width: 22px;
+  height: 22px;
+}
+main.fan-social-shell {
+  padding-inline: 0;
+}
+.social-reference-topbar {
+  padding-inline: 16px;
+}
+.fan-social-content {
+  padding: 12px 16px 44px;
+}
+.fan-social-reference .fan-recommendation-filters {
+  margin: 12px 0;
+}
+.fan-result-count {
+  margin-bottom: 8px;
+}
+.social-reference-topbar button,
+.fan-search-reference > span {
+  display: grid;
+  place-items: center;
+}
+.social-reference-topbar .inline-icon {
+  width: 22px;
+  height: 22px;
+}
+.fan-search-reference .inline-icon {
+  width: 20px;
+  height: 20px;
+}
+.fan-social-card-preview {
+  gap: 8px 10px;
+  padding: 12px;
+}
+.fan-social-tags .inline-icon {
+  display: inline-block;
+  flex: 0 0 12px;
+  width: 12px;
+  height: 12px;
+  margin-left: 3px;
+  vertical-align: -2px;
+}
+.fan-social-stats button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.fan-social-stats .inline-icon {
+  width: 13px;
+  height: 13px;
+}
+.discover-fan-list article {
+  grid-template-columns: minmax(0, 1fr) 78px;
+}
+.discover-fan-list article > .discover-fan-profile {
+  display: grid;
+  grid-template-columns: 66px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  height: auto;
+  min-height: 66px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  text-align: left;
+}
+
+.trade-match-icon .inline-icon,
+.trade-match-cards > i .inline-icon,
+.trade-condition-label .inline-icon,
+.trade-condition-details summary > .inline-icon,
+.trade-safety-note .inline-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.trade-match-icon {
+  display: inline-grid;
+  place-items: center;
+}
+
+.trade-condition-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+@keyframes trade-card-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+.trade-match-cards > article {
+  min-width: 0;
+}
+
+.trade-match-cards > article .trade-card-visual {
+  animation: trade-card-float 4s ease-in-out infinite;
+  will-change: transform;
+}
+
+.trade-match-cards > article:nth-of-type(2) .trade-card-visual {
+  animation-delay: -2s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trade-match-cards > article .trade-card-visual {
+    animation: none;
+  }
+}
+
+/* Reference fidelity corrections for fan discovery and trading previews. */
+.discover-fan-list .profile-avatar {
+  width: 66px;
+  height: 66px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+main.discover-shell .discover-fans-section .section-heading button {
+  color: #654cdd;
+  font-weight: 800;
+}
+
+.fan-social-tags i {
+  display: inline-flex;
+  align-items: center;
+  width: auto;
+  max-width: 100%;
+  flex: 0 0 auto;
+  justify-self: start;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.fan-profile-panel .section-heading {
+  margin: 0 0 12px;
+}
+
+.fan-profile-tradable-cards .more .inline-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.fan-profile-summary > div > span {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border-radius: 50%;
+  background: #f1eeff;
+  color: #6650df;
+}
+
+.fan-profile-summary > div > span .inline-icon {
+  width: 22px;
+  height: 22px;
+}
+.discover-fan-profile > span {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.discover-fan-list article > button:not(.discover-fan-profile) {
+  height: 36px;
+  border: 1px solid #6a52e7;
+  border-radius: 18px;
+  background: #fff;
+  color: #6249df;
+  font-size: 10px;
+  font-weight: 800;
+}
+.discover-collection-ownerline {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.discover-collection-ownerline .profile-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+}
+.discover-collection-ownerline .inline-icon {
+  display: inline-block;
+  flex: 0 0 13px;
+  width: 13px;
+  height: 13px;
+}
+/* Browser review refinements: profile actions, trade alignment, and compact fan cards */
+.fan-profile-panel .section-heading {
+  padding-right: 14px;
+}
+
+.fan-profile-panel .section-heading > button {
+  flex: 0 0 auto;
+  max-width: none;
+  margin-right: 0;
+  white-space: nowrap;
+}
+
+.fan-profile-tradable-cards .more {
+  position: relative;
+}
+
+.fan-profile-tradable-cards .more::before {
+  content: "collections_bookmark";
+  display: block;
+  margin-bottom: 8px;
+  color: #6248ed;
+  font-family: "Material Symbols Rounded", "Material Symbols Outlined", sans-serif;
+  font-size: 34px;
+  font-variation-settings: "FILL" 0, "wght" 450, "GRAD" 0, "opsz" 32;
+  line-height: 1;
+}
+
+.fan-profile-tradable-cards .more > svg,
+.fan-profile-tradable-cards .more > .inline-icon,
+.fan-profile-tradable-cards .more > .material-symbols-rounded,
+.fan-profile-tradable-cards .more > .material-symbols-outlined {
+  display: none;
+}
+
+.trade-match-cards {
+  align-items: start;
+}
+
+.trade-match-cards > article {
+  align-self: start;
+}
+
+.trade-match-cards > article > :first-child {
+  min-height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.trade-condition-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.trade-condition-label:not(:has(.inline-icon))::before {
+  content: "verified_user";
+  color: #5d46ec;
+  font-family: "Material Symbols Rounded", "Material Symbols Outlined", sans-serif;
+  font-size: 20px;
+  font-variation-settings: "FILL" 0, "wght" 500, "GRAD" 0, "opsz" 24;
+  line-height: 1;
+}
+
+.trade-condition-label .inline-icon {
+  color: #5d46ec;
+  font-size: 20px;
+}
+
+.trade-safety-note {
+  position: relative;
+  padding-left: 58px;
+}
+
+.trade-safety-note:not(:has(.inline-icon))::before {
+  content: "lock";
+  position: absolute;
+  left: 20px;
+  top: 50%;
+  color: #5d46ec;
+  font-family: "Material Symbols Rounded", "Material Symbols Outlined", sans-serif;
+  font-size: 24px;
+  font-variation-settings: "FILL" 0, "wght" 500, "GRAD" 0, "opsz" 24;
+  line-height: 1;
+  transform: translateY(-50%);
+}
+
+.trade-safety-note > .inline-icon {
+  position: absolute;
+  left: 20px;
+  top: 50%;
+  color: #5d46ec;
+  font-size: 24px;
+  transform: translateY(-50%);
+}
+
+.fan-social-card-preview {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr) auto;
+  column-gap: 12px;
+  row-gap: 7px;
+  align-items: start;
+  padding: 14px;
+}
+
+.fan-social-card-preview .profile-avatar,
+.fan-social-card-preview .fan-social-avatar {
+  grid-column: 1;
+  grid-row: 1 / span 3;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.fan-social-card-preview .fan-social-profile,
+.fan-social-card-preview .fan-social-main,
+.fan-social-card-preview .fan-social-identity {
+  grid-column: 2;
+  min-width: 0;
+}
+
+.fan-social-card-preview .fan-social-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 3px 0 0;
+}
+
+.fan-social-card-preview .fan-social-tags > * {
+  width: auto;
+  min-width: 0;
+  padding: 3px 8px;
+  border-radius: 7px;
+}
+
+.fan-social-card-preview .fan-social-follow,
+.fan-social-card-preview > button:last-of-type {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+
+.fan-social-card-preview .fan-social-affinity,
+.fan-social-card-preview .fan-social-match-copy {
+  grid-column: 2 / 4;
+  margin: 0;
+  padding: 7px 10px;
+  border-radius: 8px;
+}
+
+.fan-social-card-preview .fan-social-stats {
+  grid-column: 2 / 4;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 1px;
+  padding-top: 9px;
+  border-top: 1px solid #ece9f9;
+}
+
+.fan-social-card-preview .fan-social-thumbnails,
+.fan-social-card-preview .fan-social-card-thumbnails,
+.fan-social-card-preview .fan-social-cards {
+  grid-column: 2 / 4;
+  display: flex;
+  gap: 6px;
+  margin-top: 0;
+}
+
+.fan-social-card-preview .fan-social-thumbnails img,
+.fan-social-card-preview .fan-social-card-thumbnails img,
+.fan-social-card-preview .fan-social-cards img {
+  width: 64px;
+  height: 44px;
+  border-radius: 7px;
+  object-fit: cover;
+}
+/* Final browser-comment polish 2026-08-24 */
+.fan-profile-panel .section-heading {
+  width: 100%;
+  box-sizing: border-box;
+  padding-right: 4px !important;
+  overflow: visible;
+}
+
+.fan-profile-panel .section-heading > button {
+  flex: 0 0 auto;
+  max-width: none;
+  margin: 0 !important;
+  padding: 4px 2px 4px 8px;
+  white-space: nowrap;
+}
+
+.fan-profile-tradable-cards .more {
+  position: relative;
+  font-size: 0 !important;
+}
+
+.fan-profile-tradable-cards .more::before {
+  content: "collections_bookmark";
+  font-family: "Material Symbols Outlined";
+  font-size: 34px;
+  line-height: 1;
+  color: #684df3;
+}
+
+.fan-profile-tradable-cards .more::after {
+  content: "더 많은 카드를\A확인해보세요";
+  white-space: pre;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #735eea;
+}
+
+.trade-match-cards {
+  align-items: flex-start !important;
+}
+
+.trade-match-cards > article {
+  align-self: flex-start !important;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+  animation: none !important;
+  transform: none !important;
+}
+
+.trade-match-cards > article > :first-child {
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0 !important;
+}
+
+.trade-card-visual {
+  animation: tradeCardFloat 3s ease-in-out infinite;
+}
+
+.trade-match-cards > article:nth-child(2) .trade-card-visual {
+  animation-delay: -1.5s;
+}
+
+.trade-condition-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.trade-condition-label:not(:has(.inline-icon))::before {
+  content: "verified_user";
+  font-family: "Material Symbols Outlined";
+  font-size: 20px;
+  color: #5d46ec;
+}
+
+.trade-condition-label .inline-icon {
+  color: #5d46ec;
+  font-size: 20px;
+}
+
+.trade-safety-note {
+  position: relative;
+  padding-left: 58px !important;
+}
+
+.trade-safety-note:not(:has(.inline-icon))::before {
+  content: "lock";
+  font-family: "Material Symbols Outlined";
+  position: absolute;
+  left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 23px;
+  color: #5d46ec;
+}
+
+.trade-safety-note > .inline-icon {
+  position: absolute;
+  left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 23px;
+  color: #5d46ec;
+}
+
+.fan-social-card-preview {
+  display: grid !important;
+  grid-template-columns: 64px minmax(0, 1fr) auto !important;
+  column-gap: 12px !important;
+  row-gap: 6px !important;
+  align-items: start !important;
+  padding: 14px !important;
+}
+
+.fan-social-card-preview .profile-avatar {
+  grid-column: 1;
+  grid-row: 1 / span 4;
+  width: 64px !important;
+  height: 64px !important;
+  border-radius: 50% !important;
+  object-fit: cover;
+}
+
+.fan-social-card-preview .fan-social-profile {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.fan-social-card-preview .fan-social-profile h3 {
+  margin: 0 0 4px;
+}
+
+.fan-social-card-preview .fan-social-tags {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 5px !important;
+  margin: 0 !important;
+}
+
+.fan-social-card-preview .fan-social-tags span {
+  width: auto !important;
+  min-height: 0 !important;
+  padding: 3px 9px !important;
+  border: 1px solid #e1def2 !important;
+  border-radius: 7px !important;
+  background: #fff !important;
+  line-height: 1.2 !important;
+}
+
+.fan-social-card-preview .fan-social-follow {
+  grid-column: 3;
+  grid-row: 1 / span 3;
+  align-self: center;
+  margin: 0 !important;
+}
+
+.fan-social-card-preview .fan-social-affinity {
+  grid-column: 2 / 4;
+  grid-row: 3;
+  margin: 0 !important;
+  padding: 7px 10px !important;
+  border-radius: 8px;
+  background: #f1edff;
+}
+
+.fan-social-card-preview .fan-social-stats {
+  grid-column: 1 / 4;
+  grid-row: 4;
+  display: flex !important;
+  justify-content: center;
+  gap: 28px;
+  margin: 3px 0 0 !important;
+  padding-top: 9px;
+  border-top: 1px solid #ece9f6;
+}
+
+.fan-social-card-preview .fan-social-preview-cards {
+  grid-column: 2 / 4;
+  grid-row: 5;
+  display: flex !important;
+  gap: 6px;
+  margin: 0 !important;
+}
+
+.fan-social-card-preview .fan-social-preview-cards img {
+  width: 70px !important;
+  height: 46px !important;
+  border-radius: 7px;
+  object-fit: cover;
+}
+
+.public-collection-pack-tabs {
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+}
+
+.discover-collection-empty {
+  display: grid;
+  place-items: center;
+  height: 78px;
+  border-radius: 12px;
+  background: #f4f1ff;
+  color: #6a58d8;
+  font-size: 10px;
+  font-weight: 800;
+  text-align: center;
+}
+
+/* Final alignment for the current preview DOM. Keep the avatar, identity,
+   affinity, stats and card rail in the same columns as the supplied reference. */
+.fan-social-card-preview {
+  grid-template-columns: 64px minmax(0, 1fr) 76px !important;
+  column-gap: 12px !important;
+  row-gap: 8px !important;
+  padding: 14px !important;
+}
+.fan-social-card-preview > .fan-social-profile {
+  grid-column: 1 / 3 !important;
+  grid-row: 1 !important;
+  display: grid !important;
+  grid-template-columns: 64px minmax(0, 1fr) !important;
+  align-items: start !important;
+  gap: 12px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+.fan-social-card-preview > .fan-social-profile > .profile-avatar {
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+  width: 64px !important;
+  height: 64px !important;
+}
+.fan-social-card-preview > .fan-social-profile > .fan-social-copy {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  min-width: 0 !important;
+}
+.fan-social-card-preview > button:not(.fan-social-profile) {
+  grid-column: 3 !important;
+  grid-row: 1 !important;
+  align-self: center !important;
+  width: 76px !important;
+}
+.fan-social-card-preview .fan-social-stats {
+  grid-column: 1 / -1 !important;
+  grid-row: 3 !important;
+  margin-top: 2px !important;
+  padding-top: 10px !important;
+}
+.fan-social-card-preview .fan-social-card-previews {
+  grid-column: 2 / -1 !important;
+  grid-row: 4 !important;
+  display: flex !important;
+  gap: 7px !important;
+  padding-left: 0 !important;
+}
+.fan-social-card-preview .fan-social-card-previews span {
+  width: 70px !important;
+  height: 46px !important;
+}
+.fan-social-card-preview .fan-social-card-previews .inline-icon,
+.fan-social-card-preview .fan-social-stats .inline-icon {
+  flex: 0 0 auto;
+}
+.fan-social-card-preview .fan-social-copy > mark {
+  display: block !important;
+  margin-top: 2px !important;
+  line-height: 1.35 !important;
+}
+.fan-profile-identity > div > span {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+.fan-profile-identity > div > span .inline-icon,
+.fan-profile-artist b .inline-icon,
+.fan-profile-artist em .inline-icon,
+.fan-profile-progress-row button .inline-icon,
+.fan-profile-panel .section-heading button .inline-icon,
+.fan-profile-featured-cards em .inline-icon,
+.fan-profile-tradable-cards em .inline-icon {
+  width: 14px !important;
+  height: 14px !important;
+  vertical-align: -2px !important;
+}
+.fan-profile-artist b .inline-icon {
+  width: 16px !important;
+  height: 16px !important;
+  margin-left: 3px !important;
+}
+.fan-profile-tradable-cards .more {
+  font-size: 10px !important;
+}
+.fan-profile-tradable-cards .more::before,
+.fan-profile-tradable-cards .more::after {
+  content: none !important;
+}
+.public-collection-owner span .inline-icon {
+  width: 14px !important;
+  height: 14px !important;
+  vertical-align: -3px !important;
+}
+.public-collection-season > span,
+.public-collection-filter-pills button,
+.public-collection-trade-bar > span,
+.public-collection-trade-bar button {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+}
+.public-collection-season > span .inline-icon,
+.public-collection-filter-pills button .inline-icon,
+.public-collection-trade-bar .inline-icon {
+  width: 15px !important;
+  height: 15px !important;
+  flex: 0 0 auto !important;
+}
+.public-collection-season {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.public-collection-slot.owned:not(button) {
+  cursor: default;
+}
+.public-collection-empty {
+  grid-column: 1 / -1;
+  margin: 24px 0;
+  color: #7c8093;
+  text-align: center;
+  font-size: 12px;
+}
+.trade-safety-note > span .inline-icon {
+  width: 24px !important;
+  height: 24px !important;
+}
+.trade-match-icon .inline-icon {
+  width: 30px !important;
+  height: 30px !important;
+  stroke-width: 1.55 !important;
+}
+.trade-condition-label .inline-icon {
+  width: 22px !important;
+  height: 22px !important;
+  stroke-width: 1.7 !important;
+}
+.trade-safety-note {
+  display: grid !important;
+  grid-template-columns: 48px minmax(0, 1fr) !important;
+  align-items: center !important;
+  gap: 14px !important;
+  padding: 16px !important;
+}
+.trade-safety-note > .trade-safety-icon {
+  position: static !important;
+  display: grid !important;
+  place-items: center !important;
+  width: 48px !important;
+  height: 48px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  background: #ece8ff !important;
+  color: #5d46ec !important;
+}
+.trade-safety-note > .trade-safety-icon .inline-icon {
+  position: static !important;
+  width: 23px !important;
+  height: 23px !important;
+  transform: none !important;
+}
+.trade-safety-note > div {
+  min-width: 0 !important;
+  text-align: left !important;
+}
+.trade-condition-details summary > .inline-icon {
+  width: 18px !important;
+  height: 18px !important;
+}
+/* Browser comment polish: fan profile, fan search, and trade composer */
+.fan-profile-content .section-heading {
+  min-width: 0;
+}
+
+.fan-profile-content .section-heading > button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  padding-inline: 4px;
+}
+
+.fan-profile-tradable-cards .more {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.fan-profile-tradable-cards .more .material-symbols-rounded {
+  font-size: 28px;
+  line-height: 1;
+  transform: none;
+}
+
+.trade-match-cards {
+  align-items: start;
+}
+
+.trade-match-cards > article {
+  align-self: start;
+}
+
+.trade-card-visual {
+  display: block;
+  animation: trade-card-float 3.8s ease-in-out infinite;
+}
+
+.trade-match-cards > article:nth-child(2) .trade-card-visual {
+  animation-delay: -1.9s;
+}
+
+@keyframes trade-card-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+.fan-social-card-preview {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.fan-social-card-preview .profile-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.fan-social-card-preview .fan-social-profile,
+.fan-social-card-preview .fan-social-tags,
+.fan-social-card-preview .fan-social-affinity {
+  min-width: 0;
+}
+
+.fan-social-card-preview .fan-social-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.fan-social-card-preview .fan-social-affinity {
+  margin-top: 6px;
+  padding: 5px 8px;
+  border-radius: 7px;
+}
+
+.fan-social-card-preview .fan-social-stats {
+  grid-column: 2 / -1;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line, #e6e4f4);
+}
+
+.fan-social-card-preview .fan-social-preview-cards {
+  grid-column: 2 / -1;
+  display: flex;
+  gap: 6px;
+}
+
+.fan-social-card-preview .fan-social-preview-cards img {
+  width: 52px;
+  height: 68px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+.fan-profile-panel .section-heading {
+  width: 100%;
+  box-sizing: border-box;
+  padding-right: 8px !important;
+  overflow: visible;
+}
+
+.fan-profile-panel .section-heading > button {
+  flex: 0 0 auto;
+  margin: 0 !important;
+  padding: 4px 0 4px 8px;
+  white-space: nowrap;
+}
+
+.fan-profile-tradable-cards .more {
+  font-size: 0 !important;
+}
+
+.fan-profile-tradable-cards .more::before {
+  content: "collections_bookmark";
+  display: block;
+  font-family: "Material Symbols Outlined";
+  font-size: 32px;
+  line-height: 1;
+  color: #684df3;
+}
+
+.fan-profile-tradable-cards .more::after {
+  content: "더 많은 카드를\A확인해보세요";
+  display: block;
+  margin-top: 8px;
+  white-space: pre;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #735eea;
+}
+
+.trade-match-cards {
+  align-items: flex-start !important;
+}
+
+.trade-match-cards > article {
+  align-self: flex-start !important;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+  animation: none !important;
+  transform: none !important;
+}
+
+.trade-match-cards > article > :first-child {
+  display: flex;
+  min-height: 24px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0 !important;
+}
+
+.trade-card-visual {
+  animation: tradeCardFloat 3s ease-in-out infinite;
+}
+
+.trade-match-cards > article:nth-child(2) .trade-card-visual {
+  animation-delay: -1.5s;
+}
+
+.trade-condition-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.trade-condition-label:not(:has(.inline-icon))::before {
+  content: "verified_user";
+  font-family: "Material Symbols Outlined";
+  font-size: 20px;
+  color: #5d46ec;
+}
+
+.trade-condition-label .inline-icon {
+  color: #5d46ec;
+  font-size: 20px;
+}
+
+.trade-safety-note {
+  position: relative;
+  padding-left: 58px !important;
+}
+
+.trade-safety-note:not(:has(.inline-icon))::before {
+  content: "lock";
+  position: absolute;
+  top: 50%;
+  left: 20px;
+  transform: translateY(-50%);
+  font-family: "Material Symbols Outlined";
+  font-size: 23px;
+  color: #5d46ec;
+}
+
+.trade-safety-note > .inline-icon {
+  position: absolute;
+  top: 50%;
+  left: 20px;
+  transform: translateY(-50%);
+  font-size: 23px;
+  color: #5d46ec;
+}
+
+/* Keep the safety callout icon in its own reference-aligned column. */
+.trade-safety-note {
+  position: static !important;
+  grid-template-columns: 48px minmax(0, 1fr) !important;
+  padding: 16px !important;
+}
+
+.trade-safety-note > .trade-safety-icon {
+  position: static !important;
+  left: auto !important;
+  top: auto !important;
+  transform: none !important;
+}
+
+.fan-social-card-preview {
+  display: grid !important;
+  grid-template-columns: 64px minmax(0, 1fr) auto !important;
+  column-gap: 12px !important;
+  row-gap: 6px !important;
+  align-items: start !important;
+  padding: 14px !important;
+}
+
+.fan-social-card-preview .profile-avatar {
+  grid-column: 1;
+  grid-row: 1 / span 4;
+  width: 64px !important;
+  height: 64px !important;
+  border-radius: 50% !important;
+  object-fit: cover;
+}
+
+.fan-social-card-preview .fan-social-profile {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.fan-social-card-preview .fan-social-profile h3 {
+  margin: 0 0 4px;
+}
+
+.fan-social-card-preview .fan-social-tags {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 5px !important;
+  margin: 0 !important;
+}
+
+.fan-social-card-preview .fan-social-tags span {
+  width: auto !important;
+  min-height: 0 !important;
+  padding: 3px 9px !important;
+  border: 1px solid #e1def2 !important;
+  border-radius: 7px !important;
+  background: #fff !important;
+  line-height: 1.2 !important;
+}
+
+.fan-social-card-preview .fan-social-follow {
+  grid-column: 3;
+  grid-row: 1 / span 3;
+  align-self: center;
+  margin: 0 !important;
+}
+
+.fan-social-card-preview .fan-social-affinity {
+  grid-column: 2 / 4;
+  grid-row: 3;
+  margin: 0 !important;
+  padding: 7px 10px !important;
+  border-radius: 8px;
+  background: #f1edff;
+}
+
+.fan-social-card-preview .fan-social-stats {
+  grid-column: 1 / 4;
+  grid-row: 4;
+  display: flex !important;
+  justify-content: center;
+  gap: 28px;
+  margin: 3px 0 0 !important;
+  padding-top: 9px;
+  border-top: 1px solid #ece9f6;
+}
+
+.fan-social-card-preview .fan-social-preview-cards {
+  grid-column: 2 / 4;
+  grid-row: 5;
+  display: flex !important;
+  gap: 6px;
+  margin: 0 !important;
+}
+
+.fan-social-card-preview .fan-social-preview-cards img {
+  width: 70px !important;
+  height: 46px !important;
+  border-radius: 7px;
+  object-fit: cover;
+}

@@ -28,14 +28,20 @@ from app.models import (
     CollectionCampaign,
     CollectionGoal,
     Drop,
+    EngagementEvent,
     Event,
     EventApplication,
     FanWishlistItem,
     Follow,
     Member,
+    MissionDefinition,
+    MissionProgress,
     Notification,
+    PointBalance,
+    PointLedger,
     RedeemCode,
     RewardCatalog,
+    RewardGrant,
     Role,
     User,
     UserCard,
@@ -44,6 +50,7 @@ from app.rate_limit import enforce_rate_limit
 from app.schemas import (
     CollectionGoalCreate,
     NotificationPreferencesUpdate,
+    PointExchangeRequest,
     ProfileEquipmentUpdate,
     ProfileUpdate,
     ReadNotification,
@@ -55,12 +62,14 @@ from app.services import (
     fan_pass_data,
     fan_progression_data,
     grant_user_card,
+    mission_period_key,
     notify_user_once,
     reconcile_claimed_global_pass_reward_grants,
     record_analytics_event,
     record_audit,
     record_engagement_event,
     redeem,
+    spend_points,
     update_profile_equipment,
 )
 from app.storage import configured_asset_storage, storage_response
@@ -173,6 +182,10 @@ async def me(user: FanUser, session: DbSession) -> dict:
         + len(user.favorite_member_ids or [])
         + fan_following_count
     )
+    point_balance = int(
+        await session.scalar(select(PointBalance.balance).where(PointBalance.user_id == user.id))
+        or 0
+    )
     return {
         "ok": True,
         "data": {
@@ -186,7 +199,7 @@ async def me(user: FanUser, session: DbSession) -> dict:
             "onboardingCompleted": user.onboarding_completed,
             "followingCount": following_count,
             "followerCount": follower_count,
-            "points": 0,
+            "points": point_balance,
             "hasPassword": bool(user.password_hash),
         },
     }
@@ -553,6 +566,7 @@ async def catalog_card_pack_odds(pack_id: str, session: DbSession) -> dict:
 @router.post("/me/card-packs/{pack_id}/open", status_code=status.HTTP_201_CREATED)
 async def open_card_pack(
     pack_id: str,
+    background_tasks: BackgroundTasks,
     user: FanUser,
     session: DbSession,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
@@ -703,6 +717,18 @@ async def open_card_pack(
             dedupe_key=f"card-pack-opened:{opening.id}",
             metadata={"userCardId": user_card.id, "openingId": opening.id},
         )
+    try:
+        enqueue_engagement_event(event.id, background_tasks)
+    except Exception:
+        logger.exception(
+            "Could not enqueue engagement event after card pack opening commit",
+            extra={
+                "engagement_event_id": event.id,
+                "opening_id": opening.id,
+                "user_card_id": user_card.id,
+                "user_id": user_id,
+            },
+        )
     return {
         "ok": True,
         "data": {
@@ -765,6 +791,338 @@ async def progression(
             session, user.id, artist_id=artist_id, global_scope=scope == "global"
         ),
     }
+
+
+@router.get("/me/missions")
+async def missions(
+    user: FanUser,
+    session: DbSession,
+    status_filter: Literal["active", "completed", "ended"] | None = Query(
+        default=None, alias="status"
+    ),
+) -> dict:
+    event_time = datetime.now(UTC)
+    time_filters = []
+    if status_filter != "ended":
+        time_filters.extend(
+            [
+                or_(
+                    MissionDefinition.starts_at.is_(None), MissionDefinition.starts_at <= event_time
+                ),
+                or_(MissionDefinition.ends_at.is_(None), MissionDefinition.ends_at >= event_time),
+            ]
+        )
+    elif status_filter == "ended":
+        time_filters.append(MissionDefinition.ends_at < event_time)
+    definitions = list(
+        await session.scalars(
+            select(MissionDefinition)
+            .where(
+                MissionDefinition.status == "published",
+                *time_filters,
+            )
+            .order_by(MissionDefinition.created_at.desc(), MissionDefinition.id)
+        )
+    )
+    items = []
+    for mission in definitions:
+        period_key = mission_period_key(
+            mission.recurrence, event_time, mission.starts_at, mission.ends_at
+        )
+        current_progress = await session.scalar(
+            select(MissionProgress).where(
+                MissionProgress.user_id == user.id,
+                MissionProgress.mission_id == mission.id,
+                MissionProgress.period_key == period_key,
+            )
+        )
+        progress = current_progress
+        unclaimed_grant_id = await session.scalar(
+            select(RewardGrant.id)
+            .where(
+                RewardGrant.user_id == user.id,
+                RewardGrant.rule_key == f"mission:{mission.id}:{period_key}",
+                RewardGrant.claimed_at.is_(None),
+            )
+            .limit(1)
+        )
+        if not (
+            progress
+            and progress.completed_at
+            and progress.claimed_at is None
+            and unclaimed_grant_id
+        ):
+            historical_progresses = list(
+                await session.scalars(
+                    select(MissionProgress)
+                    .where(
+                        MissionProgress.user_id == user.id,
+                        MissionProgress.mission_id == mission.id,
+                        MissionProgress.completed_at.is_not(None),
+                        MissionProgress.claimed_at.is_(None),
+                        MissionProgress.period_key != period_key,
+                    )
+                    .order_by(MissionProgress.completed_at.desc(), MissionProgress.id)
+                )
+            )
+            for historical_progress in historical_progresses:
+                historical_grant_id = await session.scalar(
+                    select(RewardGrant.id)
+                    .where(
+                        RewardGrant.user_id == user.id,
+                        RewardGrant.rule_key
+                        == f"mission:{mission.id}:{historical_progress.period_key}",
+                        RewardGrant.claimed_at.is_(None),
+                    )
+                    .limit(1)
+                )
+                if historical_grant_id:
+                    progress = historical_progress
+                    period_key = historical_progress.period_key
+                    unclaimed_grant_id = historical_grant_id
+                    break
+        claimable = bool(
+            progress
+            and progress.completed_at
+            and progress.claimed_at is None
+            and unclaimed_grant_id
+        )
+        item = {
+            "id": mission.id,
+            "title": mission.title,
+            "description": mission.description,
+            "eventKind": mission.event_kind,
+            "targetValue": mission.target_value,
+            "recurrence": mission.recurrence,
+            "periodKey": period_key,
+            "currentValue": progress.current_value if progress else 0,
+            "completed": bool(progress and progress.completed_at),
+            "completedAt": progress.completed_at.isoformat()
+            if progress and progress.completed_at
+            else None,
+            "claimable": claimable,
+            "claimedAt": progress.claimed_at.isoformat()
+            if progress and progress.claimed_at
+            else None,
+            "reward": mission.reward_payload or {},
+        }
+        if status_filter == "completed" and not item["completed"]:
+            continue
+        if status_filter == "active" and item["completed"] and not item["claimable"]:
+            continue
+        items.append(item)
+    return {"ok": True, "data": {"items": items}}
+
+
+@router.get("/me/points")
+async def points(user: FanUser, session: DbSession) -> dict:
+    balance = int(
+        await session.scalar(select(PointBalance.balance).where(PointBalance.user_id == user.id))
+        or 0
+    )
+    rows = list(
+        await session.scalars(
+            select(PointLedger)
+            .where(PointLedger.user_id == user.id)
+            .order_by(PointLedger.created_at.desc(), PointLedger.id.desc())
+            .limit(100)
+        )
+    )
+    return {
+        "ok": True,
+        "data": {
+            "balance": balance,
+            "items": [
+                {
+                    "id": row.id,
+                    "type": row.transaction_type,
+                    "amount": row.amount,
+                    "balanceAfter": row.balance_after,
+                    "description": row.description,
+                    "createdAt": row.created_at.isoformat(),
+                }
+                for row in rows
+            ],
+        },
+    }
+
+
+@router.get("/me/points/history")
+async def point_history(user: FanUser, session: DbSession) -> dict:
+    return await points(user, session)
+
+
+@router.get("/catalog/point-exchanges")
+async def point_exchanges(session: DbSession) -> dict:
+    rewards = list(
+        await session.scalars(
+            select(RewardCatalog)
+            .where(RewardCatalog.status == "published")
+            .order_by(RewardCatalog.name, RewardCatalog.id)
+        )
+    )
+    items = []
+    for reward in rewards:
+        metadata = reward.metadata_ if isinstance(reward.metadata_, dict) else {}
+        try:
+            cost = int(metadata.get("pointCost") or 0)
+        except (TypeError, ValueError):
+            continue
+        if cost <= 0:
+            continue
+        items.append(
+            {
+                "id": reward.id,
+                "name": reward.name,
+                "type": reward.reward_type,
+                "pointCost": cost,
+                "metadata": metadata,
+            }
+        )
+    return {"ok": True, "data": {"items": items}}
+
+
+@router.post("/me/points/exchange", status_code=status.HTTP_201_CREATED)
+async def exchange_points(
+    payload: PointExchangeRequest,
+    user: FanUser,
+    session: DbSession,
+    background_tasks: BackgroundTasks,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> dict:
+    reward = await session.scalar(
+        select(RewardCatalog).where(
+            RewardCatalog.id == payload.reward_id,
+            RewardCatalog.status == "published",
+        )
+    )
+    if reward is None:
+        raise AppError(404, "REWARD_NOT_FOUND", "교환할 보상을 찾을 수 없습니다.")
+    metadata = reward.metadata_ if isinstance(reward.metadata_, dict) else {}
+    try:
+        cost = int(metadata.get("pointCost") or 0)
+    except (TypeError, ValueError) as exc:
+        raise AppError(
+            422, "REWARD_POINT_COST_INVALID", "보상 포인트 비용이 올바르지 않습니다."
+        ) from exc
+    if cost <= 0:
+        raise AppError(409, "REWARD_NOT_EXCHANGEABLE", "포인트로 교환할 수 없는 보상입니다.")
+    source_id = f"{user.id}:{payload.reward_id}:{idempotency_key or uuid4().hex}"
+    existing_event = await session.scalar(
+        select(EngagementEvent).where(
+            EngagementEvent.user_id == user.id,
+            EngagementEvent.kind == "points_spent",
+            EngagementEvent.source_type == "point_exchange",
+            EngagementEvent.source_id == source_id,
+        )
+    )
+    if existing_event:
+        existing_grant = await session.scalar(
+            select(RewardGrant).where(
+                RewardGrant.user_id == user.id,
+                RewardGrant.source_event_id == existing_event.id,
+            )
+        )
+        if existing_grant:
+            balance = await session.scalar(
+                select(PointBalance).where(PointBalance.user_id == user.id)
+            )
+            return {
+                "ok": True,
+                "data": {
+                    "grantId": existing_grant.id,
+                    "replayed": True,
+                    "balance": balance.balance if balance else 0,
+                },
+            }
+    event = await record_engagement_event(
+        session,
+        user_id=user.id,
+        kind="points_spent",
+        source_type="point_exchange",
+        source_id=source_id,
+        payload={"rewardId": reward.id, "points": cost},
+    )
+    await spend_points(
+        session,
+        user_id=user.id,
+        source_event_id=event.id,
+        rule_key=f"point_exchange:{reward.id}",
+        amount=cost,
+        description=f"{reward.name} 교환",
+        metadata={"rewardId": reward.id},
+    )
+    grant = RewardGrant(
+        id=f"reward_grant_{uuid4().hex[:12]}",
+        user_id=user.id,
+        reward_id=reward.id,
+        source_event_id=event.id,
+        rule_key=f"point_exchange:{reward.id}",
+    )
+    session.add(grant)
+    await session.commit()
+    enqueue_engagement_event(event.id, background_tasks)
+    balance = await session.scalar(select(PointBalance).where(PointBalance.user_id == user.id))
+    return {
+        "ok": True,
+        "data": {
+            "grantId": grant.id,
+            "rewardId": reward.id,
+            "points": cost,
+            "balance": balance.balance if balance else 0,
+        },
+    }
+
+
+@router.post("/me/points/exchanges/{exchange_id}", status_code=status.HTTP_201_CREATED)
+async def exchange_points_catalog_item(
+    exchange_id: str,
+    user: FanUser,
+    session: DbSession,
+    background_tasks: BackgroundTasks,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> dict:
+    return await exchange_points(
+        PointExchangeRequest(rewardId=exchange_id),
+        user,
+        session,
+        background_tasks,
+        idempotency_key,
+    )
+
+
+@router.post("/me/missions/{mission_id}/claim")
+async def claim_mission_rewards(mission_id: str, user: FanUser, session: DbSession) -> dict:
+    mission = await session.get(MissionDefinition, mission_id)
+    if mission is None:
+        raise AppError(404, "MISSION_NOT_FOUND", "미션을 찾을 수 없습니다.")
+    grants = list(
+        await session.scalars(
+            select(RewardGrant).where(
+                RewardGrant.user_id == user.id,
+                RewardGrant.rule_key.like(f"mission:{mission_id}:%"),
+                RewardGrant.claimed_at.is_(None),
+            )
+        )
+    )
+    if not grants:
+        raise AppError(409, "MISSION_REWARD_NOT_READY", "수령할 미션 보상이 없습니다.")
+    claimed = []
+    for grant in grants:
+        claimed.append(await claim_reward_grant(session, user_id=user.id, grant_id=grant.id))
+    claimed_at = datetime.now(UTC)
+    await session.execute(
+        update(MissionProgress)
+        .where(
+            MissionProgress.user_id == user.id,
+            MissionProgress.mission_id == mission_id,
+            MissionProgress.completed_at.is_not(None),
+            MissionProgress.claimed_at.is_(None),
+        )
+        .values(claimed_at=claimed_at)
+    )
+    await session.commit()
+    return {"ok": True, "data": {"missionId": mission_id, "grants": claimed}}
 
 
 @router.get("/me/pass")

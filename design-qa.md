@@ -46,6 +46,146 @@ final result: passed
 
 ---
 
+# 팬 탐색 및 컬렉션 매칭 프리뷰 Design QA
+
+- 탐색 기준 시안: `/Users/gojaewoong/.codex/generated_images/01a017bc-ad15-7ad0-b759-c015714ca742/exec-a7487647-16fc-400e-ada2-b5149f6bf886.png`
+- 거래 기준 시안: `/Users/gojaewoong/.codex/generated_images/01a017bc-ad15-7ad0-b759-c015714ca742/exec-5fce0bc1-1a5b-4f12-9de3-98c5e7b0e712.png`
+- 탐색 구현 경로: `http://127.0.0.1:5182/?preview=discover-hub`
+- 거래 구현 경로: `http://127.0.0.1:5182/?preview=trade-composer`
+- 동일 입력 비교 이미지: `/tmp/fanfolio-discover-compare.png`, `/tmp/fanfolio-trade-compare.png`
+
+**Findings**
+
+- 추천 팬 프로필 버튼이 공통 버튼 높이를 상속해 내부 콘텐츠가 다음 섹션으로 넘치던 문제를 선택자 범위와 높이 규칙을 바로잡아 해결했다.
+- 브라우저 측정 결과 추천 팬 섹션 하단 `481.375px`, 공개 컬렉션 섹션 상단 `497.375px`로 겹침이 없다.
+- 거래 안내, 카드 교환, 조건 확인, 안전 거래 안내에 텍스트 기호 대신 기존 `InlineIcon` 아이콘을 적용했다.
+- 두 거래 카드에는 4초 주기의 부유 모션을 서로 반대 위상으로 적용하고, `prefers-reduced-motion` 환경에서는 모션을 제거한다.
+
+**Interaction Verification**
+
+- 탐색 화면의 추천 팬 프로필 버튼 실측 높이는 `66px`이며, 공개 컬렉션 및 새 카드팩 섹션이 정상적인 문서 흐름으로 이어진다.
+- 거래 카드 두 개의 계산된 애니메이션 이름은 모두 `trade-card-float`이고 지연값은 각각 `0s`, `-2s`다.
+- 거래 화면에서 원시 기호 `◆`, `▣`, `⬡`가 노출되지 않으며 인라인 아이콘 5개가 렌더링된다.
+- `node --test frontend/tests/fan-community-journey-ui.test.mjs`: 5개 테스트 통과.
+- `npm run build`: TypeScript 및 Vite 프로덕션 빌드 통과.
+
+final result: passed
+
+---
+
+# 팬 커뮤니티 5화면 레퍼런스 재매칭 QA (2026-08-23)
+
+- 탐색: `/?preview=discover-hub`
+- 팬 찾기: `/?preview=fan-social`
+- 팬 프로필: `/?preview=fan-profile`
+- 공개 컬렉션: `/?preview=public-collection`
+- 컬렉션 매칭: `/?preview=trade-composer`
+
+**Visible Comparison**
+
+- 탐색 화면을 검색창, 4개 카테고리, 추천 팬, 공개 컬렉션, 새 카드팩, 진행 이벤트 순서와 밀도로 재구성했다.
+- 팬 찾기는 검색·필터 칩·원형 프로필·팔로우 상태·공개/거래 가능 카드 미리보기를 레퍼런스와 같은 카드형 목록으로 맞췄다.
+- 팬 프로필은 프로필 히어로, 팔로우/거래 제안, 대표 컬렉션, 수집 진행률, 교환 가능 카드, 하단 통계를 독립 화면으로 구성했다.
+- 공개 컬렉션은 시즌/버전 필터, 4열 카드 슬롯, 미획득 카드, 교환 가능 표시, 하단 거래 제안 바를 동일한 흐름으로 구현했다.
+- 컬렉션 매칭은 보내는 카드와 받는 카드 비교, 상세 조건 표, 안전 거래 안내, 확인 체크와 CTA를 한 화면에 배치했다.
+- 공개 컬렉션 수집률 숫자의 줄바꿈과 탐색 이벤트 카드의 D-day/화살표 잘림을 수정했다.
+
+**Verification**
+
+- Codex 인앱 브라우저에서 다섯 경로를 같은 세션으로 열어 제목, 세로 흐름, 가로 오버플로를 확인했다.
+- 다섯 화면 모두 가로 오버플로 없음.
+- `node --test tests/fan-community-journey-ui.test.mjs`: 4/4 통과.
+- `npm run build`: TypeScript 및 Vite 프로덕션 빌드 통과.
+
+final result: passed
+
+---
+
+# 팬 커뮤니티 여정 Design QA
+
+- source visual truth:
+  - `/Users/gojaewoong/.codex/generated_images/01a017bc-ad15-7ad0-b759-c015714ca742/exec-9005d4eb-c7f3-4e39-9ede-5c400fe740be.png`
+  - `/Users/gojaewoong/.codex/generated_images/01a017bc-ad15-7ad0-b759-c015714ca742/exec-4ce8207e-14cd-44f0-91d8-f6d4a53c5f9b.png`
+  - `/Users/gojaewoong/.codex/generated_images/01a017bc-ad15-7ad0-b759-c015714ca742/exec-e1f27902-0e51-43e6-9659-845e3b6bb9d5.png`
+  - `/Users/gojaewoong/.codex/generated_images/01a017bc-ad15-7ad0-b759-c015714ca742/exec-5fce0bc1-1a5b-4f12-9de3-98c5e7b0e712.png`
+- implementation screenshots:
+  - `/tmp/fan-social-mobile.png`
+  - `/tmp/fan-profile-mobile.png`
+  - `/tmp/public-collection-mobile.png`
+  - `/tmp/trade-composer-mobile.png`
+- viewport: `430 x 932` CSS px, device scale factor 1
+- source pixels: 약 `852 x 1846`; implementation pixels: `430 x 932` (`public-collection` 캡처는 스크롤바 제외 `415 x 899`)
+- normalization: 생성 시안은 약 2배 밀도의 전체 화면이며, 구현은 같은 모바일 화면 비율의 1배 캡처로 정보 구조와 상대적 위계를 비교했다.
+- states: 팬 찾기, 공개 팬 프로필, 공개 컬렉션, 거래 제안 작성
+
+**Findings**
+
+- P0/P1/P2로 분류할 깨짐, 가려짐, 핵심 조작 불능은 남아 있지 않다.
+- 기존 팬앱의 더 조밀한 타이포그래피와 카드 밀도를 유지했기 때문에 생성 시안보다 한 화면에 더 많은 정보가 들어간다. 이는 기존 디자인 시스템과 실제 API 데이터 구조를 따른 의도적 차이다.
+- 팬 찾기 목록은 실제 API가 제공하는 닉네임, 팔로워 수, 카드 수, 팔로우 상태를 우선 표시한다. 시안의 카드 미리보기와 상세 매칭 이유는 API 확장 전까지 보조 정보로 강제하지 않았다.
+- 프로필, 공개 컬렉션, 거래 작성 화면 모두 동일한 보라색 토큰, 흰색 패널, 얇은 보더와 기존 팬앱 서체 계층을 사용한다.
+- 카드 이미지는 기존 프로젝트의 실제 컬렉션 자산을 사용하며 임시 도형이나 텍스트 대체 이미지를 사용하지 않았다.
+
+**Interaction Verification**
+
+- 팬 찾기에서 추천 조건 필터와 검색 결과 상태가 동작한다.
+- 추천 팬 행을 누르면 별도 공개 프로필 경로로 이동한다.
+- 공개 프로필의 `전체 보기`가 해당 팬의 공개 컬렉션으로 이동한다.
+- 공개 컬렉션의 시즌, 카드팩, 거래 가능 필터가 동작하고 거래 가능한 카드만 제안할 수 있다.
+- 거래 제안 화면은 보내는 카드를 선택하기 전 제출 버튼이 비활성이고, 카드 선택 뒤 활성화된다.
+- 실제 거래 생성 API는 검증 중 외부 상태 변경을 피하기 위해 호출하지 않았다.
+- 브라우저 렌더링에서 수평 오버플로, 잘린 주요 버튼, 콘솔을 막는 런타임 오류는 확인되지 않았다.
+
+**Focused Comparison**
+
+- 팬 찾기의 검색/필터/팔로우 영역과 공개 프로필의 통계/대표 컬렉션 영역을 각각 생성 시안과 같은 비교 입력에서 확인했다.
+- 공개 컬렉션의 필터와 카드 그리드, 거래 작성의 카드 선택과 비활성/활성 제출 상태도 각각 생성 시안과 같은 비교 입력에서 확인했다.
+
+**Comparison History**
+
+- 첫 구현에서 공개 프로필 진입 경로와 개발 프리뷰 데이터의 타입 경계가 누락되어 있었다.
+- `FanPublicProfile` 화면과 팬 프로필 → 공개 컬렉션 → 거래 제안 경로를 추가하고, API 타입과 프리뷰 타입을 분리했다.
+- 모바일 `430 x 932`에서 네 화면을 다시 캡처하고 동일 상태의 생성 시안과 재비교했다.
+
+**Follow-up Polish**
+
+- P3: 백엔드 팬 추천 응답에 공통 아티스트, 찾는 카드, 거래 가능 카드 미리보기 필드를 추가하면 팬 찾기 카드의 시안 충실도를 높일 수 있다.
+
+final result: passed
+
+---
+
+# Fan Missions and Discover Hub Design QA (2026-08-23)
+
+- mission reference: `/Users/gojaewoong/.codex/generated_images/01a017bc-ad15-7ad0-b759-c015714ca742/exec-f046bb62-be8e-47ff-9ab6-6ed95d14351e.png`
+- discover reference: `/Users/gojaewoong/.codex/generated_images/01a017bc-ad15-7ad0-b759-c015714ca742/exec-dc8cca4c-539d-4f22-9b8a-0e169a6e2eff.png`
+- mission preview: `http://127.0.0.1:5180/?preview=fan-missions`
+- discover preview: `http://127.0.0.1:5180/?preview=discover-hub`
+- viewport: `430 x 900` CSS px
+
+**Visual verification**
+
+- Mission detail now follows the supplied white mobile composition: centered title, notification/profile actions, light information card, underline status tabs, consistent mission cards, progress/reward states, and recent reward history.
+- Discover retains the supplied community CTA, artist feature, five artist tabs, schedule, news, new-card rail, and event promotion inside the existing Fanfolio mobile shell.
+- Existing Fanfolio colors, typography, border radii, image assets, and navigation geometry are reused; no new visual system was introduced.
+
+**Interaction verification**
+
+- Growth mission summary routes to `/growth/missions` and the dedicated screen returns to growth.
+- Active/completed/ended tabs update `aria-selected` and the visible mission data.
+- Claiming the completed preview mission removes the claim action and announces `미션 보상을 받았어요.`.
+- Discover follow state toggles, artist tabs change selection, and fan/trade/event/card controls remain connected to app callbacks.
+- Codex in-app browser console error logs: none on either preview.
+
+**Automated verification**
+
+- frontend tests: `166/166` passed.
+- frontend production build: passed.
+
+final result: passed
+
+---
+
 # 관리자 카드 운영 프리뷰 주석 재검증 QA (2026-08-19)
 
 **반영 사항**

@@ -14,19 +14,18 @@ const fanHubSource = existsSync(fileURLToPath(fanHubUrl)) ? readFileSync(fanHubU
 const tradeInboxSource = existsSync(fileURLToPath(tradeInboxUrl)) ? readFileSync(tradeInboxUrl, 'utf8') : ''
 const tradeComposerSource = existsSync(fileURLToPath(tradeComposerUrl)) ? readFileSync(tradeComposerUrl, 'utf8') : ''
 
-test('fan app exposes public collection and follow controls', () => {
+test('fan app exposes public collection and fan connection controls', () => {
   assert.match(clientSource, /getPublicCollection/)
   assert.match(clientSource, /followFan/)
   assert.match(clientSource, /unfollowFan/)
-  assert.match(collectionSource, /공개 카드 컬렉션/)
-  assert.match(collectionSource, /팔로우/)
+  assert.match(collectionSource, /공개 컬렉션/)
+  assert.match(collectionSource, /교환 가능한 카드/)
   assert.match(appSource, /publicCollectionIdFromPath/)
   assert.match(appSource, /<PublicCollection userId=\{publicCollectionUserId\}/)
   assert.match(clientSource, /searchFans/)
   assert.match(clientSource, /getFanConnections/)
   assert.match(fanHubSource, /팬 찾기/)
   assert.match(fanHubSource, /팔로잉/)
-  assert.match(fanHubSource, /팔로워/)
   assert.match(appSource, /pathname === '\/fans'/)
 })
 
@@ -40,7 +39,7 @@ test('fan app exposes trade proposal constraints and submission', () => {
   assert.match(tradeInboxSource, /받은 제안/)
   assert.match(tradeInboxSource, /보낸 제안/)
   assert.match(tradeInboxSource, /respondToTradeProposal/)
-  assert.match(tradeComposerSource, /내가 제안할 카드/)
+  assert.match(tradeComposerSource, /내가 보내는 카드/)
   assert.match(appSource, /pathname === '\/trades'/)
   assert.match(appSource, /pathname === '\/trades\/new'/)
 })

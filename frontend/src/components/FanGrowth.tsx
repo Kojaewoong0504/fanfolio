@@ -4,6 +4,7 @@ import './FanGrowth.css'
 import './FanGrowthReference.css'
 import milestoneSprite from '../assets/fan-level-milestones.png'
 import { AuthenticatedImage } from './AuthenticatedImage'
+import { FanPoints } from './FanPoints'
 
 type FanGrowthMode = 'summary' | 'full'
 type FanGrowthSheet = 'achievements' | 'equipment' | null
@@ -24,6 +25,7 @@ type FanGrowthProps = {
   onEquip: (equipment: ProfileEquipment) => Promise<void>
   onViewPass: (tierId?: string) => void
   onViewGlobalPass?: (tierId?: string) => void
+  onViewMissions: () => void
 }
 
 function MissionIcon({ kind }: { kind: 'event' | 'cards' | 'heart' | 'flag' }) {
@@ -118,7 +120,7 @@ function MilestoneLockIcon() {
 
 type MilestoneScrollState = { ratio: number; viewportRatio: number }
 
-export function FanGrowth({ progression, globalProgression = null, artistScopes = [], selectedArtistId = null, onArtistChange, loading, error, mode, onRetry, onClaim, onClaimPassTier: _onClaimPassTier, onEquip, onViewPass, onViewGlobalPass }: FanGrowthProps) {
+export function FanGrowth({ progression, globalProgression = null, artistScopes = [], selectedArtistId = null, onArtistChange, loading, error, mode, onRetry, onClaim, onClaimPassTier: _onClaimPassTier, onEquip, onViewPass, onViewGlobalPass, onViewMissions }: FanGrowthProps) {
   const [activeSheet, setActiveSheet] = useState<FanGrowthSheet>(null)
   const [claimingRewardId, setClaimingRewardId] = useState<string | null>(null)
   const [equipmentSaving, setEquipmentSaving] = useState(false)
@@ -296,12 +298,14 @@ export function FanGrowth({ progression, globalProgression = null, artistScopes 
       </article>
 
       <section className="fan-growth-reference-section fan-growth-mission-section" aria-label="진행 중 미션">
-        <button type="button" className="fan-growth-mission-summary" onClick={() => setActiveSheet('achievements')}>
+        <button type="button" className="fan-growth-mission-summary" onClick={onViewMissions}>
           <span className="fan-growth-mission-summary-icon" aria-hidden="true"><MissionIcon kind="flag" /></span>
           <strong>{visibleAchievements.length > 0 ? `미션 ${visibleAchievements.length}개 진행 중` : '진행 중인 미션 없음'}</strong>
           <b aria-hidden="true">›</b>
         </button>
       </section>
+
+      <FanPoints />
 
       <section className="fan-growth-reference-section fan-growth-milestone-section">
         <div className="fan-growth-reference-title"><h2>레벨 마일스톤</h2>{currentSeason && <button type="button" onClick={() => onViewPass()}>전체 보기 <b aria-hidden="true">›</b></button>}</div>

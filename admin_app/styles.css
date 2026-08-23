@@ -5367,6 +5367,17 @@ button.top-avatar {
 .fan-pass-summary .summary-card.tone-3 > span { color: #16a264; background: #e8f8ef; }
 .fan-pass-summary .summary-card strong { margin-top: 4px; font-size: 23px; }
 .fan-pass-summary .summary-card p { margin: 3px 0 0; color: var(--muted); font-size: 9px; }
+.fan-growth-admin-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(260px, .8fr); gap: 16px; margin-top: 16px; }
+.fan-growth-admin-grid .panel { min-width: 0; }
+.fan-growth-admin-grid .table { min-width: 620px; }
+.fan-growth-health-list { display: grid; gap: 0; }
+.fan-growth-health-list > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.fan-growth-health-list > div:first-child { border-top: 0; }
+.fan-growth-health-list strong { text-align: right; color: var(--ink); }
+.fan-growth-health-list .danger-text { color: var(--danger); }
+.fan-growth-health-list .success-text { color: var(--success); }
+.fan-growth-alert { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding: 11px 12px; border-radius: 10px; background: #fff4f3; color: #b54d46; font-size: 12px; }
+@media (max-width: 920px) { .fan-growth-admin-grid { grid-template-columns: 1fr; } }
 .fan-pass-list-panel { padding: 18px 18px 10px; border-radius: 14px; }
 .fan-pass-list-panel .panel-heading { margin-bottom: 14px; }
 .fan-pass-list-panel .panel-heading h2 { margin: 0; font-size: 16px; }

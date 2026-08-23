@@ -81,7 +81,7 @@ const state = {
   auditLogs: [],
   campaigns: [],
   catalog: { artists: [], members: [] },
-  engagement: { achievements: [], rewards: [], passSeasons: [] },
+  engagement: { achievements: [], rewards: [], passSeasons: [], missions: [], levelPolicies: [], failedEvents: [] },
   fanPassQuery: "",
   fanPassStatus: "all",
   fanPassArtist: "all",
@@ -153,7 +153,7 @@ const canManageFanGrowth = () =>
 const canApproveFanGrowth = () =>
   can("engagement:approve") || can("engagement:approve_global");
 const canViewFanGrowth = () => canManageFanGrowth() || canApproveFanGrowth();
-const fanGrowthEmptyState = { achievements: [], rewards: [], passSeasons: [] };
+const fanGrowthEmptyState = { achievements: [], rewards: [], passSeasons: [], missions: [], levelPolicies: [], failedEvents: [] };
 const conditionFields = {
   first_card: ["artistId"],
   card_count: ["artistId", "targetValue"],
@@ -557,27 +557,28 @@ async function loadFanGrowth(renderAfter = false) {
     state.engagement = { ...fanGrowthEmptyState };
     return;
   }
-  const [achievements, rewards, passSeasons] = await Promise.all([
+  const [achievements, rewards, passSeasons, missions, levelPolicies, failedEvents] = await Promise.all([
     api("/admin/engagement/achievements"),
     api("/admin/engagement/rewards"),
     api("/admin/engagement/pass-seasons"),
+    api("/admin/engagement/missions"),
+    isRoot() ? api("/admin/engagement/level-policies") : Promise.resolve({ data: { items: [] } }),
+    isRoot() ? api("/admin/engagement/events?status=failed") : Promise.resolve({ data: { items: [] } }),
   ]);
   state.engagement = {
     achievements: achievements.data.items || [],
     rewards: rewards.data.items || [],
     passSeasons: passSeasons.data.items || [],
+    missions: missions.data.items || [],
+    levelPolicies: levelPolicies.data.items || [],
+    failedEvents: failedEvents.data.items || [],
   };
   state.error = "";
   if (renderAfter) layout();
 }
 
 async function loadOptionalFanGrowth() {
-  try {
-    await loadOptionalFanGrowth();
-  } catch (error) {
-    state.engagement = { ...fanGrowthEmptyState };
-    console.warn("Optional fan growth data unavailable", error);
-  }
+  return loadFanGrowth(false);
 }
 
 async function loadEvents(renderAfter = false) {
@@ -827,6 +828,7 @@ function drawerView() {
     "card-create": cardCreateDrawer,
     "drop-link": dropLinkDrawer,
     achievement: achievementDrawer,
+    mission: missionDrawer,
     reward: rewardDrawer,
     "fan-pass": fanPassDrawer,
     "role-change": roleChangeDrawer,
@@ -838,7 +840,7 @@ function drawerView() {
   const cardOperationsNote = state.drawer === "card-create"
     ? `<div class="drawer-context-note">${icon("info")}<span><strong>아티스트 스튜디오와 다른 작업입니다.</strong><br />스튜디오는 창작·검수 요청, 이 화면은 메타데이터·발행량·공개 상태를 관리합니다.</span></div>`
     : "";
-  return `<div class="drawer-backdrop ${state.drawer === "event" ? "event-drawer-backdrop" : ""}" id="drawer-backdrop"><aside class="drawer ${state.drawer === "card-create" ? "card-create-drawer" : state.drawer === "event" ? "event-drawer" : state.drawer === "member" ? "member-drawer" : state.drawer === "artist-assignment" ? "artist-assignment-drawer" : state.drawer === "artist-edit" ? "artist-edit-drawer" : state.drawer === "drop-link" ? "drop-link-drawer" : state.drawer === "achievement" ? "achievement-builder" : state.drawer === "reward" ? "reward-builder" : state.drawer === "fan-pass" ? "fan-pass-drawer" : ""}" role="dialog" aria-modal="true" aria-label="작업 패널">${cardOperationsNote}${contents}</aside></div>`;
+  return `<div class="drawer-backdrop ${state.drawer === "event" ? "event-drawer-backdrop" : ""}" id="drawer-backdrop"><aside class="drawer ${state.drawer === "card-create" ? "card-create-drawer" : state.drawer === "event" ? "event-drawer" : state.drawer === "member" ? "member-drawer" : state.drawer === "artist-assignment" ? "artist-assignment-drawer" : state.drawer === "artist-edit" ? "artist-edit-drawer" : state.drawer === "drop-link" ? "drop-link-drawer" : state.drawer === "achievement" ? "achievement-builder" : state.drawer === "mission" ? "mission-builder" : state.drawer === "reward" ? "reward-builder" : state.drawer === "fan-pass" ? "fan-pass-drawer" : ""}" role="dialog" aria-modal="true" aria-label="작업 패널">${cardOperationsNote}${contents}</aside></div>`;
 }
 
 function eventDrawer() {
@@ -1052,6 +1054,28 @@ function achievementDrawer() {
   return `${drawerHeader("FAN GROWTH", "업적 템플릿", "조직·아티스트·멤버 범위와 서버 조건 템플릿으로 업적을 운영합니다.")}<form class="drawer-body form" id="achievement-form" data-id="${escapeHtml(achievement.id || "")}"><label class="field"><span>업적 이름</span><input name="title" value="${escapeHtml(achievement.title || "")}" placeholder="예: 첫 공식 카드 수집" required /></label><label class="field"><span>설명</span><textarea name="description" maxlength="500" placeholder="팬에게 표시되는 달성 설명">${escapeHtml(achievement.description || "")}</textarea></label><section class="scope-fields"><p class="eyebrow">범위</p><label class="field"><span>조직</span><select name="organizationId">${organizationOptions(achievement.organizationId || "")}</select></label><div class="form-grid"><label class="field"><span>아티스트</span><select name="artistId"><option value="">전체 아티스트</option>${artists.map((artist) => `<option value="${escapeHtml(artist.id)}" ${achievement.artistId === artist.id ? "selected" : ""}>${escapeHtml(artist.name)}</option>`).join("")}</select></label><label class="field"><span>멤버</span><select name="memberId"><option value="">멤버 지정 없음</option>${members.map((member) => `<option value="${escapeHtml(member.id)}" data-artist-id="${escapeHtml(member.artistId)}" ${achievement.memberId === member.id ? "selected" : ""}>${escapeHtml(member.name)}</option>`).join("")}</select></label></div></section><section class="condition-template-fields"><p class="eyebrow">조건 템플릿</p><label class="field"><span>조건</span><select name="conditionType" id="achievement-condition">${Object.entries(conditionLabels).map(([value, label]) => `<option value="${escapeHtml(value)}" ${selectedCondition === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("")}</select></label>${visibleFields.has("targetValue") ? `<label class="field"><span>목표 수치</span><input name="targetValue" type="number" min="1" value="${Number(achievement.targetValue || 1)}" required /></label>` : `<input type="hidden" name="targetValue" value="${Number(achievement.targetValue || 1)}" />`}${visibleFields.has("cardId") ? `<label class="field"><span>특정 카드</span><select name="cardId"><option value="">카드 선택</option>${cardOptions}</select></label>` : ""}${visibleFields.has("campaignId") ? `<label class="field"><span>세트 캠페인</span><select name="campaignId"><option value="">캠페인 선택</option>${campaignOptions}</select></label>` : ""}${visibleFields.has("dropId") ? `<label class="field"><span>드롭</span><select name="dropId"><option value="">드롭 선택</option>${dropOptions}</select></label>` : ""}</section><section class="reward-preview"><p class="eyebrow">XP · 보상 · 기간</p><div class="form-grid"><label class="field"><span>XP</span><input name="xpBonus" type="number" min="0" value="${Number(achievement.xpBonus || 0)}" /></label><label class="field"><span>보상</span><select name="rewardIds" multiple size="4">${rewardOptions((achievement.rewardIds || [])[0] || "")}</select></label></div><div class="form-grid"><label class="field"><span>기간 시작</span><input name="startsAt" type="datetime-local" value="${toLocalInputDateTime(achievement.startsAt)}" /></label><label class="field"><span>기간 종료</span><input name="endsAt" type="datetime-local" value="${toLocalInputDateTime(achievement.endsAt)}" />${dateError}</label></div></section><div id="achievement-form-error" class="form-error" role="alert" hidden></div><footer class="drawer-footer"><button class="secondary close-drawer" type="button">취소</button>${canManageFanGrowth() ? `<button class="secondary" type="submit" data-save-mode="draft">임시 저장</button>${achievement.id ? `<button class="secondary fan-growth-transition" type="button" data-kind="achievement" data-action="submit" data-id="${escapeHtml(achievement.id)}">검수 요청</button>` : ""}` : ""}${approvalAction}</footer></form>`;
 }
 
+function missionDrawer() {
+  const mission = state.drawerData?.mission || {};
+  const artists = scopedArtists();
+  const recurrence = [
+    { value: "once", label: "1회" },
+    { value: "daily", label: "매일" },
+    { value: "weekly", label: "매주" },
+    { value: "season", label: "시즌" },
+  ];
+  const eventKinds = [
+    { value: "event_commented", label: "이벤트 댓글" },
+    { value: "card_redeemed", label: "카드 등록" },
+    { value: "card_pack_opened", label: "카드팩 개봉" },
+    { value: "event_joined", label: "이벤트 참여" },
+  ];
+  const reward = mission.rewardPayload || {};
+  const approvalAction = canApproveFanGrowth() && mission.id && mission.status === "pending_review"
+    ? `<button class="primary fan-growth-transition" type="button" data-kind="mission" data-action="approve" data-id="${escapeHtml(mission.id)}">공개 승인</button>`
+    : "";
+  return `${drawerHeader("FAN GROWTH", mission.id ? "미션 편집" : "미션 만들기", "팬 행동 이벤트와 XP·포인트 보상을 하나의 운영 규칙으로 관리합니다.")}<form class="drawer-body form" id="mission-form" data-id="${escapeHtml(mission.id || "")}"><label class="field"><span>미션 이름</span><input name="title" value="${escapeHtml(mission.title || "")}" placeholder="예: 이벤트 댓글로 응원하기" required /></label><label class="field"><span>설명</span><textarea name="description" maxlength="500" placeholder="팬에게 표시할 미션 설명">${escapeHtml(mission.description || "")}</textarea></label><section class="scope-fields"><p class="eyebrow">범위</p><label class="field"><span>조직</span><select name="organizationId">${organizationOptions(mission.organizationId || "")}</select></label><label class="field"><span>아티스트</span><select name="artistId"><option value="">전체 아티스트</option>${artists.map((artist) => `<option value="${escapeHtml(artist.id)}" ${mission.artistId === artist.id ? "selected" : ""}>${escapeHtml(artist.name)}</option>`).join("")}</select></label></section><div class="form-grid"><label class="field"><span>행동 이벤트</span>${adminSelect({ id: "mission-event-kind", name: "eventKind", value: mission.eventKind || "event_commented", label: "행동 이벤트", className: "form-select", options: eventKinds })}</label><label class="field"><span>반복 주기</span>${adminSelect({ id: "mission-recurrence", name: "recurrence", value: mission.recurrence || "once", label: "반복 주기", className: "form-select", options: recurrence })}</label></div><div class="form-grid"><label class="field"><span>목표 횟수</span><input name="targetValue" type="number" min="1" value="${Number(mission.targetValue || 1)}" required /></label><label class="field"><span>XP 보상</span><input name="xp" type="number" min="0" value="${Number(reward.xp || 0)}" /></label></div><div class="form-grid"><label class="field"><span>포인트 보상</span><input name="points" type="number" min="0" value="${Number(reward.points || 0)}" /></label><label class="field"><span>카드 보상 ID (선택)</span><input name="rewardId" value="${escapeHtml(reward.rewardId || "")}" placeholder="reward_..." /></label></div><div id="mission-form-error" class="form-error" role="alert" hidden></div><footer class="drawer-footer"><button class="secondary close-drawer" type="button">취소</button>${canManageFanGrowth() ? `<button class="primary" type="submit">저장</button>${mission.id && mission.status === "draft" ? `<button class="secondary fan-growth-transition" type="button" data-kind="mission" data-action="submit" data-id="${escapeHtml(mission.id)}">검수 요청</button>` : ""}` : ""}${approvalAction}</footer></form>`;
+}
+
 function fanPassDrawer() {
   const season = state.drawerData?.season || {};
   const isGlobalPass = isRoot() && (season.scopeType === "global" || (season.id && !season.organizationId && !season.artistId));
@@ -1184,6 +1208,9 @@ function scopeText(item) {
 
 function fanGrowthView() {
   const passSeasons = state.engagement.passSeasons || [];
+  const missions = state.engagement.missions || [];
+  const failedEvents = state.engagement.failedEvents || [];
+  const levelPolicies = state.engagement.levelPolicies || [];
   const artists = scopedArtists();
   const query = state.fanPassQuery.trim().toLowerCase();
   const visible = passSeasons.filter((item) => {
@@ -1196,13 +1223,26 @@ function fanGrowthView() {
     ["활성 패스", passSeasons.filter((item) => item.status === "published").length, "emoji_events", "공개 중인 레벨 패스"],
     ["검수 대기", passSeasons.filter((item) => item.status === "pending_review").length, "schedule", "검토가 필요한 패스"],
     ["등록 보상", (state.engagement.rewards || []).length, "featured_seasonal_and_gifts", "등록된 총 보상 수"],
+    ["공개 미션", missions.filter((item) => item.status === "published").length, "task_alt", "팬앱에 노출 중인 미션"],
   ];
   const createActions = canManageFanGrowth()
-    ? `<div class="fan-growth-create-actions"><button class="secondary" id="open-reward-drawer" type="button">${icon("redeem")} 보상 만들기</button>${isRoot() ? `<button class="secondary fan-pass-register" id="open-global-fan-pass-drawer" type="button">${icon("public")} 전체 팬 레벨 등록</button>` : ""}<button class="primary fan-pass-register" id="open-fan-pass-drawer" type="button">${icon("add")} 레벨 패스 등록</button></div>`
+    ? `<div class="fan-growth-create-actions"><button class="secondary" id="open-reward-drawer" type="button">${icon("redeem")} 보상 만들기</button><button class="secondary" id="open-mission-drawer" type="button">${icon("task_alt")} 미션 만들기</button>${isRoot() ? `<button class="secondary fan-pass-register" id="open-global-fan-pass-drawer" type="button">${icon("public")} 전체 팬 레벨 등록</button>` : ""}<button class="primary fan-pass-register" id="open-fan-pass-drawer" type="button">${icon("add")} 레벨 패스 등록</button></div>`
     : "";
   const statusOptions = [{ value: "all", label: "모든 상태" }, { value: "published", label: "공개 중" }, { value: "pending_review", label: "검수 대기" }, { value: "draft", label: "임시 저장" }, { value: "ended", label: "종료" }];
   const artistOptions = [{ value: "all", label: "모든 아티스트" }, ...artists.map((artist) => ({ value: artist.id, label: artist.name }))];
-  return `<div class="fan-pass-admin"><div class="page-heading with-actions fan-pass-page-heading"><div><p class="eyebrow">FAN GROWTH</p><h2>팬 성장 운영</h2><p>${isRoot() ? "아티스트별 시즌 레벨 마일스톤과 보상을 관리합니다." : "담당 아티스트의 시즌 레벨 마일스톤과 보상을 관리합니다."}</p></div>${createActions}</div><div class="fan-growth-grid fan-pass-summary">${stats.map(([label, value, iconName, note], index) => `<article class="summary-card tone-${index + 1}"><span>${icon(iconName)}</span><div><small>${label}</small><strong>${Number(value).toLocaleString()}</strong><p>${note}</p></div></article>`).join("")}</div><section class="panel fan-pass-list-panel"><div class="panel-heading"><div><h2>레벨 패스 목록</h2></div><span>총 ${passSeasons.length}개</span></div><div class="toolbar compact-toolbar fan-pass-toolbar"><label class="search-field grow">${icon("search")}<input id="fan-pass-search" placeholder="패스 이름, 아티스트 검색" value="${escapeHtml(state.fanPassQuery)}" /></label>${adminSelect({ id: "fan-pass-status-filter", value: state.fanPassStatus, label: "패스 상태", className: "filter-select fan-pass-status-filter", options: statusOptions })}${isRoot() ? adminSelect({ id: "fan-pass-artist-filter", value: state.fanPassArtist, label: "패스 아티스트", className: "filter-select fan-pass-artist-filter", options: artistOptions }) : ""}<button class="secondary fan-pass-filter-reset" id="fan-pass-filter-reset" type="button">${icon("restart_alt")} 필터 초기화</button></div><div class="table-wrap"><table class="table fan-pass-table"><thead><tr><th>패스 이름</th><th>상태</th><th>아티스트</th><th>티어 수</th><th>시즌 기간</th><th>최종 업데이트</th><th><span class="sr-only">관리</span></th></tr></thead><tbody>${fanPassRows(visible)}</tbody></table></div><footer class="fan-pass-pagination"><button class="icon-button" type="button" aria-label="이전 페이지">${icon("chevron_left")}</button><button class="page-number active" type="button">1</button><button class="page-number" type="button">2</button><button class="page-number" type="button">3</button><button class="icon-button" type="button" aria-label="다음 페이지">${icon("chevron_right")}</button><span>1-${Math.min(visible.length, 10)} of ${visible.length}</span></footer></section></div>`;
+  return `<div class="fan-pass-admin"><div class="page-heading with-actions fan-pass-page-heading"><div><p class="eyebrow">FAN GROWTH</p><h2>팬 성장 운영</h2><p>${isRoot() ? "아티스트별 시즌 레벨 마일스톤과 보상을 관리합니다." : "담당 아티스트의 시즌 레벨 마일스톤과 보상을 관리합니다."}</p></div>${createActions}</div><div class="fan-growth-grid fan-pass-summary">${stats.map(([label, value, iconName, note], index) => `<article class="summary-card tone-${index + 1}"><span>${icon(iconName)}</span><div><small>${label}</small><strong>${Number(value).toLocaleString()}</strong><p>${note}</p></div></article>`).join("")}</div><section class="panel fan-pass-list-panel"><div class="panel-heading"><div><h2>레벨 패스 목록</h2></div><span>총 ${passSeasons.length}개</span></div><div class="toolbar compact-toolbar fan-pass-toolbar"><label class="search-field grow">${icon("search")}<input id="fan-pass-search" placeholder="패스 이름, 아티스트 검색" value="${escapeHtml(state.fanPassQuery)}" /></label>${adminSelect({ id: "fan-pass-status-filter", value: state.fanPassStatus, label: "패스 상태", className: "filter-select fan-pass-status-filter", options: statusOptions })}${isRoot() ? adminSelect({ id: "fan-pass-artist-filter", value: state.fanPassArtist, label: "패스 아티스트", className: "filter-select fan-pass-artist-filter", options: artistOptions }) : ""}<button class="secondary fan-pass-filter-reset" id="fan-pass-filter-reset" type="button">${icon("restart_alt")} 필터 초기화</button></div><div class="table-wrap"><table class="table fan-pass-table"><thead><tr><th>패스 이름</th><th>상태</th><th>아티스트</th><th>티어 수</th><th>시즌 기간</th><th>최종 업데이트</th><th><span class="sr-only">관리</span></th></tr></thead><tbody>${fanPassRows(visible)}</tbody></table></div><footer class="fan-pass-pagination"><button class="icon-button" type="button" aria-label="이전 페이지">${icon("chevron_left")}</button><button class="page-number active" type="button">1</button><button class="page-number" type="button">2</button><button class="page-number" type="button">3</button><button class="icon-button" type="button" aria-label="다음 페이지">${icon("chevron_right")}</button><span>1-${Math.min(visible.length, 10)} of ${visible.length}</span></footer></section><section class="fan-growth-admin-grid"><section class="panel"><div class="panel-heading"><div><p class="eyebrow">MISSION CONTROL</p><h2>미션 운영</h2><p>팬 행동 이벤트를 미션 진행도와 보상으로 연결합니다.</p></div><span>${missions.length}개</span></div><div class="table-wrap"><table class="table responsive-table"><thead><tr><th>미션</th><th>이벤트</th><th>목표</th><th>상태</th><th>관리</th></tr></thead><tbody>${missionRows(missions)}</tbody></table></div></section><section class="panel"><div class="panel-heading"><div><p class="eyebrow">OPERATIONS</p><h2>성장 시스템 상태</h2></div></div><div class="fan-growth-health-list"><div><span>활성 레벨 정책</span><strong>${escapeHtml(levelPolicies.find((item) => item.isActive)?.name || "없음")}</strong></div><div><span>실패 처리 이벤트</span><strong class="${failedEvents.length ? "danger-text" : "success-text"}">${failedEvents.length.toLocaleString()}건</strong></div><div><span>보상 카탈로그</span><strong>${(state.engagement.rewards || []).length.toLocaleString()}개</strong></div></div>${failedEvents.length ? `<div class="fan-growth-alert">${icon("error")} 실패 이벤트를 확인하고 재시도할 수 있습니다.</div>` : ""}</section></section></div>`;
+}
+
+function missionRows(missions) {
+  if (!missions.length) return '<tr><td colspan="5" class="empty">아직 등록된 미션이 없습니다.</td></tr>';
+  return missions.map((item) => {
+    const actions = [];
+    if (item.status === "draft" && canManageFanGrowth()) actions.push(`<button class="icon-button edit-mission" type="button" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(item.title)} 수정">${icon("edit")}</button>`);
+    if (item.status === "draft" && canManageFanGrowth()) actions.push(`<button class="secondary fan-growth-transition" type="button" data-kind="mission" data-action="submit" data-id="${escapeHtml(item.id)}">검수 요청</button>`);
+    if (item.status === "pending_review" && canApproveFanGrowth()) actions.push(`<button class="primary fan-growth-transition" type="button" data-kind="mission" data-action="approve" data-id="${escapeHtml(item.id)}">공개 승인</button>`);
+    if (item.status === "published" && canApproveFanGrowth()) actions.push(`<button class="secondary fan-growth-transition" type="button" data-kind="mission" data-action="disable" data-id="${escapeHtml(item.id)}">비활성화</button>`);
+    return `<tr><td data-label="미션"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.description || "")}</small></td><td data-label="이벤트">${escapeHtml(item.eventKind)}</td><td data-label="목표">${Number(item.targetValue || 1).toLocaleString()}회</td><td data-label="상태"><span class="badge ${item.status === "published" ? "success-badge" : item.status === "pending_review" ? "warning-badge" : item.status === "disabled" ? "danger-badge" : "draft"}">${escapeHtml(fanGrowthStatusLabel(item.status))}</span></td><td data-label="관리"><div class="row-actions">${actions.join("") || "-"}</div></td></tr>`;
+  }).join("");
 }
 
 function fanGrowthQueueItem(item, kind) {
@@ -3474,6 +3514,44 @@ async function saveAchievement(event) {
   }
 }
 
+async function saveMission(event) {
+  event.preventDefault();
+  if (!canManageFanGrowth()) return;
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  const rewardPayload = {
+    xp: Number(data.get("xp") || 0),
+    points: Number(data.get("points") || 0),
+  };
+  const rewardId = String(data.get("rewardId") || "").trim();
+  if (rewardId) rewardPayload.rewardId = rewardId;
+  const payload = {
+    title: String(data.get("title") || "").trim(),
+    description: String(data.get("description") || "").trim() || null,
+    organizationId: data.get("organizationId") || null,
+    artistId: data.get("artistId") || null,
+    eventKind: data.get("eventKind") || "event_commented",
+    targetValue: Number(data.get("targetValue") || 1),
+    recurrence: data.get("recurrence") || "once",
+    conditionPayload: {},
+    rewardPayload,
+  };
+  try {
+    const missionId = form.dataset.id;
+    await api(missionId ? `/admin/engagement/missions/${encodeURIComponent(missionId)}` : "/admin/engagement/missions", {
+      method: missionId ? "PATCH" : "POST",
+      body: JSON.stringify(payload),
+    });
+    closeDrawer();
+    await loadFanGrowth(true);
+    toast(missionId ? "미션을 저장했습니다." : "미션 초안을 임시 저장했습니다.");
+  } catch {
+    const errorBox = form.querySelector("#mission-form-error");
+    errorBox.textContent = "미션 저장에 실패했습니다. 범위와 목표 값을 확인해 주세요.";
+    errorBox.hidden = false;
+  }
+}
+
 async function saveFanPass(event) {
   event.preventDefault();
   if (!canManageFanGrowth()) return;
@@ -3556,7 +3634,7 @@ async function saveReward(event) {
 }
 
 async function transitionFanGrowth(kind, action, id) {
-  const endpointKind = kind === "achievement" ? "achievements" : "pass-seasons";
+  const endpointKind = kind === "achievement" ? "achievements" : kind === "mission" ? "missions" : "pass-seasons";
   try {
     await api(`/admin/engagement/${endpointKind}/${encodeURIComponent(id)}/${action}`, {
       method: "POST",
@@ -3769,10 +3847,19 @@ function bind() {
   document
     .querySelector("#open-reward-drawer")
     ?.addEventListener("click", () => openDrawer("reward"));
+  document
+    .querySelector("#open-mission-drawer")
+    ?.addEventListener("click", () => openDrawer("mission"));
   document.querySelectorAll(".edit-achievement").forEach((button) =>
     button.addEventListener("click", () => {
       const achievement = state.engagement.achievements.find((item) => item.id === button.dataset.id);
       if (achievement) openDrawer("achievement", { achievement });
+    }),
+  );
+  document.querySelectorAll(".edit-mission").forEach((button) =>
+    button.addEventListener("click", () => {
+      const mission = state.engagement.missions.find((item) => item.id === button.dataset.id);
+      if (mission) openDrawer("mission", { mission });
     }),
   );
   document.querySelectorAll(".edit-fan-pass").forEach((button) =>
@@ -3811,6 +3898,9 @@ function bind() {
   document
     .querySelector("#achievement-form")
     ?.addEventListener("submit", saveAchievement);
+  document
+    .querySelector("#mission-form")
+    ?.addEventListener("submit", saveMission);
   document
     .querySelector("#fan-pass-form")
     ?.addEventListener("submit", saveFanPass);

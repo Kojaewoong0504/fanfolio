@@ -39,6 +39,8 @@ ROOT_ACTIONS = frozenset(
         "statistics:read",
         "engagement:manage_global",
         "engagement:approve_global",
+        "engagement:points_adjust",
+        "engagement:retry",
     }
 )
 

@@ -773,3 +773,197 @@ def test_role_scoped_email_migration_upgrades_the_previous_user_constraint(
                 "INSERT INTO users (id, email, role) VALUES (?, ?, ?)",
                 ("fan_duplicate", "shared@example.com", "FAN"),
             )
+
+
+def test_growth_missions_points_migration_creates_schema_and_defaults(tmp_path: Path) -> None:
+    database_path = tmp_path / "growth-missions-points.db"
+    backend_dir = Path(__file__).parents[2]
+
+    upgraded = run_alembic(backend_dir, database_path, "upgrade", "head")
+    assert upgraded.returncode == 0, upgraded.stderr
+
+    with sqlite3.connect(database_path) as connection:
+        table_names = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        assert {
+            "mission_definitions",
+            "mission_progress",
+            "point_ledger",
+            "point_balances",
+            "level_policy_versions",
+            "level_thresholds",
+        } <= table_names
+
+        engagement_columns = {
+            row[1]: row for row in connection.execute("PRAGMA table_info(engagement_events)")
+        }
+        assert {"error_code", "error_message", "attempt_count"} <= set(engagement_columns)
+        assert engagement_columns["attempt_count"][3] == 1
+
+        default_policy = connection.execute(
+            """
+            SELECT id, name, status, is_active
+            FROM level_policy_versions
+            WHERE id = ?
+            """,
+            ("default_level_policy",),
+        ).fetchone()
+        assert default_policy == (
+            "default_level_policy",
+            "Default fan level policy",
+            "published",
+            1,
+        )
+
+        thresholds = connection.execute(
+            """
+            SELECT level, required_xp
+            FROM level_thresholds
+            WHERE policy_version_id = ?
+            ORDER BY level
+            """,
+            ("default_level_policy",),
+        ).fetchall()
+        assert thresholds[:5] == [(1, 0), (2, 100), (3, 200), (4, 300), (5, 400)]
+
+
+def test_growth_missions_points_migration_enforces_unique_idempotence_keys(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "growth-missions-points-constraints.db"
+    backend_dir = Path(__file__).parents[2]
+
+    upgraded = run_alembic(backend_dir, database_path, "upgrade", "head")
+    assert upgraded.returncode == 0, upgraded.stderr
+
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.execute(
+            """
+            INSERT INTO users (
+                id, role, must_change_password, favorite_artist_ids,
+                favorite_member_ids, onboarding_completed, notification_email_enabled
+            ) VALUES (?, ?, ?, json('[]'), json('[]'), ?, ?)
+            """,
+            ("fan_mission", "FAN", False, False, False),
+        )
+        connection.execute(
+            """
+            INSERT INTO engagement_events (
+                id, user_id, kind, source_type, source_id, payload, status
+            ) VALUES (?, ?, ?, ?, ?, json('{}'), ?)
+            """,
+            ("evt_mission", "fan_mission", "event_commented", "comment", "comment_1", "pending"),
+        )
+        connection.execute(
+            """
+            INSERT INTO mission_definitions (
+                id, title, event_kind, target_value, recurrence, condition_payload,
+                reward_payload, status, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, json('{}'), json('{}'), ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            """,
+            ("mission_comment", "댓글 미션", "event_commented", 1, "daily", "published"),
+        )
+        connection.execute(
+            """
+            INSERT INTO mission_progress (
+                id, user_id, mission_id, period_key, current_value, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            """,
+            ("progress_1", "fan_mission", "mission_comment", "2026-08-23", 1),
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                INSERT INTO mission_progress (
+                    id, user_id, mission_id, period_key, current_value, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                ("progress_2", "fan_mission", "mission_comment", "2026-08-23", 1),
+            )
+
+        connection.execute(
+            """
+            INSERT INTO point_ledger (
+                id, user_id, source_event_id, rule_key, transaction_type, amount,
+                balance_after, description, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """,
+            (
+                "point_ledger_1",
+                "fan_mission",
+                "evt_mission",
+                "mission:mission_comment",
+                "earn",
+                100,
+                100,
+                "mission reward",
+            ),
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                INSERT INTO point_ledger (
+                    id, user_id, source_event_id, rule_key, transaction_type, amount,
+                    balance_after, description, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                (
+                    "point_ledger_2",
+                    "fan_mission",
+                    "evt_mission",
+                    "mission:mission_comment",
+                    "earn",
+                    100,
+                    100,
+                    "duplicate reward",
+                ),
+            )
+
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                INSERT INTO level_thresholds (
+                    id, policy_version_id, level, required_xp, label
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                ("threshold_duplicate", "default_level_policy", 2, 100, "Duplicate L2"),
+            )
+
+
+def test_growth_missions_points_migration_downgrades_cleanly(tmp_path: Path) -> None:
+    database_path = tmp_path / "growth-missions-points-downgrade.db"
+    backend_dir = Path(__file__).parents[2]
+
+    upgraded = run_alembic(backend_dir, database_path, "upgrade", "head")
+    assert upgraded.returncode == 0, upgraded.stderr
+
+    downgraded = run_alembic(backend_dir, database_path, "downgrade", "0049_analytics_events")
+    assert downgraded.returncode == 0, downgraded.stderr
+
+    with sqlite3.connect(database_path) as connection:
+        table_names = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        assert (
+            not {
+                "mission_definitions",
+                "mission_progress",
+                "point_ledger",
+                "point_balances",
+                "level_policy_versions",
+                "level_thresholds",
+            }
+            & table_names
+        )
+        engagement_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(engagement_events)")
+        }
+        assert not {"error_code", "error_message", "attempt_count"} & engagement_columns

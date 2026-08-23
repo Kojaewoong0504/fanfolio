@@ -1,41 +1,72 @@
 import { useEffect, useState } from 'react'
-import { ApiError, getMyCollection, type CollectionCard } from '../api/client'
-import { TradeProposal } from './TradeProposal'
+import { ApiError, createTradeProposal, getMyCollection, getPublicCollection, resolveApiUrl, type CollectionCard } from '../api/client'
+import { InlineIcon } from '../App'
 
-type Props = {
-  recipientUserId: string
-  requestedUserCardIds: string[]
-  onBack: () => void
-  onCreated: () => void
-}
+type Props = { recipientUserId: string; requestedUserCardIds: string[]; onBack: () => void; onCreated: () => void; initialCards?: CollectionCard[]; initialRequestedCards?: CollectionCard[] }
 
-export function TradeComposer({ recipientUserId, requestedUserCardIds, onBack, onCreated }: Props) {
-  const [cards, setCards] = useState<CollectionCard[]>([])
-  const [loading, setLoading] = useState(true)
+export function TradeComposer({ recipientUserId, requestedUserCardIds, onBack, onCreated, initialCards, initialRequestedCards }: Props) {
+  const [cards, setCards] = useState<CollectionCard[]>(initialCards ?? [])
+  const [requestedCards, setRequestedCards] = useState<CollectionCard[]>(initialRequestedCards ?? [])
+  const [recipientNickname, setRecipientNickname] = useState('별빛수집가')
+  const [loading, setLoading] = useState(!initialCards)
   const [error, setError] = useState('')
-
+  const [confirmed, setConfirmed] = useState(false)
+  const [message, setMessage] = useState('')
+  const [selectedOfferedUserCardId, setSelectedOfferedUserCardId] = useState<string | null>(initialCards?.find(card => card.tradable !== false)?.userCardId ?? initialCards?.[0]?.userCardId ?? null)
+  const [submitting, setSubmitting] = useState(false)
   useEffect(() => {
+    if (initialCards) {
+      setCards(initialCards)
+      setRequestedCards(initialRequestedCards ?? initialCards)
+      setLoading(false)
+      return
+    }
     let active = true
-    void getMyCollection().then(response => {
-      if (active) setCards(response.data.cards)
-    }).catch(loadError => {
-      if (active) setError(loadError instanceof ApiError ? loadError.message : '내 컬렉션을 불러오지 못했어요.')
-    }).finally(() => {
-      if (active) setLoading(false)
-    })
+    void Promise.all([getMyCollection(), getPublicCollection(recipientUserId)])
+      .then(([mine, theirs]) => {
+        if (!active) return
+        setCards(mine.data.cards)
+        setRequestedCards(theirs.data.cards)
+        setRecipientNickname(theirs.data.nickname ?? recipientUserId)
+      })
+      .catch(e => { if (active) setError(e instanceof ApiError ? e.message : '거래할 컬렉션을 불러오지 못했어요.') })
+      .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [])
-
-  return <main className="app-shell trade-composer-shell">
-    <header className="social-topbar">
-      <button type="button" onClick={onBack} aria-label="이전 화면으로 돌아가기">‹</button>
-      <div><span className="eyebrow">NEW TRADE</span><h1>거래 제안</h1></div>
-      <span />
-    </header>
+  }, [initialCards, initialRequestedCards, recipientUserId])
+  const selectableCards = cards.filter(card => card.tradable !== false)
+  const offeredCards = selectableCards.length > 0 ? selectableCards : cards
+  const mine = offeredCards.find(card => card.userCardId === selectedOfferedUserCardId) ?? offeredCards[0]
+  const wanted = requestedCards.find(card => requestedUserCardIds.includes(card.userCardId)) ?? requestedCards[0]
+  const effectiveRequestedUserCardIds = wanted ? [wanted.userCardId] : []
+  const selectNextOfferedCard = () => {
+    if (offeredCards.length < 2) return
+    const currentIndex = Math.max(0, offeredCards.findIndex(card => card.userCardId === mine?.userCardId))
+    const nextCard = offeredCards[(currentIndex + 1) % offeredCards.length]
+    setSelectedOfferedUserCardId(nextCard.userCardId)
+    setConfirmed(false)
+    setMessage('')
+  }
+  const submit = async () => {
+    if (!mine || !wanted || !confirmed || submitting) return
+    setSubmitting(true)
+    if (initialCards) { setMessage('거래 제안을 보냈어요.'); window.setTimeout(onCreated, 500); return }
+    try { await createTradeProposal({ recipientUserId, offeredUserCardIds: [mine.userCardId], requestedUserCardIds: effectiveRequestedUserCardIds }); setMessage('거래 제안을 보냈어요.'); onCreated() }
+    catch (e) { setMessage(e instanceof ApiError ? e.message : '거래 제안을 보내지 못했어요.'); setSubmitting(false) }
+  }
+  return <main className="app-shell trade-composer-shell trade-composer-reference">
+    <header className="social-reference-topbar"><button type="button" onClick={onBack} aria-label="공개 컬렉션으로 돌아가기"><InlineIcon name="back" /></button><h1>컬렉션 매칭</h1><span /></header>
     <section className="trade-composer-content">
-      <div className="trade-request-summary"><span>상대에게 요청한 카드</span><strong>{requestedUserCardIds.length}장</strong><small>거래가 수락될 때 두 팬의 카드 소유권이 함께 변경돼요.</small></div>
-      <div className="trade-composer-section-heading"><h2>내가 제안할 카드</h2><p>거래 가능한 보유 카드 중에서 선택하세요.</p></div>
-      {error ? <div className="fan-social-error" role="alert">{error}</div> : loading ? <div className="fan-social-state" role="status">내 컬렉션을 불러오는 중...</div> : <TradeProposal recipientUserId={recipientUserId} offeredCards={cards} requestedUserCardIds={requestedUserCardIds} onCreated={onCreated} />}
+      <section className="trade-match-hero"><span className="trade-match-icon" aria-hidden="true"><InlineIcon name="puzzle" /></span><div><h2>서로 원하는 카드가 일치했어요</h2><p>보유한 중복 카드로 원하는 카드를 제안해보세요.</p></div></section>
+      {error ? <p role="alert">{error}</p> : loading ? <p role="status">카드를 불러오는 중...</p> : <>
+        <section className="trade-match-panel"><div className="trade-match-cards"><article><h3>내가 보내는 카드</h3><div className="trade-card-visual"><img src={resolveApiUrl(mine?.imageUrl)} alt="내가 보내는 카드" /></div><b><span>{mine?.rarity ?? 'N'}</span> {mine?.name ?? '선택한 카드'}</b><p>{mine?.artistName ?? 'DREAMSCAPE'}<br />{mine?.seasonName ?? 'Nebula Ver.'}</p><small>내 보유 카드 <strong>1장</strong></small><button type="button" disabled={offeredCards.length < 2 || submitting} onClick={selectNextOfferedCard}>다른 카드로 변경 ›</button></article><i aria-hidden="true"><InlineIcon name="rotate" /></i><article><h3>받고 싶은 카드</h3><div className="trade-card-visual"><img src={resolveApiUrl(wanted?.imageUrl)} alt="받고 싶은 카드" /></div><b><span>{wanted?.rarity ?? 'SR'}</span> {wanted?.name ?? '요청한 카드'}</b><p>{wanted?.artistName ?? 'DREAMSCAPE'}<br />{wanted?.seasonName ?? 'STARLIGHT Ver.'}</p><small>보유자 <strong>{recipientNickname}</strong></small></article></div>
+          <div className="trade-match-table"><dl><div><dt>희귀도</dt><dd>{mine?.rarity ?? '-'}</dd></div><div><dt>팩</dt><dd>{mine?.artistName ?? '-'}</dd></div><div><dt>버전</dt><dd>{mine?.seasonName ?? '-'}</dd></div><div><dt>컨디션</dt><dd>A</dd></div></dl><dl><div><dt>희귀도</dt><dd>{wanted?.rarity ?? '-'}</dd></div><div><dt>팩</dt><dd>{wanted?.artistName ?? '-'}</dd></div><div><dt>버전</dt><dd>{wanted?.seasonName ?? '-'}</dd></div><div><dt>컨디션</dt><dd>A</dd></div></dl></div>
+        </section>
+        <details className="trade-condition-details"><summary><span className="trade-condition-label"><InlineIcon name="shield" /> 거래 조건 확인</span><InlineIcon name="chevron" /></summary><p>양쪽 팬이 모두 거래 제안을 수락해야 카드가 잠금 처리됩니다.</p></details>
+        <aside className="trade-safety-note"><span className="trade-safety-icon" aria-hidden="true"><InlineIcon name="lock" /></span><div><b>안전한 팬간 거래를 위해</b><p>양쪽 팬이 모두 거래 제안을 수락해야 카드가 잠금 처리돼요.</p></div></aside>
+        <label className="trade-confirm-check"><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} /><span />선택한 카드를 확인했어요.</label>
+        <div className="trade-match-actions"><button type="button" disabled={submitting} onClick={onBack}>다시 선택</button><button type="button" disabled={!confirmed || submitting} onClick={() => void submit()}>{submitting ? '거래 제안 보내는 중...' : '거래 제안 보내기'}</button></div>
+        {message && <p className="trade-submit-message" role="status">{message}</p>}
+      </>}
     </section>
   </main>
 }

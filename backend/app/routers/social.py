@@ -3,7 +3,7 @@
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, BackgroundTasks, Query, status
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 
@@ -14,7 +14,10 @@ from app.models import (
     Card,
     CardCombinationMaterial,
     CardOwnershipLedger,
+    CardPack,
+    CardPackCard,
     CardVisibility,
+    FanWishlistItem,
     Follow,
     Member,
     Role,
@@ -26,7 +29,8 @@ from app.models import (
     UserCard,
 )
 from app.schemas import CollectionVisibilityUpdate, TradeProposalCreate
-from app.services import notify_followers_of_card, notify_user_once
+from app.services import notify_followers_of_card, notify_user_once, record_engagement_event
+from app.tasks import enqueue_engagement_event
 
 router = APIRouter(prefix="/api", tags=["social"])
 
@@ -194,6 +198,64 @@ async def _fan_data(session: DbSession, target: User, viewer_id: str | None) -> 
                 )
             )
         )
+    favorite_artist_ids = list(target.favorite_artist_ids or [])
+    artists_by_id: dict[str, Artist] = {}
+    if favorite_artist_ids:
+        artists = list(
+            await session.scalars(select(Artist).where(Artist.id.in_(favorite_artist_ids)))
+        )
+        artists_by_id = {artist.id: artist for artist in artists}
+    favorite_artists = [
+        {
+            "id": artist.id,
+            "name": artist.name,
+            "imageUrl": artist.image_url,
+        }
+        for artist_id in favorite_artist_ids
+        if (artist := artists_by_id.get(artist_id)) is not None
+    ]
+    shared_artist_ids: set[str] = set()
+    viewer_wishlist_card_ids: set[str] = set()
+    if viewer_id and viewer_id != target.id:
+        viewer = await session.get(User, viewer_id)
+        shared_artist_ids = set(viewer.favorite_artist_ids or []) if viewer else set()
+        viewer_wishlist_card_ids = set(
+            await session.scalars(
+                select(FanWishlistItem.card_id).where(FanWishlistItem.user_id == viewer_id)
+            )
+        )
+
+    visibility = await session.get(CardVisibility, target.id)
+    collection_is_public = visibility is None or visibility.public_enabled
+    collection_rows: list[tuple[UserCard, Card, Artist | None, Member | None]] = []
+    if collection_is_public:
+        collection_rows = list(
+            (
+                await session.execute(
+                    select(UserCard, Card, Artist, Member)
+                    .select_from(UserCard)
+                    .join(Card, UserCard.card_id == Card.id)
+                    .outerjoin(Artist, Card.artist_id == Artist.id)
+                    .outerjoin(Member, Card.member_id == Member.id)
+                    .outerjoin(
+                        CardCombinationMaterial,
+                        CardCombinationMaterial.user_card_id == UserCard.id,
+                    )
+                    .where(
+                        UserCard.user_id == target.id,
+                        CardCombinationMaterial.id.is_(None),
+                    )
+                    .order_by(UserCard.acquired_at.desc(), UserCard.id)
+                )
+            ).all()
+        )
+    collection_cards = [
+        _collection_card(user_card, card, artist, member)
+        for user_card, card, artist, member in collection_rows
+    ]
+    matching_wishlist_count = len(
+        {card.id for _, card, _, _ in collection_rows} & viewer_wishlist_card_ids
+    )
     return {
         "id": target.id,
         "nickname": target.nickname or target.email or target.id,
@@ -202,6 +264,14 @@ async def _fan_data(session: DbSession, target: User, viewer_id: str | None) -> 
         "followerCount": follower_count,
         "followingCount": following_count,
         "ownedCount": owned_count,
+        "tradableCount": sum(1 for card in collection_cards if card["tradable"]),
+        "favoriteArtists": favorite_artists,
+        "sharedFavoriteArtists": [
+            artist for artist in favorite_artists if artist["id"] in shared_artist_ids
+        ],
+        "previewCards": collection_cards[:3],
+        "matchingWishlistCount": matching_wishlist_count,
+        "latestCardAt": collection_cards[0]["acquiredAt"] if collection_cards else None,
     }
 
 
@@ -288,7 +358,12 @@ async def update_collection_visibility(
 
 
 @router.post("/me/follows/{user_id}", status_code=status.HTTP_201_CREATED)
-async def follow_fan(user_id: str, user: FanUser, session: DbSession) -> dict:
+async def follow_fan(
+    user_id: str,
+    user: FanUser,
+    session: DbSession,
+    background_tasks: BackgroundTasks,
+) -> dict:
     if user_id == user.id:
         raise AppError(422, "SELF_FOLLOW_NOT_ALLOWED", "자기 자신은 팔로우할 수 없습니다.")
     target = await session.get(User, user_id)
@@ -299,8 +374,18 @@ async def follow_fan(user_id: str, user: FanUser, session: DbSession) -> dict:
     )
     if existing:
         return {"ok": True, "data": {"followingUserId": user_id, "following": True}}
-    session.add(Follow(id=str(uuid4()), follower_id=user.id, following_id=user_id))
+    follow = Follow(id=str(uuid4()), follower_id=user.id, following_id=user_id)
+    session.add(follow)
+    engagement_event = await record_engagement_event(
+        session,
+        user_id=user.id,
+        kind="fan_followed",
+        source_type="follow",
+        source_id=follow.id,
+        payload={"followingUserId": user_id},
+    )
     await session.commit()
+    enqueue_engagement_event(engagement_event.id, background_tasks)
     return {"ok": True, "data": {"followingUserId": user_id, "following": True}}
 
 
@@ -323,11 +408,37 @@ async def search_fans(
     normalized_query = query.strip()
     if normalized_query:
         pattern = f"%{normalized_query}%"
+        matching_card_owners = (
+            select(UserCard.user_id)
+            .join(Card, UserCard.card_id == Card.id)
+            .outerjoin(Artist, Card.artist_id == Artist.id)
+            .outerjoin(Member, Card.member_id == Member.id)
+            .outerjoin(CardVisibility, CardVisibility.user_id == UserCard.user_id)
+            .outerjoin(
+                CardCombinationMaterial,
+                CardCombinationMaterial.user_card_id == UserCard.id,
+            )
+            .where(
+                CardCombinationMaterial.id.is_(None),
+                or_(
+                    CardVisibility.user_id.is_(None),
+                    CardVisibility.public_enabled.is_(True),
+                ),
+                or_(
+                    Card.name.ilike(pattern),
+                    Card.season_name.ilike(pattern),
+                    Artist.name.ilike(pattern),
+                    Member.name.ilike(pattern),
+                ),
+            )
+            .distinct()
+        )
         statement = statement.where(
             or_(
                 User.id.ilike(pattern),
                 User.email.ilike(pattern),
                 User.nickname.ilike(pattern),
+                User.id.in_(matching_card_owners),
             )
         )
     targets = list(await session.scalars(statement.order_by(User.nickname, User.email, User.id)))
@@ -409,6 +520,20 @@ async def public_collection(
         _collection_card(user_card, card, artist, member)
         for user_card, card, artist, member in rows
     ]
+    card_ids = [card.id for _, card, _, _ in rows]
+    featured_pack_id = None
+    if card_ids:
+        featured_pack_id = await session.scalar(
+            select(CardPack.id)
+            .join(CardPackCard, CardPackCard.pack_id == CardPack.id)
+            .where(
+                CardPack.status == "published",
+                CardPackCard.enabled.is_(True),
+                CardPackCard.card_id.in_(card_ids),
+            )
+            .order_by(CardPack.published_at.desc(), CardPack.id)
+            .limit(1)
+        )
     follower_count, following_count, _ = await _fan_counts(session, user_id)
     is_following = bool(
         viewer
@@ -425,6 +550,8 @@ async def public_collection(
         "data": {
             "userId": user_id,
             "nickname": target.nickname,
+            "profileImageUrl": target.profile_image_url,
+            "featuredPackId": featured_pack_id,
             "visibility": "public",
             "isFollowing": is_following,
             "summary": {
@@ -575,7 +702,12 @@ async def _load_pending_proposal(
 
 
 @router.post("/me/trades/{proposal_id}/accept")
-async def accept_trade(proposal_id: str, user: FanUser, session: DbSession) -> dict:
+async def accept_trade(
+    proposal_id: str,
+    user: FanUser,
+    session: DbSession,
+    background_tasks: BackgroundTasks,
+) -> dict:
     proposal = await _load_pending_proposal(proposal_id, user, session, "recipient")
     items = list(
         await session.scalars(select(TradeItem).where(TradeItem.proposal_id == proposal.id))
@@ -635,7 +767,26 @@ async def accept_trade(proposal_id: str, user: FanUser, session: DbSession) -> d
         entity_id=proposal.id,
         event_key=f"trade:{proposal.id}:recipient",
     )
+    trade_events = []
+    for participant_id in {proposal.proposer_id, proposal.recipient_id}:
+        trade_events.append(
+            await record_engagement_event(
+                session,
+                user_id=participant_id,
+                kind="trade_completed",
+                source_type="trade",
+                source_id=proposal.id,
+                payload={
+                    "tradeId": proposal.id,
+                    "participantRole": (
+                        "proposer" if participant_id == proposal.proposer_id else "recipient"
+                    ),
+                },
+            )
+        )
     await session.commit()
+    for engagement_event in trade_events:
+        enqueue_engagement_event(engagement_event.id, background_tasks)
     return {"ok": True, "data": {"id": proposal.id, "status": proposal.status}}
 
 

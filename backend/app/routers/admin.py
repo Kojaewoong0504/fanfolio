@@ -8,7 +8,7 @@ from uuid import uuid4
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import qrcode
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, BackgroundTasks, Query, status
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import and_, delete, func, or_, select, update
 
@@ -33,7 +33,10 @@ from app.models import (
     CollectionCampaign,
     Drop,
     EngagementEvent,
+    LevelPolicyVersion,
+    LevelThreshold,
     Member,
+    MissionDefinition,
     Notification,
     Organization,
     OrganizationArtist,
@@ -75,21 +78,29 @@ from app.schemas import (
     DropCreateRequest,
     DropStatusUpdate,
     DropUpdateRequest,
+    LevelPolicyCreate,
+    MissionDefinitionCreate,
+    MissionDefinitionUpdate,
     PassSeasonCreate,
+    PointAdjustmentRequest,
     RedeemCodeStatusUpdate,
     RewardCatalogCreate,
 )
 from app.services import (
     active_review_request,
     create_review_request,
+    grant_points,
     notify_fans,
     notify_platform_reviewers,
     record_audit,
+    record_engagement_event,
     record_review_decision,
     release_card_data,
+    spend_points,
     submit_card_for_release_review,
 )
 from app.storage import configured_asset_storage, storage_response
+from app.tasks import enqueue_engagement_event
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 router.include_router(partner_router)
@@ -735,6 +746,24 @@ def achievement_data(achievement: AchievementDefinition) -> dict:
     }
 
 
+def mission_data(mission: MissionDefinition) -> dict:
+    return {
+        "id": mission.id,
+        "title": mission.title,
+        "description": mission.description,
+        "organizationId": mission.organization_id,
+        "artistId": mission.artist_id,
+        "eventKind": mission.event_kind,
+        "targetValue": mission.target_value,
+        "recurrence": mission.recurrence,
+        "conditionPayload": mission.condition_payload or {},
+        "rewardPayload": mission.reward_payload or {},
+        "status": mission.status,
+        "startsAt": _iso_utc(mission.starts_at),
+        "endsAt": _iso_utc(mission.ends_at),
+    }
+
+
 def reward_data(reward: RewardCatalog) -> dict:
     return {
         "id": reward.id,
@@ -876,6 +905,17 @@ def ensure_achievement_visible(context: AdminContext, achievement: AchievementDe
         raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
 
 
+def ensure_mission_visible(context: AdminContext, mission: MissionDefinition) -> None:
+    if context.is_root or context.is_platform_operator:
+        return
+    if context.organization is None or mission.organization_id != context.organization.id:
+        raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
+    if context.membership.access_level == "company_admin":
+        return
+    if mission.artist_id is None or mission.artist_id not in context.assigned_artist_ids:
+        raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
+
+
 def ensure_pass_season_visible(context: AdminContext, season: PassSeason) -> None:
     if context.is_root or context.is_platform_operator:
         return
@@ -999,6 +1039,25 @@ def engagement_scope_filters(context: AdminContext, model: type) -> list[object]
     if context.membership.access_level != "company_admin":
         filters.append(model.artist_id.in_(context.assigned_artist_ids))
     return filters
+
+
+def level_policy_data(policy: LevelPolicyVersion, thresholds: list[LevelThreshold]) -> dict:
+    return {
+        "id": policy.id,
+        "name": policy.name,
+        "status": policy.status,
+        "isActive": policy.is_active,
+        "effectiveAt": _iso_utc(policy.effective_at),
+        "thresholds": [
+            {
+                "id": item.id,
+                "level": item.level,
+                "requiredXp": item.required_xp,
+                "label": item.label,
+            }
+            for item in thresholds
+        ],
+    }
 
 
 @router.get("/engagement/achievements")
@@ -1156,6 +1215,451 @@ async def disable_achievement(
     )
     await session.commit()
     return {"ok": True, "data": achievement_data(achievement)}
+
+
+@router.get("/engagement/missions")
+async def list_admin_missions(context: CurrentAdmin, session: DbSession) -> dict:
+    rows = await session.scalars(
+        select(MissionDefinition)
+        .where(*engagement_scope_filters(context, MissionDefinition))
+        .order_by(MissionDefinition.title, MissionDefinition.id)
+    )
+    return {"ok": True, "data": {"items": [mission_data(item) for item in rows]}}
+
+
+@router.post("/engagement/missions", status_code=status.HTTP_201_CREATED)
+async def create_mission(
+    payload: MissionDefinitionCreate, context: CurrentAdmin, session: DbSession
+) -> dict:
+    _require_engagement_write(context)
+    organization_id, artist_id = await require_engagement_scope(
+        session, context, payload.organization_id, payload.artist_id
+    )
+    mission = MissionDefinition(
+        id=f"mission_{uuid4().hex[:12]}",
+        organization_id=organization_id,
+        artist_id=artist_id,
+        title=payload.title,
+        description=payload.description,
+        event_kind=payload.event_kind,
+        target_value=payload.target_value,
+        recurrence=payload.recurrence,
+        condition_payload=payload.condition_payload,
+        reward_payload=payload.reward_payload,
+        status="draft",
+        starts_at=payload.starts_at,
+        ends_at=payload.ends_at,
+    )
+    session.add(mission)
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="mission.created",
+        entity_type="mission",
+        entity_id=mission.id,
+        organization_id=mission.organization_id,
+        artist_id=mission.artist_id,
+        details={"eventKind": mission.event_kind, "recurrence": mission.recurrence},
+    )
+    await session.commit()
+    return {"ok": True, "data": mission_data(mission)}
+
+
+@router.patch("/engagement/missions/{mission_id}")
+async def update_mission(
+    mission_id: str,
+    payload: MissionDefinitionUpdate,
+    context: CurrentAdmin,
+    session: DbSession,
+) -> dict:
+    _require_engagement_write(context)
+    mission = await session.get(MissionDefinition, mission_id)
+    if mission is None:
+        raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
+    ensure_mission_visible(context, mission)
+    if mission.status != "draft":
+        raise AppError(409, "MISSION_EDIT_LOCKED", "초안 상태의 미션만 수정할 수 있습니다.")
+    if "organization_id" in payload.model_fields_set or "artist_id" in payload.model_fields_set:
+        organization_id, artist_id = await require_engagement_scope(
+            session,
+            context,
+            payload.organization_id
+            if "organization_id" in payload.model_fields_set
+            else mission.organization_id,
+            payload.artist_id if "artist_id" in payload.model_fields_set else mission.artist_id,
+        )
+        mission.organization_id = organization_id
+        mission.artist_id = artist_id
+    for field, attribute in (
+        ("title", "title"),
+        ("description", "description"),
+        ("event_kind", "event_kind"),
+        ("target_value", "target_value"),
+        ("recurrence", "recurrence"),
+        ("condition_payload", "condition_payload"),
+        ("reward_payload", "reward_payload"),
+        ("starts_at", "starts_at"),
+        ("ends_at", "ends_at"),
+    ):
+        if field in payload.model_fields_set:
+            setattr(mission, attribute, getattr(payload, field))
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="mission.updated",
+        entity_type="mission",
+        entity_id=mission.id,
+        organization_id=mission.organization_id,
+        artist_id=mission.artist_id,
+        details={"status": mission.status},
+    )
+    await session.commit()
+    return {"ok": True, "data": mission_data(mission)}
+
+
+async def transition_mission_status(
+    mission_id: str,
+    context: AdminContext,
+    session: DbSession,
+    *,
+    required_status: str,
+    next_status: str,
+    action: str,
+) -> dict:
+    mission = await session.get(MissionDefinition, mission_id)
+    if mission is None:
+        raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
+    ensure_mission_visible(context, mission)
+    if mission.status != required_status:
+        raise AppError(
+            409,
+            "INVALID_MISSION_STATUS",
+            "현재 상태에서는 미션 검수 상태를 전환할 수 없습니다.",
+        )
+    mission.status = next_status
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action=action,
+        entity_type="mission",
+        entity_id=mission.id,
+        organization_id=mission.organization_id,
+        artist_id=mission.artist_id,
+        details={"previousStatus": required_status, "nextStatus": next_status},
+    )
+    await session.commit()
+    return {"ok": True, "data": mission_data(mission)}
+
+
+@router.post("/engagement/missions/{mission_id}/submit")
+async def submit_mission_review(mission_id: str, context: CurrentAdmin, session: DbSession) -> dict:
+    _require_engagement_write(context)
+    return await transition_mission_status(
+        mission_id,
+        context,
+        session,
+        required_status="draft",
+        next_status="pending_review",
+        action="mission.submitted",
+    )
+
+
+@router.post("/engagement/missions/{mission_id}/approve")
+async def approve_mission(mission_id: str, context: CurrentAdmin, session: DbSession) -> dict:
+    mission = await session.get(MissionDefinition, mission_id)
+    if mission is None:
+        raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
+    ensure_mission_visible(context, mission)
+    _require_engagement_approve(context)
+    if mission.organization_id is None:
+        if not context.is_root and "engagement:approve_global" not in context.allowed_actions:
+            raise AppError(403, "ADMIN_WRITE_REQUIRED", "이 작업을 수행할 권한이 없습니다.")
+    elif (
+        not context.is_root
+        and not context.is_platform_operator
+        and context.membership.access_level != "company_admin"
+    ):
+        raise AppError(
+            403, "ADMIN_WRITE_REQUIRED", "파트너 관리자만 미션을 공개 승인할 수 있습니다."
+        )
+    if mission.status != "pending_review":
+        raise AppError(
+            409,
+            "INVALID_MISSION_STATUS",
+            "검수 대기 중인 미션만 공개 승인할 수 있습니다.",
+        )
+    mission.status = "published"
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="mission.published",
+        entity_type="mission",
+        entity_id=mission.id,
+        organization_id=mission.organization_id,
+        artist_id=mission.artist_id,
+        details={"previousStatus": "pending_review", "nextStatus": "published"},
+    )
+    await session.commit()
+    return {"ok": True, "data": mission_data(mission)}
+
+
+@router.post("/engagement/missions/{mission_id}/disable")
+async def disable_mission(mission_id: str, context: CurrentAdmin, session: DbSession) -> dict:
+    mission = await session.get(MissionDefinition, mission_id)
+    if mission is None:
+        raise AppError(404, "RESOURCE_NOT_FOUND", "항목을 찾을 수 없습니다.")
+    ensure_mission_visible(context, mission)
+    _require_engagement_approve(context)
+    if mission.organization_id is None:
+        if not context.is_root and "engagement:approve_global" not in context.allowed_actions:
+            raise AppError(403, "ADMIN_WRITE_REQUIRED", "이 작업을 수행할 권한이 없습니다.")
+    elif (
+        not context.is_root
+        and not context.is_platform_operator
+        and context.membership.access_level != "company_admin"
+    ):
+        raise AppError(
+            403, "ADMIN_WRITE_REQUIRED", "파트너 관리자만 미션을 비활성화할 수 있습니다."
+        )
+    if mission.status != "published":
+        raise AppError(
+            409,
+            "INVALID_MISSION_STATUS",
+            "공개 중인 미션만 비활성화할 수 있습니다.",
+        )
+    mission.status = "disabled"
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="mission.disabled",
+        entity_type="mission",
+        entity_id=mission.id,
+        organization_id=mission.organization_id,
+        artist_id=mission.artist_id,
+        details={"previousStatus": "published", "nextStatus": "disabled"},
+    )
+    await session.commit()
+    return {"ok": True, "data": mission_data(mission)}
+
+
+@router.get("/engagement/level-policies")
+async def list_level_policies(context: CurrentAdmin, session: DbSession) -> dict:
+    context.require_action("engagement:manage_global")
+    policies = list(
+        await session.scalars(
+            select(LevelPolicyVersion).order_by(
+                LevelPolicyVersion.created_at.desc(), LevelPolicyVersion.id
+            )
+        )
+    )
+    items = []
+    for policy in policies:
+        thresholds = list(
+            await session.scalars(
+                select(LevelThreshold)
+                .where(LevelThreshold.policy_version_id == policy.id)
+                .order_by(LevelThreshold.level)
+            )
+        )
+        items.append(level_policy_data(policy, thresholds))
+    return {"ok": True, "data": {"items": items}}
+
+
+@router.post("/engagement/level-policies", status_code=status.HTTP_201_CREATED)
+async def create_level_policy(
+    payload: LevelPolicyCreate, context: CurrentAdmin, session: DbSession
+) -> dict:
+    context.require_action("engagement:manage_global")
+    policy = LevelPolicyVersion(
+        id=f"level_policy_{uuid4().hex[:12]}",
+        name=payload.name,
+        status="draft",
+        is_active=False,
+        effective_at=payload.effective_at,
+    )
+    session.add(policy)
+    for threshold in payload.thresholds:
+        session.add(
+            LevelThreshold(
+                id=f"level_threshold_{uuid4().hex[:12]}",
+                policy_version_id=policy.id,
+                level=threshold.level,
+                required_xp=threshold.required_xp,
+                label=threshold.label,
+            )
+        )
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="level_policy.created",
+        entity_type="level_policy",
+        entity_id=policy.id,
+        details={"thresholdCount": len(payload.thresholds)},
+    )
+    await session.commit()
+    thresholds = list(
+        await session.scalars(
+            select(LevelThreshold)
+            .where(LevelThreshold.policy_version_id == policy.id)
+            .order_by(LevelThreshold.level)
+        )
+    )
+    return {"ok": True, "data": level_policy_data(policy, thresholds)}
+
+
+@router.post("/engagement/level-policies/{policy_id}/publish")
+async def publish_level_policy(policy_id: str, context: CurrentAdmin, session: DbSession) -> dict:
+    context.require_action("engagement:manage_global")
+    policy = await session.get(LevelPolicyVersion, policy_id)
+    if policy is None:
+        raise AppError(404, "RESOURCE_NOT_FOUND", "레벨 정책을 찾을 수 없습니다.")
+    if policy.status != "draft":
+        raise AppError(409, "INVALID_LEVEL_POLICY_STATUS", "초안 정책만 공개할 수 있습니다.")
+    thresholds = list(
+        await session.scalars(
+            select(LevelThreshold).where(LevelThreshold.policy_version_id == policy.id)
+        )
+    )
+    if not thresholds:
+        raise AppError(409, "LEVEL_POLICY_EMPTY", "레벨 기준을 하나 이상 등록해 주세요.")
+    await session.execute(
+        update(LevelPolicyVersion)
+        .where(LevelPolicyVersion.is_active.is_(True))
+        .values(is_active=False)
+    )
+    policy.status = "published"
+    policy.is_active = True
+    policy.effective_at = policy.effective_at or datetime.now(UTC)
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="level_policy.published",
+        entity_type="level_policy",
+        entity_id=policy.id,
+        details={"thresholdCount": len(thresholds)},
+    )
+    await session.commit()
+    thresholds.sort(key=lambda item: item.level)
+    return {"ok": True, "data": level_policy_data(policy, thresholds)}
+
+
+@router.post("/engagement/points/adjustments")
+async def adjust_fan_points(
+    payload: PointAdjustmentRequest, context: CurrentAdmin, session: DbSession
+) -> dict:
+    context.require_action("engagement:points_adjust")
+    if payload.amount == 0:
+        raise AppError(422, "INVALID_POINT_AMOUNT", "조정 포인트는 0이 될 수 없습니다.")
+    user = await session.get(User, payload.user_id)
+    if user is None:
+        raise AppError(404, "USER_NOT_FOUND", "팬을 찾을 수 없습니다.")
+    source_id = f"admin_adjustment:{payload.user_id}:{payload.idempotency_key or uuid4().hex}"
+    event = await record_engagement_event(
+        session,
+        user_id=user.id,
+        kind="points_adjusted",
+        source_type="admin_point_adjustment",
+        source_id=source_id,
+        payload={"amount": payload.amount, "reason": payload.reason},
+    )
+    if payload.amount > 0:
+        ledger = await grant_points(
+            session,
+            user_id=user.id,
+            source_event_id=event.id,
+            rule_key="admin_point_adjustment",
+            amount=payload.amount,
+            description=payload.reason,
+            metadata={"actorId": context.user.id},
+        )
+    else:
+        ledger = await spend_points(
+            session,
+            user_id=user.id,
+            source_event_id=event.id,
+            rule_key="admin_point_adjustment",
+            amount=abs(payload.amount),
+            description=payload.reason,
+            metadata={"actorId": context.user.id},
+        )
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="points.adjusted",
+        entity_type="user",
+        entity_id=user.id,
+        details={"amount": payload.amount, "reason": payload.reason, "eventId": event.id},
+    )
+    await session.commit()
+    return {
+        "ok": True,
+        "data": {"userId": user.id, "amount": payload.amount, "balance": ledger.balance_after},
+    }
+
+
+@router.get("/engagement/events")
+async def list_engagement_events(
+    context: CurrentAdmin,
+    session: DbSession,
+    status_filter: str | None = Query(default=None, alias="status"),
+) -> dict:
+    context.require_action("engagement:retry")
+    filters = []
+    if status_filter:
+        filters.append(EngagementEvent.status == status_filter)
+    rows = list(
+        await session.scalars(
+            select(EngagementEvent).where(*filters).order_by(EngagementEvent.id.desc()).limit(100)
+        )
+    )
+    return {
+        "ok": True,
+        "data": {
+            "items": [
+                {
+                    "id": event.id,
+                    "userId": event.user_id,
+                    "kind": event.kind,
+                    "sourceType": event.source_type,
+                    "sourceId": event.source_id,
+                    "status": event.status,
+                    "attemptCount": event.attempt_count,
+                    "errorCode": event.error_code,
+                    "errorMessage": event.error_message,
+                }
+                for event in rows
+            ]
+        },
+    }
+
+
+@router.post("/engagement/events/{event_id}/retry")
+async def retry_engagement_event(
+    event_id: str,
+    context: CurrentAdmin,
+    session: DbSession,
+    background_tasks: BackgroundTasks,
+) -> dict:
+    context.require_action("engagement:retry")
+    event = await session.get(EngagementEvent, event_id)
+    if event is None:
+        raise AppError(404, "ENGAGEMENT_EVENT_NOT_FOUND", "성장 이벤트를 찾을 수 없습니다.")
+    if event.status != "failed":
+        raise AppError(409, "INVALID_ENGAGEMENT_STATUS", "실패한 이벤트만 재처리할 수 있습니다.")
+    event.status = "pending"
+    event.error_code = None
+    event.error_message = None
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="engagement_event.retried",
+        entity_type="engagement_event",
+        entity_id=event.id,
+        details={"previousStatus": "failed"},
+    )
+    await session.commit()
+    enqueue_engagement_event(event.id, background_tasks)
+    return {"ok": True, "data": {"id": event.id, "status": event.status}}
 
 
 @router.get("/engagement/rewards")

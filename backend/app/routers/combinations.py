@@ -3,7 +3,7 @@ from __future__ import annotations
 import secrets
 from uuid import uuid4
 
-from fastapi import APIRouter, Header, Response, status
+from fastapi import APIRouter, BackgroundTasks, Header, Response, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
@@ -20,7 +20,13 @@ from app.models import (
     UserCard,
 )
 from app.schemas import CardCombinationRecipeCreate, CardCombinationRequest
-from app.services import grant_user_card, notify_user_once, record_audit
+from app.services import (
+    grant_user_card,
+    notify_user_once,
+    record_audit,
+    record_engagement_event,
+)
+from app.tasks import enqueue_engagement_event
 
 router = APIRouter(prefix="/api", tags=["card-combinations"])
 
@@ -233,6 +239,7 @@ async def combine_cards(
     user: FanUser,
     session: DbSession,
     response: Response,
+    background_tasks: BackgroundTasks,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict:
     if idempotency_key:
@@ -324,6 +331,20 @@ async def combine_cards(
         metadata={"recipeId": recipe.id, "packId": pack.id},
     )
     combination.result_user_card_id = result.id
+    engagement_event = await record_engagement_event(
+        session,
+        user_id=user.id,
+        kind="card_combined",
+        source_type="card_combination",
+        source_id=combination.id,
+        payload={
+            "combinationId": combination.id,
+            "recipeId": recipe.id,
+            "packId": pack.id,
+            "cardId": result_card_id,
+            "artistId": pack.artist_id,
+        },
+    )
     await notify_user_once(
         session,
         user_id=user.id,
@@ -345,6 +366,7 @@ async def combine_cards(
                 "이미 사용한 카드가 포함되어 있습니다.",
             ) from exc
         raise
+    enqueue_engagement_event(engagement_event.id, background_tasks)
     return {"ok": True, "data": _combination_data(combination, cards[result_card_id])}
 
 

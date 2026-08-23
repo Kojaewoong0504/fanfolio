@@ -16,10 +16,14 @@ from app.models import (
     Drop,
     EngagementEvent,
     FanLevel,
+    MissionDefinition,
+    MissionProgress,
     Notification,
     PassProgress,
     PassSeason,
     PassTier,
+    PointBalance,
+    PointLedger,
     ProfileEquipment,
     RewardCatalog,
     RewardGrant,
@@ -27,8 +31,192 @@ from app.models import (
     XpLedger,
 )
 from app.routers import fan as fan_router
-from app.services import claim_reward_grant, now, process_engagement_event, record_engagement_event
+from app.services import (
+    claim_reward_grant,
+    mission_period_key,
+    now,
+    process_engagement_event,
+    record_engagement_event,
+)
 from tests.conftest import assert_error, assert_success
+
+
+def test_completed_unclaimed_mission_stays_claimable_until_reward_is_claimed(
+    actors: dict[str, TestClient],
+) -> None:
+    async def seed_claimable_mission() -> None:
+        async with SessionLocal() as session:
+            reward = RewardCatalog(
+                id="reward_mission_claimable",
+                artist_id="artist_nova3",
+                reward_type="badge",
+                name="Mission Badge",
+                status="published",
+            )
+            mission = MissionDefinition(
+                id="mission_claimable",
+                title="Claimable mission",
+                event_kind="event_viewed",
+                target_value=1,
+                recurrence="once",
+                reward_payload={"rewardId": reward.id},
+                status="published",
+            )
+            session.add_all([reward, mission])
+            await session.flush()
+            event_row = EngagementEvent(
+                id="evt_mission_claimable",
+                user_id="fan",
+                kind="event_viewed",
+                source_type="event",
+                source_id="event_claimable",
+                status="processed",
+                processed_at=now(),
+            )
+            session.add(event_row)
+            await session.flush()
+            session.add_all(
+                [
+                    MissionProgress(
+                        id="mission_progress_claimable",
+                        user_id="fan",
+                        mission_id=mission.id,
+                        period_key="once",
+                        current_value=1,
+                        completed_at=now(),
+                    ),
+                    RewardGrant(
+                        id="reward_grant_mission_claimable",
+                        user_id="fan",
+                        reward_id=reward.id,
+                        source_event_id=event_row.id,
+                        rule_key="mission:mission_claimable:once",
+                    ),
+                ]
+            )
+            await session.commit()
+
+    asyncio.run(seed_claimable_mission())
+
+    active_before = assert_success(actors["fan"].get("/api/me/missions?status=active"))
+    claimable = next(item for item in active_before["items"] if item["id"] == "mission_claimable")
+    assert claimable["completed"] is True
+    assert claimable["claimable"] is True
+    assert claimable["claimedAt"] is None
+
+    claimed = assert_success(actors["fan"].post("/api/me/missions/mission_claimable/claim"))
+    assert claimed["missionId"] == "mission_claimable"
+    assert [grant["id"] for grant in claimed["grants"]] == ["reward_grant_mission_claimable"]
+
+    active_after = assert_success(actors["fan"].get("/api/me/missions?status=active"))
+    assert "mission_claimable" not in {item["id"] for item in active_after["items"]}
+    completed = assert_success(actors["fan"].get("/api/me/missions?status=completed"))
+    completed_mission = next(
+        item for item in completed["items"] if item["id"] == "mission_claimable"
+    )
+    assert completed_mission["claimable"] is False
+    assert completed_mission["claimedAt"] is not None
+
+
+def test_historical_unclaimed_repeatable_missions_remain_claimable_after_rollover(
+    actors: dict[str, TestClient],
+) -> None:
+    event_time = now()
+    current_daily_key = mission_period_key("daily", event_time, None, None)
+    current_weekly_key = mission_period_key("weekly", event_time, None, None)
+    season_starts_at = event_time - timedelta(days=1)
+    season_ends_at = event_time + timedelta(days=30)
+    current_season_key = mission_period_key("season", event_time, season_starts_at, season_ends_at)
+    historical_periods = {
+        "daily": (event_time - timedelta(days=1)).date().isoformat(),
+        "weekly": mission_period_key("weekly", event_time - timedelta(days=7), None, None),
+        "season": "season:previous-start:previous-end",
+    }
+
+    assert historical_periods["daily"] != current_daily_key
+    assert historical_periods["weekly"] != current_weekly_key
+    assert historical_periods["season"] != current_season_key
+
+    async def seed_historical_claimable_missions() -> None:
+        async with SessionLocal() as session:
+            for recurrence, period_key in historical_periods.items():
+                reward = RewardCatalog(
+                    id=f"reward_historical_{recurrence}",
+                    artist_id="artist_nova3",
+                    reward_type="badge",
+                    name=f"Historical {recurrence} Badge",
+                    status="published",
+                )
+                mission = MissionDefinition(
+                    id=f"mission_historical_{recurrence}",
+                    title=f"Historical {recurrence} mission",
+                    event_kind="event_viewed",
+                    target_value=1,
+                    recurrence=recurrence,
+                    starts_at=season_starts_at if recurrence == "season" else None,
+                    ends_at=season_ends_at if recurrence == "season" else None,
+                    reward_payload={"rewardId": reward.id},
+                    status="published",
+                )
+                event_row = EngagementEvent(
+                    id=f"evt_historical_{recurrence}",
+                    user_id="fan",
+                    kind="event_viewed",
+                    source_type="event",
+                    source_id=f"event_historical_{recurrence}",
+                    status="processed",
+                    processed_at=event_time - timedelta(days=1),
+                )
+                session.add_all([reward, mission, event_row])
+                await session.flush()
+                session.add_all(
+                    [
+                        MissionProgress(
+                            id=f"mission_progress_historical_{recurrence}",
+                            user_id="fan",
+                            mission_id=mission.id,
+                            period_key=period_key,
+                            current_value=1,
+                            completed_at=event_time - timedelta(days=1),
+                        ),
+                        RewardGrant(
+                            id=f"reward_grant_historical_{recurrence}",
+                            user_id="fan",
+                            reward_id=reward.id,
+                            source_event_id=event_row.id,
+                            rule_key=f"mission:{mission.id}:{period_key}",
+                        ),
+                    ]
+                )
+            await session.commit()
+
+    asyncio.run(seed_historical_claimable_missions())
+
+    active = assert_success(actors["fan"].get("/api/me/missions?status=active"))
+    active_by_id = {item["id"]: item for item in active["items"]}
+    for recurrence, period_key in historical_periods.items():
+        item = active_by_id[f"mission_historical_{recurrence}"]
+        assert item["periodKey"] == period_key
+        assert item["currentValue"] == 1
+        assert item["completed"] is True
+        assert item["claimable"] is True
+        assert item["claimedAt"] is None
+
+    completed = assert_success(actors["fan"].get("/api/me/missions?status=completed"))
+    completed_ids = {item["id"] for item in completed["items"]}
+    assert {
+        "mission_historical_daily",
+        "mission_historical_weekly",
+        "mission_historical_season",
+    } <= completed_ids
+
+    claimed = assert_success(actors["fan"].post("/api/me/missions/mission_historical_daily/claim"))
+    assert [grant["id"] for grant in claimed["grants"]] == ["reward_grant_historical_daily"]
+    assert_error(
+        actors["fan"].post("/api/me/missions/mission_historical_daily/claim"),
+        409,
+        "MISSION_REWARD_NOT_READY",
+    )
 
 
 def load_fan_growth_events() -> list[EngagementEvent]:
@@ -1056,3 +1244,72 @@ def test_progression_can_be_read_for_one_artist_without_mixing_other_artist_xp(
     assert all_progression["level"]["totalXp"] == 70
     assert nova_progression["level"]["totalXp"] == 0
     assert luminous_progression["level"]["totalXp"] == 70
+
+
+def test_fan_points_and_exchange_are_backed_by_balance_ledger_and_idempotent_grant(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    async def seed_point_reward() -> None:
+        async with SessionLocal() as session:
+            session.add(
+                RewardCatalog(
+                    id="reward_point_exchange_card",
+                    artist_id="artist_nova3",
+                    reward_type="digital_bonus",
+                    name="Point Exchange Ticket",
+                    metadata_={"pointCost": 10},
+                    status="published",
+                )
+            )
+            session.add(PointBalance(user_id="fan", balance=20))
+            await session.commit()
+
+    asyncio.run(seed_point_reward())
+
+    profile = assert_success(actors["fan"].get("/api/me"))
+    assert profile["points"] == 20
+    points = assert_success(actors["fan"].get("/api/me/points"))
+    assert points["balance"] == 20
+    assert points["items"] == []
+
+    first = assert_success(
+        actors["fan"].post(
+            "/api/me/points/exchange",
+            json={"rewardId": "reward_point_exchange_card"},
+            headers={"Idempotency-Key": "fan-point-exchange-1"},
+        ),
+        201,
+    )
+    replay = assert_success(
+        actors["fan"].post(
+            "/api/me/points/exchange",
+            json={"rewardId": "reward_point_exchange_card"},
+            headers={"Idempotency-Key": "fan-point-exchange-1"},
+        ),
+        201,
+    )
+
+    assert first["points"] == 10
+    assert replay["replayed"] is True
+    assert replay["grantId"] == first["grantId"]
+
+    async def load_spend_rows() -> tuple[list[PointLedger], list[RewardGrant]]:
+        async with SessionLocal() as session:
+            ledgers = list(
+                await session.scalars(
+                    select(PointLedger).where(
+                        PointLedger.user_id == "fan",
+                        PointLedger.transaction_type == "spend",
+                    )
+                )
+            )
+            grants = list(
+                await session.scalars(select(RewardGrant).where(RewardGrant.user_id == "fan"))
+            )
+            return ledgers, grants
+
+    spend_rows, grants = asyncio.run(load_spend_rows())
+    assert len(spend_rows) == 1
+    assert spend_rows[0].amount == -10
+    assert spend_rows[0].balance_after == 10
+    assert len(grants) == 1

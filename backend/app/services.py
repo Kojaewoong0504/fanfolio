@@ -29,6 +29,8 @@ from app.models import (
     BackgroundRemovalJob,
     Card,
     CardOwnershipLedger,
+    CardPack,
+    CardPackCard,
     CardReviewDecision,
     CardReviewRequest,
     CardVisibility,
@@ -39,14 +41,20 @@ from app.models import (
     EngagementEvent,
     FanLevel,
     Follow,
+    LevelPolicyVersion,
+    LevelThreshold,
     MagicLink,
     Member,
+    MissionDefinition,
+    MissionProgress,
     Notification,
     Organization,
     OrganizationArtist,
     PassProgress,
     PassSeason,
     PassTier,
+    PointBalance,
+    PointLedger,
     ProfileEquipment,
     RedeemCode,
     RedeemCodeBatch,
@@ -63,7 +71,7 @@ from app.models import (
     UserCard,
     XpLedger,
 )
-from app.passwords import hash_password
+from app.passwords import hash_password, verify_password
 from app.storage import configured_asset_storage
 
 logger = logging.getLogger(__name__)
@@ -330,8 +338,160 @@ async def grant_xp(
         level = FanLevel(user_id=user_id)
         session.add(level)
     level.total_xp = int(total_xp or 0)
-    level.level = max(1, level.total_xp // 100 + 1)
+    level.level = await level_for_total_xp(session, total_xp=level.total_xp)
     return row
+
+
+async def level_for_total_xp(session: AsyncSession, *, total_xp: int) -> int:
+    active_policy_id = await session.scalar(
+        select(LevelPolicyVersion.id)
+        .where(
+            LevelPolicyVersion.status == "published",
+            LevelPolicyVersion.is_active.is_(True),
+            or_(
+                LevelPolicyVersion.effective_at.is_(None),
+                LevelPolicyVersion.effective_at <= now(),
+            ),
+        )
+        .order_by(LevelPolicyVersion.effective_at.desc().nullslast(), LevelPolicyVersion.id)
+        .limit(1)
+    )
+    if active_policy_id is None:
+        return max(1, total_xp // 100 + 1)
+    threshold_level = await session.scalar(
+        select(LevelThreshold.level)
+        .where(
+            LevelThreshold.policy_version_id == active_policy_id,
+            LevelThreshold.required_xp <= max(0, total_xp),
+        )
+        .order_by(LevelThreshold.level.desc())
+        .limit(1)
+    )
+    return int(threshold_level or 1)
+
+
+async def _get_or_create_point_balance_for_update(
+    session: AsyncSession, *, user_id: str
+) -> PointBalance:
+    balance = await session.scalar(
+        select(PointBalance).where(PointBalance.user_id == user_id).with_for_update()
+    )
+    if balance is not None:
+        return balance
+
+    balance = PointBalance(user_id=user_id)
+    try:
+        async with session.begin_nested():
+            session.add(balance)
+            await session.flush()
+    except IntegrityError:
+        balance = await session.scalar(
+            select(PointBalance).where(PointBalance.user_id == user_id).with_for_update()
+        )
+        if balance is not None:
+            return balance
+        raise
+    return balance
+
+
+async def grant_points(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    source_event_id: str,
+    rule_key: str,
+    amount: int,
+    description: str | None = None,
+    metadata: dict | None = None,
+    expires_at: datetime | None = None,
+) -> PointLedger:
+    if amount <= 0:
+        raise AppError(422, "INVALID_POINT_AMOUNT", "point amount must be positive")
+    existing = await session.scalar(
+        select(PointLedger).where(
+            PointLedger.user_id == user_id,
+            PointLedger.source_event_id == source_event_id,
+            PointLedger.rule_key == rule_key,
+        )
+    )
+    if existing:
+        return existing
+
+    ledger = PointLedger(
+        id=f"point_{uuid4().hex[:12]}",
+        user_id=user_id,
+        source_event_id=source_event_id,
+        rule_key=rule_key,
+        transaction_type="earn",
+        amount=amount,
+        balance_after=0,
+        description=description,
+        expires_at=expires_at,
+        metadata_json=metadata or {},
+    )
+    try:
+        async with session.begin_nested():
+            session.add(ledger)
+            await session.flush()
+    except IntegrityError:
+        existing = await session.scalar(
+            select(PointLedger).where(
+                PointLedger.user_id == user_id,
+                PointLedger.source_event_id == source_event_id,
+                PointLedger.rule_key == rule_key,
+            )
+        )
+        if existing:
+            return existing
+        raise
+    balance = await _get_or_create_point_balance_for_update(session, user_id=user_id)
+    balance.balance += amount
+    ledger.balance_after = balance.balance
+    return ledger
+
+
+async def spend_points(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    source_event_id: str,
+    rule_key: str,
+    amount: int,
+    description: str | None = None,
+    metadata: dict | None = None,
+) -> PointLedger:
+    if amount <= 0:
+        raise AppError(422, "INVALID_POINT_AMOUNT", "point amount must be positive")
+    existing = await session.scalar(
+        select(PointLedger).where(
+            PointLedger.user_id == user_id,
+            PointLedger.source_event_id == source_event_id,
+            PointLedger.rule_key == rule_key,
+        )
+    )
+    if existing:
+        return existing
+
+    balance = await session.scalar(
+        select(PointBalance).where(PointBalance.user_id == user_id).with_for_update()
+    )
+    if balance is None or balance.balance < amount:
+        raise AppError(409, "INSUFFICIENT_POINTS", "포인트가 부족합니다.")
+    balance.balance -= amount
+    ledger = PointLedger(
+        id=f"point_{uuid4().hex[:12]}",
+        user_id=user_id,
+        source_event_id=source_event_id,
+        rule_key=rule_key,
+        transaction_type="spend",
+        amount=-amount,
+        balance_after=balance.balance,
+        description=description,
+        metadata_json=metadata or {},
+    )
+    session.add(ledger)
+    await session.flush()
+    return ledger
 
 
 def base_xp_for(event: EngagementEvent) -> int:
@@ -440,6 +600,222 @@ async def organization_id_for_card_collected_event(
             .where(*conditions)
         )
     return None
+
+
+async def organization_id_for_event(session: AsyncSession, event: EngagementEvent) -> str | None:
+    organization_id = event.payload.get("organizationId")
+    if organization_id:
+        return str(organization_id)
+    return await organization_id_for_card_collected_event(session, event)
+
+
+def mission_period_key(
+    recurrence: str,
+    event_time: datetime,
+    starts_at: datetime | None,
+    ends_at: datetime | None,
+) -> str:
+    event_time = _as_aware_utc(event_time) or now()
+    if recurrence == "daily":
+        return event_time.date().isoformat()
+    if recurrence == "weekly":
+        year, week, _ = event_time.isocalendar()
+        return f"{year}-W{week:02d}"
+    if recurrence == "season":
+        start = _datetime_data(starts_at) or "open"
+        end = _datetime_data(ends_at) or "open"
+        return f"season:{start}:{end}"
+    return "once"
+
+
+def _payload_value_matches(expected: object, actual: object) -> bool:
+    if isinstance(expected, list):
+        return actual in expected
+    return actual == expected
+
+
+def mission_payload_matches(mission: MissionDefinition, event: EngagementEvent) -> bool:
+    for key, expected in (mission.condition_payload or {}).items():
+        if key not in event.payload:
+            return False
+        if not _payload_value_matches(expected, event.payload.get(key)):
+            return False
+    return True
+
+
+async def published_missions_for_event(
+    session: AsyncSession, event: EngagementEvent
+) -> list[MissionDefinition]:
+    event_time = now()
+    organization_id = await organization_id_for_event(session, event)
+    artist_id = event.payload.get("artistId")
+    candidates = list(
+        await session.scalars(
+            select(MissionDefinition).where(
+                MissionDefinition.status == "published",
+                MissionDefinition.event_kind == event.kind,
+                or_(
+                    MissionDefinition.starts_at.is_(None), MissionDefinition.starts_at <= event_time
+                ),
+                or_(MissionDefinition.ends_at.is_(None), MissionDefinition.ends_at >= event_time),
+            )
+        )
+    )
+    missions = []
+    for mission in candidates:
+        if mission.organization_id is not None and mission.organization_id != organization_id:
+            continue
+        if mission.artist_id is not None and mission.artist_id != artist_id:
+            continue
+        if not mission_payload_matches(mission, event):
+            continue
+        missions.append(mission)
+    return missions
+
+
+async def get_or_create_mission_progress(
+    session: AsyncSession, *, user_id: str, mission_id: str, period_key: str
+) -> MissionProgress:
+    progress = await session.scalar(
+        select(MissionProgress).where(
+            MissionProgress.user_id == user_id,
+            MissionProgress.mission_id == mission_id,
+            MissionProgress.period_key == period_key,
+        )
+    )
+    if progress:
+        return progress
+    progress = MissionProgress(
+        id=f"mission_progress_{uuid4().hex[:12]}",
+        user_id=user_id,
+        mission_id=mission_id,
+        period_key=period_key,
+    )
+    try:
+        async with session.begin_nested():
+            session.add(progress)
+            await session.flush()
+    except IntegrityError:
+        existing = await session.scalar(
+            select(MissionProgress).where(
+                MissionProgress.user_id == user_id,
+                MissionProgress.mission_id == mission_id,
+                MissionProgress.period_key == period_key,
+            )
+        )
+        if existing:
+            return existing
+        raise
+    return progress
+
+
+async def notify_mission_once(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    mission: MissionDefinition,
+    period_key: str,
+) -> None:
+    event_key = f"mission:{mission.id}:{user_id}:{period_key}"
+    if await session.scalar(
+        select(Notification.id).where(
+            Notification.user_id == user_id,
+            Notification.event_key == event_key,
+        )
+    ):
+        return
+    session.add(
+        Notification(
+            id=f"notification_{uuid4().hex[:12]}",
+            user_id=user_id,
+            kind="mission_completed",
+            title="미션을 완료했어요",
+            body=f"{mission.title} 미션 보상이 지급되었습니다.",
+            entity_type="mission",
+            entity_id=mission.id,
+            event_key=event_key,
+        )
+    )
+
+
+async def deliver_mission_reward(
+    session: AsyncSession,
+    *,
+    event: EngagementEvent,
+    mission: MissionDefinition,
+    period_key: str,
+) -> None:
+    reward_payload = mission.reward_payload or {}
+    rule_key = f"mission:{mission.id}:{period_key}"
+    xp = int(reward_payload.get("xp") or 0)
+    if xp:
+        await grant_xp(
+            session,
+            user_id=event.user_id,
+            event_id=event.id,
+            rule_key=rule_key,
+            amount=xp,
+        )
+    points = int(reward_payload.get("points") or 0)
+    if points:
+        await grant_points(
+            session,
+            user_id=event.user_id,
+            source_event_id=event.id,
+            rule_key=rule_key,
+            amount=points,
+            description=f"Mission reward: {mission.title}",
+            metadata={"missionId": mission.id, "periodKey": period_key},
+        )
+    reward_id = reward_payload.get("rewardId")
+    if reward_id:
+        await grant_reward(
+            session,
+            user_id=event.user_id,
+            reward_id=str(reward_id),
+            source_event_id=event.id,
+            rule_key=rule_key,
+        )
+    await notify_mission_once(
+        session,
+        user_id=event.user_id,
+        mission=mission,
+        period_key=period_key,
+    )
+
+
+async def update_mission_progress(
+    session: AsyncSession,
+    *,
+    event: EngagementEvent,
+    mission: MissionDefinition,
+) -> MissionProgress:
+    period_key = mission_period_key(
+        mission.recurrence,
+        now(),
+        mission.starts_at,
+        mission.ends_at,
+    )
+    progress = await get_or_create_mission_progress(
+        session,
+        user_id=event.user_id,
+        mission_id=mission.id,
+        period_key=period_key,
+    )
+    was_completed = progress.completed_at is not None
+    if progress.completed_at is None:
+        progress.current_value = min(progress.current_value + 1, mission.target_value)
+        progress.updated_at = now()
+        if progress.current_value >= mission.target_value:
+            progress.completed_at = now()
+    if progress.completed_at is not None and not was_completed:
+        await deliver_mission_reward(
+            session,
+            event=event,
+            mission=mission,
+            period_key=period_key,
+        )
+    return progress
 
 
 def eligible_source_card_conditions(*, user_id: str) -> list[object]:
@@ -769,7 +1145,7 @@ async def fan_progression_data(
     global_scope: bool = False,
 ) -> dict:
     total_xp = await scoped_user_xp(session, user_id=user_id, artist_id=artist_id)
-    level_number = max(1, total_xp // 100 + 1)
+    level_number = await level_for_total_xp(session, total_xp=total_xp)
     definitions = list(
         await session.scalars(
             select(AchievementDefinition)
@@ -1381,22 +1757,47 @@ async def process_engagement_event(event_id: str) -> None:
             )
         if event.status == "processed":
             return
-        source_is_eligible = await card_collected_source_is_eligible(session, event)
-        amount = base_xp_for(event) if source_is_eligible else 0
-        if amount:
-            await grant_xp(
-                session,
-                user_id=event.user_id,
-                event_id=event.id,
-                rule_key=event.kind,
-                amount=amount,
+        next_attempt_count = (event.attempt_count or 0) + 1
+        event.attempt_count = next_attempt_count
+        event.error_code = None
+        event.error_message = None
+        try:
+            source_is_eligible = await card_collected_source_is_eligible(session, event)
+            amount = base_xp_for(event) if source_is_eligible else 0
+            if amount:
+                await grant_xp(
+                    session,
+                    user_id=event.user_id,
+                    event_id=event.id,
+                    rule_key=event.kind,
+                    amount=amount,
+                )
+            if event.kind != "card_collected" or source_is_eligible:
+                for mission in await published_missions_for_event(session, event):
+                    await update_mission_progress(session, event=event, mission=mission)
+            for definition in await published_definitions_for_event(session, event):
+                await update_achievement_progress(session, event=event, definition=definition)
+            await update_pass_progress(session, event=event)
+            event.status = "processed"
+            event.processed_at = now()
+            await session.commit()
+        except Exception as exc:
+            await session.rollback()
+            failed_event = await session.scalar(
+                select(EngagementEvent).where(EngagementEvent.id == event_id).with_for_update()
             )
-        for definition in await published_definitions_for_event(session, event):
-            await update_achievement_progress(session, event=event, definition=definition)
-        await update_pass_progress(session, event=event)
-        event.status = "processed"
-        event.processed_at = now()
-        await session.commit()
+            if failed_event is not None:
+                failed_event.status = "failed"
+                failed_event.attempt_count = next_attempt_count
+                if isinstance(exc, AppError):
+                    failed_event.error_code = exc.code
+                    failed_event.error_message = exc.message
+                else:
+                    failed_event.error_code = exc.__class__.__name__
+                    failed_event.error_message = str(exc)
+                failed_event.error_message = (failed_event.error_message or "")[:500]
+                await session.commit()
+            raise
 
 
 async def revoke_card_growth(
@@ -1465,6 +1866,165 @@ async def ensure_demo_catalog(session: AsyncSession) -> None:
             )
         )
     await session.commit()
+
+
+async def ensure_fan_community_demo(session: AsyncSession, *, password: str) -> dict[str, object]:
+    """Create isolated local accounts and inventory for the real social flow.
+
+    The seed is deliberately explicit and non-destructive: it only owns IDs
+    prefixed with ``local_demo_`` and never resets or deletes existing data.
+    Hosted environments cannot invoke it.
+    """
+    if get_settings().is_hosted:
+        raise RuntimeError("FAN_COMMUNITY_DEMO_LOCAL_ONLY")
+    if len(password) < 12:
+        raise ValueError("The local fan community demo password must be at least 12 characters")
+
+    await ensure_demo_catalog(session)
+
+    user_specs = (
+        {
+            "id": "local_demo_fan",
+            "email": "demo.fan@example.com",
+            "nickname": "팬포리오",
+            "profile_image_url": "/src/assets/profile-avatar-generated.png",
+            "favorite_member_ids": ["member_yuna"],
+        },
+        {
+            "id": "local_demo_collector",
+            "email": "demo.collector@example.com",
+            "nickname": "별빛수집가",
+            "profile_image_url": "/src/assets/card-yuna-lavender.jpg",
+            "favorite_member_ids": ["member_minho", "member_jei"],
+        },
+    )
+    for spec in user_specs:
+        user = await session.get(User, spec["id"])
+        if user is None:
+            user = User(id=spec["id"], role=Role.FAN)
+            session.add(user)
+        elif user.role != Role.FAN:
+            raise RuntimeError(f"FAN_COMMUNITY_DEMO_ID_CONFLICT:{spec['id']}")
+        user.email = str(spec["email"])
+        user.nickname = str(spec["nickname"])
+        user.profile_image_url = str(spec["profile_image_url"])
+        user.favorite_artist_ids = ["artist_nova3"]
+        user.favorite_member_ids = list(spec["favorite_member_ids"])
+        user.onboarding_completed = True
+        if not verify_password(password, user.password_hash):
+            user.password_hash = hash_password(password)
+
+    card_specs = (
+        {
+            "id": "local_demo_card_harin",
+            "name": "Nebula Harin Ver.",
+            "member_id": "member_yuna",
+            "rarity": "UR",
+            "image_url": "/src/assets/collection-card-harin-generated.png",
+        },
+        {
+            "id": "local_demo_card_doyun",
+            "name": "Nebula Doyun Ver.",
+            "member_id": "member_minho",
+            "rarity": "SR",
+            "image_url": "/src/assets/collection-card-doyun-generated.png",
+        },
+        {
+            "id": "local_demo_card_minjae",
+            "name": "Starlight Minjae Ver.",
+            "member_id": "member_jei",
+            "rarity": "R",
+            "image_url": "/src/assets/collection-card-minjae-generated.png",
+        },
+        {
+            "id": "local_demo_card_jay",
+            "name": "Midnight Jay Ver.",
+            "member_id": "member_yuna",
+            "rarity": "N",
+            "image_url": "/src/assets/collection-card-jay-generated.png",
+        },
+    )
+    for spec in card_specs:
+        card = await session.get(Card, spec["id"])
+        if card is None:
+            card = Card(id=spec["id"], name=str(spec["name"]))
+            session.add(card)
+        card.name = str(spec["name"])
+        card.status = "published"
+        card.release_policy = "partner_and_platform"
+        card.release_status = "published"
+        card.is_official = True
+        card.artist_id = "artist_nova3"
+        card.member_id = str(spec["member_id"])
+        card.season_name = "정규 1집 · DREAMSCAPE"
+        card.rarity = str(spec["rarity"])
+        card.image_url = str(spec["image_url"])
+        card.tradable = True
+
+    await session.flush()
+    pack_id = "local_demo_pack_dreamscape"
+    pack = await session.get(CardPack, pack_id)
+    if pack is None:
+        pack = CardPack(id=pack_id, artist_id="artist_nova3", name="DREAMSCAPE Nebula Ver.")
+        session.add(pack)
+    pack.artist_id = "artist_nova3"
+    pack.name = "DREAMSCAPE Nebula Ver."
+    pack.season_name = "정규 1집 · DREAMSCAPE"
+    pack.version = "v1.0"
+    pack.image_url = "/src/assets/card-pack-dreamscape-generated.png"
+    pack.description = "드림스케이프 정규 1집의 공개 카드를 확인하고 수집해보세요."
+    pack.status = "published"
+    pack.published_at = pack.published_at or now()
+    await session.flush()
+    for position, spec in enumerate(card_specs, start=1):
+        link_id = f"local_demo_pack_card_{position}"
+        link = await session.get(CardPackCard, link_id)
+        if link is None:
+            link = CardPackCard(id=link_id, pack_id=pack_id, card_id=str(spec["id"]))
+            session.add(link)
+        link.pack_id = pack_id
+        link.card_id = str(spec["id"])
+        link.position = position
+        link.probability = 25.0
+        link.enabled = True
+
+    await session.flush()
+    for user_id in ("local_demo_fan", "local_demo_collector"):
+        visibility = await session.get(CardVisibility, user_id)
+        if visibility is None:
+            session.add(CardVisibility(user_id=user_id, public_enabled=True))
+        else:
+            visibility.public_enabled = True
+
+    inventory_specs = {
+        "local_demo_fan": ("local_demo_card_harin", "local_demo_card_jay"),
+        "local_demo_collector": (
+            "local_demo_card_doyun",
+            "local_demo_card_minjae",
+            "local_demo_card_harin",
+        ),
+    }
+    inventory: dict[str, list[str]] = {}
+    for user_id, card_ids in inventory_specs.items():
+        inventory[user_id] = []
+        for position, card_id in enumerate(card_ids, start=1):
+            user_card = await grant_user_card(
+                session,
+                user_id=user_id,
+                card_id=card_id,
+                source_type="fan_community_demo",
+                source_id=f"{user_id}:{position}:{card_id}",
+                acquisition_source="card_pack",
+            )
+            inventory[user_id].append(user_card.id)
+
+    await session.commit()
+    return {
+        "fanUserId": "local_demo_fan",
+        "collectorUserId": "local_demo_collector",
+        "fanUserCardIds": inventory["local_demo_fan"],
+        "collectorUserCardIds": inventory["local_demo_collector"],
+    }
 
 
 async def ensure_demo_card_asset(session: AsyncSession) -> None:

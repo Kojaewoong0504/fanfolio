@@ -915,6 +915,214 @@ class EngagementEvent(Base):
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
     status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    attempt_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+
+
+class MissionDefinition(Base):
+    """Operator-authored repeatable growth mission definition."""
+
+    __tablename__ = "mission_definitions"
+    __table_args__ = (
+        CheckConstraint(
+            "recurrence IN ('once', 'daily', 'weekly', 'season')",
+            name="ck_mission_definitions_recurrence",
+        ),
+        CheckConstraint(
+            "status IN ('draft', 'pending_review', 'published', 'disabled', 'ended')",
+            name="ck_mission_definitions_status",
+        ),
+        CheckConstraint("target_value > 0", name="ck_mission_definitions_target_positive"),
+        Index("ix_mission_definitions_status_event", "status", "event_kind"),
+        Index(
+            "ix_mission_definitions_scope_status",
+            "organization_id",
+            "artist_id",
+            "status",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    organization_id: Mapped[str | None] = mapped_column(
+        ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True
+    )
+    artist_id: Mapped[str | None] = mapped_column(
+        ForeignKey("artists.id", ondelete="SET NULL"), nullable=True
+    )
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    event_kind: Mapped[str] = mapped_column(String(80), nullable=False)
+    target_value: Mapped[int] = mapped_column(Integer, nullable=False)
+    recurrence: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="once", server_default="once"
+    )
+    condition_payload: Mapped[dict] = mapped_column(
+        JSON, default=dict, server_default=sa.text("'{}'")
+    )
+    reward_payload: Mapped[dict] = mapped_column(JSON, default=dict, server_default=sa.text("'{}'"))
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="draft", server_default="draft"
+    )
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class MissionProgress(Base):
+    """Per-fan progress for one mission period instance."""
+
+    __tablename__ = "mission_progress"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "mission_id",
+            "period_key",
+            name="uq_mission_progress_user_period",
+        ),
+        CheckConstraint("current_value >= 0", name="ck_mission_progress_current_nonnegative"),
+        Index("ix_mission_progress_user_updated", "user_id", "updated_at"),
+        Index("ix_mission_progress_mission_period", "mission_id", "period_key"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    mission_id: Mapped[str] = mapped_column(
+        ForeignKey("mission_definitions.id", ondelete="CASCADE")
+    )
+    period_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    current_value: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class PointLedger(Base):
+    """Immutable point accounting row for earns, spends, reversals, and expirations."""
+
+    __tablename__ = "point_ledger"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "source_event_id",
+            "rule_key",
+            name="uq_point_ledger_event_rule",
+        ),
+        CheckConstraint(
+            "transaction_type IN ('earn', 'spend', 'reverse', 'expire', 'adjust')",
+            name="ck_point_ledger_transaction_type",
+        ),
+        Index("ix_point_ledger_user_created", "user_id", "created_at"),
+        Index("ix_point_ledger_expires_at", "expires_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    source_event_id: Mapped[str] = mapped_column(ForeignKey("engagement_events.id"), nullable=False)
+    rule_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    transaction_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    balance_after: Mapped[int] = mapped_column(Integer, nullable=False)
+    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reversed_ledger_id: Mapped[str | None] = mapped_column(
+        ForeignKey("point_ledger.id"), nullable=True
+    )
+    metadata_json: Mapped[dict] = mapped_column(
+        "metadata", JSON, default=dict, server_default=sa.text("'{}'")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class PointBalance(Base):
+    """Cached spendable point balance for one fan."""
+
+    __tablename__ = "point_balances"
+    __table_args__ = (CheckConstraint("balance >= 0", name="ck_point_balances_nonnegative"),)
+
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    balance: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class LevelPolicyVersion(Base):
+    """Versioned fan-level policy so future threshold changes are explicit."""
+
+    __tablename__ = "level_policy_versions"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'published', 'disabled')",
+            name="ck_level_policy_versions_status",
+        ),
+        Index("ix_level_policy_versions_active_status", "is_active", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="draft", server_default="draft"
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=sa.false()
+    )
+    effective_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class LevelThreshold(Base):
+    """Required cumulative XP for one level under a policy version."""
+
+    __tablename__ = "level_thresholds"
+    __table_args__ = (
+        UniqueConstraint(
+            "policy_version_id",
+            "level",
+            name="uq_level_threshold_policy_level",
+        ),
+        CheckConstraint("level >= 1", name="ck_level_thresholds_level_positive"),
+        CheckConstraint("required_xp >= 0", name="ck_level_thresholds_required_nonnegative"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    policy_version_id: Mapped[str] = mapped_column(
+        ForeignKey("level_policy_versions.id", ondelete="CASCADE")
+    )
+    level: Mapped[int] = mapped_column(Integer, nullable=False)
+    required_xp: Mapped[int] = mapped_column(Integer, nullable=False)
+    label: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
 
 class AnalyticsEvent(Base):
