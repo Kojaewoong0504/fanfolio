@@ -1,7 +1,10 @@
+import importlib.util
 import os
 import sqlite3
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -22,6 +25,40 @@ def run_alembic(
         text=True,
         check=False,
     )
+
+
+def test_social_card_trading_adds_postgres_columns_without_table_recreation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    backend_dir = Path(__file__).parents[2]
+    migration_path = backend_dir / "alembic/versions/0046_social_card_trading.py"
+    spec = importlib.util.spec_from_file_location("migration_0046", migration_path)
+    assert spec and spec.loader
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+
+    bind = SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))
+    inspector = MagicMock()
+    inspector.has_table.return_value = True
+    inspector.get_columns.side_effect = lambda table: (
+        [{"name": "id"}] if table in {"cards", "user_cards"} else []
+    )
+    add_column = MagicMock()
+    batch_alter_table = MagicMock()
+
+    monkeypatch.setattr(migration.op, "get_bind", lambda: bind)
+    monkeypatch.setattr(migration.sa, "inspect", lambda _bind: inspector)
+    monkeypatch.setattr(migration.op, "add_column", add_column)
+    monkeypatch.setattr(migration.op, "batch_alter_table", batch_alter_table)
+
+    migration.upgrade()
+
+    assert [call.args[0] for call in add_column.call_args_list] == [
+        "cards",
+        "user_cards",
+        "user_cards",
+    ]
+    batch_alter_table.assert_not_called()
 
 
 def create_partial_0025_logo_schema(database_path: Path) -> None:
