@@ -32,6 +32,8 @@ ROOT_ACTIONS = frozenset(
         "events:review",
         "events:publish",
         "codes:manage",
+        "codes:read",
+        "codes:write",
         "users:manage",
         "audit:read",
         "statistics:read",
