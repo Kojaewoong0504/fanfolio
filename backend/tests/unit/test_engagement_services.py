@@ -178,6 +178,15 @@ async def get_progress(session, *, user_id: str, achievement_id: str):
     )
 
 
+async def process_with_session_local(session_factory, event_id: str) -> None:
+    original_session_local = services.SessionLocal
+    services.SessionLocal = session_factory
+    try:
+        await services.process_engagement_event(event_id)
+    finally:
+        services.SessionLocal = original_session_local
+
+
 def test_record_engagement_event_is_idempotent_for_one_source() -> None:
     async def scenario() -> None:
         engine = create_async_engine("sqlite+aiosqlite://")
@@ -215,6 +224,290 @@ def test_record_engagement_event_is_idempotent_for_one_source() -> None:
             assert first.id == second.id
             assert len(rows) == 1
             assert rows[0].payload == {"cardId": "card_1"}
+
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_published_mission_progresses_matching_daily_scope_once_per_event() -> None:
+    async def scenario() -> None:
+        engine, session_factory = await create_growth_test_session()
+        async with session_factory() as session:
+            session.add(models.User(id="fan", email="fan@example.com", role=models.Role.FAN))
+            session.add(
+                models.MissionDefinition(
+                    id="mission_daily_comment",
+                    title="Daily comment",
+                    event_kind="event_commented",
+                    target_value=2,
+                    recurrence="daily",
+                    condition_payload={"eventId": "event_1"},
+                    status="published",
+                )
+            )
+            await session.commit()
+            matching_event = await services.record_engagement_event(
+                session,
+                user_id="fan",
+                kind="event_commented",
+                source_type="comment",
+                source_id="comment_1",
+                payload={"eventId": "event_1", "commentId": "comment_1"},
+            )
+            non_matching_event = await services.record_engagement_event(
+                session,
+                user_id="fan",
+                kind="event_commented",
+                source_type="comment",
+                source_id="comment_2",
+                payload={"eventId": "event_2", "commentId": "comment_2"},
+            )
+            await session.commit()
+
+            await process_with_session_local(session_factory, matching_event.id)
+            await process_with_session_local(session_factory, matching_event.id)
+            await process_with_session_local(session_factory, non_matching_event.id)
+
+            progress_rows = list(await session.scalars(select(models.MissionProgress)))
+            assert len(progress_rows) == 1
+            assert progress_rows[0].mission_id == "mission_daily_comment"
+            assert progress_rows[0].period_key == services.mission_period_key(
+                "daily", services.now(), None, None
+            )
+            assert progress_rows[0].current_value == 1
+            assert progress_rows[0].completed_at is None
+
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_mission_period_key_supports_all_recurrence_modes() -> None:
+    event_time = services.now().replace(year=2026, month=8, day=23)
+    starts_at = event_time.replace(month=8, day=1)
+    ends_at = event_time.replace(month=8, day=31)
+
+    assert services.mission_period_key("once", event_time, None, None) == "once"
+    assert services.mission_period_key("daily", event_time, None, None) == "2026-08-23"
+    assert services.mission_period_key("weekly", event_time, None, None) == "2026-W34"
+    assert (
+        services.mission_period_key("season", event_time, starts_at, ends_at)
+        == f"season:{services._datetime_data(starts_at)}:{services._datetime_data(ends_at)}"
+    )
+
+
+def test_mission_completion_grants_xp_and_points_once() -> None:
+    async def scenario() -> None:
+        engine, session_factory = await create_growth_test_session()
+        async with session_factory() as session:
+            session.add(models.User(id="fan", email="fan@example.com", role=models.Role.FAN))
+            session.add(
+                models.MissionDefinition(
+                    id="mission_weekly_share",
+                    title="Weekly share",
+                    event_kind="post_shared",
+                    target_value=1,
+                    recurrence="weekly",
+                    reward_payload={"xp": 40, "points": 25},
+                    status="published",
+                )
+            )
+            await session.commit()
+            event_row = await services.record_engagement_event(
+                session,
+                user_id="fan",
+                kind="post_shared",
+                source_type="post",
+                source_id="post_1",
+                payload={"postId": "post_1"},
+            )
+            await session.commit()
+
+            await process_with_session_local(session_factory, event_row.id)
+            await process_with_session_local(session_factory, event_row.id)
+
+            progress = await session.scalar(select(models.MissionProgress))
+            xp_rows = list(await session.scalars(select(models.XpLedger)))
+            point_rows = list(await session.scalars(select(models.PointLedger)))
+            balance = await session.get(models.PointBalance, "fan")
+            notifications = list(
+                await session.scalars(
+                    select(models.Notification).where(
+                        models.Notification.event_key == "mission:mission_weekly_share:fan:"
+                        f"{progress.period_key}"
+                    )
+                )
+            )
+
+            assert progress.current_value == 1
+            assert progress.completed_at is not None
+            assert [row.amount for row in xp_rows] == [40]
+            assert [row.amount for row in point_rows] == [25]
+            assert point_rows[0].transaction_type == "earn"
+            assert point_rows[0].balance_after == 25
+            assert balance.balance == 25
+            assert len(notifications) == 1
+
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_ineligible_card_collected_event_does_not_progress_mission() -> None:
+    async def scenario() -> None:
+        engine, session_factory = await create_growth_test_session()
+        async with session_factory() as session:
+            await seed_growth_catalog(session)
+            session.add(
+                models.MissionDefinition(
+                    id="mission_card_collect",
+                    title="Collect card",
+                    event_kind="card_collected",
+                    target_value=1,
+                    status="published",
+                )
+            )
+            await session.commit()
+
+            await process_test_card_collected(
+                session,
+                session_factory,
+                card_id="card_unofficial",
+                drop_id="drop_live",
+            )
+
+            progress_rows = list(await session.scalars(select(models.MissionProgress)))
+            assert progress_rows == []
+
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_grant_xp_uses_active_level_threshold_policy_when_available() -> None:
+    async def scenario() -> None:
+        engine, session_factory = await create_growth_test_session()
+        async with session_factory() as session:
+            session.add(models.User(id="fan", email="fan@example.com", role=models.Role.FAN))
+            await session.flush()
+            session.add(
+                models.EngagementEvent(
+                    id="evt_level",
+                    user_id="fan",
+                    kind="manual",
+                    source_type="test",
+                    source_id="test",
+                )
+            )
+            session.add(
+                models.LevelPolicyVersion(
+                    id="policy_active",
+                    name="Active",
+                    status="published",
+                    is_active=True,
+                )
+            )
+            await session.flush()
+            session.add_all(
+                [
+                    models.LevelThreshold(
+                        id="threshold_1",
+                        policy_version_id="policy_active",
+                        level=1,
+                        required_xp=0,
+                    ),
+                    models.LevelThreshold(
+                        id="threshold_2",
+                        policy_version_id="policy_active",
+                        level=2,
+                        required_xp=50,
+                    ),
+                    models.LevelThreshold(
+                        id="threshold_3",
+                        policy_version_id="policy_active",
+                        level=3,
+                        required_xp=120,
+                    ),
+                ]
+            )
+            await session.commit()
+
+            await services.grant_xp(
+                session, user_id="fan", event_id="evt_level", rule_key="manual", amount=75
+            )
+
+            level = await session.get(models.FanLevel, "fan")
+            assert level.total_xp == 75
+            assert level.level == 2
+
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_process_engagement_event_records_failure_and_can_retry_idempotently() -> None:
+    async def scenario() -> None:
+        engine, session_factory = await create_growth_test_session()
+        async with session_factory() as session:
+            session.add(models.User(id="fan", email="fan@example.com", role=models.Role.FAN))
+            session.add(
+                models.MissionDefinition(
+                    id="mission_bad_reward",
+                    title="Bad reward",
+                    event_kind="event_commented",
+                    target_value=1,
+                    reward_payload={"points": -5},
+                    status="published",
+                )
+            )
+            await session.commit()
+            event_row = await services.record_engagement_event(
+                session,
+                user_id="fan",
+                kind="event_commented",
+                source_type="comment",
+                source_id="comment_retry",
+                payload={"eventId": "event_1"},
+            )
+            await session.commit()
+
+            with pytest.raises(AppError) as exc_info:
+                await process_with_session_local(session_factory, event_row.id)
+            assert exc_info.value.code == "INVALID_POINT_AMOUNT"
+
+            failed_event = await session.get(models.EngagementEvent, event_row.id)
+            await session.refresh(failed_event)
+            progress_rows_after_failure = list(
+                await session.scalars(select(models.MissionProgress))
+            )
+            point_rows_after_failure = list(await session.scalars(select(models.PointLedger)))
+            assert failed_event.status == "failed"
+            assert failed_event.attempt_count == 1
+            assert failed_event.error_code == "INVALID_POINT_AMOUNT"
+            assert "positive" in failed_event.error_message
+            assert progress_rows_after_failure == []
+            assert point_rows_after_failure == []
+
+            mission = await session.get(models.MissionDefinition, "mission_bad_reward")
+            mission.reward_payload = {"points": 5}
+            await session.commit()
+
+            await process_with_session_local(session_factory, event_row.id)
+
+            processed_event = await session.get(models.EngagementEvent, event_row.id)
+            await session.refresh(processed_event)
+            progress_rows = list(await session.scalars(select(models.MissionProgress)))
+            point_rows = list(await session.scalars(select(models.PointLedger)))
+            balance = await session.get(models.PointBalance, "fan")
+            assert processed_event.status == "processed"
+            assert processed_event.attempt_count == 2
+            assert processed_event.error_code is None
+            assert processed_event.error_message is None
+            assert len(progress_rows) == 1
+            assert progress_rows[0].current_value == 1
+            assert [row.amount for row in point_rows] == [5]
+            assert balance.balance == 5
 
         await engine.dispose()
 

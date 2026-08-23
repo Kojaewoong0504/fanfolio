@@ -39,14 +39,20 @@ from app.models import (
     EngagementEvent,
     FanLevel,
     Follow,
+    LevelPolicyVersion,
+    LevelThreshold,
     MagicLink,
     Member,
+    MissionDefinition,
+    MissionProgress,
     Notification,
     Organization,
     OrganizationArtist,
     PassProgress,
     PassSeason,
     PassTier,
+    PointBalance,
+    PointLedger,
     ProfileEquipment,
     RedeemCode,
     RedeemCodeBatch,
@@ -330,8 +336,98 @@ async def grant_xp(
         level = FanLevel(user_id=user_id)
         session.add(level)
     level.total_xp = int(total_xp or 0)
-    level.level = max(1, level.total_xp // 100 + 1)
+    level.level = await level_for_total_xp(session, total_xp=level.total_xp)
     return row
+
+
+async def level_for_total_xp(session: AsyncSession, *, total_xp: int) -> int:
+    active_policy_id = await session.scalar(
+        select(LevelPolicyVersion.id)
+        .where(
+            LevelPolicyVersion.status == "published",
+            LevelPolicyVersion.is_active.is_(True),
+            or_(
+                LevelPolicyVersion.effective_at.is_(None),
+                LevelPolicyVersion.effective_at <= now(),
+            ),
+        )
+        .order_by(LevelPolicyVersion.effective_at.desc().nullslast(), LevelPolicyVersion.id)
+        .limit(1)
+    )
+    if active_policy_id is None:
+        return max(1, total_xp // 100 + 1)
+    threshold_level = await session.scalar(
+        select(LevelThreshold.level)
+        .where(
+            LevelThreshold.policy_version_id == active_policy_id,
+            LevelThreshold.required_xp <= max(0, total_xp),
+        )
+        .order_by(LevelThreshold.level.desc())
+        .limit(1)
+    )
+    return int(threshold_level or 1)
+
+
+async def grant_points(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    source_event_id: str,
+    rule_key: str,
+    amount: int,
+    description: str | None = None,
+    metadata: dict | None = None,
+    expires_at: datetime | None = None,
+) -> PointLedger:
+    if amount <= 0:
+        raise AppError(422, "INVALID_POINT_AMOUNT", "point amount must be positive")
+    existing = await session.scalar(
+        select(PointLedger).where(
+            PointLedger.user_id == user_id,
+            PointLedger.source_event_id == source_event_id,
+            PointLedger.rule_key == rule_key,
+        )
+    )
+    if existing:
+        return existing
+
+    balance = await session.scalar(
+        select(PointBalance).where(PointBalance.user_id == user_id).with_for_update()
+    )
+    if balance is None:
+        balance = PointBalance(user_id=user_id)
+        session.add(balance)
+        await session.flush()
+    balance.balance += amount
+    ledger = PointLedger(
+        id=f"point_{uuid4().hex[:12]}",
+        user_id=user_id,
+        source_event_id=source_event_id,
+        rule_key=rule_key,
+        transaction_type="earn",
+        amount=amount,
+        balance_after=balance.balance,
+        description=description,
+        expires_at=expires_at,
+        metadata_json=metadata or {},
+    )
+    try:
+        async with session.begin_nested():
+            session.add(ledger)
+            await session.flush()
+    except IntegrityError:
+        await session.refresh(balance)
+        existing = await session.scalar(
+            select(PointLedger).where(
+                PointLedger.user_id == user_id,
+                PointLedger.source_event_id == source_event_id,
+                PointLedger.rule_key == rule_key,
+            )
+        )
+        if existing:
+            return existing
+        raise
+    return ledger
 
 
 def base_xp_for(event: EngagementEvent) -> int:
@@ -440,6 +536,213 @@ async def organization_id_for_card_collected_event(
             .where(*conditions)
         )
     return None
+
+
+async def organization_id_for_event(session: AsyncSession, event: EngagementEvent) -> str | None:
+    organization_id = event.payload.get("organizationId")
+    if organization_id:
+        return str(organization_id)
+    return await organization_id_for_card_collected_event(session, event)
+
+
+def mission_period_key(
+    recurrence: str,
+    event_time: datetime,
+    starts_at: datetime | None,
+    ends_at: datetime | None,
+) -> str:
+    event_time = _as_aware_utc(event_time) or now()
+    if recurrence == "daily":
+        return event_time.date().isoformat()
+    if recurrence == "weekly":
+        year, week, _ = event_time.isocalendar()
+        return f"{year}-W{week:02d}"
+    if recurrence == "season":
+        start = _datetime_data(starts_at) or "open"
+        end = _datetime_data(ends_at) or "open"
+        return f"season:{start}:{end}"
+    return "once"
+
+
+def _payload_value_matches(expected: object, actual: object) -> bool:
+    if isinstance(expected, list):
+        return actual in expected
+    return actual == expected
+
+
+def mission_payload_matches(mission: MissionDefinition, event: EngagementEvent) -> bool:
+    for key, expected in (mission.condition_payload or {}).items():
+        if key not in event.payload:
+            return False
+        if not _payload_value_matches(expected, event.payload.get(key)):
+            return False
+    return True
+
+
+async def published_missions_for_event(
+    session: AsyncSession, event: EngagementEvent
+) -> list[MissionDefinition]:
+    event_time = now()
+    organization_id = await organization_id_for_event(session, event)
+    artist_id = event.payload.get("artistId")
+    candidates = list(
+        await session.scalars(
+            select(MissionDefinition).where(
+                MissionDefinition.status == "published",
+                MissionDefinition.event_kind == event.kind,
+                or_(
+                    MissionDefinition.starts_at.is_(None), MissionDefinition.starts_at <= event_time
+                ),
+                or_(MissionDefinition.ends_at.is_(None), MissionDefinition.ends_at >= event_time),
+            )
+        )
+    )
+    missions = []
+    for mission in candidates:
+        if mission.organization_id is not None and mission.organization_id != organization_id:
+            continue
+        if mission.artist_id is not None and mission.artist_id != artist_id:
+            continue
+        if not mission_payload_matches(mission, event):
+            continue
+        missions.append(mission)
+    return missions
+
+
+async def get_or_create_mission_progress(
+    session: AsyncSession, *, user_id: str, mission_id: str, period_key: str
+) -> MissionProgress:
+    progress = await session.scalar(
+        select(MissionProgress).where(
+            MissionProgress.user_id == user_id,
+            MissionProgress.mission_id == mission_id,
+            MissionProgress.period_key == period_key,
+        )
+    )
+    if progress:
+        return progress
+    progress = MissionProgress(
+        id=f"mission_progress_{uuid4().hex[:12]}",
+        user_id=user_id,
+        mission_id=mission_id,
+        period_key=period_key,
+    )
+    try:
+        async with session.begin_nested():
+            session.add(progress)
+            await session.flush()
+    except IntegrityError:
+        existing = await session.scalar(
+            select(MissionProgress).where(
+                MissionProgress.user_id == user_id,
+                MissionProgress.mission_id == mission_id,
+                MissionProgress.period_key == period_key,
+            )
+        )
+        if existing:
+            return existing
+        raise
+    return progress
+
+
+async def notify_mission_once(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    mission: MissionDefinition,
+    period_key: str,
+) -> None:
+    event_key = f"mission:{mission.id}:{user_id}:{period_key}"
+    if await session.scalar(
+        select(Notification.id).where(
+            Notification.user_id == user_id,
+            Notification.event_key == event_key,
+        )
+    ):
+        return
+    session.add(
+        Notification(
+            id=f"notification_{uuid4().hex[:12]}",
+            user_id=user_id,
+            kind="mission_completed",
+            title="미션을 완료했어요",
+            body=f"{mission.title} 미션 보상이 지급되었습니다.",
+            entity_type="mission",
+            entity_id=mission.id,
+            event_key=event_key,
+        )
+    )
+
+
+async def deliver_mission_reward(
+    session: AsyncSession,
+    *,
+    event: EngagementEvent,
+    mission: MissionDefinition,
+    period_key: str,
+) -> None:
+    reward_payload = mission.reward_payload or {}
+    rule_key = f"mission:{mission.id}:{period_key}"
+    xp = int(reward_payload.get("xp") or 0)
+    if xp:
+        await grant_xp(
+            session,
+            user_id=event.user_id,
+            event_id=event.id,
+            rule_key=rule_key,
+            amount=xp,
+        )
+    points = int(reward_payload.get("points") or 0)
+    if points:
+        await grant_points(
+            session,
+            user_id=event.user_id,
+            source_event_id=event.id,
+            rule_key=rule_key,
+            amount=points,
+            description=f"Mission reward: {mission.title}",
+            metadata={"missionId": mission.id, "periodKey": period_key},
+        )
+    await notify_mission_once(
+        session,
+        user_id=event.user_id,
+        mission=mission,
+        period_key=period_key,
+    )
+
+
+async def update_mission_progress(
+    session: AsyncSession,
+    *,
+    event: EngagementEvent,
+    mission: MissionDefinition,
+) -> MissionProgress:
+    period_key = mission_period_key(
+        mission.recurrence,
+        now(),
+        mission.starts_at,
+        mission.ends_at,
+    )
+    progress = await get_or_create_mission_progress(
+        session,
+        user_id=event.user_id,
+        mission_id=mission.id,
+        period_key=period_key,
+    )
+    was_completed = progress.completed_at is not None
+    if progress.completed_at is None:
+        progress.current_value = min(progress.current_value + 1, mission.target_value)
+        progress.updated_at = now()
+        if progress.current_value >= mission.target_value:
+            progress.completed_at = now()
+    if progress.completed_at is not None and not was_completed:
+        await deliver_mission_reward(
+            session,
+            event=event,
+            mission=mission,
+            period_key=period_key,
+        )
+    return progress
 
 
 def eligible_source_card_conditions(*, user_id: str) -> list[object]:
@@ -769,7 +1072,7 @@ async def fan_progression_data(
     global_scope: bool = False,
 ) -> dict:
     total_xp = await scoped_user_xp(session, user_id=user_id, artist_id=artist_id)
-    level_number = max(1, total_xp // 100 + 1)
+    level_number = await level_for_total_xp(session, total_xp=total_xp)
     definitions = list(
         await session.scalars(
             select(AchievementDefinition)
@@ -1381,22 +1684,47 @@ async def process_engagement_event(event_id: str) -> None:
             )
         if event.status == "processed":
             return
-        source_is_eligible = await card_collected_source_is_eligible(session, event)
-        amount = base_xp_for(event) if source_is_eligible else 0
-        if amount:
-            await grant_xp(
-                session,
-                user_id=event.user_id,
-                event_id=event.id,
-                rule_key=event.kind,
-                amount=amount,
+        next_attempt_count = (event.attempt_count or 0) + 1
+        event.attempt_count = next_attempt_count
+        event.error_code = None
+        event.error_message = None
+        try:
+            source_is_eligible = await card_collected_source_is_eligible(session, event)
+            amount = base_xp_for(event) if source_is_eligible else 0
+            if amount:
+                await grant_xp(
+                    session,
+                    user_id=event.user_id,
+                    event_id=event.id,
+                    rule_key=event.kind,
+                    amount=amount,
+                )
+            if source_is_eligible:
+                for mission in await published_missions_for_event(session, event):
+                    await update_mission_progress(session, event=event, mission=mission)
+            for definition in await published_definitions_for_event(session, event):
+                await update_achievement_progress(session, event=event, definition=definition)
+            await update_pass_progress(session, event=event)
+            event.status = "processed"
+            event.processed_at = now()
+            await session.commit()
+        except Exception as exc:
+            await session.rollback()
+            failed_event = await session.scalar(
+                select(EngagementEvent).where(EngagementEvent.id == event_id).with_for_update()
             )
-        for definition in await published_definitions_for_event(session, event):
-            await update_achievement_progress(session, event=event, definition=definition)
-        await update_pass_progress(session, event=event)
-        event.status = "processed"
-        event.processed_at = now()
-        await session.commit()
+            if failed_event is not None:
+                failed_event.status = "failed"
+                failed_event.attempt_count = next_attempt_count
+                if isinstance(exc, AppError):
+                    failed_event.error_code = exc.code
+                    failed_event.error_message = exc.message
+                else:
+                    failed_event.error_code = exc.__class__.__name__
+                    failed_event.error_message = str(exc)
+                failed_event.error_message = (failed_event.error_message or "")[:500]
+                await session.commit()
+            raise
 
 
 async def revoke_card_growth(
