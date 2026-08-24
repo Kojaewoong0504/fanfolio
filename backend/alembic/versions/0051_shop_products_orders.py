@@ -3,6 +3,7 @@
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
 from alembic import op
 
@@ -13,57 +14,83 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        "shop_products",
-        sa.Column("id", sa.String(), primary_key=True),
-        sa.Column(
-            "artist_id",
-            sa.String(),
-            sa.ForeignKey("artists.id", ondelete="RESTRICT"),
-            nullable=False,
-        ),
-        sa.Column("product_type", sa.String(length=32), nullable=False, server_default="card_pack"),
-        sa.Column("card_pack_id", sa.String(), sa.ForeignKey("card_packs.id", ondelete="RESTRICT")),
-        sa.Column("name", sa.String(length=200), nullable=False),
-        sa.Column("description", sa.String(length=1000)),
-        sa.Column("image_url", sa.String()),
-        sa.Column("price_points", sa.Integer(), nullable=False),
-        sa.Column("status", sa.String(length=32), nullable=False, server_default="draft"),
-        sa.Column("starts_at", sa.DateTime(timezone=True)),
-        sa.Column("ends_at", sa.DateTime(timezone=True)),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.CheckConstraint(
-            "product_type IN ('card_pack', 'point_item', 'limited_item')",
-            name="ck_shop_products_product_type",
-        ),
-        sa.CheckConstraint(
-            "status IN ('draft', 'published', 'archived')", name="ck_shop_products_status"
-        ),
-        sa.CheckConstraint("price_points > 0", name="ck_shop_products_price_points_positive"),
-    )
-    op.create_index("ix_shop_products_status_artist", "shop_products", ["status", "artist_id"])
-    op.create_table(
-        "shop_orders",
-        sa.Column("id", sa.String(), primary_key=True),
-        sa.Column(
-            "user_id", sa.String(), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
-        ),
-        sa.Column(
-            "product_id",
-            sa.String(),
-            sa.ForeignKey("shop_products.id", ondelete="RESTRICT"),
-            nullable=False,
-        ),
-        sa.Column("product_name", sa.String(length=200), nullable=False),
-        sa.Column("price_points", sa.Integer(), nullable=False),
-        sa.Column("payment_method", sa.String(length=32), nullable=False, server_default="points"),
-        sa.Column("status", sa.String(length=32), nullable=False, server_default="completed"),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.CheckConstraint("payment_method IN ('points')", name="ck_shop_orders_payment_method"),
-        sa.CheckConstraint("status IN ('completed', 'failed')", name="ck_shop_orders_status"),
-    )
-    op.create_index("ix_shop_orders_user_created", "shop_orders", ["user_id", "created_at"])
+    # Migration 0001 creates the current SQLAlchemy metadata for a fresh local
+    # database. Since that metadata now includes these tables, reuse them when
+    # they already exist and keep the migration compatible with older databases.
+    bind = op.get_bind()
+    inspector = inspect(bind)
+    if not inspector.has_table("shop_products"):
+        op.create_table(
+            "shop_products",
+            sa.Column("id", sa.String(), primary_key=True),
+            sa.Column(
+                "artist_id",
+                sa.String(),
+                sa.ForeignKey("artists.id", ondelete="RESTRICT"),
+                nullable=False,
+            ),
+            sa.Column(
+                "product_type", sa.String(length=32), nullable=False, server_default="card_pack"
+            ),
+            sa.Column(
+                "card_pack_id", sa.String(), sa.ForeignKey("card_packs.id", ondelete="RESTRICT")
+            ),
+            sa.Column("name", sa.String(length=200), nullable=False),
+            sa.Column("description", sa.String(length=1000)),
+            sa.Column("image_url", sa.String()),
+            sa.Column("price_points", sa.Integer(), nullable=False),
+            sa.Column("status", sa.String(length=32), nullable=False, server_default="draft"),
+            sa.Column("starts_at", sa.DateTime(timezone=True)),
+            sa.Column("ends_at", sa.DateTime(timezone=True)),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+            sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+            sa.CheckConstraint(
+                "product_type IN ('card_pack', 'point_item', 'limited_item')",
+                name="ck_shop_products_product_type",
+            ),
+            sa.CheckConstraint(
+                "status IN ('draft', 'published', 'archived')", name="ck_shop_products_status"
+            ),
+            sa.CheckConstraint("price_points > 0", name="ck_shop_products_price_points_positive"),
+        )
+    inspector = inspect(bind)
+    if "ix_shop_products_status_artist" not in {
+        index["name"] for index in inspector.get_indexes("shop_products")
+    }:
+        op.create_index("ix_shop_products_status_artist", "shop_products", ["status", "artist_id"])
+    if not inspector.has_table("shop_orders"):
+        op.create_table(
+            "shop_orders",
+            sa.Column("id", sa.String(), primary_key=True),
+            sa.Column(
+                "user_id",
+                sa.String(),
+                sa.ForeignKey("users.id", ondelete="CASCADE"),
+                nullable=False,
+            ),
+            sa.Column(
+                "product_id",
+                sa.String(),
+                sa.ForeignKey("shop_products.id", ondelete="RESTRICT"),
+                nullable=False,
+            ),
+            sa.Column("product_name", sa.String(length=200), nullable=False),
+            sa.Column("price_points", sa.Integer(), nullable=False),
+            sa.Column(
+                "payment_method", sa.String(length=32), nullable=False, server_default="points"
+            ),
+            sa.Column("status", sa.String(length=32), nullable=False, server_default="completed"),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+            sa.CheckConstraint(
+                "payment_method IN ('points')", name="ck_shop_orders_payment_method"
+            ),
+            sa.CheckConstraint("status IN ('completed', 'failed')", name="ck_shop_orders_status"),
+        )
+    inspector = inspect(bind)
+    if "ix_shop_orders_user_created" not in {
+        index["name"] for index in inspector.get_indexes("shop_orders")
+    }:
+        op.create_index("ix_shop_orders_user_created", "shop_orders", ["user_id", "created_at"])
 
 
 def downgrade() -> None:
