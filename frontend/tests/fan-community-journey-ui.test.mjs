@@ -24,12 +24,49 @@ test('fan discovery opens a dedicated public fan profile before collection', () 
   assert.match(fanProfileSource, /대표 컬렉션/)
   assert.match(fanProfileSource, /컬렉션 진행률/)
   assert.match(fanProfileSource, /교환 가능한 카드/)
+  assert.match(fanProfileSource, /이 팬이 원하는 카드/)
+  assert.match(fanProfileSource, /collection\.wantedCards/)
   assert.match(fanProfileSource, /팔로우 중인 아티스트/)
   assert.match(fanProfileSource, /팔로워/)
   assert.match(fanProfileSource, /공개 카드/)
   assert.match(fanHubSource, /<InlineIcon name="grid"/)
   assert.match(fanHubSource, /<InlineIcon name="rotate"/)
+  assert.match(fanHubSource, /tabIndex=\{0\}/)
+  assert.match(fanHubSource, /event\.target as HTMLElement\)\.closest\('button, a, input, select, textarea'\)/)
+  assert.match(fanHubSource, /event\.key === 'Enter' \|\| event\.key === ' '/)
   assert.doesNotMatch(fanHubSource, /[▣◇⌕‹]/)
+})
+
+test('fan discovery cards keep identity, affinity, stats, and card previews in separate responsive rows', () => {
+  assert.match(fanHubSource, /className="fan-social-avatar-button"/)
+  assert.match(fanHubSource, /className="fan-social-affinity"/)
+  assert.match(fanHubSource, /className="fan-social-card-previews"/)
+  const css = readFileSync(new URL('../src/fan-community-reference.css', import.meta.url), 'utf8')
+  assert.match(css, /\.fan-social-card-preview \.fan-social-avatar-button\s*\{[^}]*grid-column:\s*1/s)
+  assert.match(css, /\.fan-social-card-preview \.fan-social-affinity\s*\{[^}]*grid-column:\s*2 \/ 4/s)
+  assert.match(css, /\.fan-social-card-preview \.fan-social-card-previews\s*\{[^}]*grid-column:\s*2 \/ 4/s)
+})
+
+test('fan discovery artist chips stay left-aligned inside the identity column', () => {
+  const css = readFileSync(new URL('../src/fan-community-reference.css', import.meta.url), 'utf8')
+  assert.match(css, /\.fan-social-card-preview \.fan-social-copy > \.fan-social-tags\s*\{[^}]*grid-column:\s*1[^}]*justify-self:\s*start[^}]*width:\s*100%/s)
+  assert.match(css, /\.fan-social-card-preview\s*\{[^}]*min-width:\s*0/s)
+})
+
+test('fan discovery identity copy keeps the full row beneath the compact follow button', () => {
+  const css = readFileSync(new URL('../src/fan-community-reference.css', import.meta.url), 'utf8')
+  assert.match(css, /\.fan-social-card-preview > \.fan-social-copy\s*\{[^}]*grid-column:\s*2 \/ 4[^}]*grid-row:\s*1 \/ span 2/s)
+  assert.match(css, /\.fan-social-card-preview > \.fan-social-copy\s*\{[^}]*grid-template-rows:\s*30px auto/s)
+  assert.match(css, /\.fan-social-card-preview > \.fan-social-copy > strong\s*\{[^}]*display:\s*flex[^}]*align-items:\s*center/s)
+  assert.match(css, /\.fan-social-card-preview > \.fan-social-copy > \.fan-social-tags\s*\{[^}]*grid-column:\s*1 \/ -1[^}]*width:\s*100%/s)
+})
+
+test('fan discovery affinity copy uses the reference heart icon and leaves room for artist chips', () => {
+  assert.match(fanHubSource, /<p className="fan-social-affinity"><InlineIcon name="heart" \/>/)
+  const css = readFileSync(new URL('../src/fan-community-reference.css', import.meta.url), 'utf8')
+  assert.match(css, /\.fan-social-card-preview > button:not\(\.fan-social-profile\)\s*\{[^}]*align-self:\s*start[^}]*width:\s*62px[^}]*height:\s*30px/s)
+  assert.match(css, /\.fan-social-card-preview\s*\{[^}]*grid-template-columns:\s*64px minmax\(0, 1fr\) 62px/s)
+  assert.match(css, /\.fan-social-affinity \.inline-icon\s*\{[^}]*width:\s*14px[^}]*height:\s*14px/s)
 })
 
 test('public collection supports discovery filters and a clear trade path', () => {
@@ -65,6 +102,14 @@ test('public fan profile derives artist and pack display from backend collection
   assert.match(fanProfileSource, /const representativeImage = resolveApiUrl\(representativeCard\?\.imageUrl\) \|\| avatarFallback/)
   assert.match(fanProfileSource, /const primaryPackCount = representativeCard/)
   assert.doesNotMatch(fanProfileSource, /ownedCount \/ 40|ownedCount\}\/40/)
+})
+
+test('public fan profile starts trade from the selected tradable-card list', () => {
+  assert.match(fanProfileSource, /disabled=\{tradableCards\.length === 0\} onClick=\{\(\) => onTrade\(\)\}>거래 제안/)
+  assert.match(appSource, /\/trades\/new\?recipient=\$\{encodeURIComponent\(publicFanProfileUserId\)\}/)
+  assert.doesNotMatch(appSource, /onTrade=.*\/fans\/\$\{encodeURIComponent\(publicFanProfileUserId\)\}\/collection\?filter=tradable/)
+  assert.match(fanProfileSource, /followFan\(userId\)/)
+  assert.match(fanProfileSource, /unfollowFan\(userId\)/)
 })
 
 test('public collection derives owner badge and featured pack from backend collection cards', () => {
@@ -106,10 +151,11 @@ test('authenticated fan community routes use backend data instead of preview inj
   assert.doesNotMatch(tradeComposerSource, /const wanted = cards\[1\]/)
 })
 
-test('fan community previews avoid nested shell gutters and preserve compact spacing', () => {
+test('fan community previews share the primary shell gutter and preserve compact spacing', () => {
   const css = readFileSync(new URL('../src/fan-community-reference.css', import.meta.url), 'utf8')
-  assert.match(css, /main\.discover-shell\s*\{[^}]*padding-inline:\s*0/s)
-  assert.match(css, /main\.app-shell\.discover-shell > header\.app-header\s*\{[^}]*width:\s*calc\(100% - 32px\)\s*!important[^}]*margin:\s*0 16px 8px\s*!important/s)
+  assert.doesNotMatch(css, /main\.discover-shell\s*\{[^}]*padding-inline:\s*0/s)
+  assert.doesNotMatch(css, /main\.app-shell\.discover-shell > header\.app-header\s*\{[^}]*width:\s*calc\(100% - 32px\)/s)
+  assert.match(css, /main\.discover-shell \.discover-hub\s*\{[^}]*padding:\s*0 0 110px/s)
   assert.match(css, /main\.fan-social-shell\s*\{[^}]*padding-inline:\s*0/s)
   assert.match(css, /\.fan-social-content\s*\{[^}]*padding:\s*12px 16px 44px/s)
   assert.match(css, /\.fan-social-tags \.inline-icon\s*\{[^}]*width:\s*12px/s)
@@ -128,10 +174,15 @@ test('fan community visuals keep icons, avatars, chips, and motion aligned with 
 
   assert.equal((tradeComposerSource.match(/className="trade-card-visual"/g) ?? []).length, 2)
   assert.match(css, /\.discover-fan-list \.profile-avatar\s*\{[^}]*border-radius:\s*50%/s)
-  assert.match(css, /main\.discover-shell \.discover-fans-section \.section-heading button\s*\{[^}]*color:\s*#654cdd[^}]*font-weight:\s*800/s)
+  assert.match(css, /main\.discover-shell \.discover-featured-section \.section-heading button\s*\{[^}]*color:\s*#654cdd[^}]*font-weight:\s*800/s)
   assert.match(css, /\.fan-social-tags i\s*\{[^}]*display:\s*inline-flex[^}]*width:\s*auto/s)
   assert.match(css, /\.fan-profile-panel \.section-heading\s*\{[^}]*margin:\s*0 0 12px/s)
   assert.match(css, /\.fan-profile-tradable-cards \.more \.inline-icon\s*\{[^}]*width:\s*22px[^}]*height:\s*22px/s)
+  assert.match(css, /\.fan-profile-wanted-cards\s*\{[^}]*grid-template-columns:\s*repeat\(3/s)
+  assert.match(css, /\.fan-profile-wanted-panel \.section-heading > strong/)
+  assert.match(fanProfileSource, /거래 제안 준비/)
+  assert.match(css, /\.fan-profile-trade-ready\s*\{[^}]*grid-template-columns:/s)
+  assert.match(css, /\.fan-profile-trade-ready > span\s*\{[^}]*border-radius:\s*50%/s)
   assert.match(css, /\.fan-profile-summary > div > span\s*\{[^}]*width:\s*42px[^}]*border-radius:\s*50%[^}]*background:\s*#f1eeff/s)
   assert.match(css, /\.fan-profile-summary > div > span \.inline-icon\s*\{[^}]*width:\s*22px[^}]*height:\s*22px/s)
   assert.match(css, /\.trade-match-cards > article \.trade-card-visual\s*\{[^}]*animation:\s*trade-card-float/s)
@@ -148,7 +199,7 @@ test('secondary fan-community controls have real destinations or state changes',
   assert.match(tradeComposerSource, /selectNextOfferedCard/)
   assert.match(tradeComposerSource, /onClick=\{selectNextOfferedCard\}/)
   assert.doesNotMatch(tradeComposerSource, /<button type="button">다른 카드로 변경/)
-  assert.match(appSource, /onOpenArtist=\{artistId => window\.location\.assign/)
+  assert.match(appSource, /onOpenArtist=\{artistId => navigateAppPath/)
   assert.match(appSource, /const openPublicPackCatalog = \(packId\?: string\) =>/)
   assert.match(appSource, /onOpenPackCatalog=\{openPublicPackCatalog\}/)
   assert.match(appSource, /\/discover\/packs\/\$\{encodeURIComponent\(packId\)\}/)
@@ -174,9 +225,33 @@ test('trade composer submits the displayed requested card once', () => {
   assert.match(tradeComposerSource, /disabled=\{!confirmed \|\| submitting\}/)
 })
 
+test('trade proposal starts with a four-column card picker and continues to confirmation', () => {
+  assert.match(tradeComposerSource, /function TradeCardPicker/)
+  assert.match(tradeComposerSource, /상대가 원하는 카드/)
+  assert.match(tradeComposerSource, /내가 보낼 카드/)
+  assert.match(appSource, /tradeStep !== 'confirm'/)
+  assert.match(appSource, /initialOfferedUserCardId=/)
+})
+
 test('fan-community routes preserve a validated return destination', () => {
   assert.match(appSource, /safeAppReturnPath/)
   assert.match(appSource, /routeWithReturnTo/)
   assert.match(appSource, /returnTo/)
   assert.match(appSource, /window\.history\.replaceState\(\{\}, '', '\/fans'\)/)
+})
+
+test('collection exposes the live wishlist registration flow', () => {
+  const css = readFileSync(new URL('../src/reference.css', import.meta.url), 'utf8')
+  assert.match(appSource, /showWishlistPicker/)
+  assert.match(appSource, /\/collection\/wishlist/)
+  assert.match(appSource, /function WishlistPicker/)
+  assert.match(appSource, /preview === 'wishlist-picker'/)
+  assert.match(appSource, /persist=\{false\}/)
+  assert.match(appSource, /saveWishlistCard\(cardId\)/)
+  assert.match(appSource, /removeWishlistCard\(cardId\)/)
+  assert.match(appSource, /원하는 카드 등록/)
+  assert.match(appSource, /카드명 또는 멤버를 검색해보세요/)
+  assert.match(appSource, /원하는 카드로 등록/)
+  assert.match(css, /main\.collection-shell \.collection-wishlist-entry/)
+  assert.match(css, /main\.wishlist-picker-shell \.wishlist-picker-grid/)
 })

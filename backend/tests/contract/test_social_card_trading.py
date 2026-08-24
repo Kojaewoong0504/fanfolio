@@ -192,6 +192,8 @@ def test_fan_search_follow_connections_and_public_collection_summary(
     assert public["isFollowing"] is True
     assert public["summary"]["followerCount"] == 1
     assert public["summary"]["followingCount"] == 0
+    assert "wantedCards" in public
+    assert isinstance(public["wantedCards"], list)
 
 
 def test_trade_inbox_detail_reject_cancel_and_expire_notifications(

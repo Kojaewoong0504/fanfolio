@@ -1,10 +1,60 @@
 import { useEffect, useState } from 'react'
-import { ApiError, createTradeProposal, getMyCollection, getPublicCollection, resolveApiUrl, type CollectionCard } from '../api/client'
+import { ApiError, createTradeProposal, getMyCollection, getPublicCollection, resolveApiUrl, type CollectionCard, type PublicWantedCard } from '../api/client'
 import { InlineIcon } from '../App'
 
-type Props = { recipientUserId: string; requestedUserCardIds: string[]; onBack: () => void; onCreated: () => void; initialCards?: CollectionCard[]; initialRequestedCards?: CollectionCard[] }
+type TradeSelection = { offeredUserCardId: string; requestedUserCardId: string }
 
-export function TradeComposer({ recipientUserId, requestedUserCardIds, onBack, onCreated, initialCards, initialRequestedCards }: Props) {
+type PickerProps = { recipientUserId: string; requestedUserCardIds: string[]; onBack: () => void; onContinue: (selection: TradeSelection) => void }
+
+export function TradeCardPicker({ recipientUserId, requestedUserCardIds, onBack, onContinue }: PickerProps) {
+  const [cards, setCards] = useState<CollectionCard[]>([])
+  const [requestedCards, setRequestedCards] = useState<CollectionCard[]>([])
+  const [wantedCards, setWantedCards] = useState<PublicWantedCard[]>([])
+  const [selectedOfferedId, setSelectedOfferedId] = useState<string | null>(null)
+  const [selectedRequestedId, setSelectedRequestedId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    void Promise.all([getMyCollection(), getPublicCollection(recipientUserId)]).then(([mine, theirs]) => {
+      if (!active) return
+      const available = mine.data.cards.filter(card => card.tradable !== false)
+      const requested: CollectionCard[] = theirs.data.cards
+      const requestedFromRoute = requestedUserCardIds.map(id => requested.find(card => card.userCardId === id)).filter(Boolean) as CollectionCard[]
+      const requestedFromWishlist = (theirs.data.wantedCards ?? []).map(wanted => requested.find(card => card.cardId === wanted.cardId)).filter(Boolean) as CollectionCard[]
+      const mergedRequested = Array.from(new Map([...requestedFromRoute, ...requestedFromWishlist, ...requested].map(card => [card.userCardId, card])).values())
+      setCards(available.length > 0 ? available : mine.data.cards)
+      setRequestedCards(mergedRequested)
+      setWantedCards(theirs.data.wantedCards ?? [])
+      setSelectedOfferedId((available[0] ?? mine.data.cards[0])?.userCardId ?? null)
+      setSelectedRequestedId((requestedFromRoute[0] ?? requestedFromWishlist[0] ?? mergedRequested[0])?.userCardId ?? null)
+    }).catch(errorValue => { if (active) setError(errorValue instanceof ApiError ? errorValue.message : '거래할 카드를 불러오지 못했어요.') }).finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [recipientUserId, requestedUserCardIds])
+
+  const selectedOffered = cards.find(card => card.userCardId === selectedOfferedId)
+  const selectedRequested = requestedCards.find(card => card.userCardId === selectedRequestedId)
+  const wantedCardIds = new Set(wantedCards.map(card => card.cardId))
+  const cardLabel = (card: CollectionCard) => `${card.rarity ?? 'N'} · ${card.memberName ?? card.name}`
+
+  return <main className="app-shell trade-picker-shell">
+    <header className="social-reference-topbar"><button type="button" onClick={onBack} aria-label="팬 프로필로 돌아가기"><InlineIcon name="back" /></button><h1>거래 제안</h1><span /></header>
+    <section className="trade-picker-content">
+      <section className="trade-picker-intro"><InlineIcon name="rotate" /><div><b>서로 원하는 카드를 골라보세요</b><p>상대가 원하는 카드와 내가 보낼 카드를 선택해요.</p></div></section>
+      {error ? <p role="alert">{error}</p> : loading ? <p role="status">카드를 불러오는 중...</p> : <>
+        <section className="trade-picker-section"><div className="trade-picker-heading"><div><h2>상대가 원하는 카드</h2><p>받고 싶은 카드 {requestedCards.length}장</p></div><b>{requestedCards.length}장</b></div><div className="trade-picker-wanted-grid">{requestedCards.slice(0, 4).map(card => { const selected = card.userCardId === selectedRequestedId; return <button type="button" key={card.userCardId} className={`trade-picker-card ${selected ? 'selected' : ''}`} onClick={() => setSelectedRequestedId(card.userCardId)} aria-pressed={selected} aria-label={`${cardLabel(card)} ${selected ? '선택됨' : '선택'}`}><img src={resolveApiUrl(card.imageUrl)} alt={card.name} /><span>{card.rarity ?? 'N'}</span><em><InlineIcon name="star" /> 1</em>{(wantedCardIds.has(card.cardId) || selected) && <small>원하는 카드</small>}{selected && <i><InlineIcon name="check" /></i>}</button> })}</div></section>
+        <section className="trade-picker-section"><div className="trade-picker-heading"><div><h2>내가 보낼 카드</h2><p>교환할 카드 1장을 선택해 주세요.</p></div><b>{cards.length}장</b></div><div className="trade-picker-offered-grid">{cards.slice(0, 8).map(card => { const selected = card.userCardId === selectedOfferedId; return <button type="button" key={card.userCardId} className={`trade-picker-card ${selected ? 'selected' : ''}`} onClick={() => setSelectedOfferedId(card.userCardId)} aria-pressed={selected} aria-label={`${cardLabel(card)} ${selected ? '선택 해제' : '선택'}`}><img src={resolveApiUrl(card.imageUrl)} alt={card.name} /><span>{card.rarity ?? 'N'}</span><em><InlineIcon name="star" /> 1</em>{selected && <i><InlineIcon name="check" /></i>}</button> })}</div></section>
+        {selectedOffered && selectedRequested && <div className="trade-picker-summary"><img src={resolveApiUrl(selectedOffered.imageUrl)} alt="내가 보낼 카드" /><span>선택한 카드 <b>{selectedOffered.name}</b><small>받고 싶은 카드: {selectedRequested.name}</small></span><InlineIcon name="chevron" /></div>}
+      </>}
+    </section>
+    <footer className="trade-picker-footer"><button type="button" onClick={onBack}>취소</button><button type="button" className="primary" disabled={!selectedOfferedId || !selectedRequestedId || loading} onClick={() => selectedOfferedId && selectedRequestedId && onContinue({ offeredUserCardId: selectedOfferedId, requestedUserCardId: selectedRequestedId })}>선택 완료</button></footer>
+  </main>
+}
+
+type Props = { recipientUserId: string; requestedUserCardIds: string[]; onBack: () => void; onCreated: () => void; initialCards?: CollectionCard[]; initialRequestedCards?: CollectionCard[]; initialOfferedUserCardId?: string }
+
+export function TradeComposer({ recipientUserId, requestedUserCardIds, onBack, onCreated, initialCards, initialRequestedCards, initialOfferedUserCardId }: Props) {
   const [cards, setCards] = useState<CollectionCard[]>(initialCards ?? [])
   const [requestedCards, setRequestedCards] = useState<CollectionCard[]>(initialRequestedCards ?? [])
   const [recipientNickname, setRecipientNickname] = useState('별빛수집가')
@@ -12,7 +62,7 @@ export function TradeComposer({ recipientUserId, requestedUserCardIds, onBack, o
   const [error, setError] = useState('')
   const [confirmed, setConfirmed] = useState(false)
   const [message, setMessage] = useState('')
-  const [selectedOfferedUserCardId, setSelectedOfferedUserCardId] = useState<string | null>(initialCards?.find(card => card.tradable !== false)?.userCardId ?? initialCards?.[0]?.userCardId ?? null)
+  const [selectedOfferedUserCardId, setSelectedOfferedUserCardId] = useState<string | null>(initialOfferedUserCardId ?? initialCards?.find(card => card.tradable !== false)?.userCardId ?? initialCards?.[0]?.userCardId ?? null)
   const [submitting, setSubmitting] = useState(false)
   useEffect(() => {
     if (initialCards) {
