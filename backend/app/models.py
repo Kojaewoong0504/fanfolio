@@ -479,6 +479,69 @@ class CardPack(Base):
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class ShopProduct(Base):
+    """Sellable storefront metadata linked to an existing catalog artifact."""
+
+    __tablename__ = "shop_products"
+    __table_args__ = (
+        CheckConstraint(
+            "product_type IN ('card_pack', 'point_item', 'limited_item')",
+            name="ck_shop_products_product_type",
+        ),
+        CheckConstraint(
+            "status IN ('draft', 'published', 'archived')",
+            name="ck_shop_products_status",
+        ),
+        CheckConstraint("price_points > 0", name="ck_shop_products_price_points_positive"),
+        Index("ix_shop_products_status_artist", "status", "artist_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id", ondelete="RESTRICT"))
+    product_type: Mapped[str] = mapped_column(String(32), nullable=False, default="card_pack")
+    card_pack_id: Mapped[str | None] = mapped_column(
+        ForeignKey("card_packs.id", ondelete="RESTRICT"), nullable=True
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    detail_content: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
+    image_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    price_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class ShopOrder(Base):
+    """Immutable point purchase snapshot for a storefront product."""
+
+    __tablename__ = "shop_orders"
+    __table_args__ = (
+        CheckConstraint("payment_method IN ('points')", name="ck_shop_orders_payment_method"),
+        CheckConstraint("status IN ('completed', 'failed')", name="ck_shop_orders_status"),
+        Index("ix_shop_orders_user_created", "user_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    product_id: Mapped[str] = mapped_column(ForeignKey("shop_products.id", ondelete="RESTRICT"))
+    product_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    price_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    payment_method: Mapped[str] = mapped_column(String(32), nullable=False, default="points")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="completed")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
 class CardPackCard(Base):
     """Card membership and the public probability for one pack version."""
 

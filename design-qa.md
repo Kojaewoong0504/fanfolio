@@ -1,3 +1,70 @@
+# 구매 · 교환 내역 프리뷰 Design QA (2026-08-24)
+
+- source visual truth: `/Users/gojaewoong/.codex/generated_images/01a02fb6-11fa-7cc3-9285-cad167b0f38f/exec-be4cae30-72ec-4d22-9d8a-619aa47bb6fe.png`
+- implementation screenshot: `/Users/gojaewoong/Desktop/ko/fanfolio/design-qa-shop-history-preview.png`
+- combined comparison: `/Users/gojaewoong/Desktop/ko/fanfolio/design-qa-shop-history-comparison.png`
+- preview: `http://127.0.0.1:5174/?preview=shop-history`
+- viewport: `384px` CSS width, full-page capture
+- state: 전체 내역, 2026년 8월 및 7월 기록
+
+**Findings**
+
+- 상점과 동일한 보라색 토큰, 흰색 카드, 얇은 라벤더 보더, 모바일 헤더를 사용해 별도 디자인 시스템처럼 보이지 않도록 구성했다.
+- 시안의 월간 포인트·구매·교환 요약, 세 가지 필터, 월별 내역 그룹, 최근 1년 안내 순서를 그대로 유지했다.
+- 긴 상품명은 최대 두 줄로 표시하고 금액 열은 고정해 384px 폭에서도 본문 가로 오버플로와 금액 겹침이 없다.
+- 관심 아티스트는 6개 항목이 화면을 넘으면 해당 행에서만 가로 스크롤되며 문서 전체 폭은 늘어나지 않는다.
+
+**Interaction Verification**
+
+- 상점의 `구매 · 교환 내역` 버튼이 전용 프리뷰 경로로 이동한다.
+- `포인트 교환` 필터 선택 시 활성 상태와 목록이 교환 기록 1건으로 갱신된다.
+- 상단 뒤로가기 버튼이 상점 프리뷰로 복귀한다.
+- 브라우저 실측: 내역 4건, 월 그룹 2개, 문서 가로 오버플로 없음.
+
+**Automated Verification**
+
+- `npm test`: 202/202 passed.
+- `npm run build`: TypeScript 및 Vite 프로덕션 빌드 통과.
+- `npm run lint`: 오류 없음. 기존 경고 3건은 이번 변경 범위 밖이다.
+
+final result: passed
+
+---
+
+# 상점 프리뷰 Design QA (2026-08-24)
+
+- source visual truth: `/Users/gojaewoong/.codex/generated_images/01a02fb6-11fa-7cc3-9285-cad167b0f38f/exec-400b3b17-b72b-4647-8e94-4d547816b1c4.png`
+- implementation screenshot: `/Users/gojaewoong/Desktop/ko/fanfolio/design-qa-shop-preview.png`
+- combined comparison: `/Users/gojaewoong/Desktop/ko/fanfolio/design-qa-shop-comparison.png`
+- preview: `http://127.0.0.1:5174/?preview=shop`
+- viewport: `430 x 932` CSS px for visual capture, plus `360 x 800` responsive overflow check
+- source pixels: `864 x 1821`; implementation pixels: `415 x 1256`
+- state: 전체 아티스트, 추천 카테고리, 기본 상품 목록
+
+**Findings**
+
+- 시안의 정보 순서인 관심 아티스트 → 보유 포인트 → 구매·교환 내역 → 카테고리 → 추천 카드팩 → 포인트 교환 → 한정 상품을 그대로 유지했다.
+- 기존 팬앱의 보라색 토큰, 헤더, 카드 보더, 버튼, 하단 내비게이션 규칙을 재사용했다. `마이` 대신 `상점`이 활성인 5개 탭 구성을 프리뷰 안에서만 적용했다.
+- 사용자가 지적했던 구매·교환 내역은 포인트 카드 바로 아래의 독립 행으로 배치했고, 전체 아티스트는 별도 원형 아이콘 버튼으로 정리했다.
+- 프로젝트에 있는 실제 카드팩, 팬 이미지, 팬 위크, 프로필 장식 자산을 사용했으며 텍스트 플레이스홀더 이미지는 사용하지 않았다.
+- 시안보다 구현 캡처의 세로 길이가 길다. 실제 팬앱의 터치 영역과 고정 하단 내비게이션을 유지한 스크롤 화면이기 때문이며, 핵심 콘텐츠의 잘림이나 가로 오버플로는 없다.
+
+**Interaction Verification**
+
+- 추천, 카드팩, 포인트 교환, 한정 상품 탭이 선택 상태를 바꾸고 해당 섹션만 표시한다.
+- 드림스케이프와 루나라이즈 아티스트 선택 상태가 `aria-pressed`와 시각 강조에 반영된다.
+- 카드팩, 포인트 교환, 한정 상품 버튼을 누르면 선택한 상품명이 포함된 상태 안내가 표시된다.
+- `360 x 800`에서 문서 폭은 `345px`, 가로 오버플로는 `false`다.
+- 최종 브라우저 콘솔 오류: 없음.
+
+**Follow-up Polish**
+
+- P3: 실제 상점 API를 붙일 때 포인트 잔액, 구매·교환 내역, 아티스트별 상품 필터를 서버 데이터로 교체한다.
+
+final result: passed
+
+---
+
 # Compact Inventory Source Chips Design QA
 
 - source visual truth: `/Users/gojaewoong/Downloads/스크린샷 2026-08-19 오후 12.33.34.png`
@@ -464,5 +531,38 @@ final result: passed
 **Known Limitation**
 
 - 목업 프리뷰이므로 데이터 저장, 이미지 업로드, 검수 요청, 실제 인증번호 생성은 백엔드에 연결하지 않았다.
+
+final result: passed
+# 결제 정보 프리뷰 Design QA (2026-08-24)
+
+- source visual truth: `/Users/gojaewoong/.codex/generated_images/01a02fb6-11fa-7cc3-9285-cad167b0f38f/exec-00458db8-db6e-4a9a-80cb-83684eac725d.png`
+- implementation screenshot: `/Users/gojaewoong/Desktop/ko/fanfolio/design-qa-shop-checkout-preview.png`
+- combined comparison: `/Users/gojaewoong/Desktop/ko/fanfolio/design-qa-shop-checkout-comparison.png`
+- preview: `http://127.0.0.1:5174/?preview=shop-checkout`
+- viewport: `384px` CSS width, full-page capture
+- state: 포인트 결제 선택, 포인트 우선 사용 활성화
+
+**Findings**
+
+- 선택한 3번 시안의 핵심 순서인 진행 단계 → 상품 요약 → 결제 수단 → 포인트 우선 사용 → 결제 금액 → 하단 액션을 유지했다.
+- 현재 상점과 동일한 보라색 토큰, 흰색 표면, 라벤더 보더, 둥근 카드, 모바일 고정 액션 레일을 재사용했다.
+- 상품 이미지는 프로젝트의 실제 `dreamscapeCardPack` 자산을 사용했고, 결제 아이콘은 기존 `InlineIcon`과 서비스 내 컬러 토큰으로 구성했다.
+- 384px 폭에서 문서 가로 오버플로 없이 카드·결제수단·요약 금액이 세로로 안전하게 스크롤된다.
+
+**Interaction Verification**
+
+- 상점의 `Nebula 카드팩` 카드팩 열기 버튼이 `/?preview=shop-checkout`으로 이동한다.
+- 포인트, 신용·체크카드, 카카오페이, 네이버페이 선택 상태가 갱신된다.
+- 포인트 우선 사용을 끄면 포인트 사용액과 최종 결제 금액이 `0P`·`1,200원`으로 갱신된다.
+- `다음`을 누르면 구매 완료 상태로 전환되고, `상점으로 돌아가기`가 상점 프리뷰로 복귀한다.
+- `이전`과 상단 뒤로가기는 상점 프리뷰로 복귀한다.
+- 브라우저 실측: 문서 가로 오버플로 없음, 완료 상태·상점 복귀 확인.
+
+**Automated Verification**
+
+- `npm test`: 204/204 passed.
+- `npm run build`: TypeScript 및 Vite 프로덕션 빌드 통과.
+- `npm run lint`: 오류 없음. 기존 경고 3건은 이번 변경 범위 밖이다.
+- `git diff --check`: 통과.
 
 final result: passed

@@ -3,7 +3,7 @@ import './App.css'
 import './reference.css'
 import './fan-community-reference.css'
 import { getUserCardHistory, type UserCardHistoryItem } from './api/client'
-import { ApiError, apiFetch, applyToFanEvent, claimPassTier, claimReward, clearAccessToken, combineCards, connectNotificationStream, createCollectionGoal, deleteCollectionGoal, followFan, getCardCombination, getCardPacks, getCardPackOdds, getCollectionGoals, getFanEvent, getFanEventComments, getFanEvents, getFanHome, getMyEventApplications, getFanPass, getNotificationPreferences, getProgression, getWishlist, oauthStartUrl, openCardPack, postFanEventComment, previewCardCombination, reconcilePassRewards, removeWishlistCard, resolveApiUrl, saveWishlistCard, searchFans, setAccessToken, unfollowFan, updateNotificationPreferences, updateProfileEquipment, type CardCombinationPreview, type CardCombinationRecipe, type CardCombinationResult, type CardDesignConfig, type CardPack, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionGoal, type CollectionSummary, type CurrentUser, type EventPagination, type FanEvent, type FanEventApplication, type FanEventComment, type FanEventStatus, type FanHomeResponse, type FanMission, type FanProgression, type FanSummary, type NotificationItem, type ProfileEquipment, type PublicCollection as PublicCollectionData, type RewardGrant, type UserCardDetail } from './api/client'
+import { ApiError, apiFetch, applyToFanEvent, claimPassTier, claimReward, clearAccessToken, combineCards, connectNotificationStream, createCollectionGoal, createShopOrder, deleteCollectionGoal, followFan, getCardCombination, getCardPacks, getCardPackOdds, getCollectionGoals, getFanEvent, getFanEventComments, getFanEvents, getFanHome, getMyEventApplications, getFanPass, getNotificationPreferences, getProgression, getShopProduct, getShopProducts, getShopOrders, getWishlist, oauthStartUrl, openCardPack, postFanEventComment, previewCardCombination, reconcilePassRewards, removeWishlistCard, resolveApiUrl, saveWishlistCard, searchFans, setAccessToken, unfollowFan, updateNotificationPreferences, updateProfileEquipment, type CardCombinationPreview, type CardCombinationRecipe, type CardCombinationResult, type CardDesignConfig, type CardPack, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionGoal, type CollectionSummary, type CurrentUser, type EventPagination, type FanEvent, type FanEventApplication, type FanEventComment, type FanEventStatus, type FanHomeResponse, type FanMission, type FanProgression, type FanSummary, type NotificationItem, type ProfileEquipment, type PublicCollection as PublicCollectionData, type RewardGrant, type ShopOrder, type ShopProduct, type UserCardDetail } from './api/client'
 import { QrRedeemModal, RedeemIcon } from './components/QrRedeemModal'
 import { CardDetail } from './components/CardDetail'
 import { InteractiveCollectibleCard } from './components/InteractiveCollectibleCard'
@@ -43,8 +43,9 @@ import mysteryCardImage from './assets/card-reveal-mystery-generated.png'
 import dreamscapeCardPack from './assets/card-pack-dreamscape-generated.png'
 import registrationCompleteCelebration from './assets/registration-complete-celebration-v2.png'
 import fanLevelStar from './assets/fan-level-star-v2.png'
+import profileDecorationsImage from './assets/profile-decorations-generated.png'
 
-type Tab = 'home' | 'discover' | 'collection' | 'growth' | 'settings' | 'alerts' | 'events'
+type Tab = 'home' | 'discover' | 'collection' | 'growth' | 'shop' | 'settings' | 'alerts' | 'events'
 
 const cardRoutePreviewKey = 'fanfolio.card-route-preview'
 
@@ -181,8 +182,265 @@ function FanGrowthPreview() {
     </div>
     <section className="screen"><FanGrowth progression={fanGrowthPreviewProgression} globalProgression={{ ...fanGrowthPreviewProgression, level: { level: 2, totalXp: 120, nextLevelXp: 300 }, pass: { ...fanGrowthPreviewProgression.pass, seasons: fanGrowthPreviewProgression.pass.seasons.map(season => ({ ...season, id: 'preview-global-season', title: '전체 팬 레벨', artistId: null })) } }} artistScopes={artistScopes} selectedArtistId="dreamscape" onArtistChange={() => {}} loading={false} error="" mode="full" {...previewCallbacks} onViewPass={onViewPass} onViewGlobalPass={onViewGlobalPass} fanGrowthMode="full" /></section>
     <div className="bottom-nav" aria-label="주요 메뉴">{[
-      ['탐색', 'discover'], ['보관함', 'collection'], ['홈', 'home'], ['팬 레벨', 'growth'], ['마이', 'settings'],
-    ].map(([label, icon]) => <button key={label} type="button" className={`nav-item ${label === '팬 레벨' ? 'active' : ''}`}><NavIcon name={icon as 'discover' | 'collection' | 'home' | 'growth' | 'settings'} /><span>{label}</span></button>)}</div>
+      ['탐색', 'discover'], ['보관함', 'collection'], ['홈', 'home'], ['팬 레벨', 'growth'], ['상점', 'shop'],
+    ].map(([label, icon]) => <button key={label} type="button" className={`nav-item ${label === '팬 레벨' ? 'active' : ''}`}><NavIcon name={icon as 'discover' | 'collection' | 'home' | 'growth' | 'shop'} /><span>{label}</span></button>)}</div>
+  </main>
+}
+
+type ShopCategory = 'recommended' | 'packs' | 'points' | 'limited'
+type ShopPaymentMethod = 'points' | 'card' | 'kakao' | 'naver'
+
+type ShopHistoryFilter = 'all' | 'purchase' | 'exchange'
+
+type ShopHistoryRecord = {
+  id: string
+  type: Exclude<ShopHistoryFilter, 'all'>
+  month: string
+  title: string
+  date: string
+  status: string
+  points: string
+  image: string
+  cancelled?: boolean
+  imageClassName?: string
+}
+
+const shopHistoryRecords: ShopHistoryRecord[] = [
+  { id: 'nebula-pack', type: 'purchase', month: '2026년 8월', title: 'DREAMSCAPE Nebula Ver. 카드팩', date: '2026.08.24 12:42', status: '구매 완료', points: '-1,200P', image: dreamscapeCardPack },
+  { id: 'points-500', type: 'exchange', month: '2026년 8월', title: '포인트 500P 교환', date: '2026.08.21 18:10', status: '교환 완료', points: '-500P', image: fanLevelStar, imageClassName: 'points' },
+  { id: 'summer-pack', type: 'purchase', month: '2026년 8월', title: '2026 SUMMER 한정 카드팩', date: '2026.08.08 09:31', status: '구매 완료', points: '-900P', image: dreamscapeCardPack, imageClassName: 'summer' },
+  { id: 'starlight-pack', type: 'purchase', month: '2026년 7월', title: 'DREAMSCAPE Starlight Ver. 카드팩', date: '2026.07.28 16:05', status: '구매 취소', points: '+1,200P', image: dreamscapeCardPack, cancelled: true, imageClassName: 'starlight' },
+]
+
+function ShopHistoryPreview({ appMode = false }: { appMode?: boolean }) {
+  const [filter, setFilter] = useState<ShopHistoryFilter>('all')
+  const [liveRecords, setLiveRecords] = useState<ShopHistoryRecord[] | null>(null)
+  const [historyError, setHistoryError] = useState('')
+  useEffect(() => {
+    if (!appMode) return
+    let active = true
+    void getShopOrders().then(result => {
+      if (!active) return
+      setLiveRecords(result.data.items.map((item: ShopOrder) => ({ id: item.id, type: 'purchase', month: item.createdAt.slice(0, 7).replace('-', '년 ') + '월', title: item.productName, date: item.createdAt.replace('T', ' ').slice(0, 16), status: item.status === 'completed' ? '구매 완료' : '구매 실패', points: `-${item.pricePoints.toLocaleString()}P`, image: dreamscapeCardPack })))
+    }).catch(() => { if (active) setHistoryError('구매 내역을 불러오지 못했어요.') })
+    return () => { active = false }
+  }, [appMode])
+  useEffect(() => {
+    const previousTitle = document.title
+    document.title = 'Fanfolio · 구매 · 교환 내역'
+    return () => { document.title = previousTitle }
+  }, [])
+  const filters: Array<{ id: ShopHistoryFilter; label: string }> = [
+    { id: 'all', label: '전체' },
+    { id: 'purchase', label: '구매' },
+    { id: 'exchange', label: '포인트 교환' },
+  ]
+  const sourceRecords = liveRecords ?? shopHistoryRecords
+  const records = filter === 'all' ? sourceRecords : sourceRecords.filter(record => record.type === filter)
+  const months = [...new Set(records.map(record => record.month))]
+
+  return <main className="app-shell shop-history-shell">
+    <header className="shop-history-topbar">
+      <button type="button" aria-label="상점으로 돌아가기" onClick={() => navigateAppPath(appMode ? '/shop' : '/?preview=shop')}><InlineIcon name="back" /></button>
+      <h1>구매 · 교환 내역</h1>
+      <span aria-hidden="true" />
+    </header>
+
+    <section className="shop-history-content">
+      <section className="shop-history-summary" aria-label="상점 이용 요약">
+        <div><span>보유 포인트</span><strong>3,250<small>P</small></strong></div>
+        <div><span>이번 달 구매</span><strong>2<small>건</small></strong></div>
+        <div><span>이번 달 교환</span><strong>1<small>건</small></strong></div>
+      </section>
+
+      <div className="shop-history-filters" role="tablist" aria-label="내역 필터">
+        {filters.map(item => <button type="button" role="tab" key={item.id} className={filter === item.id ? 'active' : ''} aria-selected={filter === item.id} onClick={() => setFilter(item.id)}>{item.label}</button>)}
+      </div>
+
+      {historyError && <p className="shop-notice" role="alert">{historyError}</p>}
+      <div className="shop-history-groups" aria-live="polite">
+        {months.map(month => <section className="shop-history-group" key={month} aria-labelledby={`shop-history-${month}`}>
+          <h2 id={`shop-history-${month}`}>{month}</h2>
+          <div className="shop-history-list">
+            {records.filter(record => record.month === month).map(record => <article className={`shop-history-card${record.cancelled ? ' cancelled' : ''}`} key={record.id}>
+              <span className={`shop-history-thumb ${record.imageClassName ?? ''}`}><img src={record.image} alt="" />{record.type === 'exchange' && <b aria-hidden="true">P</b>}</span>
+              <div className="shop-history-copy"><h3>{record.title}</h3><time>{record.date}</time><em>{record.status}</em></div>
+              <strong>{record.points}</strong>
+            </article>)}
+          </div>
+        </section>)}
+      </div>
+
+      <aside className="shop-history-note"><span><InlineIcon name="system" /></span><p>최근 1년간의 구매 및 교환 내역을 확인할 수 있어요.</p></aside>
+    </section>
+  </main>
+}
+
+function ShopCheckoutPreview({ appMode = false }: { appMode?: boolean }) {
+  const [paymentMethod, setPaymentMethod] = useState<ShopPaymentMethod>('points')
+  const [usePointsFirst, setUsePointsFirst] = useState(true)
+  const [completed, setCompleted] = useState(false)
+  const price = 1200
+  const balance = 3250
+  const pointUsed = paymentMethod === 'points' || usePointsFirst ? Math.min(price, balance) : 0
+  const cashDue = Math.max(price - pointUsed, 0)
+  const methods: Array<{ id: ShopPaymentMethod; label: string; description: string; icon: string }> = [
+    { id: 'points', label: '포인트', description: `보유 ${balance.toLocaleString()}P`, icon: 'P' },
+    { id: 'card', label: '신용 · 체크카드', description: '카드 등록 또는 선택', icon: 'card' },
+    { id: 'kakao', label: '카카오페이', description: '간편 결제', icon: '카' },
+    { id: 'naver', label: '네이버페이', description: '간편 결제', icon: 'N' },
+  ]
+
+  useEffect(() => {
+    const previousTitle = document.title
+    document.title = completed ? 'Fanfolio · 구매 완료' : 'Fanfolio · 결제 정보'
+    return () => { document.title = previousTitle }
+  }, [completed])
+
+  if (completed) return <main className="app-shell shop-checkout-shell shop-checkout-complete-shell">
+    <header className="shop-checkout-topbar"><button type="button" aria-label="상점으로 돌아가기" onClick={() => navigateAppPath(appMode ? '/shop' : '/?preview=shop')}><InlineIcon name="back" /></button><h1>구매 완료</h1><span aria-hidden="true" /></header>
+    <section className="shop-checkout-complete" aria-live="polite">
+      <span className="shop-checkout-success"><InlineIcon name="check" /></span>
+      <h2>카드팩 구매가 완료됐어요</h2>
+      <p>DREAMSCAPE Nebula Ver. 카드팩이<br />내 보관함에 추가됐어요.</p>
+      <div className="shop-checkout-complete-card"><img src={dreamscapeCardPack} alt="DREAMSCAPE Nebula 카드팩" /><div><strong>정규 1집 · DREAMSCAPE</strong><span>Nebula Ver.</span><b>{price.toLocaleString()}P 결제</b></div></div>
+    </section>
+    <div className="shop-checkout-complete-footer"><button type="button" className="shop-checkout-primary" onClick={() => navigateAppPath(appMode ? '/shop' : '/?preview=shop')}>상점으로 돌아가기</button></div>
+  </main>
+
+  return <main className="app-shell shop-checkout-shell">
+    <header className="shop-checkout-topbar"><button type="button" aria-label="상점으로 돌아가기" onClick={() => navigateAppPath(appMode ? '/shop' : '/?preview=shop')}><InlineIcon name="back" /></button><h1>결제 정보</h1><span aria-hidden="true" /></header>
+    <section className="shop-checkout-content">
+      <div className="shop-checkout-progress" aria-label="구매 단계"><span className="active">상품 확인</span><i /><span className="active">결제 수단</span><i /><span>완료</span></div>
+      <section className="shop-checkout-product" aria-labelledby="checkout-product-title"><img src={dreamscapeCardPack} alt="DREAMSCAPE Nebula 카드팩" /><div><span>정규 1집 · DREAMSCAPE</span><h2 id="checkout-product-title">Nebula Ver. 카드팩</h2><p>랜덤 포토카드 3장</p></div><strong>{price.toLocaleString()}P</strong></section>
+      <section className="shop-checkout-section" aria-labelledby="checkout-method-title"><div className="shop-checkout-heading"><div><h2 id="checkout-method-title">결제 수단</h2><p>원하는 결제 방법을 선택해 주세요.</p></div></div><div className="shop-checkout-methods">{methods.map(item => <button type="button" key={item.id} className={`shop-checkout-method${paymentMethod === item.id ? ' selected' : ''}`} aria-pressed={paymentMethod === item.id} onClick={() => setPaymentMethod(item.id)}><span className={`shop-checkout-method-icon ${item.id}`}>{item.icon === 'card' ? <InlineIcon name="card" /> : item.icon}</span><span><b>{item.label}</b><small>{item.description}</small></span>{paymentMethod === item.id && <span className="shop-checkout-method-check"><InlineIcon name="check" /></span>}</button>)}</div></section>
+      <label className="shop-checkout-toggle"><span><b>포인트 우선 사용</b><small>보유 포인트를 먼저 사용해요.</small></span><input type="checkbox" checked={usePointsFirst} onChange={event => setUsePointsFirst(event.target.checked)} /><i aria-hidden="true" /></label>
+      <section className="shop-checkout-summary" aria-label="결제 금액"><div><span>상품 금액</span><strong>{price.toLocaleString()}P</strong></div><div><span>포인트 사용</span><strong>-{pointUsed.toLocaleString()}P</strong></div><div className="total"><span>최종 결제</span><strong>{cashDue === 0 ? '0원' : `${cashDue.toLocaleString()}원`}</strong></div></section>
+    </section>
+    <footer className="shop-checkout-footer"><button type="button" className="shop-checkout-secondary" onClick={() => navigateAppPath(appMode ? '/shop' : '/?preview=shop')}>이전</button><button type="button" className="shop-checkout-primary" onClick={() => setCompleted(true)}>다음</button></footer>
+  </main>
+}
+
+function ShopProductDetail({ productId }: { productId: string }) {
+  const [product, setProduct] = useState<ShopProduct | null>(null)
+  const [state, setState] = useState<'loading' | 'ready' | 'error' | 'buying'>('loading')
+  const [message, setMessage] = useState('')
+  useEffect(() => { let active = true; void getShopProduct(productId).then(result => { if (active) { setProduct(result.data); setState('ready') } }).catch(() => { if (active) setState('error') }); return () => { active = false } }, [productId])
+  const buy = async () => { if (!product) return; setState('buying'); setMessage(''); try { await createShopOrder(product.id); navigateAppPath('/shop/history') } catch (error) { setMessage(error instanceof ApiError ? error.message : '구매에 실패했어요.'); setState('ready') } }
+  return <main className="app-shell shop-product-detail-shell"><header className="shop-history-topbar"><button type="button" aria-label="상점으로 돌아가기" onClick={() => navigateAppPath('/shop')}><InlineIcon name="back" /></button><h1>상품 상세</h1><span aria-hidden="true" /></header><section className="shop-product-detail-content">{state === 'loading' && <p className="shop-notice">상품 정보를 불러오고 있어요.</p>}{state === 'error' && <p className="shop-notice" role="alert">상품을 찾을 수 없어요.</p>}{product && <><img className="shop-product-detail-image" src={resolveApiUrl(product.imageUrl) || dreamscapeCardPack} alt="" /><p className="eyebrow">{product.artistName ?? 'FANFOLIO'}</p><h2>{product.name}</h2><p>{product.description || product.cardPack?.name || '카드팩 상품'}</p><strong className="shop-product-detail-price">{product.pricePoints.toLocaleString()}P</strong>{message && <p className="shop-notice" role="alert">{message}</p>}<button type="button" className="shop-checkout-primary" disabled={state === 'buying'} onClick={() => void buy()}>{state === 'buying' ? '구매 처리 중…' : '포인트로 구매하기'}</button>{product.detailContent?.map((block, index) => block.type === 'image' ? <figure className="shop-product-detail-media" key={block.key ?? `${block.title}-${index}`}><img src={resolveApiUrl(block.imageUrl) || dreamscapeCardPack} alt={block.alt || block.title} /><figcaption>{block.title}</figcaption></figure> : <section className="shop-product-detail-block" key={block.key ?? `${block.title}-${index}`}><h3>{block.title}</h3><p>{block.body || ''}</p></section>)}</>}</section></main>
+}
+
+function ShopPreview({ appMode = false }: { appMode?: boolean }) {
+  const [category, setCategory] = useState<ShopCategory>('recommended')
+  const [artist, setArtist] = useState<'all' | 'dreamscape' | 'lunarize' | 'astra' | 'eclipse'>('all')
+  const [notice, setNotice] = useState('')
+  const [products, setProducts] = useState<ShopProduct[]>([])
+  const [productsLoading, setProductsLoading] = useState(appMode)
+  const [productsError, setProductsError] = useState('')
+  useEffect(() => {
+    const previousTitle = document.title
+    document.title = 'Fanfolio · 상점'
+    return () => { document.title = previousTitle }
+  }, [])
+  useEffect(() => {
+    if (!appMode) return
+    let active = true
+    void getShopProducts().then(result => {
+      if (!active) return
+      setProducts(result.data.items)
+      setProductsLoading(false)
+    }).catch(() => {
+      if (!active) return
+      setProductsError('상품을 불러오지 못했어요.')
+      setProductsLoading(false)
+    })
+    return () => { active = false }
+  }, [appMode])
+  const categories: Array<{ id: ShopCategory; label: string }> = [
+    { id: 'recommended', label: '추천' },
+    { id: 'packs', label: '카드팩' },
+    { id: 'points', label: '포인트 교환' },
+    { id: 'limited', label: '한정 상품' },
+  ]
+  const showPacks = category === 'recommended' || category === 'packs'
+  const showPoints = category === 'recommended' || category === 'points'
+  const showLimited = category === 'recommended' || category === 'limited'
+  const visibleProducts = artist === 'all' ? products : products.filter(product => product.artistId === artist)
+  const livePacks = visibleProducts.filter(product => product.productType === 'card_pack')
+  const livePointItems = visibleProducts.filter(product => product.productType === 'point_item')
+  const liveLimitedItems = visibleProducts.filter(product => product.productType === 'limited_item')
+  const selectProduct = (label: string) => {
+    if (label === 'Nebula 카드팩') navigateAppPath(appMode ? '/shop/checkout' : '/?preview=shop-checkout')
+    else setNotice(`${label} 상세를 준비하고 있어요.`)
+  }
+
+  return <main className="app-shell shop-shell">
+    <header className="app-header shop-header">
+      <div className="app-header-copy"><span className="eyebrow">FANFOLIO</span><h1>상점</h1><p className="app-header-description">포인트와 카드팩으로 컬렉션을 완성해보세요.</p></div>
+      <div className="header-actions"><button className="header-alert-button" aria-label="알림"><NavIcon name="alerts" /></button><button className="header-profile-button" aria-label="프로필 및 설정"><ProfileAvatar imageUrl={cardMinhoImage} fallback="팬" alt="프로필 이미지" /></button></div>
+    </header>
+
+    <section className="shop-content">
+      <section className="shop-artist-section" aria-labelledby="shop-artist-title">
+        <h2 id="shop-artist-title">관심 아티스트</h2>
+        <div className="shop-artist-list">
+          <button type="button" className={artist === 'all' ? 'selected' : ''} aria-label="전체 아티스트 상품 보기" aria-pressed={artist === 'all'} onClick={() => setArtist('all')}><span className="shop-artist-all"><InlineIcon name="card" /></span><b>전체</b></button>
+          <button type="button" className={artist === 'dreamscape' ? 'selected' : ''} aria-pressed={artist === 'dreamscape'} onClick={() => setArtist('dreamscape')}><img src={loginDreamscapeGroup} alt="" /><b>드림스케이프</b></button>
+          <button type="button" className={artist === 'lunarize' ? 'selected' : ''} aria-pressed={artist === 'lunarize'} onClick={() => setArtist('lunarize')}><img src={cardYunaImage} alt="" /><b>루나라이즈</b></button>
+          <button type="button" className={artist === 'astra' ? 'selected' : ''} aria-pressed={artist === 'astra'} onClick={() => setArtist('astra')}><img src={cardMinhoImage} alt="" /><b>아스트라</b></button>
+          <button type="button" className={artist === 'eclipse' ? 'selected' : ''} aria-pressed={artist === 'eclipse'} onClick={() => setArtist('eclipse')}><img src={cardJayImage} alt="" /><b>이클립스</b></button>
+          <button type="button" onClick={() => setNotice('관심 아티스트 설정으로 이동해요.')}><span className="shop-artist-add"><InlineIcon name="plus" /></span><b>아티스트 추가</b></button>
+        </div>
+      </section>
+
+      <section className="shop-points-card" aria-label="보유 포인트 3,250 포인트">
+        <div><span>보유 포인트</span><strong>3,250<small>P</small></strong></div>
+        <span className="shop-points-art" aria-hidden="true"><img src={fanLevelStar} alt="" /><b>P</b></span>
+        <button type="button" onClick={() => setNotice('포인트 충전 내역을 준비하고 있어요.')}>충전 내역 <InlineIcon name="chevron" /></button>
+      </section>
+
+      <button type="button" className="shop-history-link" onClick={() => navigateAppPath(appMode ? '/shop/history' : '/?preview=shop-history')}><span><InlineIcon name="list" /></span><b>구매 · 교환 내역</b><InlineIcon name="chevron" /></button>
+
+      <div className="shop-category-tabs" role="tablist" aria-label="상점 카테고리">
+        {categories.map(item => <button type="button" role="tab" key={item.id} className={category === item.id ? 'active' : ''} aria-selected={category === item.id} onClick={() => setCategory(item.id)}>{item.label}</button>)}
+      </div>
+
+      {notice && <p className="shop-notice" role="status">{notice}</p>}
+      {appMode && productsLoading && <p className="shop-notice" role="status">상품을 불러오고 있어요.</p>}
+      {appMode && productsError && <p className="shop-notice" role="alert">{productsError}</p>}
+      {appMode && !productsLoading && !productsError && visibleProducts.length === 0 && <div className="shop-empty-state"><InlineIcon name="card" /><b>판매 중인 상품이 없어요.</b><span>관리자가 게시한 상품이 여기에 표시됩니다.</span></div>}
+
+      {showPacks && (!appMode || livePacks.length > 0) && <section className="shop-catalog-section">
+        <div className="shop-section-heading"><h2>추천 카드팩</h2><button type="button" onClick={() => setCategory('packs')}>전체 보기 <InlineIcon name="chevron" /></button></div>
+        <article className="shop-featured-pack">
+          {appMode && livePacks[0] ? <><img src={resolveApiUrl(livePacks[0].imageUrl) || dreamscapeCardPack} alt="" /><div><h3>{livePacks[0].name}</h3><p>{livePacks[0].description || livePacks[0].cardPack?.version || '카드팩'}</p><strong>{livePacks[0].pricePoints.toLocaleString()} <small>P</small></strong><span>판매 중</span></div><button type="button" onClick={() => navigateAppPath(`/shop/products/${encodeURIComponent(livePacks[0].id)}`)}>상품 보기</button></> : <><img src={dreamscapeCardPack} alt="드림스케이프 Nebula 카드팩" /><div><h3>정규 1집 · DREAMSCAPE</h3><p>Nebula Ver.</p><strong>1,200 <small>P</small></strong><span>신규</span></div><button type="button" onClick={() => selectProduct('Nebula 카드팩')}>카드팩 열기</button></>}
+        </article>
+        <div className="shop-secondary-packs">
+          {appMode && livePacks.length > 0 ? livePacks.slice(1, 3).map(product => <article key={product.id}><img src={resolveApiUrl(product.imageUrl) || dreamscapeCardPack} alt="" /><div><h3>{product.name}</h3><strong>{product.pricePoints.toLocaleString()} <small>P</small></strong><button type="button" onClick={() => navigateAppPath(`/shop/products/${encodeURIComponent(product.id)}`)}>상품 보기</button></div></article>) : !appMode ? <>
+          <article><img src={dreamscapeCardPack} alt="Starlight 카드팩" /><div><h3>Starlight Ver.</h3><strong>1,200 <small>P</small></strong><button type="button" onClick={() => selectProduct('Starlight 카드팩')}>카드팩 열기</button></div></article>
+          <article className="summer"><img src={dreamscapeCardPack} alt="2026 SUMMER 카드팩" /><div><h3>2026 SUMMER</h3><strong>1,500 <small>P</small></strong><button type="button" onClick={() => selectProduct('2026 SUMMER 카드팩')}>카드팩 열기</button></div></article>
+          </> : null}
+        </div>
+      </section>}
+
+      {showPoints && (!appMode || livePointItems.length > 0) && <section className="shop-catalog-section shop-exchange-section">
+        <div className="shop-section-heading"><h2>포인트 교환</h2><button type="button" onClick={() => setCategory('points')}>전체 보기 <InlineIcon name="chevron" /></button></div>
+        {appMode && livePointItems.length > 0 ? livePointItems.slice(0, 2).map(product => <button type="button" className="shop-exchange-item" key={product.id} onClick={() => navigateAppPath(`/shop/products/${encodeURIComponent(product.id)}`)}><img src={resolveApiUrl(product.imageUrl) || profileDecorationsImage} alt="" /><span><b>{product.name}</b><strong>{product.pricePoints.toLocaleString()} <small>P</small></strong></span><em>교환</em></button>) : !appMode ? <><button type="button" className="shop-exchange-item" onClick={() => selectProduct('프로필 프레임 · 별빛')}><img src={fanLevelStar} alt="" /><span><b>프로필 프레임 · 별빛</b><strong>800 <small>P</small></strong></span><em>교환</em></button><button type="button" className="shop-exchange-item" onClick={() => selectProduct('컬렉션 배경 · Nebula')}><img src={profileDecorationsImage} alt="" /><span><b>컬렉션 배경 · Nebula</b><strong>1,000 <small>P</small></strong></span><em>교환</em></button></> : null}
+      </section>}
+
+      {showLimited && (!appMode || liveLimitedItems.length > 0) && <section className="shop-catalog-section shop-limited-section">
+        <div className="shop-section-heading"><h2>한정 상품</h2><button type="button" onClick={() => setCategory('limited')}>전체 보기 <InlineIcon name="chevron" /></button></div>
+        {appMode && liveLimitedItems[0] ? <article className="shop-limited-product"><img src={resolveApiUrl(liveLimitedItems[0].imageUrl) || fanWeekNightStage} alt="" /><div><span>판매 중</span><h3>{liveLimitedItems[0].name}</h3><strong>{liveLimitedItems[0].pricePoints.toLocaleString()} <small>P</small></strong></div><button type="button" onClick={() => navigateAppPath(`/shop/products/${encodeURIComponent(liveLimitedItems[0].id)}`)}>상품 보기</button></article> : !appMode ? <article className="shop-limited-product"><img src={fanWeekNightStage} alt="드림스케이프 팬 위크" /><div><span>D-3</span><h3>DREAMSCAPE 팬 위크 패키지</h3><strong>2,500 <small>P</small></strong></div><button type="button" onClick={() => selectProduct('팬 위크 패키지')}>구매하기</button></article> : null}
+      </section>}
+    </section>
+
+    <nav className="bottom-nav" aria-label="주요 메뉴">
+      <button type="button" className="nav-item" onClick={() => appMode && navigateAppPath('/discover')}><NavIcon name="discover" /><span>탐색</span></button>
+      <button type="button" className="nav-item" onClick={() => appMode && navigateAppPath('/collection')}><NavIcon name="collection" /><span>보관함</span></button>
+      <button type="button" className="nav-item" onClick={() => appMode && navigateAppPath('/home')}><NavIcon name="home" /><span>홈</span></button>
+      <button type="button" className="nav-item" onClick={() => appMode && navigateAppPath('/growth')}><NavIcon name="growth" /><span>팬 레벨</span></button>
+      <button type="button" className="nav-item active" aria-current="page"><NavIcon name="shop" /><span>상점</span></button>
+    </nav>
   </main>
 }
 
@@ -979,6 +1237,9 @@ function App() {
     const preview = new URLSearchParams(window.location.search).get('preview')
     if (preview === 'fan-pass' || preview === 'fan-global-pass') return <FanPassPage progression={fanGrowthPreviewProgression} loading={false} error="" onRetry={() => {}} onBack={() => { window.history.pushState({}, '', '/?preview=fan-growth'); window.dispatchEvent(new PopStateEvent('popstate')) }} onClaimPassTier={async () => ({})} onNavigate={tab => window.location.assign(pathForTab(tab))} isGlobal={preview === 'fan-global-pass'} />
     if (preview === 'fan-growth') return <FanGrowthPreview />
+    if (preview === 'shop') return <ShopPreview />
+    if (preview === 'shop-checkout') return <ShopCheckoutPreview />
+    if (preview === 'shop-history') return <ShopHistoryPreview />
     if (preview === 'fan-missions') return <FanMissionPage onBack={() => window.location.assign('/?preview=fan-growth')} initialMissions={fanMissionPreviewItems} />
     if (preview === 'discover-hub') return <main className="app-shell discover-shell"><div className="app-header"><div className="app-header-copy"><span className="eyebrow">FANFOLIO</span><h1>탐색</h1></div><div className="header-actions"><button className="header-alert-button" aria-label="알림"><NavIcon name="alerts" /></button><button className="header-profile-button" aria-label="프로필 및 설정"><ProfileAvatar imageUrl={null} fallback="배" alt="프로필 이미지" /></button></div></div><section className="screen"><Discover onFindFans={() => window.location.assign('/?preview=fan-social')} onOpenFanProfile={() => window.location.assign('/?preview=fan-profile')} onOpenPublicCollection={() => window.location.assign('/?preview=public-collection')} onOpenEvent={() => window.location.assign('/?preview=discover-event')} onOpenArtist={() => window.location.assign('/?preview=discover-artist')} onOpenPackCatalog={() => window.location.assign('/?preview=card-collection')} onOpenPack={() => window.location.assign('/?preview=discover-pack')} featuredArtist={{ id: 'artist_nova3', name: '드림스케이프', imageUrl: dreamscapeHero }} featuredEvent={fallbackHomeEvent} initialFans={fanCommunityPreviewFans} /></section><BottomNavigation active="discover" onNavigate={() => {}} /></main>
     if (preview === 'discover-artist') return <ArtistHubDetail artist={{ id: 'artist_nova3', name: '드림스케이프', imageUrl: dreamscapeHero }} usePreviewData onBack={() => window.location.assign('/?preview=discover-hub')} onOpenEvents={() => window.location.assign('/?preview=discover-event')} onOpenEvent={() => window.location.assign('/?preview=discover-event')} onOpenCollection={() => window.location.assign('/?preview=collection-inventory-entry')} onOpenCard={() => {}} />
@@ -999,6 +1260,12 @@ function App() {
   }
 
   const inventoryProgression = mergeProgressionsForInventory(fanProgression, globalFanProgression)
+
+  const shopProductId = pathname.match(/^\/shop\/products\/([^/]+)$/)?.[1]
+  if (shopProductId) return <ShopProductDetail productId={decodeURIComponent(shopProductId)} />
+  if (pathname === '/shop/checkout') return <ShopCheckoutPreview appMode />
+  if (pathname === '/shop/history') return <ShopHistoryPreview appMode />
+  if (tab === 'shop') return <ShopPreview appMode />
 
   if (showOnboarding) {
     return <Onboarding userId={currentUser?.id ?? 'fan'} profileImageUrl={currentUser?.profileImageUrl ?? null} onComplete={() => { setShowOnboarding(false); collectionRequestUserRef.current = null; growthRequestKeyRef.current = null; void refreshUser() }} onBack={logout} />
@@ -1186,6 +1453,7 @@ function tabFromPath(pathname: string): Tab {
   if (pathname === '/collection/rewards') return 'collection'
   if (pathname === '/collection/cards') return 'collection'
   if (pathname === '/collection/wishlist') return 'collection'
+  if (pathname === '/shop' || pathname.startsWith('/shop/')) return 'shop'
   if (pathname === '/growth') return 'growth'
   if (pathname === '/growth/missions') return 'growth'
   if (pathname === '/growth/pass' || pathname === '/growth/global-pass') return 'growth'
@@ -1200,7 +1468,7 @@ function SessionLoading() {
 }
 
 function pathForTab(tab: Tab): string {
-  return { home: '/home', discover: '/discover', collection: '/collection', growth: '/growth', settings: '/settings', alerts: '/notifications', events: '/events' }[tab]
+  return { home: '/home', discover: '/discover', collection: '/collection', growth: '/growth', shop: '/shop', settings: '/settings', alerts: '/notifications', events: '/events' }[tab]
 }
 
 function eventIdFromPath(pathname: string): string | null {
@@ -1233,8 +1501,8 @@ function revealIdFromPath(pathname: string): string | null {
   return match ? decodeURIComponent(match[1]) : null
 }
 
-function tabTitle(tab: Tab) { return { home: '내 컬렉션', discover: '탐색', collection: '내 컬렉션', growth: '팬 레벨', settings: '마이', alerts: '알림', events: '이벤트' }[tab] }
-function tabDescription(tab: Tab) { return { home: '', discover: '', collection: '내가 수집한 모든 카드와 컬렉션을 관리해요.', growth: '팬 활동을 통해 레벨을 올리고 특별한 혜택을 받아보세요!', settings: '', alerts: '', events: '드림스케이프의 다양한 이벤트에 참여해보세요.' }[tab] }
+function tabTitle(tab: Tab) { return { home: '내 컬렉션', discover: '탐색', collection: '내 컬렉션', growth: '팬 레벨', shop: '상점', settings: '마이', alerts: '알림', events: '이벤트' }[tab] }
+function tabDescription(tab: Tab) { return { home: '', discover: '', collection: '내가 수집한 모든 카드와 컬렉션을 관리해요.', growth: '팬 활동을 통해 레벨을 올리고 특별한 혜택을 받아보세요!', shop: '포인트와 카드팩으로 컬렉션을 완성해보세요.', settings: '', alerts: '', events: '드림스케이프의 다양한 이벤트에 참여해보세요.' }[tab] }
 
 type LoginProvider = 'apple' | 'google' | 'kakao' | 'naver'
 
@@ -3449,7 +3717,7 @@ function RevealCard({ userCardId, collectionSummary, fanProgression, onClose, on
     <button type="button" className="card-reveal-again" onClick={() => setPhase('mystery')}>다시 확인하기</button>
   </main>
 }
-export function NavItem({ active, label, icon = label === '탐색' ? 'discover' : label === '알림' ? 'alerts' : label === '팬 레벨' ? 'growth' : label === '설정' ? 'settings' : 'collection', badge, onClick }: { active: boolean, label: string, icon?: 'home' | 'collection' | 'discover' | 'alerts' | 'growth' | 'settings', badge?: number, onClick: () => void }) { return <button type="button" className={active ? 'nav-item active' : 'nav-item'} aria-current={active ? 'page' : undefined} onClick={onClick}><NavIcon name={icon} />{label}{badge ? <b className="nav-badge">{badge > 99 ? '99+' : badge}</b> : null}</button> }
+export function NavItem({ active, label, icon = label === '탐색' ? 'discover' : label === '알림' ? 'alerts' : label === '팬 레벨' ? 'growth' : label === '상점' ? 'shop' : label === '설정' ? 'settings' : 'collection', badge, onClick }: { active: boolean, label: string, icon?: 'home' | 'collection' | 'discover' | 'alerts' | 'growth' | 'settings' | 'shop', badge?: number, onClick: () => void }) { return <button type="button" className={active ? 'nav-item active' : 'nav-item'} aria-current={active ? 'page' : undefined} onClick={onClick}><NavIcon name={icon} />{label}{badge ? <b className="nav-badge">{badge > 99 ? '99+' : badge}</b> : null}</button> }
 
 function BottomNavigation({ active, onNavigate }: { active: Tab; onNavigate: (tab: Tab) => void }) {
   return <nav className="bottom-nav" aria-label="주요 메뉴">
@@ -3457,12 +3725,12 @@ function BottomNavigation({ active, onNavigate }: { active: Tab; onNavigate: (ta
     <NavItem active={active === 'collection'} label="보관함" icon="collection" onClick={() => onNavigate('collection')} />
     <NavItem active={active === 'home'} label="홈" icon="home" onClick={() => onNavigate('home')} />
     <NavItem active={active === 'growth'} label="팬 레벨" icon="growth" onClick={() => onNavigate('growth')} />
-    <NavItem active={active === 'settings'} label="마이" icon="settings" onClick={() => onNavigate('settings')} />
+    <NavItem active={active === 'shop'} label="상점" icon="shop" onClick={() => onNavigate('shop')} />
   </nav>
 }
 
-function NavIcon({ name }: { name: 'home' | 'collection' | 'discover' | 'growth' | 'alerts' | 'settings' }) {
-  const paths = { home: 'M3 10.5 12 3l9 7.5M5.5 9v11h13V9M9 20v-6h6v6', collection: 'M6 3h12a2 2 0 0 1 2 2v16l-8-4-8 4V5a2 2 0 0 1 2-2Z', discover: 'm21 21-4.35-4.35M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z', growth: 'M4 19V5M4 19h16M8 15l3-3 3 2 5-7M18 7h1v5', alerts: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4', settings: 'M4 6h16M4 12h16M4 18h16M8 4v4M16 10v4M10 16v4' } as const
+function NavIcon({ name }: { name: 'home' | 'collection' | 'discover' | 'growth' | 'alerts' | 'settings' | 'shop' }) {
+  const paths = { home: 'M3 10.5 12 3l9 7.5M5.5 9v11h13V9M9 20v-6h6v6', collection: 'M6 3h12a2 2 0 0 1 2 2v16l-8-4-8 4V5a2 2 0 0 1 2-2Z', discover: 'm21 21-4.35-4.35M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z', growth: 'M4 19V5M4 19h16M8 15l3-3 3 2 5-7M18 7h1v5', alerts: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4', settings: 'M4 6h16M4 12h16M4 18h16M8 4v4M16 10v4M10 16v4', shop: 'M5 8h14l-1 13H6L5 8Zm3 0V6a4 4 0 0 1 8 0v2' } as const
   return <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d={paths[name]} fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" /></svg>
 }
 

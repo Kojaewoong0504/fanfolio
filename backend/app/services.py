@@ -63,6 +63,7 @@ from app.models import (
     RewardGrant,
     Role,
     Session,
+    ShopProduct,
     TradeItem,
     TradeLock,
     TradeProposal,
@@ -1987,6 +1988,21 @@ async def ensure_fan_community_demo(session: AsyncSession, *, password: str) -> 
         link.position = position
         link.probability = 25.0
         link.enabled = True
+
+    demo_product = await session.get(ShopProduct, "local_demo_shop_pack_nebula")
+    if demo_product is None:
+        demo_product = ShopProduct(id="local_demo_shop_pack_nebula")
+        session.add(demo_product)
+    demo_product.artist_id = "artist_nova3"
+    demo_product.product_type = "card_pack"
+    demo_product.card_pack_id = pack_id
+    demo_product.name = "DREAMSCAPE Nebula Ver. 카드팩"
+    demo_product.description = "랜덤 포토카드 3장을 만나보세요."
+    demo_product.image_url = pack.image_url
+    demo_product.price_points = 1200
+    demo_product.status = "published"
+    demo_product.starts_at = None
+    demo_product.ends_at = None
 
     await session.flush()
     for user_id in ("local_demo_fan", "local_demo_collector"):

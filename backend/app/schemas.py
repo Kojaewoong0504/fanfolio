@@ -179,6 +179,40 @@ class CardPackCreate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class ShopProductCreate(BaseModel):
+    artist_id: str = Field(alias="artistId", min_length=1)
+    product_type: Literal["card_pack", "point_item", "limited_item"] = Field(
+        default="card_pack", alias="productType"
+    )
+    card_pack_id: str | None = Field(default=None, alias="cardPackId")
+    name: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=1000)
+    detail_content: list[dict] = Field(default_factory=list, alias="detailContent", max_length=20)
+    image_url: str | None = Field(default=None, alias="imageUrl", max_length=2048)
+    price_points: int = Field(alias="pricePoints", gt=0)
+    starts_at: datetime | None = Field(default=None, alias="startsAt")
+    ends_at: datetime | None = Field(default=None, alias="endsAt")
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ShopProductUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=1000)
+    detail_content: list[dict] | None = Field(default=None, alias="detailContent", max_length=20)
+    image_url: str | None = Field(default=None, alias="imageUrl", max_length=2048)
+    price_points: int | None = Field(default=None, alias="pricePoints", gt=0)
+    starts_at: datetime | None = Field(default=None, alias="startsAt")
+    ends_at: datetime | None = Field(default=None, alias="endsAt")
+    status: Literal["draft", "published", "archived"] | None = None
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ShopOrderCreate(BaseModel):
+    product_id: str = Field(alias="productId", min_length=1)
+    payment_method: Literal["points"] = Field(alias="paymentMethod")
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class CardCombinationRecipeCreate(BaseModel):
     scope_type: Literal["card_pack"] = Field(alias="scopeType")
     scope_id: str = Field(alias="scopeId", min_length=1)

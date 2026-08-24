@@ -48,6 +48,7 @@ from app.models import (
     RewardCatalog,
     RewardGrant,
     Role,
+    ShopProduct,
     TradeItem,
     TradeProposal,
     User,
@@ -85,6 +86,8 @@ from app.schemas import (
     PointAdjustmentRequest,
     RedeemCodeStatusUpdate,
     RewardCatalogCreate,
+    ShopProductCreate,
+    ShopProductUpdate,
 )
 from app.services import (
     active_review_request,
@@ -2608,6 +2611,156 @@ async def publish_card_pack(pack_id: str, context: CurrentAdmin, session: DbSess
     )
     await session.commit()
     return {"ok": True, "data": card_pack_data(pack)}
+
+
+def admin_shop_product_data(
+    product: ShopProduct, artist: Artist | None = None, pack: CardPack | None = None
+) -> dict:
+    return {
+        "id": product.id,
+        "artistId": product.artist_id,
+        "artistName": artist.name if artist else None,
+        "productType": product.product_type,
+        "cardPackId": product.card_pack_id,
+        "name": product.name,
+        "description": product.description,
+        "detailContent": product.detail_content or [],
+        "imageUrl": product.image_url,
+        "pricePoints": product.price_points,
+        "status": product.status,
+        "startsAt": product.starts_at.isoformat() if product.starts_at else None,
+        "endsAt": product.ends_at.isoformat() if product.ends_at else None,
+    }
+
+
+async def admin_shop_product_row(
+    product_id: str, session: DbSession
+) -> tuple[ShopProduct, Artist | None, CardPack | None]:
+    row = await session.execute(
+        select(ShopProduct, Artist, CardPack)
+        .join(Artist, ShopProduct.artist_id == Artist.id)
+        .outerjoin(CardPack, ShopProduct.card_pack_id == CardPack.id)
+        .where(ShopProduct.id == product_id)
+    )
+    result = row.one_or_none()
+    if result is None:
+        raise AppError(404, "SHOP_PRODUCT_NOT_FOUND", "상품을 찾을 수 없습니다.")
+    return result
+
+
+async def validate_shop_product_payload(
+    payload: ShopProductCreate, context: CurrentAdmin, session: DbSession
+) -> tuple[Artist, CardPack]:
+    artist = await session.get(Artist, payload.artist_id)
+    if artist is None:
+        raise AppError(404, "ARTIST_NOT_FOUND", "아티스트를 찾을 수 없습니다.")
+    context.require_artist(payload.artist_id)
+    if payload.product_type != "card_pack" or not payload.card_pack_id:
+        raise AppError(
+            422, "SHOP_PRODUCT_LINK_REQUIRED", "현재는 카드팩 상품만 등록할 수 있습니다."
+        )
+    pack = await session.get(CardPack, payload.card_pack_id)
+    if pack is None or pack.artist_id != payload.artist_id or pack.status != "published":
+        raise AppError(422, "SHOP_CARD_PACK_INVALID", "공개된 아티스트 카드팩을 연결해 주세요.")
+    return artist, pack
+
+
+@router.get("/shop/products")
+async def admin_shop_products(context: CurrentAdmin, session: DbSession) -> dict:
+    context.require_action("cards:read")
+    query = (
+        select(ShopProduct, Artist, CardPack)
+        .join(Artist, ShopProduct.artist_id == Artist.id)
+        .outerjoin(CardPack, ShopProduct.card_pack_id == CardPack.id)
+    )
+    if not context.is_root:
+        query = query.where(ShopProduct.artist_id.in_(context.assigned_artist_ids))
+    rows = list(
+        await session.execute(query.order_by(ShopProduct.created_at.desc(), ShopProduct.id))
+    )
+    return {
+        "ok": True,
+        "data": {
+            "items": [
+                admin_shop_product_data(product, artist, pack) for product, artist, pack in rows
+            ]
+        },
+    }
+
+
+@router.post("/shop/products", status_code=status.HTTP_201_CREATED)
+async def create_admin_shop_product(
+    payload: ShopProductCreate, context: CurrentAdmin, session: DbSession
+) -> dict:
+    context.require_action("cards:write")
+    artist, _ = await validate_shop_product_payload(payload, context, session)
+    product = ShopProduct(
+        id=f"shop_product_{uuid4().hex[:12]}",
+        artist_id=payload.artist_id,
+        product_type=payload.product_type,
+        card_pack_id=payload.card_pack_id,
+        name=payload.name,
+        description=payload.description,
+        detail_content=payload.detail_content,
+        image_url=payload.image_url,
+        price_points=payload.price_points,
+        starts_at=payload.starts_at,
+        ends_at=payload.ends_at,
+        status="draft",
+    )
+    session.add(product)
+    await session.commit()
+    return {"ok": True, "data": admin_shop_product_data(product, artist)}
+
+
+@router.get("/shop/products/{product_id}")
+async def get_admin_shop_product(
+    product_id: str, context: CurrentAdmin, session: DbSession
+) -> dict:
+    context.require_action("cards:read")
+    product, artist, pack = await admin_shop_product_row(product_id, session)
+    context.require_artist(product.artist_id)
+    return {"ok": True, "data": admin_shop_product_data(product, artist, pack)}
+
+
+@router.patch("/shop/products/{product_id}")
+async def update_admin_shop_product(
+    product_id: str, payload: ShopProductUpdate, context: CurrentAdmin, session: DbSession
+) -> dict:
+    context.require_action("cards:write")
+    product, artist, pack = await admin_shop_product_row(product_id, session)
+    context.require_artist(product.artist_id)
+    for field in (
+        "name",
+        "description",
+        "detail_content",
+        "image_url",
+        "price_points",
+        "starts_at",
+        "ends_at",
+        "status",
+    ):
+        value = getattr(payload, field)
+        if value is not None:
+            setattr(product, field, value)
+    await session.commit()
+    return {"ok": True, "data": admin_shop_product_data(product, artist, pack)}
+
+
+@router.post("/shop/products/{product_id}/publish")
+async def publish_admin_shop_product(
+    product_id: str, context: CurrentAdmin, session: DbSession
+) -> dict:
+    context.require_action("cards:write")
+    product, artist, pack = await admin_shop_product_row(product_id, session)
+    context.require_artist(product.artist_id)
+    if pack is None or pack.status != "published":
+        raise AppError(
+            422, "SHOP_CARD_PACK_INVALID", "공개된 카드팩을 연결해야 상품을 공개할 수 있습니다."
+        )
+    product.status = "published"
+    await session.commit()
+    return {"ok": True, "data": admin_shop_product_data(product, artist, pack)}
 
 
 @router.get("/drops/{drop_id}")

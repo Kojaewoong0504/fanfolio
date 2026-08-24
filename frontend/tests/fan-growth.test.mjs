@@ -22,7 +22,7 @@ test('fan growth is a persistent bottom tab instead of settings content', async 
   assert.doesNotMatch(appSource, /fanGrowthMode="summary"/)
   assert.doesNotMatch(appSource, /label="팬 패스"/)
   assert.equal([...appSource.matchAll(/<NavItem /g)].length, 5)
-  assert.match(appSource, /type Tab = 'home' \| 'discover' \| 'collection' \| 'growth' \| 'settings' \| 'alerts'/)
+  assert.match(appSource, /type Tab = 'home' \| 'discover' \| 'collection' \| 'growth' \| 'shop' \| 'settings' \| 'alerts'/)
   assert.match(appSource, /if \(pathname === '\/growth'\) return 'growth'/)
   assert.match(appSource, /growth: '\/growth'/)
   assert.match(appSource, /growth: '팬 레벨'/)

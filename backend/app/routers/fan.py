@@ -43,6 +43,8 @@ from app.models import (
     RewardCatalog,
     RewardGrant,
     Role,
+    ShopOrder,
+    ShopProduct,
     User,
     UserCard,
 )
@@ -55,6 +57,7 @@ from app.schemas import (
     ProfileUpdate,
     ReadNotification,
     RedemptionRequest,
+    ShopOrderCreate,
 )
 from app.services import (
     claim_pass_tier,
@@ -103,6 +106,168 @@ def public_pack_card_data(link: CardPackCard, card: Card) -> dict:
         "memberId": card.member_id,
         "probability": link.probability,
         "position": link.position,
+    }
+
+
+def shop_product_data(
+    product: ShopProduct, artist: Artist | None = None, pack: CardPack | None = None
+) -> dict:
+    return {
+        "id": product.id,
+        "artistId": product.artist_id,
+        "artistName": artist.name if artist else None,
+        "productType": product.product_type,
+        "cardPackId": product.card_pack_id,
+        "name": product.name,
+        "description": product.description,
+        "detailContent": product.detail_content or [],
+        "imageUrl": product.image_url,
+        "pricePoints": product.price_points,
+        "status": product.status,
+        "startsAt": product.starts_at.isoformat() if product.starts_at else None,
+        "endsAt": product.ends_at.isoformat() if product.ends_at else None,
+        "cardPack": {
+            "id": pack.id,
+            "name": pack.name,
+            "seasonName": pack.season_name,
+            "version": pack.version,
+            "imageUrl": pack.image_url,
+            "status": pack.status,
+        }
+        if pack
+        else None,
+    }
+
+
+def shop_product_is_sellable(product: ShopProduct, now: datetime) -> bool:
+    return (
+        product.status == "published"
+        and (product.starts_at is None or product.starts_at <= now)
+        and (product.ends_at is None or product.ends_at >= now)
+    )
+
+
+@router.get("/catalog/shop/products")
+async def catalog_shop_products(
+    session: DbSession,
+    artist_id: str | None = Query(default=None, alias="artistId"),
+    product_type: str | None = Query(default=None, alias="productType"),
+) -> dict:
+    filters = [ShopProduct.status == "published"]
+    if artist_id:
+        filters.append(ShopProduct.artist_id == artist_id)
+    if product_type:
+        filters.append(ShopProduct.product_type == product_type)
+    now = datetime.now(UTC)
+    filters.extend(
+        [
+            or_(ShopProduct.starts_at.is_(None), ShopProduct.starts_at <= now),
+            or_(ShopProduct.ends_at.is_(None), ShopProduct.ends_at >= now),
+        ]
+    )
+    rows = list(
+        await session.execute(
+            select(ShopProduct, Artist, CardPack)
+            .join(Artist, ShopProduct.artist_id == Artist.id)
+            .outerjoin(CardPack, ShopProduct.card_pack_id == CardPack.id)
+            .where(*filters)
+            .order_by(ShopProduct.created_at.desc(), ShopProduct.id)
+        )
+    )
+    return {
+        "ok": True,
+        "data": {
+            "items": [shop_product_data(product, artist, pack) for product, artist, pack in rows]
+        },
+    }
+
+
+@router.get("/catalog/shop/products/{product_id}")
+async def catalog_shop_product(product_id: str, session: DbSession) -> dict:
+    row = await session.execute(
+        select(ShopProduct, Artist, CardPack)
+        .join(Artist, ShopProduct.artist_id == Artist.id)
+        .outerjoin(CardPack, ShopProduct.card_pack_id == CardPack.id)
+        .where(ShopProduct.id == product_id)
+    )
+    result = row.one_or_none()
+    if result is None:
+        raise AppError(404, "SHOP_PRODUCT_NOT_FOUND", "판매 중인 상품을 찾을 수 없습니다.")
+    product, artist, pack = result
+    if not shop_product_is_sellable(product, datetime.now(UTC)):
+        raise AppError(404, "SHOP_PRODUCT_NOT_FOUND", "판매 중인 상품을 찾을 수 없습니다.")
+    return {"ok": True, "data": shop_product_data(product, artist, pack)}
+
+
+@router.get("/me/shop/orders")
+async def shop_orders(user: FanUser, session: DbSession) -> dict:
+    rows = list(
+        await session.scalars(
+            select(ShopOrder)
+            .where(ShopOrder.user_id == user.id)
+            .order_by(ShopOrder.created_at.desc(), ShopOrder.id.desc())
+            .limit(100)
+        )
+    )
+    return {
+        "ok": True,
+        "data": {
+            "items": [
+                {
+                    "id": row.id,
+                    "productId": row.product_id,
+                    "productName": row.product_name,
+                    "pricePoints": row.price_points,
+                    "paymentMethod": row.payment_method,
+                    "status": row.status,
+                    "createdAt": row.created_at.isoformat(),
+                }
+                for row in rows
+            ]
+        },
+    }
+
+
+@router.post("/me/shop/orders", status_code=status.HTTP_201_CREATED)
+async def create_shop_order(payload: ShopOrderCreate, user: FanUser, session: DbSession) -> dict:
+    if payload.payment_method != "points":
+        raise AppError(422, "SHOP_PAYMENT_METHOD_UNSUPPORTED", "현재는 포인트 결제만 지원합니다.")
+    product = await session.scalar(select(ShopProduct).where(ShopProduct.id == payload.product_id))
+    if product is None or not shop_product_is_sellable(product, datetime.now(UTC)):
+        raise AppError(409, "SHOP_PRODUCT_UNAVAILABLE", "판매가 종료된 상품입니다.")
+    if product.product_type != "card_pack" or not product.card_pack_id:
+        raise AppError(409, "SHOP_PRODUCT_NOT_PURCHASABLE", "현재 구매할 수 없는 상품입니다.")
+    event = await record_engagement_event(
+        session,
+        user_id=user.id,
+        kind="points_spent",
+        source_type="shop_order",
+        source_id=f"{user.id}:{product.id}:{uuid4().hex}",
+        payload={"productId": product.id, "points": product.price_points},
+    )
+    await spend_points(
+        session,
+        user_id=user.id,
+        source_event_id=event.id,
+        rule_key=f"shop_order:{product.id}",
+        amount=product.price_points,
+        description=f"{product.name} 구매",
+        metadata={"productId": product.id, "cardPackId": product.card_pack_id},
+    )
+    order = ShopOrder(
+        id=f"shop_order_{uuid4().hex[:12]}",
+        user_id=user.id,
+        product_id=product.id,
+        product_name=product.name,
+        price_points=product.price_points,
+        payment_method=payload.payment_method,
+        status="completed",
+    )
+    session.add(order)
+    await session.commit()
+    return {
+        "ok": True,
+        "data": {"id": order.id, "productId": order.product_id, "status": order.status},
     }
 
 
