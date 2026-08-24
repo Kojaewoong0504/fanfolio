@@ -46,6 +46,7 @@ const state = {
   unreadNotificationCount: 0,
   cards: [],
   cardPacks: [],
+  shopProducts: [],
   cardPackQuery: "",
   cardPackStatus: "all",
   cardPackArtist: "all",
@@ -312,6 +313,8 @@ function title() {
     "card-packs": "카드팩 관리",
     "card-pack-create": "새 카드팩 만들기",
     "card-pack-composition": "카드 구성 편집",
+    "shop-products": "상점 상품 관리",
+    "shop-product-create": "상점 상품 등록",
     batches: "발급·인증번호",
     "issuance-create": "새 발급 배치 만들기",
     events: "이벤트",
@@ -335,6 +338,7 @@ function navItems() {
       : []),
     { id: "artists", label: "아티스트", icon: "recent_actors" },
     { id: "cards", label: "카드", icon: "style" },
+    ...(can("cards:read") ? [{ id: "shop-products", label: "상점 상품", icon: "storefront" }] : []),
     ...(can("events:read")
       ? [{ id: "events", label: "이벤트", icon: "campaign" }]
       : []),
@@ -383,7 +387,7 @@ function navigationView() {
   const role = isRoot() ? "루트 관리자" : `${state.adminContext?.accessLevel || "viewer"} · ${scopeLabel()}`;
   const navToggleLabel = state.navCollapsed ? "내비게이션 펼치기" : "내비게이션 접기";
   const cardSection = `<div class="nav-section-group"><button type="button" data-view="cards" class="nav-item ${["cards", "card-packs", "card-pack-create", "card-pack-composition", "batches", "issuance-create"].includes(state.view) ? "active" : ""}" aria-label="카드" title="카드">${icon("style")}<span>카드</span>${icon("expand_more", "nav-section-chevron")}</button><div class="nav-subitems"><button type="button" data-view="cards" class="nav-subitem ${state.view === "cards" ? "active" : ""}">카드 관리</button>${can("cards:read") ? `<button type="button" data-view="card-packs" class="nav-subitem ${["card-packs", "card-pack-create", "card-pack-composition"].includes(state.view) ? "active" : ""}">카드팩 관리</button>` : ""}${can("codes:read") ? `<button type="button" data-view="batches" class="nav-subitem ${["batches", "issuance-create"].includes(state.view) ? "active" : ""}">발급·인증번호</button>` : ""}</div></div>`;
-  const items = navItems().map((item) => item.id === "cards" ? cardSection : `<button type="button" data-view="${item.id}" class="nav-item ${state.view === item.id ? "active" : ""}" aria-current="${state.view === item.id ? "page" : "false"}" aria-label="${escapeHtml(item.label)}" title="${escapeHtml(item.label)}">${icon(item.icon)}<span>${item.label}</span></button>`).join("");
+  const items = navItems().map((item) => item.id === "cards" ? cardSection : `<button type="button" data-view="${item.id}" class="nav-item ${state.view === item.id || (item.id === "shop-products" && state.view === "shop-product-create") ? "active" : ""}" aria-current="${state.view === item.id ? "page" : "false"}" aria-label="${escapeHtml(item.label)}" title="${escapeHtml(item.label)}">${icon(item.icon)}<span>${item.label}</span></button>`).join("");
   return `<aside class="app-nav ${state.mobileNavOpen ? "open" : ""}" aria-label="관리자 주요 메뉴"><div class="nav-brand"><span class="nav-brand-mark"><img src="./assets/fanfolio-app-icon-192.png" alt="Fanfolio 서비스 아이콘" /></span><span class="nav-brand-copy"><strong>FANFOLIO</strong><small>OPERATIONS</small></span><button class="icon-button nav-toggle" id="desktop-nav-toggle" type="button" aria-label="${navToggleLabel}" title="${navToggleLabel}">${icon(state.navCollapsed ? "keyboard_double_arrow_right" : "keyboard_double_arrow_left")}</button></div><nav>${items}</nav><div class="nav-account"><span class="account-avatar">${escapeHtml((person.displayName || person.email || "관").slice(0, 1))}</span><div class="nav-account-copy"><strong>${escapeHtml(person.displayName || "관리자")}</strong><small>${escapeHtml(role)}</small></div><button class="icon-button" id="logout" type="button" aria-label="로그아웃" title="로그아웃">${icon("logout")}</button></div></aside>`;
 }
 
@@ -428,6 +432,8 @@ function currentView() {
     "card-packs": cardPacksView,
     "card-pack-create": cardPackCreateView,
     "card-pack-composition": cardPackCompositionView,
+    "shop-products": shopProductsView,
+    "shop-product-create": shopProductCreateView,
     batches: batchesView,
     "issuance-create": issuanceCreationView,
     events: eventsView,
@@ -1127,6 +1133,25 @@ function cardsView() {
   return `<div class="commercial-review-workspace"><div class="review-commandbar"><div><nav class="review-breadcrumb" aria-label="카드 > 검수"><span>카드</span><span aria-hidden="true">&gt;</span><strong>검수</strong></nav><h2>${isRoot() ? "전체 카드 운영" : "담당 카드 운영"}</h2><p>${isRoot() ? "아티스트 카드의 검수와 공개 상태를 관리합니다." : "배정된 아티스트의 카드 초안을 만들고 검수를 요청합니다."}</p></div><div class="review-command-actions"><button class="secondary" id="export-cards-csv" type="button">${icon("download")} CSV 내보내기</button>${can("cards:write") ? `<button class="primary review-register-cta" id="open-card-drawer" type="button">${icon("add_card")} 카드 등록</button>` : ""}</div></div>${reviewStatusTabs()}<div class="review-workbench"><section class="panel review-list-panel"><div class="review-list-heading"><div><p class="eyebrow">RELEASE REVIEW</p><h3>검수 대기열</h3></div><span>${visible.length}개 항목</span></div><div class="toolbar compact-toolbar"><label class="search-field grow">${icon("search")}<input id="card-search" placeholder="카드명, 아티스트 검색" value="${escapeHtml(state.query)}" /></label>${adminSelect({ id: "card-artist-filter", value: state.cardArtist, label: "아티스트 필터", className: "filter-select card-artist-filter", options: artistOptions })}${adminSelect({ id: "card-status", value: state.status, label: "카드 상태 필터", className: "filter-select card-status-filter", options: statusOptions })}</div><div class="table-wrap"><table class="table responsive-table card-table"><thead><tr><th>카드</th><th>메타데이터</th><th>마감</th><th>담당자</th><th>상태</th><th><span class="sr-only">관리</span></th></tr></thead><tbody>${cardRows(visible)}</tbody></table></div></section>${reviewDetail}</div></div>`;
 }
 
+function shopProductStatusLabel(status) {
+  return ({ published: "공개됨", draft: "초안", archived: "보관됨" }[status] || status || "-");
+}
+
+function shopProductsView() {
+  const products = state.shopProducts || [];
+  const artistName = (id) => scopedArtists().find((artist) => artist.id === id)?.name || id || "-";
+  const rows = products.length
+    ? products.map((product) => `<tr><td><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.productType || "card_pack")}${product.cardPackId ? ` · ${escapeHtml(product.cardPackId)}` : ""}</small></td><td>${escapeHtml(artistName(product.artistId))}</td><td>${Number(product.pricePoints || 0).toLocaleString()}P</td><td><span class="badge ${product.status === "published" ? "success-badge" : product.status === "archived" ? "draft" : "warning-badge"}">${escapeHtml(shopProductStatusLabel(product.status))}</span></td><td>${product.status === "draft" && can("cards:write") ? `<button class="secondary shop-product-publish" type="button" data-shop-product-id="${escapeHtml(product.id)}">공개</button>` : "-"}</td></tr>`).join("")
+    : '<tr><td colspan="5" class="empty">등록된 상점 상품이 없습니다.</td></tr>';
+  return `<div class="card-operations-page"><div class="page-heading with-actions"><div><p class="eyebrow">SHOP CATALOG</p><h2>상점 상품 관리</h2><p>팬앱 상점에 노출할 카드팩 상품을 등록하고 공개 상태를 관리합니다.</p></div>${can("cards:write") ? `<button class="primary" id="open-shop-product-create" type="button">${icon("add")} 상품 등록</button>` : ""}</div><section class="panel"><div class="notice">상품은 카드팩과 연결되어야 팬앱에서 구매할 수 있습니다. 초안은 팬앱에 노출되지 않습니다.</div><div class="table-wrap"><table class="table responsive-table"><thead><tr><th>상품</th><th>아티스트</th><th>가격</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div><footer class="preview-table-footer"><strong>총 ${products.length}개</strong></footer></section></div>`;
+}
+
+function shopProductCreateView() {
+  const artists = scopedArtists();
+  const packs = state.cardPacks.filter((pack) => pack.status === "published");
+  return `<div class="card-operations-page"><div class="page-heading"><div><p class="eyebrow">SHOP CATALOG</p><h2>상점 상품 등록</h2><p>기존 공개 카드팩을 팬앱에서 구매할 상품으로 연결합니다.</p></div></div><form class="panel form shop-product-form" id="shop-product-form"><div class="form-grid"><label class="field"><span>상품명</span><input name="name" placeholder="예: DREAMSCAPE Nebula Ver. 카드팩" required /></label><label class="field"><span>가격 (포인트)</span><input name="pricePoints" type="number" min="1" step="1" placeholder="1200" required /></label></div><div class="form-grid"><label class="field"><span>아티스트</span><select name="artistId" required><option value="">아티스트 선택</option>${artists.map((artist) => `<option value="${escapeHtml(artist.id)}">${escapeHtml(artist.name)}</option>`).join("")}</select></label><label class="field"><span>연결 카드팩</span><select name="cardPackId" required><option value="">공개 카드팩 선택</option>${packs.map((pack) => `<option value="${escapeHtml(pack.id)}">${escapeHtml(pack.name)} · ${escapeHtml(pack.version || "v1.0")}</option>`).join("")}</select></label></div><label class="field"><span>상품 이미지 URL</span><input name="imageUrl" type="url" placeholder="카드팩 이미지 URL (선택)" /></label><label class="field"><span>설명</span><textarea name="description" maxlength="1000" placeholder="팬에게 표시할 상품 설명"></textarea></label><div class="notice">등록 직후에는 초안으로 저장됩니다. 목록에서 공개하면 팬앱 상점에 노출됩니다.</div><footer class="drawer-footer"><button class="secondary" type="button" data-view="shop-products">취소</button><button class="primary" type="submit" ${packs.length ? "" : "disabled"}>상품 저장</button></footer></form></div>`;
+}
+
 function cardPackStatusLabel(status) {
   return ({ published: "공개됨", draft: "임시 저장", pending_review: "검수 대기" }[status] || status || "-");
 }
@@ -1733,6 +1758,38 @@ async function publishCardPack(packId) {
   }
 }
 
+async function createShopProduct(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const values = Object.fromEntries(new FormData(form).entries());
+  try {
+    await api("/admin/shop/products", { method: "POST", body: JSON.stringify({
+      artistId: values.artistId,
+      productType: "card_pack",
+      cardPackId: values.cardPackId,
+      name: values.name,
+      description: values.description || null,
+      imageUrl: values.imageUrl || null,
+      pricePoints: Number(values.pricePoints),
+    }) });
+    toast("상점 상품을 초안으로 저장했습니다.");
+    state.view = "shop-products";
+    await loadData();
+  } catch (error) {
+    toast(error.message || "상점 상품 저장에 실패했습니다.");
+  }
+}
+
+async function publishShopProduct(productId) {
+  try {
+    await api(`/admin/shop/products/${encodeURIComponent(productId)}/publish`, { method: "POST", body: "{}" });
+    toast("상점 상품을 공개했습니다.");
+    await loadData();
+  } catch (error) {
+    toast(error.message || "상품 공개에 실패했습니다.");
+  }
+}
+
 async function saveCardPackComposition(event) {
   event.preventDefault();
   const pack = state.selectedCardPack;
@@ -2224,11 +2281,14 @@ async function loadData() {
     if (state.auditQuery.trim()) auditParams.set("q", state.auditQuery.trim());
     if (state.auditAction !== "all")
       auditParams.set("action", state.auditAction);
-    const [dashboard, cards, cardPacks, auditLogs, catalog, notifications, operationalMetrics, statistics] = await Promise.all([
+    const [dashboard, cards, cardPacks, shopProducts, auditLogs, catalog, notifications, operationalMetrics, statistics] = await Promise.all([
       api("/admin/dashboard"),
       api("/admin/cards"),
       can("cards:read")
         ? api("/admin/card-packs")
+        : Promise.resolve({ data: { items: [] } }),
+      can("cards:read")
+        ? api("/admin/shop/products")
         : Promise.resolve({ data: { items: [] } }),
       api(`/admin/audit-logs?${auditParams}`),
       api("/admin/catalog"),
@@ -2243,6 +2303,7 @@ async function loadData() {
     state.recentActivity = dashboard.data.recentActivity || [];
     state.cards = cards.data.items;
     state.cardPacks = cardPacks.data.items || [];
+    state.shopProducts = shopProducts.data.items || [];
     void loadCardThumbnails(state.cards);
     state.auditLogs = auditLogs.data.items;
     state.auditPagination = auditLogs.data.meta.pagination;
@@ -3694,6 +3755,14 @@ function bind() {
     layout();
   });
   document.querySelector("#card-pack-form")?.addEventListener("submit", createCardPack);
+  document.querySelector("#shop-product-form")?.addEventListener("submit", createShopProduct);
+  document.querySelector("#open-shop-product-create")?.addEventListener("click", () => {
+    state.view = "shop-product-create";
+    layout();
+  });
+  document.querySelectorAll(".shop-product-publish").forEach((button) =>
+    button.addEventListener("click", () => void publishShopProduct(button.dataset.shopProductId)),
+  );
   document.querySelector("#card-pack-composition-form")?.addEventListener("submit", saveCardPackComposition);
   document.querySelectorAll(".card-pack-open").forEach((button) =>
     button.addEventListener("click", () => void loadCardPackDetail(button.dataset.cardPackId)),

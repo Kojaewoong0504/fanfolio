@@ -219,6 +219,32 @@ export type CardPackOpening = {
   card: CardPackCard
 }
 
+export type ShopProduct = {
+  id: string
+  artistId: string
+  artistName?: string | null
+  productType: 'card_pack' | 'point_item' | 'limited_item'
+  cardPackId?: string | null
+  name: string
+  description?: string | null
+  imageUrl?: string | null
+  pricePoints: number
+  status: 'draft' | 'published' | 'archived'
+  startsAt?: string | null
+  endsAt?: string | null
+  cardPack?: { id: string; name: string; seasonName?: string | null; version: string; imageUrl?: string | null; status: string } | null
+}
+
+export type ShopOrder = {
+  id: string
+  productId: string
+  productName: string
+  pricePoints: number
+  paymentMethod: 'points'
+  status: 'completed' | 'failed'
+  createdAt: string
+}
+
 export type CardCombinationOdds = {
   cardId: string
   name: string
@@ -799,6 +825,29 @@ export function getCardPacks(artistId?: string | null): Promise<{ ok: true, data
 
 export function getCardPackOdds(packId: string): Promise<{ ok: true, data: { pack: CardPack, items: CardPackCard[], totalProbability: number } }> {
   return apiFetch<{ ok: true, data: { pack: CardPack, items: CardPackCard[], totalProbability: number } }>(`/catalog/card-packs/${encodeURIComponent(packId)}/odds`)
+}
+
+export function getShopProducts(filters?: { artistId?: string; productType?: ShopProduct['productType'] }): Promise<{ ok: true, data: { items: ShopProduct[] } }> {
+  const params = new URLSearchParams()
+  if (filters?.artistId) params.set('artistId', filters.artistId)
+  if (filters?.productType) params.set('productType', filters.productType)
+  const query = params.size ? `?${params.toString()}` : ''
+  return apiFetch<{ ok: true; data: { items: ShopProduct[] } }>(`/catalog/shop/products${query}`)
+}
+
+export function getShopProduct(productId: string): Promise<{ ok: true; data: ShopProduct }> {
+  return apiFetch<{ ok: true; data: ShopProduct }>(`/catalog/shop/products/${encodeURIComponent(productId)}`)
+}
+
+export function createShopOrder(productId: string): Promise<{ ok: true; data: { id: string; productId: string; status: ShopOrder['status'] } }> {
+  return apiFetch<{ ok: true; data: { id: string; productId: string; status: ShopOrder['status'] } }>('/me/shop/orders', {
+    method: 'POST',
+    body: JSON.stringify({ productId, paymentMethod: 'points' }),
+  })
+}
+
+export function getShopOrders(): Promise<{ ok: true; data: { items: ShopOrder[] } }> {
+  return apiFetch<{ ok: true; data: { items: ShopOrder[] } }>('/me/shop/orders')
 }
 
 export function openCardPack(packId: string): Promise<{ ok: true, data: CardPackOpening }> {
