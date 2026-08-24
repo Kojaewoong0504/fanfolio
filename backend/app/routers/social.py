@@ -70,6 +70,24 @@ def _collection_card(
     }
 
 
+def _wanted_card(card: Card, artist: Artist | None, member: Member | None) -> dict:
+    return {
+        "cardId": card.id,
+        "name": card.name,
+        "imageUrl": _card_image_url(card),
+        "isOfficial": card.is_official,
+        "artistId": artist.id if artist else card.artist_id,
+        "artistName": artist.name if artist else None,
+        "memberId": member.id if member else card.member_id,
+        "memberName": member.name if member else None,
+        "rarity": card.rarity,
+        "seasonName": card.season_name,
+        "cardType": getattr(card, "card_type", None),
+        "signatureText": card.signature_text,
+        "issueLimit": card.issue_limit,
+    }
+
+
 async def _is_blocked(session: DbSession, first_id: str, second_id: str) -> bool:
     return bool(
         await session.scalar(
@@ -520,6 +538,20 @@ async def public_collection(
         _collection_card(user_card, card, artist, member)
         for user_card, card, artist, member in rows
     ]
+    wanted_rows = list(
+        (
+            await session.execute(
+                select(Card, Artist, Member)
+                .select_from(FanWishlistItem)
+                .join(Card, FanWishlistItem.card_id == Card.id)
+                .outerjoin(Artist, Card.artist_id == Artist.id)
+                .outerjoin(Member, Card.member_id == Member.id)
+                .where(FanWishlistItem.user_id == user_id)
+                .order_by(FanWishlistItem.created_at.desc(), FanWishlistItem.id.desc())
+            )
+        ).all()
+    )
+    wanted_cards = [_wanted_card(card, artist, member) for card, artist, member in wanted_rows]
     card_ids = [card.id for _, card, _, _ in rows]
     featured_pack_id = None
     if card_ids:
@@ -560,6 +592,7 @@ async def public_collection(
                 "followingCount": following_count,
             },
             "cards": cards,
+            "wantedCards": wanted_cards,
         },
     }
 

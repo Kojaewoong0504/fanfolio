@@ -7,6 +7,24 @@
 main.discover-shell .discover-hub{display:grid;gap:18px;padding:0 20px 110px}.discover-hub-intro p{margin:0;color:#85899c;font-size:12px}.discover-global-search{height:52px;display:flex;align-items:center;gap:12px;padding:0 16px;border:1px solid #dfdaf1;border-radius:26px;background:#fff}.discover-global-search span{color:#777b9b;font-size:26px}.discover-global-search input{width:100%;border:0;outline:0;background:transparent;font-size:13px}.discover-categories{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #e0dcef;border-radius:14px;background:#fff;padding:4px}.discover-categories button{height:38px;border:0;border-radius:11px;background:transparent;color:#676b81;font-size:11px;font-weight:800}.discover-categories button.active{background:linear-gradient(135deg,#7658ed,#573ee3);color:#fff}.discover-featured-section{display:grid;gap:10px}.discover-featured-section .section-heading{display:flex;align-items:center;justify-content:space-between}.discover-featured-section .section-heading h2{margin:0;font-size:16px}.discover-featured-section .section-heading button{border:0;background:transparent;color:#654cdd;font-size:10px}.discover-hub .inline-icon{display:inline-block;width:14px;height:14px;vertical-align:-2px;flex:0 0 14px}.discover-fan-list{display:grid;gap:10px}.discover-fan-list article{display:grid;grid-template-columns:66px minmax(0,1fr) 78px;align-items:center;gap:12px;padding:13px;border:1px solid #e1ddef;border-radius:18px;background:#fff}.discover-fan-list .profile-avatar{width:66px;height:66px}.discover-fan-list article>span{display:grid;gap:5px}.discover-fan-list strong{font-size:14px}.discover-fan-list small{color:#85899c;font-size:10px}.discover-fan-list small b{color:#654ce0}.discover-fan-list em{padding:5px 7px;border-radius:8px;background:#f5f2ff;color:#7168a9;font-size:9px;font-style:normal}.discover-fan-list article>button{height:36px;border:1px solid #6a52e7;border-radius:18px;background:#fff;color:#6249df;font-size:10px;font-weight:800}.discover-collection-entry,.discover-pack-entry,.discover-event-entry,.discover-artist-entry{width:100%;display:grid;align-items:center;gap:13px;padding:13px;border:1px solid #e1ddef;border-radius:18px;background:#fff;text-align:left}.discover-collection-entry{grid-template-columns:126px minmax(0,1fr) auto}.discover-collection-cards{position:relative;height:78px}.discover-collection-cards img{position:absolute;left:calc(var(--stack-index) * 34px);top:3px;width:54px;height:72px;border:2px solid #fff;border-radius:8px;object-fit:cover;transform:rotate(calc((var(--stack-index) - 1) * 5deg))}.discover-collection-entry>span:nth-child(2){display:grid;gap:5px}.discover-collection-entry strong{font-size:13px}.discover-collection-entry small{font-size:9px;color:#777c91}.discover-collection-entry i{height:6px;border-radius:999px;background:#ece9f4;overflow:hidden}.discover-collection-entry i em{display:block;height:100%;background:#654ce0}.discover-collection-entry>b{color:#73778c;font-size:11px}.discover-pack-entry,.discover-event-entry,.discover-artist-entry{grid-template-columns:90px minmax(0,1fr) auto}.discover-pack-entry>img,.discover-event-entry>img,.discover-artist-entry>img{width:90px;height:90px;border-radius:12px;object-fit:cover}.discover-pack-entry>span,.discover-event-entry>span,.discover-artist-entry>span{display:grid;gap:5px}.discover-pack-entry small,.discover-event-entry small,.discover-artist-entry small{color:#654ce0;font-size:9px;font-weight:800}.discover-pack-entry strong,.discover-event-entry strong,.discover-artist-entry strong{font-size:14px}.discover-pack-entry em,.discover-event-entry em,.discover-artist-entry em{color:#85899c;font-size:9px;font-style:normal}.discover-event-entry>b{display:grid;place-items:center;width:45px;height:45px;border-radius:50%;background:linear-gradient(135deg,#7658ed,#573ee3);color:#fff;font-size:12px}.discover-event-entry>i,.discover-pack-entry>i,.discover-artist-entry>i{color:#8b8fa1;font-size:21px;font-style:normal}
 @media (max-width:390px){.fan-social-content,.fan-profile-content,.trade-composer-content{padding-left:15px;padding-right:15px}.fan-social-reference .fan-recommendation-filters{gap:5px}.fan-social-reference .fan-recommendation-filters button{font-size:10px}.public-collection-reference{padding-left:15px;padding-right:15px}.public-collection-reference .social-reference-topbar{margin-left:-15px;margin-right:-15px}.public-collection-reference .public-collection-grid{gap:9px 7px}.fan-profile-identity>img{width:78px;height:78px}}
 
+/* Trade proposal step 1: keep the picker in the same compact four-card rhythm as the fan profile. */
+.trade-picker-shell{min-height:100dvh;padding:0 18px 92px;background:#f8f8ff;color:#171b39}
+.trade-picker-shell .social-reference-topbar{margin:0 -18px}
+.trade-picker-content{display:grid;gap:14px;padding-top:16px}
+.trade-picker-intro{display:flex;align-items:center;gap:12px;padding:14px;border:1px solid #e1dcf3;border-radius:15px;background:#f7f4ff}
+.trade-picker-intro>.inline-icon{flex:0 0 auto;width:22px;height:22px;color:#624be0}
+.trade-picker-intro b{font-size:12px}.trade-picker-intro p{margin:4px 0 0;color:#85899d;font-size:9px}
+.trade-picker-section{display:grid;gap:10px;padding:14px;border:1px solid #e0dcef;border-radius:16px;background:#fff}
+.trade-picker-heading{display:flex;align-items:end;justify-content:space-between;gap:10px}.trade-picker-heading h2{margin:0;font-size:15px;letter-spacing:-.045em}.trade-picker-heading p{margin:4px 0 0;color:#85899d;font-size:9px}.trade-picker-heading>b{padding:5px 8px;border-radius:8px;background:#eeebff;color:#5949ed;font-size:10px;white-space:nowrap}
+.trade-picker-wanted-grid,.trade-picker-offered-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.trade-picker-card{position:relative;min-width:0;overflow:hidden;padding:0;border:1px solid #e0dcef;border-radius:10px;background:#24245e;color:#fff;text-align:left;cursor:pointer}
+.trade-picker-card.selected{border:2px solid #5949ed;box-shadow:0 0 0 2px #d9d4ff}
+.trade-picker-card img{display:block;width:100%;aspect-ratio:3/4;object-fit:cover;object-position:center top}
+.trade-picker-card>span{position:absolute;left:5px;bottom:21px;padding:3px 4px;border-radius:5px;background:#30316d;color:#fff;font-size:8px;font-weight:800}.trade-picker-card>em{position:absolute;right:5px;bottom:6px;display:flex;align-items:center;gap:2px;color:#fff;font-size:9px;font-style:normal;text-shadow:0 1px 4px #000}.trade-picker-card>em .inline-icon{width:12px;height:12px}.trade-picker-card>small{display:block;overflow:hidden;padding:5px 5px 6px;background:#fff;color:#5949ed;font-size:8px;font-weight:800;text-align:center;text-overflow:ellipsis;white-space:nowrap}.trade-picker-card>i{position:absolute;top:5px;right:5px;display:grid;place-items:center;width:20px;height:20px;border:2px solid #fff;border-radius:50%;background:#5949ed;color:#fff;font-style:normal}.trade-picker-card>i .inline-icon{width:12px;height:12px}
+.trade-picker-summary{display:grid;grid-template-columns:38px minmax(0,1fr) 16px;align-items:center;gap:10px;padding:10px 12px;border:1px solid #ded9f4;border-radius:14px;background:#fff}.trade-picker-summary img{width:38px;height:50px;border-radius:7px;object-fit:cover}.trade-picker-summary span{display:grid;gap:2px;font-size:10px}.trade-picker-summary b{overflow:hidden;color:#171b39;text-overflow:ellipsis;white-space:nowrap}.trade-picker-summary small{color:#85899d;font-size:9px}.trade-picker-summary>.inline-icon{width:15px;height:15px;color:#85899d}
+.trade-picker-footer{position:fixed;right:0;bottom:0;left:0;z-index:5;display:grid;grid-template-columns:1fr 1.35fr;gap:10px;width:min(100%,430px);margin:0 auto;padding:12px 18px calc(12px + env(safe-area-inset-bottom));border-top:1px solid #e5e1ee;background:#fffffff4;box-shadow:0 -8px 20px #4e47a314;backdrop-filter:blur(12px)}.trade-picker-footer button{height:48px;border:1px solid #6c54e7;border-radius:13px;background:#fff;color:#6049df;font-size:12px;font-weight:850}.trade-picker-footer .primary{margin:0;background:#654be3;color:#fff}.trade-picker-footer button:disabled{opacity:.45;cursor:not-allowed}
+@media(max-width:390px){.trade-picker-shell{padding-right:15px;padding-left:15px}.trade-picker-shell .social-reference-topbar{margin-right:-15px;margin-left:-15px}.trade-picker-section{padding:12px 10px}.trade-picker-wanted-grid,.trade-picker-offered-grid{gap:6px}}
+
 /* Reference fidelity corrections for circular fan portraits and the four-part event row. */
 .fan-social-card-preview .profile-avatar{border-radius:50%;object-fit:cover}
 .discover-event-entry{grid-template-columns:90px minmax(0,1fr) 45px 18px}
@@ -14,23 +32,9 @@ main.discover-shell .discover-hub{display:grid;gap:18px;padding:0 20px 110px}.di
 .public-collection-owner strong{display:flex;flex-direction:column;align-items:flex-end;white-space:nowrap}.public-collection-owner strong>span{display:flex;align-items:baseline;gap:3px}.public-collection-owner strong>span>b{color:#654be1;font-size:22px}
 main.discover-shell .discover-event-entry{display:flex;align-items:center;gap:12px}main.discover-shell .discover-event-entry>img{width:90px;height:82px;flex:0 0 90px}main.discover-shell .discover-event-entry>span{min-width:0;flex:1}main.discover-shell .discover-event-entry>b{flex:0 0 45px}main.discover-shell .discover-event-entry>i{flex:0 0 auto;margin-left:0}
 
-/* Keep reference screens flush with the shared mobile shell; inner content owns the one gutter. */
-main.discover-shell {
-  padding-inline: 0;
-}
-main.app-shell.discover-shell > header.app-header {
-  width: calc(100% - 32px) !important;
-  margin: 0 16px 8px !important;
-}
-main.app-shell.discover-shell > div.app-header {
-  width: calc(100% - 32px) !important;
-  margin: 0 16px 8px !important;
-}
-main.discover-shell > .screen {
-  padding-inline: 0;
-}
+/* The shared app shell owns the same 22px gutter on every primary tab. */
 main.discover-shell .discover-hub {
-  padding: 0 16px 110px;
+  padding: 0 0 110px;
   gap: 16px;
 }
 main.discover-shell .discover-global-search > button {
@@ -101,6 +105,7 @@ main.fan-social-shell {
 }
 .discover-fan-list article {
   grid-template-columns: minmax(0, 1fr) 78px;
+  cursor: pointer;
 }
 .discover-fan-list article > .discover-fan-profile {
   display: grid;
@@ -172,9 +177,92 @@ main.fan-social-shell {
   object-fit: cover;
 }
 
-main.discover-shell .discover-fans-section .section-heading button {
+main.discover-shell .discover-featured-section .section-heading button {
   color: #654cdd;
   font-weight: 800;
+}
+
+.discover-fan-list em {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.discover-loading-card,
+.discover-empty-entry,
+.card-collection-loading {
+  width: 100%;
+  min-height: 88px;
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  padding: 18px;
+  border: 1px solid #e1ddef;
+  border-radius: 18px;
+  background: #fff;
+  color: #7a7e95;
+  font-size: 11px;
+  text-align: center;
+}
+
+.discover-loading-card {
+  position: relative;
+  overflow: hidden;
+  color: transparent;
+}
+
+.discover-loading-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 20%, rgb(116 87 237 / 10%) 50%, transparent 80%);
+  transform: translateX(-100%);
+  animation: discover-loading-sweep 1.2s ease-in-out infinite;
+}
+
+.discover-empty-entry {
+  border-style: solid;
+  color: #654cdd;
+  cursor: pointer;
+}
+
+.discover-empty-entry .inline-icon,
+.discover-media-placeholder .inline-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.discover-media-placeholder {
+  display: grid;
+  width: 90px;
+  height: 90px;
+  place-items: center;
+  flex: 0 0 90px;
+  border-radius: 12px;
+  background: #f2efff;
+  color: #654cdd;
+}
+
+main.discover-shell .discover-event-entry > .discover-media-placeholder {
+  min-width: 90px;
+  flex: 0 0 90px;
+}
+
+.card-collection-loading {
+  width: calc(100% - 44px);
+  min-height: 180px;
+  margin: 22px;
+}
+
+@keyframes discover-loading-sweep {
+  to { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .discover-loading-card::after {
+    animation: none;
+  }
 }
 
 .fan-social-tags i {
@@ -617,6 +705,374 @@ main.discover-shell .discover-fans-section .section-heading button {
   object-fit: cover;
 }
 
+/* Fan profile reference: wanted cards are the decision point before trading. */
+.fan-profile-wanted-panel .section-heading {
+  align-items: flex-start;
+}
+
+.fan-profile-wanted-panel .section-heading > div {
+  min-width: 0;
+}
+
+.fan-profile-wanted-panel .section-heading p {
+  margin: 5px 0 0;
+  color: #85899e;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.fan-profile-wanted-panel .section-heading > strong {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border-radius: 9px;
+  background: #f0edff;
+  color: #6049df;
+  font-size: 14px;
+}
+
+.fan-profile-wanted-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.fan-profile-wanted-cards button {
+  position: relative;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fan-profile-wanted-cards img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.fan-profile-wanted-cards button > span {
+  display: grid;
+  gap: 2px;
+  margin-top: 6px;
+}
+
+.fan-profile-wanted-cards button > span b {
+  color: #26294a;
+  font-size: 9px;
+}
+
+.fan-profile-wanted-cards button > span small {
+  overflow: hidden;
+  color: #85899e;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fan-profile-wanted-cards button > em {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  color: #684df3;
+  font-style: normal;
+}
+
+.fan-profile-wanted-cards button > em .inline-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.fan-profile-wanted-cards button > label {
+  display: inline-block;
+  margin-top: 5px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: #f0edff;
+  color: #684df3;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.fan-profile-empty-wanted {
+  margin: 0;
+  padding: 16px 0 4px;
+  color: #85899e;
+  font-size: 11px;
+  text-align: center;
+}
+
+.fan-profile-trade-ready {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid #e1ddef;
+  border-radius: 18px;
+  background: #fff;
+  color: #252947;
+  text-align: left;
+}
+
+.fan-profile-trade-ready > span {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #f1eeff;
+  color: #634be0;
+}
+
+.fan-profile-trade-ready > span .inline-icon {
+  width: 28px;
+  height: 28px;
+}
+
+.fan-profile-trade-ready > div {
+  min-width: 0;
+}
+
+.fan-profile-trade-ready h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.fan-profile-trade-ready p {
+  margin: 0;
+  color: #85899c;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.fan-profile-trade-ready > .inline-icon {
+  width: 18px;
+  height: 18px;
+  color: #9296aa;
+}
+
+.fan-profile-trade-ready:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+/* The compact follow action owns only the top-right cell. The identity copy
+   still owns the full content width on the row beneath it, so artist chips do
+   not leave an artificial blank column beside the button. */
+.fan-social-card-preview {
+  grid-template-columns: 64px minmax(0, 1fr) 62px !important;
+  column-gap: 12px !important;
+  row-gap: 6px !important;
+}
+
+.fan-social-card-preview > button.fan-social-avatar-button {
+  grid-column: 1 !important;
+  grid-row: 1 / span 4 !important;
+}
+
+.fan-social-card-preview > .fan-social-copy {
+  grid-column: 2 / 4 !important;
+  grid-row: 1 / span 2 !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 62px !important;
+  grid-template-rows: 30px auto !important;
+  gap: 6px 0 !important;
+  min-width: 0 !important;
+  width: 100% !important;
+}
+
+.fan-social-card-preview > .fan-social-copy > strong {
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+  display: flex !important;
+  align-items: center !important;
+  height: 30px !important;
+  min-width: 0 !important;
+}
+
+.fan-social-card-preview > .fan-social-copy > .fan-social-tags {
+  grid-column: 1 / -1 !important;
+  grid-row: 2 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  justify-self: stretch !important;
+}
+
+.fan-social-card-preview > button:not(.fan-social-avatar-button) {
+  grid-column: 3 !important;
+  grid-row: 1 !important;
+  align-self: start !important;
+  justify-self: end !important;
+  width: 62px !important;
+  min-width: 62px !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  z-index: 1;
+}
+
+.fan-social-card-preview > .fan-social-affinity {
+  grid-column: 2 / 4 !important;
+  grid-row: 3 !important;
+}
+
+.fan-social-card-preview > .fan-social-stats {
+  grid-column: 1 / -1 !important;
+  grid-row: 4 !important;
+}
+
+.fan-social-card-preview > .fan-social-card-previews {
+  grid-column: 2 / 4 !important;
+  grid-row: 5 !important;
+}
+
+/* Keep the current FanSocialHub markup aligned after the legacy reference rules. */
+.fan-social-card-preview > button.fan-social-avatar-button {
+  grid-column: 1 !important;
+  grid-row: 1 / span 3 !important;
+  align-self: start !important;
+  width: 64px !important;
+  height: 64px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  background: transparent !important;
+}
+.fan-social-card-preview > .fan-social-copy {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+}
+.fan-social-card-preview > .fan-social-affinity {
+  grid-column: 2 / 4 !important;
+  grid-row: 2 !important;
+}
+.fan-social-card-preview > .fan-social-stats {
+  grid-column: 1 / -1 !important;
+  grid-row: 3 !important;
+}
+.fan-social-card-preview > .fan-social-card-previews {
+  grid-column: 2 / 4 !important;
+  grid-row: 4 !important;
+}
+
+.fan-social-card-preview .fan-social-copy > .fan-social-tags {
+  grid-column: 1 !important;
+  justify-self: start !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+.fan-social-card-preview {
+  min-width: 0 !important;
+}
+
+/* Fan cards follow the reference's vertical rhythm: identity, affinity, stats,
+   then the preview rail. The grid keeps one, two, or three cards from forcing
+   the identity copy into the follow button column. */
+.fan-social-card-preview {
+  grid-template-columns: 64px minmax(0, 1fr) 76px !important;
+  column-gap: 12px !important;
+  row-gap: 8px !important;
+  padding: 14px !important;
+}
+
+.fan-social-card-preview .fan-social-avatar-button {
+  grid-column: 1 !important;
+  grid-row: 1 / span 3 !important;
+  width: 64px !important;
+  height: 64px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  background: transparent !important;
+  cursor: pointer;
+}
+
+.fan-social-card-preview > button.fan-social-avatar-button {
+  grid-column: 1 !important;
+  grid-row: 1 / span 3 !important;
+  align-self: start !important;
+  width: 64px !important;
+  height: 64px !important;
+}
+
+.fan-social-card-preview .fan-social-avatar-button .profile-avatar {
+  display: block;
+  width: 64px !important;
+  height: 64px !important;
+}
+
+.fan-social-card-preview .fan-social-copy {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.fan-social-card-preview > button:not(.fan-social-avatar-button) {
+  grid-column: 3;
+  grid-row: 1;
+  width: 76px !important;
+  align-self: center;
+}
+
+.fan-social-card-preview .fan-social-affinity {
+  grid-column: 2 / 4 !important;
+  grid-row: 2 !important;
+  min-width: 0;
+  margin: 0 !important;
+  padding: 7px 10px !important;
+  border-radius: 8px;
+  background: #f1edff;
+  color: #6256b2;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.fan-social-card-preview .fan-social-affinity mark {
+  display: block;
+  overflow: hidden;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fan-social-card-preview .fan-social-stats {
+  grid-column: 1 / -1 !important;
+  grid-row: 3;
+  justify-content: space-around !important;
+  gap: 12px !important;
+  margin: 0 !important;
+  padding-top: 9px !important;
+}
+
+.fan-social-card-preview .fan-social-card-previews {
+  grid-column: 2 / 4 !important;
+  grid-row: 4 !important;
+  display: flex !important;
+  gap: 7px !important;
+  padding-left: 0 !important;
+}
+
+.fan-social-card-preview .fan-social-card-previews span {
+  flex: 0 0 70px;
+  width: 70px !important;
+  height: 46px !important;
+}
+
 .public-collection-pack-tabs {
   grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
 }
@@ -665,8 +1121,55 @@ main.discover-shell .discover-fans-section .section-heading button {
 .fan-social-card-preview > button:not(.fan-social-profile) {
   grid-column: 3 !important;
   grid-row: 1 !important;
-  align-self: center !important;
-  width: 76px !important;
+  align-self: start !important;
+  width: 62px !important;
+  min-width: 62px !important;
+  height: 30px !important;
+}
+
+.fan-social-card-preview {
+  grid-template-columns: 64px minmax(0, 1fr) 62px !important;
+}
+
+.fan-social-card-preview .fan-social-affinity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fan-social-card-preview .fan-social-affinity .inline-icon {
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  color: #6550df;
+}
+
+.fan-social-card-preview > button.fan-social-avatar-button {
+  grid-column: 1 !important;
+  grid-row: 1 / span 3 !important;
+  align-self: start !important;
+  width: 64px !important;
+  height: 64px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  background: transparent !important;
+}
+.fan-social-card-preview > .fan-social-copy {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+}
+.fan-social-card-preview > .fan-social-affinity {
+  grid-column: 2 / 4 !important;
+  grid-row: 2 !important;
+}
+.fan-social-card-preview > .fan-social-stats {
+  grid-column: 1 / -1 !important;
+  grid-row: 3 !important;
+}
+.fan-social-card-preview > .fan-social-card-previews {
+  grid-column: 2 / 4 !important;
+  grid-row: 4 !important;
 }
 .fan-social-card-preview .fan-social-stats {
   grid-column: 1 / -1 !important;
@@ -693,6 +1196,68 @@ main.discover-shell .discover-fans-section .section-heading button {
   display: block !important;
   margin-top: 2px !important;
   line-height: 1.35 !important;
+}
+
+/* Final current-DOM override: the copy spans the button's column on its
+   second internal row, while the button remains a compact top-right action. */
+.fan-social-card-preview {
+  cursor: pointer;
+}
+.fan-social-card-preview {
+  grid-template-columns: 64px minmax(0, 1fr) 62px !important;
+  column-gap: 12px !important;
+  row-gap: 6px !important;
+}
+.fan-social-card-preview > button.fan-social-avatar-button {
+  grid-column: 1 !important;
+  grid-row: 1 / span 4 !important;
+}
+.fan-social-card-preview > .fan-social-copy {
+  grid-column: 2 / 4 !important;
+  grid-row: 1 / span 2 !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 62px !important;
+  grid-template-rows: 30px auto !important;
+  gap: 6px 0 !important;
+  min-width: 0 !important;
+  width: 100% !important;
+}
+.fan-social-card-preview > .fan-social-copy > strong {
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+  min-width: 0 !important;
+}
+.fan-social-card-preview > .fan-social-copy > .fan-social-tags {
+  grid-column: 1 / -1 !important;
+  grid-row: 2 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  justify-self: stretch !important;
+}
+.fan-social-card-preview > button:not(.fan-social-avatar-button) {
+  grid-column: 3 !important;
+  grid-row: 1 !important;
+  align-self: start !important;
+  justify-self: end !important;
+  width: 62px !important;
+  min-width: 62px !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  z-index: 1;
+}
+.fan-social-card-preview > .fan-social-affinity {
+  grid-column: 2 / 4 !important;
+  grid-row: 3 !important;
+}
+.fan-social-card-preview > .fan-social-stats {
+  grid-column: 1 / -1 !important;
+  grid-row: 4 !important;
+}
+.fan-social-card-preview > .fan-social-card-previews {
+  grid-column: 2 / 4 !important;
+  grid-row: 5 !important;
 }
 .fan-profile-identity > div > span {
   display: inline-flex !important;

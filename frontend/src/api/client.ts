@@ -837,6 +837,23 @@ export type PublicCollection = {
   isFollowing: boolean
   summary: { ownedCount: number; followerCount: number; followingCount: number }
   cards: Array<CollectionCard & { expiresAt?: string | null; tradable: boolean }>
+  wantedCards?: PublicWantedCard[]
+}
+
+export type PublicWantedCard = {
+  cardId: string
+  name: string
+  imageUrl: string
+  isOfficial: boolean
+  artistId?: string | null
+  artistName?: string | null
+  memberId?: string | null
+  memberName?: string | null
+  rarity?: string | null
+  seasonName?: string | null
+  cardType?: string | null
+  signatureText?: string | null
+  issueLimit?: number | null
 }
 
 export type FanSummary = {

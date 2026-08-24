@@ -30,6 +30,13 @@ main.collection-shell .collection-register-entry>span:nth-child(2) { display:gri
 main.collection-shell .collection-register-entry b { font-size:14px!important; letter-spacing:-.035em!important; }
 main.collection-shell .collection-register-entry small { overflow:hidden!important; color:#777f96!important; font-size:9px!important; line-height:1.4!important; text-overflow:ellipsis!important; white-space:nowrap!important; }
 main.collection-shell .collection-register-entry>.inline-icon { width:15px!important; height:15px!important; color:#767b91!important; }
+main.collection-shell .collection-wishlist-entry { display:grid!important; grid-template-columns:42px minmax(0,1fr) 16px!important; align-items:center!important; gap:11px!important; width:100%!important; min-height:68px!important; margin-top:-12px!important; padding:12px 14px!important; border:1px solid #d7d0ff!important; border-radius:16px!important; background:linear-gradient(115deg,#f8f6ff,#fff)!important; color:var(--fan-ink)!important; text-align:left!important; box-shadow:0 8px 20px #4e47a30d!important; cursor:pointer!important; }
+main.collection-shell .collection-wishlist-entry-icon { display:grid!important; place-items:center!important; width:42px!important; height:42px!important; border-radius:13px!important; background:#eeeaff!important; color:#5949ed!important; }
+main.collection-shell .collection-wishlist-entry-icon .inline-icon { width:22px!important; height:22px!important; }
+main.collection-shell .collection-wishlist-entry>span:nth-child(2) { display:grid!important; gap:3px!important; min-width:0!important; }
+main.collection-shell .collection-wishlist-entry b { font-size:14px!important; letter-spacing:-.035em!important; }
+main.collection-shell .collection-wishlist-entry small { overflow:hidden!important; color:#777f96!important; font-size:9px!important; line-height:1.4!important; text-overflow:ellipsis!important; white-space:nowrap!important; }
+main.collection-shell .collection-wishlist-entry>.inline-icon { width:15px!important; height:15px!important; color:#767b91!important; }
 main.collection-shell .collection-progress-label { color:#4e5872!important; font-size:14px!important; font-weight:700!important; }
 main.collection-shell .collection-progress-value { display:flex!important; align-items:baseline!important; justify-content:space-between!important; margin-top:8px!important; }
 main.collection-shell .collection-progress-value strong { color:#5549ed!important; font-size:34px!important; font-weight:850!important; letter-spacing:-.07em!important; line-height:1!important; }
@@ -58,6 +65,55 @@ main.collection-shell .collection-summary-grid article { display:grid!important;
 main.collection-shell .collection-summary-grid article > .inline-icon { width:24px!important; height:24px!important; padding:5px!important; border-radius:50%!important; background:#f0edff!important; color:#5b4cf3!important; } main.collection-shell .collection-summary-grid article span { font-size:10px!important; } main.collection-shell .collection-summary-grid article strong { color:var(--fan-ink)!important; font-size:17px!important; }
 main.collection-shell .collection-details { display:grid!important; gap:12px!important; padding-top:4px!important; }
 @media(max-width:360px) { main.collection-shell .collection-progress-card { padding:16px!important; } main.collection-shell .collection-recent-grid, main.collection-shell .collection-summary-grid { gap:7px!important; } main.collection-shell .collection-reference-card { height:142px!important; } main.collection-shell .collection-card-copy { bottom:26px!important; } main.collection-shell .collection-card-copy b, main.collection-shell .collection-card-copy em, main.collection-shell .collection-card-status { font-size:9px!important; } main.collection-shell .collection-summary-grid article { min-height:82px!important; } }
+
+/* Wishlist picker: mobile-first card selection flow from the approved option 1. */
+main.wishlist-picker-shell { width:min(100%,430px)!important; min-height:100vh!important; margin:0 auto!important; padding:0 0 92px!important; overflow-x:hidden!important; background:#f8f7fc!important; }
+main.wishlist-picker-shell .wishlist-picker-header { display:grid!important; grid-template-columns:40px minmax(0,1fr) 40px!important; align-items:center!important; width:100%!important; min-height:72px!important; box-sizing:border-box!important; padding:12px 18px!important; border-bottom:1px solid #e5e2ef!important; background:#fff!important; }
+main.wishlist-picker-shell .wishlist-picker-header>button { display:grid!important; place-items:center!important; width:36px!important; height:36px!important; border:0!important; border-radius:50%!important; background:transparent!important; color:var(--fan-ink)!important; cursor:pointer!important; }
+main.wishlist-picker-shell .wishlist-picker-header>button .inline-icon { width:22px!important; height:22px!important; }
+main.wishlist-picker-shell .wishlist-picker-header h1 { margin:0!important; color:var(--fan-ink)!important; font-size:18px!important; letter-spacing:-.055em!important; text-align:center!important; }
+main.wishlist-picker-shell .wishlist-picker-content { display:grid!important; gap:16px!important; width:100%!important; margin:0!important; box-sizing:border-box!important; padding:18px 18px 22px!important; }
+main.wishlist-picker-shell .wishlist-picker-description { display:grid!important; gap:5px!important; margin:0!important; padding:0 2px!important; }
+main.wishlist-picker-shell .wishlist-picker-description strong { color:var(--fan-ink)!important; font-size:15px!important; letter-spacing:-.045em!important; }
+main.wishlist-picker-shell .wishlist-picker-description span { color:#777f96!important; font-size:10px!important; line-height:1.45!important; }
+main.wishlist-picker-shell .wishlist-picker-search { display:grid!important; grid-template-columns:20px minmax(0,1fr)!important; align-items:center!important; gap:8px!important; min-height:48px!important; padding:0 14px!important; border:1px solid #dcd7f5!important; border-radius:15px!important; background:#fff!important; }
+main.wishlist-picker-shell .wishlist-picker-search .inline-icon { width:19px!important; height:19px!important; color:#767b96!important; }
+main.wishlist-picker-shell .wishlist-picker-search input { min-width:0!important; border:0!important; outline:0!important; background:transparent!important; color:var(--fan-ink)!important; font-size:12px!important; }
+main.wishlist-picker-shell .wishlist-picker-search input::placeholder { color:#9a9db1!important; }
+main.wishlist-picker-shell .wishlist-picker-filters { display:flex!important; gap:8px!important; overflow-x:auto!important; padding-bottom:2px!important; scrollbar-width:none!important; }
+main.wishlist-picker-shell .wishlist-picker-filters::-webkit-scrollbar { display:none!important; }
+main.wishlist-picker-shell .wishlist-picker-filters button { flex:0 0 auto!important; min-height:32px!important; padding:0 13px!important; border:1px solid #ddd8f3!important; border-radius:999px!important; background:#fff!important; color:#747890!important; font-size:10px!important; cursor:pointer!important; }
+main.wishlist-picker-shell .wishlist-picker-filters button.active { border-color:#5949ed!important; background:#5949ed!important; color:#fff!important; box-shadow:0 5px 12px #5949ed2b!important; }
+main.wishlist-picker-shell .wishlist-picker-heading { display:flex!important; align-items:end!important; justify-content:space-between!important; gap:12px!important; }
+main.wishlist-picker-shell .wishlist-picker-heading>div { display:grid!important; gap:4px!important; }
+main.wishlist-picker-shell .wishlist-picker-heading h2 { margin:0!important; font-size:17px!important; letter-spacing:-.055em!important; }
+main.wishlist-picker-shell .wishlist-picker-heading span { color:#777f96!important; font-size:10px!important; }
+main.wishlist-picker-shell .wishlist-picker-heading>b { padding:6px 9px!important; border-radius:9px!important; background:#eeebff!important; color:#5949ed!important; font-size:11px!important; white-space:nowrap!important; }
+main.wishlist-picker-shell .wishlist-picker-grid { display:grid!important; grid-template-columns:repeat(4,minmax(0,1fr))!important; gap:10px!important; }
+main.wishlist-picker-shell .wishlist-picker-card { position:relative!important; min-width:0!important; overflow:hidden!important; padding:0!important; border:2px solid transparent!important; border-radius:11px!important; background:#24245e!important; color:#fff!important; text-align:left!important; box-shadow:0 5px 12px #3d35721c!important; cursor:pointer!important; }
+main.wishlist-picker-shell .wishlist-picker-card.selected { border-color:#5949ed!important; box-shadow:0 0 0 2px #d6d0ff,0 7px 14px #5949ed31!important; }
+main.wishlist-picker-shell .wishlist-picker-card img { display:block!important; width:100%!important; aspect-ratio:3/4!important; object-fit:cover!important; object-position:center top!important; }
+main.wishlist-picker-shell .wishlist-picker-rarity { position:absolute!important; top:5px!important; left:5px!important; z-index:2!important; min-width:21px!important; padding:3px 4px!important; border-radius:5px!important; color:#fff!important; font-size:8px!important; font-weight:850!important; text-align:center!important; }
+main.wishlist-picker-shell .wishlist-picker-rarity.rarity-ur { background:#704be7!important; } main.wishlist-picker-shell .wishlist-picker-rarity.rarity-sr { background:#3274e9!important; } main.wishlist-picker-shell .wishlist-picker-rarity.rarity-r { background:#3b75dc!important; } main.wishlist-picker-shell .wishlist-picker-rarity.rarity-n { background:#667085!important; }
+main.wishlist-picker-shell .wishlist-picker-card-meta { display:grid!important; gap:1px!important; padding:6px 6px 7px!important; }
+main.wishlist-picker-shell .wishlist-picker-card-meta b { overflow:hidden!important; font-size:9px!important; text-overflow:ellipsis!important; white-space:nowrap!important; }
+main.wishlist-picker-shell .wishlist-picker-card-meta small { overflow:hidden!important; color:#c9c8e8!important; font-size:8px!important; text-overflow:ellipsis!important; white-space:nowrap!important; }
+main.wishlist-picker-shell .wishlist-picker-heart { position:absolute!important; top:5px!important; right:5px!important; display:grid!important; place-items:center!important; width:22px!important; height:22px!important; border-radius:50%!important; background:#17174499!important; }
+main.wishlist-picker-shell .wishlist-picker-heart .inline-icon { width:14px!important; height:14px!important; }
+main.wishlist-picker-shell .wishlist-picker-card.selected .wishlist-picker-heart { display:none!important; }
+main.wishlist-picker-shell .wishlist-picker-check { position:absolute!important; top:5px!important; right:5px!important; display:grid!important; place-items:center!important; width:22px!important; height:22px!important; border:2px solid #fff!important; border-radius:50%!important; background:#5949ed!important; color:#fff!important; box-shadow:0 2px 5px #15144055!important; }
+main.wishlist-picker-shell .wishlist-picker-check .inline-icon { width:13px!important; height:13px!important; }
+main.wishlist-picker-shell .wishlist-picker-state { display:grid!important; justify-items:center!important; gap:8px!important; padding:42px 20px!important; border:1px dashed #d7d2ee!important; border-radius:16px!important; background:#fff!important; color:#777f96!important; text-align:center!important; }
+main.wishlist-picker-shell .wishlist-picker-state .inline-icon { width:26px!important; height:26px!important; color:#5949ed!important; }
+main.wishlist-picker-shell .wishlist-picker-state strong { color:var(--fan-ink)!important; font-size:13px!important; }
+main.wishlist-picker-shell .wishlist-picker-state span { font-size:10px!important; }
+main.wishlist-picker-shell .wishlist-picker-error { margin:0!important; color:#c94a65!important; font-size:11px!important; text-align:center!important; }
+main.wishlist-picker-shell .wishlist-picker-footer { position:fixed!important; right:0!important; bottom:0!important; left:0!important; z-index:10!important; display:flex!important; align-items:center!important; justify-content:space-between!important; gap:14px!important; width:min(100%,430px)!important; margin:0 auto!important; padding:12px var(--fan-gutter) calc(12px + env(safe-area-inset-bottom))!important; border-top:1px solid #e4e1ef!important; background:#fffffff2!important; box-shadow:0 -8px 22px #4e47a314!important; backdrop-filter:blur(12px)!important; }
+main.wishlist-picker-shell .wishlist-picker-footer>span { color:#777f96!important; font-size:11px!important; white-space:nowrap!important; }
+main.wishlist-picker-shell .wishlist-picker-footer>span b { color:#5949ed!important; font-size:16px!important; }
+main.wishlist-picker-shell .wishlist-picker-footer .primary { flex:1!important; min-height:46px!important; padding:0 14px!important; border:0!important; border-radius:13px!important; background:#5949ed!important; color:#fff!important; font-size:12px!important; font-weight:800!important; cursor:pointer!important; }
+main.wishlist-picker-shell .wishlist-picker-footer .primary:disabled { opacity:.48!important; cursor:wait!important; }
+@media(max-width:360px) { main.wishlist-picker-shell .wishlist-picker-grid { gap:7px!important; } main.wishlist-picker-shell .wishlist-picker-card-meta { padding-right:4px!important; padding-left:4px!important; } main.wishlist-picker-shell .wishlist-picker-card-meta b, main.wishlist-picker-shell .wishlist-picker-card-meta small { font-size:8px!important; } }
 
 /* Pass reward inventory: approved collection entry and dedicated inventory. */
 main.collection-shell .collection-reward-inventory-entry {
