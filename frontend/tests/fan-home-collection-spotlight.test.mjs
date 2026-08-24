@@ -37,7 +37,7 @@ test('fan navigation uses five persistent destinations with alerts retained in t
   assert.match(appSource, /label="탐색"/)
   assert.match(appSource, /label="보관함"/)
   assert.match(appSource, /label="팬 레벨"/)
-  assert.match(appSource, /label="마이"/)
+  assert.match(appSource, /label="상점"/)
   assert.match(appSource, /label="탐색"[\s\S]*label="보관함"[\s\S]*label="홈"/)
   assert.match(appSource, /header-alert-button/)
   assert.match(appSource, /navigateTab\('alerts'\)/)

@@ -321,55 +321,41 @@ function ShopCheckoutPreview({ appMode = false }: { appMode?: boolean }) {
   </main>
 }
 
-function ShopApiPage() {
-  const [products, setProducts] = useState<ShopProduct[]>([])
-  const [artist, setArtist] = useState('all')
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  useEffect(() => {
-    let active = true
-    setLoading(true)
-    void getShopProducts().then(result => {
-      if (!active) return
-      setProducts(result.data.items)
-      setLoading(false)
-    }).catch(() => { if (active) { setError('상품을 불러오지 못했어요.'); setLoading(false) } })
-    return () => { active = false }
-  }, [])
-  const artists = [{ id: 'all', name: '전체' }, ...Array.from(new Map(products.map(product => [product.artistId, product.artistName ?? product.artistId])).entries()).map(([id, name]) => ({ id, name }))]
-  const visibleProducts = artist === 'all' ? products : products.filter(product => product.artistId === artist)
-  return <main className="app-shell shop-shell">
-    <header className="app-header shop-header"><div className="app-header-copy"><span className="eyebrow">FANFOLIO</span><h1>상점</h1><p className="app-header-description">포인트와 카드팩으로 컬렉션을 완성해보세요.</p></div><div className="header-actions"><button className="header-alert-button" aria-label="알림"><NavIcon name="alerts" /></button><button className="header-profile-button" aria-label="프로필 및 설정"><ProfileAvatar imageUrl={cardMinhoImage} fallback="팬" alt="프로필 이미지" /></button></div></header>
-    <section className="shop-content">
-      <section className="shop-artist-section" aria-labelledby="live-shop-artist-title"><h2 id="live-shop-artist-title">관심 아티스트</h2><div className="shop-artist-list shop-artist-list-live">{artists.map(item => <button type="button" key={item.id} className={artist === item.id ? 'selected' : ''} aria-pressed={artist === item.id} onClick={() => setArtist(item.id)}><span className="shop-artist-all"><InlineIcon name="card" /></span><b>{item.name}</b></button>)}</div></section>
-      <button type="button" className="shop-history-link" onClick={() => navigateAppPath('/shop/history')}><span><InlineIcon name="list" /></span><b>구매 · 교환 내역</b><InlineIcon name="chevron" /></button>
-      {loading && <p className="shop-notice" role="status">상품을 불러오고 있어요.</p>}
-      {error && <p className="shop-notice" role="alert">{error}</p>}
-      {!loading && !error && visibleProducts.length === 0 && <div className="shop-empty-state"><InlineIcon name="card" /><b>판매 중인 상품이 없어요.</b><span>관리자가 게시한 상품이 여기에 표시됩니다.</span></div>}
-      {!loading && !error && visibleProducts.length > 0 && <section className="shop-catalog-section"><div className="shop-section-heading"><h2>판매 중인 상품</h2><span>{visibleProducts.length}개</span></div><div className="shop-live-product-list">{visibleProducts.map(product => <article className="shop-featured-pack shop-live-product" key={product.id}><img src={resolveApiUrl(product.imageUrl) || dreamscapeCardPack} alt="" /><div><h3>{product.name}</h3><p>{product.description || product.cardPack?.name || '카드팩 상품'}</p><strong>{product.pricePoints.toLocaleString()} <small>P</small></strong></div><button type="button" onClick={() => navigateAppPath(`/shop/products/${encodeURIComponent(product.id)}`)}>상품 보기</button></article>)}</div></section>}
-    </section>
-  </main>
-}
-
 function ShopProductDetail({ productId }: { productId: string }) {
   const [product, setProduct] = useState<ShopProduct | null>(null)
   const [state, setState] = useState<'loading' | 'ready' | 'error' | 'buying'>('loading')
   const [message, setMessage] = useState('')
   useEffect(() => { let active = true; void getShopProduct(productId).then(result => { if (active) { setProduct(result.data); setState('ready') } }).catch(() => { if (active) setState('error') }); return () => { active = false } }, [productId])
   const buy = async () => { if (!product) return; setState('buying'); setMessage(''); try { await createShopOrder(product.id); navigateAppPath('/shop/history') } catch (error) { setMessage(error instanceof ApiError ? error.message : '구매에 실패했어요.'); setState('ready') } }
-  return <main className="app-shell shop-product-detail-shell"><header className="shop-history-topbar"><button type="button" aria-label="상점으로 돌아가기" onClick={() => navigateAppPath('/shop')}><InlineIcon name="back" /></button><h1>상품 상세</h1><span aria-hidden="true" /></header><section className="shop-product-detail-content">{state === 'loading' && <p className="shop-notice">상품 정보를 불러오고 있어요.</p>}{state === 'error' && <p className="shop-notice" role="alert">상품을 찾을 수 없어요.</p>}{product && <><img className="shop-product-detail-image" src={resolveApiUrl(product.imageUrl) || dreamscapeCardPack} alt="" /><p className="eyebrow">{product.artistName ?? 'FANFOLIO'}</p><h2>{product.name}</h2><p>{product.description || product.cardPack?.name || '카드팩 상품'}</p><strong className="shop-product-detail-price">{product.pricePoints.toLocaleString()}P</strong>{message && <p className="shop-notice" role="alert">{message}</p>}<button type="button" className="shop-checkout-primary" disabled={state === 'buying'} onClick={() => void buy()}>{state === 'buying' ? '구매 처리 중…' : '포인트로 구매하기'}</button></>}</section></main>
+  return <main className="app-shell shop-product-detail-shell"><header className="shop-history-topbar"><button type="button" aria-label="상점으로 돌아가기" onClick={() => navigateAppPath('/shop')}><InlineIcon name="back" /></button><h1>상품 상세</h1><span aria-hidden="true" /></header><section className="shop-product-detail-content">{state === 'loading' && <p className="shop-notice">상품 정보를 불러오고 있어요.</p>}{state === 'error' && <p className="shop-notice" role="alert">상품을 찾을 수 없어요.</p>}{product && <><img className="shop-product-detail-image" src={resolveApiUrl(product.imageUrl) || dreamscapeCardPack} alt="" /><p className="eyebrow">{product.artistName ?? 'FANFOLIO'}</p><h2>{product.name}</h2><p>{product.description || product.cardPack?.name || '카드팩 상품'}</p><strong className="shop-product-detail-price">{product.pricePoints.toLocaleString()}P</strong>{message && <p className="shop-notice" role="alert">{message}</p>}<button type="button" className="shop-checkout-primary" disabled={state === 'buying'} onClick={() => void buy()}>{state === 'buying' ? '구매 처리 중…' : '포인트로 구매하기'}</button>{product.detailContent?.map((block, index) => block.type === 'image' ? <figure className="shop-product-detail-media" key={block.key ?? `${block.title}-${index}`}><img src={resolveApiUrl(block.imageUrl) || dreamscapeCardPack} alt={block.alt || block.title} /><figcaption>{block.title}</figcaption></figure> : <section className="shop-product-detail-block" key={block.key ?? `${block.title}-${index}`}><h3>{block.title}</h3><p>{block.body || ''}</p></section>)}</>}</section></main>
 }
 
 function ShopPreview({ appMode = false }: { appMode?: boolean }) {
   const [category, setCategory] = useState<ShopCategory>('recommended')
   const [artist, setArtist] = useState<'all' | 'dreamscape' | 'lunarize' | 'astra' | 'eclipse'>('all')
   const [notice, setNotice] = useState('')
+  const [products, setProducts] = useState<ShopProduct[]>([])
+  const [productsLoading, setProductsLoading] = useState(appMode)
+  const [productsError, setProductsError] = useState('')
   useEffect(() => {
     const previousTitle = document.title
     document.title = 'Fanfolio · 상점'
     return () => { document.title = previousTitle }
   }, [])
-  if (appMode) return <ShopApiPage />
+  useEffect(() => {
+    if (!appMode) return
+    let active = true
+    void getShopProducts().then(result => {
+      if (!active) return
+      setProducts(result.data.items)
+      setProductsLoading(false)
+    }).catch(() => {
+      if (!active) return
+      setProductsError('상품을 불러오지 못했어요.')
+      setProductsLoading(false)
+    })
+    return () => { active = false }
+  }, [appMode])
   const categories: Array<{ id: ShopCategory; label: string }> = [
     { id: 'recommended', label: '추천' },
     { id: 'packs', label: '카드팩' },
@@ -379,6 +365,10 @@ function ShopPreview({ appMode = false }: { appMode?: boolean }) {
   const showPacks = category === 'recommended' || category === 'packs'
   const showPoints = category === 'recommended' || category === 'points'
   const showLimited = category === 'recommended' || category === 'limited'
+  const visibleProducts = artist === 'all' ? products : products.filter(product => product.artistId === artist)
+  const livePacks = visibleProducts.filter(product => product.productType === 'card_pack')
+  const livePointItems = visibleProducts.filter(product => product.productType === 'point_item')
+  const liveLimitedItems = visibleProducts.filter(product => product.productType === 'limited_item')
   const selectProduct = (label: string) => {
     if (label === 'Nebula 카드팩') navigateAppPath(appMode ? '/shop/checkout' : '/?preview=shop-checkout')
     else setNotice(`${label} 상세를 준비하고 있어요.`)
@@ -416,29 +406,31 @@ function ShopPreview({ appMode = false }: { appMode?: boolean }) {
       </div>
 
       {notice && <p className="shop-notice" role="status">{notice}</p>}
+      {appMode && productsLoading && <p className="shop-notice" role="status">상품을 불러오고 있어요.</p>}
+      {appMode && productsError && <p className="shop-notice" role="alert">{productsError}</p>}
+      {appMode && !productsLoading && !productsError && visibleProducts.length === 0 && <div className="shop-empty-state"><InlineIcon name="card" /><b>판매 중인 상품이 없어요.</b><span>관리자가 게시한 상품이 여기에 표시됩니다.</span></div>}
 
-      {showPacks && <section className="shop-catalog-section">
+      {showPacks && (!appMode || livePacks.length > 0) && <section className="shop-catalog-section">
         <div className="shop-section-heading"><h2>추천 카드팩</h2><button type="button" onClick={() => setCategory('packs')}>전체 보기 <InlineIcon name="chevron" /></button></div>
         <article className="shop-featured-pack">
-          <img src={dreamscapeCardPack} alt="드림스케이프 Nebula 카드팩" />
-          <div><h3>정규 1집 · DREAMSCAPE</h3><p>Nebula Ver.</p><strong>1,200 <small>P</small></strong><span>신규</span></div>
-          <button type="button" onClick={() => selectProduct('Nebula 카드팩')}>카드팩 열기</button>
+          {appMode && livePacks[0] ? <><img src={resolveApiUrl(livePacks[0].imageUrl) || dreamscapeCardPack} alt="" /><div><h3>{livePacks[0].name}</h3><p>{livePacks[0].description || livePacks[0].cardPack?.version || '카드팩'}</p><strong>{livePacks[0].pricePoints.toLocaleString()} <small>P</small></strong><span>판매 중</span></div><button type="button" onClick={() => navigateAppPath(`/shop/products/${encodeURIComponent(livePacks[0].id)}`)}>상품 보기</button></> : <><img src={dreamscapeCardPack} alt="드림스케이프 Nebula 카드팩" /><div><h3>정규 1집 · DREAMSCAPE</h3><p>Nebula Ver.</p><strong>1,200 <small>P</small></strong><span>신규</span></div><button type="button" onClick={() => selectProduct('Nebula 카드팩')}>카드팩 열기</button></>}
         </article>
         <div className="shop-secondary-packs">
+          {appMode && livePacks.length > 0 ? livePacks.slice(1, 3).map(product => <article key={product.id}><img src={resolveApiUrl(product.imageUrl) || dreamscapeCardPack} alt="" /><div><h3>{product.name}</h3><strong>{product.pricePoints.toLocaleString()} <small>P</small></strong><button type="button" onClick={() => navigateAppPath(`/shop/products/${encodeURIComponent(product.id)}`)}>상품 보기</button></div></article>) : !appMode ? <>
           <article><img src={dreamscapeCardPack} alt="Starlight 카드팩" /><div><h3>Starlight Ver.</h3><strong>1,200 <small>P</small></strong><button type="button" onClick={() => selectProduct('Starlight 카드팩')}>카드팩 열기</button></div></article>
           <article className="summer"><img src={dreamscapeCardPack} alt="2026 SUMMER 카드팩" /><div><h3>2026 SUMMER</h3><strong>1,500 <small>P</small></strong><button type="button" onClick={() => selectProduct('2026 SUMMER 카드팩')}>카드팩 열기</button></div></article>
+          </> : null}
         </div>
       </section>}
 
-      {showPoints && <section className="shop-catalog-section shop-exchange-section">
+      {showPoints && (!appMode || livePointItems.length > 0) && <section className="shop-catalog-section shop-exchange-section">
         <div className="shop-section-heading"><h2>포인트 교환</h2><button type="button" onClick={() => setCategory('points')}>전체 보기 <InlineIcon name="chevron" /></button></div>
-        <button type="button" className="shop-exchange-item" onClick={() => selectProduct('프로필 프레임 · 별빛')}><img src={fanLevelStar} alt="" /><span><b>프로필 프레임 · 별빛</b><strong>800 <small>P</small></strong></span><em>교환</em></button>
-        <button type="button" className="shop-exchange-item" onClick={() => selectProduct('컬렉션 배경 · Nebula')}><img src={profileDecorationsImage} alt="" /><span><b>컬렉션 배경 · Nebula</b><strong>1,000 <small>P</small></strong></span><em>교환</em></button>
+        {appMode && livePointItems.length > 0 ? livePointItems.slice(0, 2).map(product => <button type="button" className="shop-exchange-item" key={product.id} onClick={() => navigateAppPath(`/shop/products/${encodeURIComponent(product.id)}`)}><img src={resolveApiUrl(product.imageUrl) || profileDecorationsImage} alt="" /><span><b>{product.name}</b><strong>{product.pricePoints.toLocaleString()} <small>P</small></strong></span><em>교환</em></button>) : !appMode ? <><button type="button" className="shop-exchange-item" onClick={() => selectProduct('프로필 프레임 · 별빛')}><img src={fanLevelStar} alt="" /><span><b>프로필 프레임 · 별빛</b><strong>800 <small>P</small></strong></span><em>교환</em></button><button type="button" className="shop-exchange-item" onClick={() => selectProduct('컬렉션 배경 · Nebula')}><img src={profileDecorationsImage} alt="" /><span><b>컬렉션 배경 · Nebula</b><strong>1,000 <small>P</small></strong></span><em>교환</em></button></> : null}
       </section>}
 
-      {showLimited && <section className="shop-catalog-section shop-limited-section">
+      {showLimited && (!appMode || liveLimitedItems.length > 0) && <section className="shop-catalog-section shop-limited-section">
         <div className="shop-section-heading"><h2>한정 상품</h2><button type="button" onClick={() => setCategory('limited')}>전체 보기 <InlineIcon name="chevron" /></button></div>
-        <article className="shop-limited-product"><img src={fanWeekNightStage} alt="드림스케이프 팬 위크" /><div><span>D-3</span><h3>DREAMSCAPE 팬 위크 패키지</h3><strong>2,500 <small>P</small></strong></div><button type="button" onClick={() => selectProduct('팬 위크 패키지')}>구매하기</button></article>
+        {appMode && liveLimitedItems[0] ? <article className="shop-limited-product"><img src={resolveApiUrl(liveLimitedItems[0].imageUrl) || fanWeekNightStage} alt="" /><div><span>판매 중</span><h3>{liveLimitedItems[0].name}</h3><strong>{liveLimitedItems[0].pricePoints.toLocaleString()} <small>P</small></strong></div><button type="button" onClick={() => navigateAppPath(`/shop/products/${encodeURIComponent(liveLimitedItems[0].id)}`)}>상품 보기</button></article> : !appMode ? <article className="shop-limited-product"><img src={fanWeekNightStage} alt="드림스케이프 팬 위크" /><div><span>D-3</span><h3>DREAMSCAPE 팬 위크 패키지</h3><strong>2,500 <small>P</small></strong></div><button type="button" onClick={() => selectProduct('팬 위크 패키지')}>구매하기</button></article> : null}
       </section>}
     </section>
 

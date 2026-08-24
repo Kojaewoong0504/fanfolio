@@ -69,6 +69,23 @@ test('authenticated shop reads catalog data and opens a real product detail', ()
   assert.match(appSource, /shop\/products\/\$\{encodeURIComponent\(product\.id\)\}/)
 })
 
+test('authenticated shop reuses the preview shell and keeps live navigation', () => {
+  assert.doesNotMatch(appSource, /if \(appMode\) return <ShopApiPage \/>/)
+  assert.match(appSource, /useEffect\(\(\) => \{[\s\S]*getShopProducts\(\)/)
+  assert.match(appSource, /className="shop-points-card"/)
+  assert.match(appSource, /className="shop-category-tabs"/)
+  assert.match(appSource, /className="bottom-nav" aria-label="주요 메뉴"/)
+  assert.match(appSource, /onClick=\{\(\) => appMode && navigateAppPath\('\/discover'\)\}/)
+})
+
+test('shop product detail renders admin-authored detail content blocks', () => {
+  assert.match(appSource, /detailContent/)
+  assert.match(appSource, /shop-product-detail-block/)
+  assert.match(appSource, /block\.type === 'image'/)
+  assert.match(appSource, /shop-product-detail-media/)
+  assert.match(appCssSource, /\.app-shell\.shop-product-detail-shell\{[^}]*padding:0 0 28px/)
+})
+
 test('shop history preview filters realistic purchase and exchange records', () => {
   const historySource = appSource.slice(appSource.indexOf('function ShopHistoryPreview('), appSource.indexOf('function ShopPreview('))
   assert.match(historySource, /useState<ShopHistoryFilter>\('all'\)/)

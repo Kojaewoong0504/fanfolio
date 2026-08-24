@@ -47,6 +47,13 @@ const state = {
   cards: [],
   cardPacks: [],
   shopProducts: [],
+  shopProductDraft: null,
+  shopProductBlocks: [
+    { key: "intro", type: "text", title: "상품 소개", body: "DREAMSCAPE의 새로운 비주얼과 이야기를 담은 카드팩입니다.", imageUrl: "", alt: "" },
+    { key: "contents", type: "text", title: "구성품 안내", body: "포토카드 5장(랜덤)과 스페셜 포토카드 1장이 포함됩니다.", imageUrl: "", alt: "" },
+    { key: "notice", type: "text", title: "구매 안내", body: "구매 후 바로 보관함에서 확인할 수 있습니다.", imageUrl: "", alt: "" },
+  ],
+  shopProductPreviewMode: "desktop",
   cardPackQuery: "",
   cardPackStatus: "all",
   cardPackArtist: "all",
@@ -1146,10 +1153,125 @@ function shopProductsView() {
   return `<div class="card-operations-page"><div class="page-heading with-actions"><div><p class="eyebrow">SHOP CATALOG</p><h2>상점 상품 관리</h2><p>팬앱 상점에 노출할 카드팩 상품을 등록하고 공개 상태를 관리합니다.</p></div>${can("cards:write") ? `<button class="primary" id="open-shop-product-create" type="button">${icon("add")} 상품 등록</button>` : ""}</div><section class="panel"><div class="notice">상품은 카드팩과 연결되어야 팬앱에서 구매할 수 있습니다. 초안은 팬앱에 노출되지 않습니다.</div><div class="table-wrap"><table class="table responsive-table"><thead><tr><th>상품</th><th>아티스트</th><th>가격</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div><footer class="preview-table-footer"><strong>총 ${products.length}개</strong></footer></section></div>`;
 }
 
+function shopProductEditorDraft() {
+  return state.shopProductDraft || {
+    name: "Nebula Ver. 카드팩",
+    artistId: scopedArtists()[0]?.id || "",
+    cardPackId: state.cardPacks.find((pack) => pack.status === "published")?.id || "",
+    imageUrl: "",
+    pricePoints: "1200",
+    description: "DREAMSCAPE의 새로운 비주얼과 이야기를 담은 카드팩입니다.",
+  };
+}
+
+function shopProductContentBlocks() {
+  return state.shopProductBlocks?.length
+    ? state.shopProductBlocks.map((block) => ({ type: "text", imageUrl: "", alt: "", ...block }))
+    : [{ key: "intro", type: "text", title: "상품 소개", body: "", imageUrl: "", alt: "" }];
+}
+
+function shopProductBlockEditor(block, index) {
+  const typeLabel = block.type === "image" ? "이미지" : "텍스트";
+  return `<article class="shop-product-block-row" data-shop-content-block="${escapeHtml(block.key)}"><span class="shop-product-block-drag">${icon("drag_indicator")}</span><div class="shop-product-block-copy"><strong>${escapeHtml(block.title)}</strong><small>${typeLabel} · 팬앱 상품 상세에 표시되는 콘텐츠 블록</small></div><button class="icon-button shop-product-block-edit" type="button" data-shop-block-edit="${escapeHtml(block.key)}" aria-label="${escapeHtml(block.title)} 편집">${icon("edit")}</button><button class="icon-button danger-button shop-product-block-remove" type="button" data-shop-block-remove="${escapeHtml(block.key)}" aria-label="${escapeHtml(block.title)} 삭제" ${index === 0 ? "disabled" : ""}>${icon("delete")}</button></article>`;
+}
+
+function shopProductPreview(draft, blocks) {
+  const pack = state.cardPacks.find((item) => item.id === draft.cardPackId);
+  const artist = scopedArtists().find((item) => item.id === draft.artistId);
+  const imageUrl = draft.imageUrl || pack?.imageUrl || "";
+  const image = imageUrl
+    ? `<img src="${escapeHtml(resolveAdminAssetUrl(imageUrl))}" alt="${escapeHtml(draft.name || "상품 이미지")}" />`
+    : `<div class="shop-product-preview-image-placeholder">${icon("inventory_2")}<span>상품 이미지 미리보기</span></div>`;
+  const content = blocks.map((block) => block.type === "image"
+    ? `<figure class="shop-product-preview-media"><img src="${escapeHtml(resolveAdminAssetUrl(block.imageUrl || imageUrl))}" alt="${escapeHtml(block.alt || block.title)}" data-shop-preview-target="block-image-${escapeHtml(block.key)}" /><figcaption data-shop-preview-target="block-title-${escapeHtml(block.key)}">${escapeHtml(block.title)}</figcaption></figure>`
+    : `<section class="shop-product-preview-block"><h4 data-shop-preview-target="block-title-${escapeHtml(block.key)}">${escapeHtml(block.title)}</h4><p data-shop-preview-target="block-${escapeHtml(block.key)}">${escapeHtml(block.body || "내용을 입력해 주세요.")}</p></section>`).join("");
+  return `<div class="shop-product-preview-panel"><div class="shop-product-preview-toolbar"><strong>미리보기 패널</strong><div class="shop-product-preview-toggle" role="group" aria-label="미리보기 크기"><button type="button" class="${state.shopProductPreviewMode === "mobile" ? "active" : ""}" data-shop-preview-mode="mobile">${icon("phone_iphone")} 모바일</button><button type="button" class="${state.shopProductPreviewMode === "desktop" ? "active" : ""}" data-shop-preview-mode="desktop">${icon("desktop_windows")} 데스크톱</button></div></div><div class="shop-product-preview-surface ${state.shopProductPreviewMode === "mobile" ? "mobile" : "desktop"}"><div class="shop-product-preview-topbar">${icon("arrow_back")}<strong>상품 상세</strong>${icon("ios_share")}</div><div class="shop-product-preview-hero">${image}</div><div class="shop-product-preview-body"><span class="shop-product-preview-artist">${escapeHtml(artist?.name || "아티스트")}</span><h3 data-shop-preview-target="name">${escapeHtml(draft.name || "상품명")}</h3><strong class="shop-product-preview-price" data-shop-preview-target="price">${Number(draft.pricePoints || 0).toLocaleString()}P</strong><button class="primary full-width" type="button">${icon("shopping_cart")} 카드팩 구매하기</button><div class="shop-product-preview-tabs"><span class="active">상품 소개</span><span>구성품 안내</span><span>구매 안내</span></div>${content}</div></div></div>`;
+}
+
 function shopProductCreateView() {
   const artists = scopedArtists();
   const packs = state.cardPacks.filter((pack) => pack.status === "published");
-  return `<div class="card-operations-page"><div class="page-heading"><div><p class="eyebrow">SHOP CATALOG</p><h2>상점 상품 등록</h2><p>기존 공개 카드팩을 팬앱에서 구매할 상품으로 연결합니다.</p></div></div><form class="panel form shop-product-form" id="shop-product-form"><div class="form-grid"><label class="field"><span>상품명</span><input name="name" placeholder="예: DREAMSCAPE Nebula Ver. 카드팩" required /></label><label class="field"><span>가격 (포인트)</span><input name="pricePoints" type="number" min="1" step="1" placeholder="1200" required /></label></div><div class="form-grid"><label class="field"><span>아티스트</span><select name="artistId" required><option value="">아티스트 선택</option>${artists.map((artist) => `<option value="${escapeHtml(artist.id)}">${escapeHtml(artist.name)}</option>`).join("")}</select></label><label class="field"><span>연결 카드팩</span><select name="cardPackId" required><option value="">공개 카드팩 선택</option>${packs.map((pack) => `<option value="${escapeHtml(pack.id)}">${escapeHtml(pack.name)} · ${escapeHtml(pack.version || "v1.0")}</option>`).join("")}</select></label></div><label class="field"><span>상품 이미지 URL</span><input name="imageUrl" type="url" placeholder="카드팩 이미지 URL (선택)" /></label><label class="field"><span>설명</span><textarea name="description" maxlength="1000" placeholder="팬에게 표시할 상품 설명"></textarea></label><div class="notice">등록 직후에는 초안으로 저장됩니다. 목록에서 공개하면 팬앱 상점에 노출됩니다.</div><footer class="drawer-footer"><button class="secondary" type="button" data-view="shop-products">취소</button><button class="primary" type="submit" ${packs.length ? "" : "disabled"}>상품 저장</button></footer></form></div>`;
+  const draft = shopProductEditorDraft();
+  const blocks = shopProductContentBlocks();
+  const blockFields = blocks.map((block) => `<div class="shop-product-block-input" data-shop-block-input="${escapeHtml(block.key)}"><div class="shop-product-block-input-heading"><strong>${escapeHtml(block.title)}</strong><span>${block.type === "image" ? "이미지 블록" : "텍스트 블록"}</span></div><label class="field"><span>블록 유형</span><select name="block_type_${escapeHtml(block.key)}" data-shop-block-type="${escapeHtml(block.key)}"><option value="text" ${block.type !== "image" ? "selected" : ""}>텍스트</option><option value="image" ${block.type === "image" ? "selected" : ""}>이미지</option></select></label><label class="field"><span>블록 제목</span><input name="block_title_${escapeHtml(block.key)}" value="${escapeHtml(block.title)}" data-shop-block-title="${escapeHtml(block.key)}" /></label>${block.type === "image" ? `<label class="field"><span>이미지 URL</span><input name="block_image_${escapeHtml(block.key)}" type="url" value="${escapeHtml(block.imageUrl || "")}" placeholder="https://..." data-shop-block-image="${escapeHtml(block.key)}" /><small class="field-help">상품 상세 안에 표시할 이미지를 연결합니다.</small></label><label class="field"><span>대체 텍스트</span><input name="block_alt_${escapeHtml(block.key)}" value="${escapeHtml(block.alt || "")}" placeholder="이미지 설명" data-shop-block-alt="${escapeHtml(block.key)}" /></label>` : `<label class="field"><span>텍스트 내용</span><textarea name="block_${escapeHtml(block.key)}" data-shop-preview-field="block-${escapeHtml(block.key)}">${escapeHtml(block.body || "")}</textarea></label>`}</div>`).join("");
+  return `<div class="card-operations-page shop-product-editor"><div class="page-heading with-actions"><div><p class="eyebrow">SHOP CATALOG / PRODUCT EDITOR</p><h2>상품 등록</h2><p>상품 정보를 입력하고 팬앱 상세 화면을 미리보며 콘텐츠를 편집합니다.</p></div><div class="shop-product-editor-actions"><button class="secondary" type="button" id="shop-product-save-draft">저장</button><button class="secondary" type="button" data-shop-preview-mode="desktop">${icon("visibility")} 미리보기</button><button class="primary" type="submit" form="shop-product-form">상품 등록하기</button></div></div><div class="shop-product-editor-layout"><form class="shop-product-editor-form form" id="shop-product-form"><section class="panel shop-product-basic-panel"><div class="panel-heading"><div><p class="eyebrow">PRODUCT INFORMATION</p><h3>기본 정보</h3></div></div><div class="shop-product-basic-grid"><div class="shop-product-image-field"><label class="field"><span>상품 이미지</span><div class="shop-product-image-preview">${draft.imageUrl ? `<img src="${escapeHtml(resolveAdminAssetUrl(draft.imageUrl))}" alt="상품 이미지" />` : `${icon("add_photo_alternate")}<small>상품 이미지를 등록하세요</small>`}</div><input name="imageUrl" type="url" value="${escapeHtml(draft.imageUrl)}" placeholder="이미지 URL" data-shop-preview-field="imageUrl" /></label></div><div class="shop-product-field-stack"><label class="field"><span>상품명 <em>*</em></span><input name="name" value="${escapeHtml(draft.name)}" placeholder="예: DREAMSCAPE Nebula Ver. 카드팩" required data-shop-preview-field="name" /></label><label class="field"><span>아티스트 <em>*</em></span><select name="artistId" required data-shop-preview-field="artistId"><option value="">아티스트 선택</option>${artists.map((artist) => `<option value="${escapeHtml(artist.id)}" ${artist.id === draft.artistId ? "selected" : ""}>${escapeHtml(artist.name)}</option>`).join("")}</select></label><label class="field"><span>연결 카드팩 <em>*</em></span><select name="cardPackId" required data-shop-preview-field="cardPackId"><option value="">공개 카드팩 선택</option>${packs.map((pack) => `<option value="${escapeHtml(pack.id)}" ${pack.id === draft.cardPackId ? "selected" : ""}>${escapeHtml(pack.name)} · ${escapeHtml(pack.version || "v1.0")}</option>`).join("")}</select></label><label class="field"><span>판매 가격 <em>*</em></span><div class="input-with-suffix"><input name="pricePoints" type="number" min="1" step="1" value="${escapeHtml(draft.pricePoints)}" required data-shop-preview-field="price" /><span>P</span></div></label></div></div></section><section class="panel shop-product-content-panel"><div class="panel-heading"><div><p class="eyebrow">DETAIL CONTENT</p><h3>상품 상세 콘텐츠</h3><span>팬앱 상품 상세 페이지에 표시할 콘텐츠를 구성합니다.</span></div><button class="secondary" id="shop-product-add-block" type="button">${icon("add")} 블록 추가</button></div><div class="shop-product-content-layout"><div class="shop-product-block-list">${blocks.map(shopProductBlockEditor).join("")}</div><div class="shop-product-block-editor"><label class="field"><span>상품 설명</span><textarea name="description" maxlength="1000" data-shop-preview-field="description">${escapeHtml(draft.description)}</textarea></label>${blockFields}</div></div></section><div class="notice shop-product-editor-notice">등록 후에는 초안으로 저장됩니다. 상품 목록에서 공개하면 팬앱 상점에 노출됩니다.</div><footer class="shop-product-editor-footer"><button class="secondary" type="button" data-view="shop-products">취소</button><button class="primary" type="submit" ${packs.length ? "" : "disabled"}>상품 등록하기</button></footer></form><aside class="shop-product-preview">${shopProductPreview(draft, blocks)}</aside></div></div>`;
+}
+
+function bindShopProductEditor() {
+  const form = document.querySelector("#shop-product-form");
+  if (!form) return;
+  const syncDraft = () => {
+    const values = Object.fromEntries(new FormData(form).entries());
+    const currentDraft = shopProductEditorDraft();
+    state.shopProductDraft = {
+      ...currentDraft,
+      ...values,
+      pricePoints: values.pricePoints || "0",
+    };
+    state.shopProductBlocks = shopProductContentBlocks().map((block) => ({
+      ...block,
+      type: values[`block_type_${block.key}`] || block.type || "text",
+      title: values[`block_title_${block.key}`] ?? block.title,
+      body: values[`block_${block.key}`] ?? block.body,
+      imageUrl: values[`block_image_${block.key}`] ?? block.imageUrl ?? "",
+      alt: values[`block_alt_${block.key}`] ?? block.alt ?? "",
+    }));
+  };
+  const updatePreview = (event) => {
+    syncDraft();
+    const field = event.currentTarget.dataset.shopPreviewField;
+    if (field === "name") {
+      document.querySelectorAll('[data-shop-preview-target="name"]').forEach((node) => { node.textContent = event.currentTarget.value || "상품명"; });
+    } else if (field === "price") {
+      document.querySelectorAll('[data-shop-preview-target="price"]').forEach((node) => { node.textContent = `${Number(event.currentTarget.value || 0).toLocaleString()}P`; });
+    } else if (field?.startsWith("block-")) {
+      document.querySelectorAll(`[data-shop-preview-target="${CSS.escape(field)}"]`).forEach((node) => { node.textContent = event.currentTarget.value || "내용을 입력해 주세요."; });
+    }
+  };
+  form.querySelectorAll("[data-shop-preview-field]").forEach((input) => {
+    input.addEventListener("input", updatePreview);
+    input.addEventListener("change", updatePreview);
+  });
+  form.querySelectorAll("[data-shop-block-title]").forEach((input) => input.addEventListener("input", (event) => {
+    syncDraft();
+    const key = event.currentTarget.dataset.shopBlockTitle;
+    document.querySelectorAll(`[data-shop-preview-target="block-title-${CSS.escape(key)}"]`).forEach((node) => { node.textContent = event.currentTarget.value || "콘텐츠"; });
+    document.querySelector(`[data-shop-content-block="${CSS.escape(key)}"] .shop-product-block-copy strong`)?.replaceChildren(document.createTextNode(event.currentTarget.value || "콘텐츠"));
+  }));
+  form.querySelectorAll("[data-shop-block-image]").forEach((input) => input.addEventListener("input", (event) => {
+    syncDraft();
+    const key = event.currentTarget.dataset.shopBlockImage;
+    const image = document.querySelector(`[data-shop-preview-target="block-image-${CSS.escape(key)}"]`);
+    if (image) image.src = resolveAdminAssetUrl(event.currentTarget.value) || resolveAdminAssetUrl(shopProductEditorDraft().imageUrl);
+  }));
+  form.querySelectorAll("[data-shop-block-type]").forEach((input) => input.addEventListener("change", () => {
+    syncDraft();
+    layout();
+  }));
+  document.querySelectorAll("[data-shop-preview-mode]").forEach((button) => button.addEventListener("click", () => {
+    state.shopProductPreviewMode = button.dataset.shopPreviewMode;
+    const surface = document.querySelector(".shop-product-preview-surface");
+    if (surface) surface.className = `shop-product-preview-surface ${state.shopProductPreviewMode}`;
+    document.querySelectorAll("[data-shop-preview-mode]").forEach((item) => item.classList.toggle("active", item.dataset.shopPreviewMode === state.shopProductPreviewMode));
+  }));
+  document.querySelector("#shop-product-add-block")?.addEventListener("click", () => {
+    syncDraft();
+    const key = `custom-${Date.now()}`;
+    state.shopProductBlocks.push({ key, type: "text", title: "새 콘텐츠", body: "내용을 입력해 주세요.", imageUrl: "", alt: "" });
+    layout();
+  });
+  document.querySelectorAll("[data-shop-block-remove]").forEach((button) => button.addEventListener("click", () => {
+    syncDraft();
+    state.shopProductBlocks = state.shopProductBlocks.filter((block) => block.key !== button.dataset.shopBlockRemove);
+    layout();
+  }));
+  document.querySelectorAll("[data-shop-block-edit]").forEach((button) => button.addEventListener("click", () => {
+    document.querySelector(`[data-shop-block-input="${CSS.escape(button.dataset.shopBlockEdit)}"] textarea`)?.focus();
+  }));
+  document.querySelector("#shop-product-save-draft")?.addEventListener("click", () => {
+    syncDraft();
+    toast("상품 편집 내용을 임시 저장했습니다.");
+  });
 }
 
 function cardPackStatusLabel(status) {
@@ -1762,6 +1884,14 @@ async function createShopProduct(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const values = Object.fromEntries(new FormData(form).entries());
+  const detailContent = state.shopProductBlocks.map((block) => ({
+    key: block.key,
+    type: values[`block_type_${block.key}`] || block.type || "text",
+    title: values[`block_title_${block.key}`] || block.title,
+    body: values[`block_${block.key}`] || block.body || "",
+    imageUrl: values[`block_image_${block.key}`] || block.imageUrl || null,
+    alt: values[`block_alt_${block.key}`] || block.alt || null,
+  }));
   try {
     await api("/admin/shop/products", { method: "POST", body: JSON.stringify({
       artistId: values.artistId,
@@ -1771,9 +1901,11 @@ async function createShopProduct(event) {
       description: values.description || null,
       imageUrl: values.imageUrl || null,
       pricePoints: Number(values.pricePoints),
+      detailContent,
     }) });
     toast("상점 상품을 초안으로 저장했습니다.");
     state.view = "shop-products";
+    state.shopProductDraft = null;
     await loadData();
   } catch (error) {
     toast(error.message || "상점 상품 저장에 실패했습니다.");
@@ -3756,8 +3888,15 @@ function bind() {
   });
   document.querySelector("#card-pack-form")?.addEventListener("submit", createCardPack);
   document.querySelector("#shop-product-form")?.addEventListener("submit", createShopProduct);
+  bindShopProductEditor();
   document.querySelector("#open-shop-product-create")?.addEventListener("click", () => {
     state.view = "shop-product-create";
+    state.shopProductDraft = null;
+    state.shopProductBlocks = [
+      { key: "intro", type: "text", title: "상품 소개", body: "DREAMSCAPE의 새로운 비주얼과 이야기를 담은 카드팩입니다.", imageUrl: "", alt: "" },
+      { key: "contents", type: "text", title: "구성품 안내", body: "포토카드 5장(랜덤)과 스페셜 포토카드 1장이 포함됩니다.", imageUrl: "", alt: "" },
+      { key: "notice", type: "text", title: "구매 안내", body: "구매 후 바로 보관함에서 확인할 수 있습니다.", imageUrl: "", alt: "" },
+    ];
     layout();
   });
   document.querySelectorAll(".shop-product-publish").forEach((button) =>

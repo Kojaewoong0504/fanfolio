@@ -120,6 +120,7 @@ def shop_product_data(
         "cardPackId": product.card_pack_id,
         "name": product.name,
         "description": product.description,
+        "detailContent": product.detail_content or [],
         "imageUrl": product.image_url,
         "pricePoints": product.price_points,
         "status": product.status,

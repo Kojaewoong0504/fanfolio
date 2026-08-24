@@ -2624,6 +2624,7 @@ def admin_shop_product_data(
         "cardPackId": product.card_pack_id,
         "name": product.name,
         "description": product.description,
+        "detailContent": product.detail_content or [],
         "imageUrl": product.image_url,
         "pricePoints": product.price_points,
         "status": product.status,
@@ -2700,6 +2701,7 @@ async def create_admin_shop_product(
         card_pack_id=payload.card_pack_id,
         name=payload.name,
         description=payload.description,
+        detail_content=payload.detail_content,
         image_url=payload.image_url,
         price_points=payload.price_points,
         starts_at=payload.starts_at,
@@ -2731,6 +2733,7 @@ async def update_admin_shop_product(
     for field in (
         "name",
         "description",
+        "detail_content",
         "image_url",
         "price_points",
         "starts_at",

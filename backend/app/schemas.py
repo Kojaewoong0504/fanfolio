@@ -187,6 +187,7 @@ class ShopProductCreate(BaseModel):
     card_pack_id: str | None = Field(default=None, alias="cardPackId")
     name: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=1000)
+    detail_content: list[dict] = Field(default_factory=list, alias="detailContent", max_length=20)
     image_url: str | None = Field(default=None, alias="imageUrl", max_length=2048)
     price_points: int = Field(alias="pricePoints", gt=0)
     starts_at: datetime | None = Field(default=None, alias="startsAt")
@@ -197,6 +198,7 @@ class ShopProductCreate(BaseModel):
 class ShopProductUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=1000)
+    detail_content: list[dict] | None = Field(default=None, alias="detailContent", max_length=20)
     image_url: str | None = Field(default=None, alias="imageUrl", max_length=2048)
     price_points: int | None = Field(default=None, alias="pricePoints", gt=0)
     starts_at: datetime | None = Field(default=None, alias="startsAt")

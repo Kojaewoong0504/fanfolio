@@ -227,6 +227,7 @@ export type ShopProduct = {
   cardPackId?: string | null
   name: string
   description?: string | null
+  detailContent?: Array<{ key?: string; type?: 'text' | 'image'; title: string; body?: string | null; imageUrl?: string | null; alt?: string | null }> | null
   imageUrl?: string | null
   pricePoints: number
   status: 'draft' | 'published' | 'archived'

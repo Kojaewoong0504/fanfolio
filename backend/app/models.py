@@ -504,6 +504,7 @@ class ShopProduct(Base):
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    detail_content: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
     image_url: Mapped[str | None] = mapped_column(String, nullable=True)
     price_points: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
