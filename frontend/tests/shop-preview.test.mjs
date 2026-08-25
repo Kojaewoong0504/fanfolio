@@ -55,10 +55,17 @@ test('shop history button opens a dedicated preview route', () => {
 test('shop is available in the authenticated app routes, not only preview mode', () => {
   assert.match(appSource, /pathname === '\/shop\/checkout'.*ShopCheckoutPreview appMode/s)
   assert.match(appSource, /pathname === '\/shop\/history'.*ShopHistoryPreview appMode/s)
-  assert.match(appSource, /if \(tab === 'shop'\) return <ShopPreview appMode \/>/)
+  assert.match(appSource, /if \(tab === 'shop'\) return <ShopPreview appMode onOpenAlerts=\{openAlerts\} onOpenProfile=\{\(\) => navigateTab\('settings'\)\} \/>/)
   assert.match(appSource, /pathname === '\/shop' \|\| pathname\.startsWith\('\/shop\/'\)/)
   assert.match(appSource, /shop: '\/shop'/)
   assert.match(appSource, /<NavItem active=\{active === 'shop'\} label="상점" icon="shop"/)
+})
+
+test('authenticated shop header keeps profile and notification actions connected', () => {
+  const shopSource = appSource.slice(appSource.indexOf('function ShopPreview('), appSource.indexOf('function readCardRoutePreview('))
+  assert.match(shopSource, /onOpenAlerts\?\./)
+  assert.match(shopSource, /onOpenProfile\?\./)
+  assert.match(appSource, /<ShopPreview appMode onOpenAlerts=\{openAlerts\} onOpenProfile=\{\(\) => navigateTab\('settings'\)\} \/>/)
 })
 
 test('authenticated shop reads catalog data and opens a real product detail', () => {
@@ -67,6 +74,7 @@ test('authenticated shop reads catalog data and opens a real product detail', ()
   assert.match(appSource, /createShopOrder\(product\.id\)/)
   assert.match(appSource, /function ShopProductDetail\(/)
   assert.match(appSource, /shop\/products\/\$\{encodeURIComponent\(product\.id\)\}/)
+  assert.match(appSource, /navigateAppPath\(`\/shop\/checkout\?productId=/)
 })
 
 test('authenticated shop reuses the preview shell and keeps live navigation', () => {
@@ -76,6 +84,8 @@ test('authenticated shop reuses the preview shell and keeps live navigation', ()
   assert.match(appSource, /className="shop-category-tabs"/)
   assert.match(appSource, /className="bottom-nav" aria-label="주요 메뉴"/)
   assert.match(appSource, /onClick=\{\(\) => appMode && navigateAppPath\('\/discover'\)\}/)
+  assert.match(appSource, /getFanPoints\(\)/)
+  assert.doesNotMatch(appSource, /aria-label="보유 포인트 3,250 포인트"/)
 })
 
 test('shop product detail renders admin-authored detail content blocks', () => {
@@ -84,6 +94,20 @@ test('shop product detail renders admin-authored detail content blocks', () => {
   assert.match(appSource, /block\.type === 'image'/)
   assert.match(appSource, /shop-product-detail-media/)
   assert.match(appCssSource, /\.app-shell\.shop-product-detail-shell\{[^}]*padding:0 0 28px/)
+})
+
+test('shop detail routes reuse the shared detail top bar and keep points art clear', () => {
+  assert.match(appSource, /<DetailTopBar title="구매 · 교환 내역"/)
+  assert.match(appSource, /<DetailTopBar title="상품 상세"/)
+  assert.doesNotMatch(appSource, /<header className="shop-history-topbar detail-topbar">/)
+  assert.doesNotMatch(appSource, /<span className="shop-points-art"[^>]*>[\s\S]*<b>P<\/b>/)
+  assert.match(appCssSource, /\.shop-points-art img\{[^}]*object-fit:contain/)
+})
+
+test('shop detail layouts are bounded by the shared app canvas', () => {
+  assert.match(appCssSource, /\.shop-history-shell\{[^}]*padding:0 0 28px/)
+  assert.match(appCssSource, /\.shop-product-detail-shell\{[^}]*width:min\(100%,430px\)/)
+  assert.match(appCssSource, /\.shop-history-content[\s\S]*padding:\s*var\(--detail-content-start\) var\(--detail-content-gutter\) 32px/)
 })
 
 test('shop history preview filters realistic purchase and exchange records', () => {
@@ -95,6 +119,8 @@ test('shop history preview filters realistic purchase and exchange records', () 
   assert.match(appSource, /포인트 500P 교환/)
   assert.match(historySource, /최근 1년간의 구매 및 교환 내역을 확인할 수 있어요\./)
   assert.match(historySource, /appMode \? '\/shop' : '\/\?preview=shop'/)
+  assert.match(historySource, /getFanPoints\(\)/)
+  assert.match(historySource, /const sourceRecords = appMode \? liveRecords : shopHistoryRecords/)
 })
 
 test('shop history layout matches the selected mobile detail design', () => {
@@ -114,6 +140,8 @@ test('shop exposes the selected payment information checkout flow', () => {
   assert.match(appSource, /setPaymentMethod\(item\.id\)/)
   assert.match(appSource, /구매 완료/)
   assert.match(appSource, /appMode \? '\/shop\/checkout' : '\/\?preview=shop-checkout'/)
+  assert.match(appSource, /getShopProduct\(productId\)/)
+  assert.match(appSource, /createShopOrder\(product\.id\)/)
 })
 
 test('checkout layout preserves the compact shop design system', () => {

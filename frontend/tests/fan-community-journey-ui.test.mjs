@@ -47,6 +47,20 @@ test('fan discovery cards keep identity, affinity, stats, and card previews in s
   assert.match(css, /\.fan-social-card-preview \.fan-social-card-previews\s*\{[^}]*grid-column:\s*2 \/ 4/s)
 })
 
+test('follow controls expose one shared and visually distinct pressed state', () => {
+  const css = readFileSync(new URL('../src/fan-community-reference.css', import.meta.url), 'utf8')
+
+  assert.match(appSource, /className={`follow-state-button\$\{fan\.isFollowing \? ' following' : ''\}`}/)
+  assert.match(appSource, /aria-pressed=\{fan\.isFollowing\}/)
+  assert.match(appSource, /fan\.isFollowing && <InlineIcon name="check" \/>/)
+  assert.match(fanProfileSource, /className={`follow-state-button\$\{following \? ' following' : ''\}`}/)
+  assert.match(fanProfileSource, /aria-pressed=\{following\}/)
+  assert.match(fanProfileSource, /following && <InlineIcon name="check" \/>/)
+  assert.match(css, /\.follow-state-button\s*\{[^}]*background:\s*linear-gradient[^}]*color:\s*#fff/s)
+  assert.match(css, /\.follow-state-button\.following\s*\{[^}]*background:\s*#f2efff[^}]*color:\s*#5e46d8/s)
+  assert.match(css, /\.follow-state-button \.inline-icon\s*\{[^}]*width:\s*13px[^}]*height:\s*13px/s)
+})
+
 test('fan discovery artist chips stay left-aligned inside the identity column', () => {
   const css = readFileSync(new URL('../src/fan-community-reference.css', import.meta.url), 'utf8')
   assert.match(css, /\.fan-social-card-preview \.fan-social-copy > \.fan-social-tags\s*\{[^}]*grid-column:\s*1[^}]*justify-self:\s*start[^}]*width:\s*100%/s)

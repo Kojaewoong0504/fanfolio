@@ -10,7 +10,8 @@ test('notification entry remembers the route it should return to', () => {
   assert.match(appSource, /const openAlerts = \(\) => \{[\s\S]*alertsReturnPathRef\.current = currentPath[\s\S]*navigateTab\('alerts'\)/)
   assert.match(appSource, /const closeAlerts = \(\) => \{[\s\S]*window\.history\.pushState\(\{\}, '', returnPath\)/)
   assert.match(appSource, /<Alerts[\s\S]*onBack=\{closeAlerts\}/)
-  assert.match(appSource, /className="alerts-back-button"[\s\S]*onClick=\{onBack\}/)
+  assert.match(appSource, /<DetailTopBar title="알림" onBack=\{onBack\}/)
+  assert.doesNotMatch(appSource, /<DetailTopBar title="알림"[^>]*right=/)
 })
 
 test('notification screen uses compact utility sizing', () => {

@@ -705,6 +705,58 @@ main.discover-shell .discover-event-entry > .discover-media-placeholder {
   object-fit: cover;
 }
 
+/* Shared follow-state language: action is solid, completed state is calm and checked. */
+.follow-state-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border-color: transparent;
+  background: linear-gradient(135deg, #7658ed, #573ee3);
+  color: #fff;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 120ms ease;
+}
+
+.follow-state-button.following {
+  border-color: #8a74ee;
+  background: #f2efff;
+  color: #5e46d8;
+  box-shadow: inset 0 0 0 1px rgba(94, 70, 216, 0.08);
+}
+
+.follow-state-button .inline-icon {
+  width: 13px;
+  height: 13px;
+}
+
+.follow-state-button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.follow-state-button:focus-visible {
+  outline: 3px solid #dcd5ff;
+  outline-offset: 2px;
+}
+
+.follow-state-button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
+.discover-fan-list article > button.follow-state-button,
+.fan-profile-actions button.follow-state-button {
+  border-color: transparent;
+  background: linear-gradient(135deg, #7658ed, #573ee3);
+  color: #fff;
+}
+
+.discover-fan-list article > button.follow-state-button.following,
+.fan-profile-actions button.follow-state-button.following {
+  border-color: #8a74ee;
+  background: #f2efff;
+  color: #5e46d8;
+}
+
 /* Fan profile reference: wanted cards are the decision point before trading. */
 .fan-profile-wanted-panel .section-heading {
   align-items: flex-start;

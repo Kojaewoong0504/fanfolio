@@ -297,6 +297,11 @@
   color: #171b39;
 }
 
+/* The shared detail header spans the full registration canvas, not the padded content column. */
+.redeem-flow-screen > .detail-topbar { width: calc(100% + 46px); margin-right: -23px; margin-left: -23px; }
+.redeem-flow-step-count { justify-self: end; color: #77798e; font-size: 14px; }
+.redeem-flow-step-count em { color: #5544e8; font-style: normal; }
+
 .redeem-flow-topbar {
   display: grid;
   grid-template-columns: 42px 1fr 42px;
@@ -748,6 +753,7 @@
 
 @media (max-width: 430px) {
   .redeem-flow-screen { padding: 20px 18px calc(22px + env(safe-area-inset-bottom)); }
+  .redeem-flow-screen > .detail-topbar { width: calc(100% + 36px); margin-right: -18px; margin-left: -18px; }
   .redeem-flow-progress { margin-top: 17px; margin-bottom: 29px; }
   .redeem-flow-card-preview { width: 150px; height: 212px; margin: 24px 0 21px; }
   .redeem-flow-method { min-height: 70px; padding: 10px 12px; }

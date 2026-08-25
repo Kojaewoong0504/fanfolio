@@ -148,14 +148,14 @@ main.collection-shell .collection-reward-entry-copy b { color:var(--fan-ink)!imp
 main.collection-shell .collection-reward-entry-copy em { overflow:hidden!important; color:#737b92!important; font-size:9px!important; font-style:normal!important; line-height:1.4!important; text-overflow:ellipsis!important; white-space:nowrap!important; }
 main.collection-shell .collection-reward-inventory-entry > .inline-icon { width:16px!important; height:16px!important; color:#747b91!important; }
 
-.reward-inventory-shell { padding:0 20px calc(var(--fan-nav-height) + 116px)!important; background:linear-gradient(180deg,#fbfaff 0%,#f7f5fc 100%)!important; }
+.reward-inventory-shell { padding:0 0 calc(var(--fan-nav-height) + 116px)!important; background:linear-gradient(180deg,#fbfaff 0%,#f7f5fc 100%)!important; }
 .reward-inventory-header { position:sticky; z-index:15; top:0; display:grid; grid-template-columns:36px 1fr 36px; align-items:center; min-height:62px; margin:0 -20px; padding:10px 20px; border-bottom:1px solid #ece9f4; background:#fbfaffed; backdrop-filter:blur(16px); }
 .reward-inventory-header > button { display:grid; width:36px; height:36px; place-items:center; padding:0; border:0; border-radius:50%; background:transparent; color:var(--fan-ink); cursor:pointer; }
 .reward-inventory-header > button:hover { background:#f0edff; }
 .reward-inventory-header .inline-icon { width:22px; height:22px; }
 .reward-inventory-header div { display:grid; justify-items:center; }
 .reward-inventory-header h1 { margin:0; color:var(--fan-ink); font-size:18px; font-weight:900; letter-spacing:-.055em; }
-.reward-inventory-screen { display:grid; gap:20px; padding:17px 0 22px; }
+.reward-inventory-screen { display:grid; gap:20px; padding:var(--detail-content-start) var(--detail-content-gutter) 22px; }
 .reward-inventory-summary { position:relative; display:grid; grid-template-columns:1fr auto; gap:8px; overflow:hidden; min-height:126px; padding:20px; border:1px solid #dcd5ff; border-radius:22px; background:radial-gradient(circle at 90% 20%,#e6e0ff 0,transparent 36%),linear-gradient(120deg,#fff,#f5f1ff); box-shadow:0 12px 28px #4d40b016; }
 .reward-inventory-summary::after { position:absolute; right:-24px; bottom:-46px; width:132px; height:132px; border:1px solid #d8d0ff; border-radius:50%; content:''; box-shadow:0 0 0 18px #f0ecff80; }
 .reward-inventory-summary > div { position:relative; z-index:1; display:flex; align-items:center; gap:12px; }
@@ -217,7 +217,7 @@ main.collection-shell .collection-reward-inventory-entry > .inline-icon { width:
   main.collection-shell .collection-reward-thumbnails img:nth-child(3) { left:22px!important; }
   main.collection-shell .collection-reward-thumbnails img:nth-child(4) { left:33px!important; }
   main.collection-shell .collection-reward-entry-copy b { font-size:14px!important; }
-  .reward-inventory-shell { padding-right:16px!important; padding-left:16px!important; }
+  .reward-inventory-shell { padding-right:0!important; padding-left:0!important; }
   .reward-inventory-header { margin-right:-16px; margin-left:-16px; padding-right:16px; padding-left:16px; }
   .reward-inventory-summary { padding:17px; }
   .reward-inventory-card { min-height:180px; padding:10px; }
@@ -228,7 +228,7 @@ main.collection-shell .collection-reward-inventory-entry > .inline-icon { width:
 
 /* Fan collection: source-first inventory with one uniform item card contract. */
 .reward-inventory-shell { padding-bottom:calc(var(--fan-nav-height) + 28px)!important; }
-.reward-inventory-screen { gap:20px; padding-top:19px; }
+.reward-inventory-screen { gap:20px; padding-top:var(--detail-content-start); }
 .reward-inventory-kicker { display:flex; align-items:baseline; gap:10px; padding:0 2px; }
 .reward-inventory-kicker span { color:var(--fan-ink); font-size:12px; font-weight:750; letter-spacing:-.025em; }
 .reward-inventory-kicker strong { color:#5d4cee; font-size:12px; font-weight:900; }
@@ -653,26 +653,29 @@ main.collection-shell .collection-reward-inventory-entry > .inline-icon { width:
 .card-collection-pack-rail { display:flex; gap:8px; min-height:112px; padding:12px 18px; overflow-x:auto; border-bottom:1px solid #e8e5f0; background:#fff; scrollbar-width:none; }
 .card-collection-pack-rail::-webkit-scrollbar { display:none; }
 .card-collection-pack-rail > button { display:flex; flex:0 0 126px; align-items:center; gap:8px; min-width:0; padding:8px; border:1px solid transparent; border-radius:14px; background:#fff; color:var(--fan-ink); text-align:left; cursor:pointer; }
+.card-collection-pack-rail > button:not(.card-collection-all-packs){ flex-basis:142px; }
 .card-collection-pack-rail > button.active { border-color:#634eff; box-shadow:0 0 0 1px #634eff,0 7px 16px #5545dc17; }
 .card-collection-pack-rail > button img { width:40px; height:72px; flex:0 0 40px; object-fit:contain; object-position:center; filter:saturate(.9) hue-rotate(0deg); }
 .card-collection-pack-rail > button img.pack-tone-2 { filter:saturate(.55) brightness(1.55) hue-rotate(8deg); }
 .card-collection-pack-rail > button img.pack-tone-3 { filter:saturate(.8) brightness(.72) hue-rotate(24deg); }
-.card-collection-pack-rail > button > span { display:grid; min-width:0; gap:6px; }
-.card-collection-pack-rail > button b { font-size:12px; font-weight:800; line-height:1.25; }
+.card-collection-pack-rail > button > span { display:grid; min-width:0; gap:6px; overflow:hidden; }
+.card-collection-pack-rail > button b { display:-webkit-box; overflow:hidden; font-size:12px; font-weight:800; line-height:1.25; -webkit-box-orient:vertical; -webkit-line-clamp:2; text-overflow:ellipsis; white-space:normal; word-break:break-word; }
 .card-collection-pack-rail > button small { color:#757b91; font-size:11px; }
 .card-collection-pack-rail > button small strong { color:#5947ed; font-size:13px; }
 .card-collection-pack-rail > .card-collection-all-packs { display:grid; flex-basis:66px; align-content:center; justify-items:center; gap:7px; padding:4px; text-align:center; }
 .card-collection-all-packs > span { display:grid!important; width:44px; height:44px; place-items:center; border:1px solid #e4e0f1; border-radius:13px; background:#fff; color:#14182f; }
 .card-collection-all-packs .inline-icon { width:24px; height:24px; }
 .card-collection-all-packs b { font-size:10px!important; white-space:nowrap; }
-.card-collection-catalog { display:grid; gap:14px; padding:20px 20px 24px; }
-.card-collection-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.card-collection-catalog { display:grid; min-width:0; width:100%; max-width:100%; gap:14px; padding:20px 20px 24px; overflow:hidden; }
+.card-collection-search { min-width:0; width:100%; max-width:100%; }
+.card-collection-search input { min-width:0; max-width:100%; }
+.card-collection-heading { display:grid; min-width:0; width:100%; max-width:100%; grid-template-columns:minmax(0,1fr); gap:10px; }
 .card-collection-heading h2 { min-width:0; margin:0; font-size:19px; font-weight:900; letter-spacing:-.055em; white-space:nowrap; }
 .card-collection-heading h2 small { color:#747a90; font-size:12px; font-weight:700; letter-spacing:0; }
 .card-collection-heading h2 strong { color:#5a47ec; }
-.card-collection-heading > div { display:flex; flex:0 0 auto; align-items:center; gap:8px; }
+.card-collection-heading > div { display:flex; min-width:0; max-width:100%; align-items:center; justify-content:flex-end; gap:8px; }
 .card-collection-heading label { position:relative; }
-.card-collection-heading select { width:118px; height:42px; padding:0 30px 0 12px; border:1px solid #dfdbec; border-radius:12px; background:#fff; color:#747a91; font-size:11px; font-weight:700; outline:0; cursor:pointer; }
+.card-collection-heading select { width:118px; max-width:100%; min-width:0; height:42px; padding:0 30px 0 12px; border:1px solid #dfdbec; border-radius:12px; background:#fff; color:#747a91; font-size:11px; font-weight:700; outline:0; cursor:pointer; }
 .card-collection-heading > div > button { display:grid; width:42px; height:42px; place-items:center; padding:0; border:1px solid #dfdbec; border-radius:12px; background:#f5f2ff; color:#171b35; cursor:pointer; }
 .card-collection-heading > div > button.active { border-color:#6a58ef; color:#5c49ec; }
 .collection-goal-card { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 14px; border:1px solid #e3def8; border-radius:14px; background:linear-gradient(135deg,#faf9ff,#f0edff); }
@@ -690,7 +693,7 @@ main.collection-shell .collection-reward-inventory-entry > .inline-icon { width:
 .card-collection-filters { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; padding:5px; border-radius:12px; background:#f3f1f8; }
 .card-collection-filters button { min-height:32px; border:0; border-radius:8px; background:transparent; color:#777d91; font-size:10px; font-weight:750; cursor:pointer; }
 .card-collection-filters button.active { background:#fff; color:#5b49e9; box-shadow:0 3px 10px #3e365d12; }
-.card-collection-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:9px 8px; }
+.card-collection-grid { display:grid; min-width:0; width:100%; max-width:100%; grid-template-columns:repeat(4,minmax(0,1fr)); gap:9px 8px; }
 .card-collection-slot { position:relative; min-width:0; overflow:hidden; padding:0; border:0; border-radius:9px; background:#171244; aspect-ratio:3/4.35; box-shadow:0 4px 10px #271e551c; }
 button.card-collection-slot { cursor:pointer; }
 .card-collection-slot > img { width:100%; height:100%; object-fit:cover; }
@@ -3699,12 +3702,12 @@ main.discover-shell .discover-pack-entry > i,
 main.discover-shell .discover-event-entry > i { color: #999bad; font-size: 24px; font-style: normal; }
 main.discover-shell .discover-event-entry { margin-top: -2px; }
 
-main.discover-artist-shell { min-height: 100dvh; padding: 0 18px 36px; background: #f8f8ff; }
+main.discover-artist-shell { min-height: 100dvh; padding: 0 0 36px; background: #f8f8ff; }
 main.discover-artist-shell .discover-detail-topbar { display: grid; grid-template-columns: 44px minmax(0,1fr) 44px; align-items: center; min-height: 68px; border-bottom: 1px solid #ebe8f4; }
 main.discover-artist-shell .discover-detail-topbar button { display: grid; place-items: center; width: 42px; height: 42px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #1d2344; cursor: pointer; }
 main.discover-artist-shell .discover-detail-topbar button .inline-icon { width: 22px; height: 22px; }
 main.discover-artist-shell .discover-detail-topbar h1 { margin: 0; color: #171c3d; font-size: 19px; text-align: center; letter-spacing: -.055em; }
-main.discover-artist-shell .artist-hub { display: grid; gap: 0; padding-top: 16px; }
+main.discover-artist-shell .artist-hub { display: grid; gap: 0; padding: var(--detail-content-start) var(--detail-content-gutter) 32px; }
 main.discover-artist-shell .artist-hub-hero { height: 205px; border-radius: 18px; }
 main.discover-artist-shell .artist-hub-hero-overlay { height: 205px; padding: 16px; }
 main.discover-artist-shell .artist-hub-hero-overlay h3 .inline-icon { display: inline-block; width: 16px; height: 16px; margin-left: 3px; color: #5a9af5; vertical-align: -1px; }
@@ -3768,3 +3771,10 @@ main.discover-artist-shell .hub-event-promo > i { color: #9497aa; font-style: no
 .fan-profile-shell{min-height:100dvh;padding:0 18px 36px;background:#f8f8ff;color:#171b39}.fan-profile-content{display:grid;gap:13px;padding-top:16px}.fan-profile-hero{display:grid;grid-template-columns:64px minmax(0,1fr) auto;align-items:center;gap:12px;padding:18px;border:1px solid #e1ddf1;border-radius:20px;background:linear-gradient(145deg,#fff,#f6f3ff);box-shadow:0 12px 30px #3e37670c}.fan-profile-hero>.profile-avatar{width:64px;height:64px;font-size:20px}.fan-profile-hero h2{margin:0 0 4px;font-size:19px;letter-spacing:-.05em}.fan-profile-hero p{margin:0;color:#85899e;font-size:10px}.fan-profile-hero>button{padding:9px 12px;border:0;border-radius:10px;background:#624ce7;color:#fff;font-size:10px;font-weight:800}.fan-profile-hero>button.following{border:1px solid #dcd7f6;background:#fff;color:#6858bd}.fan-profile-hero dl{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,1fr);margin:4px 0 0;padding-top:13px;border-top:1px solid #ebe8f5}.fan-profile-hero dl div{display:grid;place-items:center;gap:3px}.fan-profile-hero dl div+div{border-left:1px solid #ebe8f5}.fan-profile-hero dt{color:#9296a8;font-size:9px}.fan-profile-hero dd{margin:0;color:#242842;font-size:15px;font-weight:850}.fan-profile-panel{display:grid;gap:12px;padding:16px;border:1px solid #e2deef;border-radius:18px;background:#fff}.fan-profile-panel .section-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}.fan-profile-panel h3{margin:0;font-size:15px;letter-spacing:-.04em}.fan-profile-panel .section-heading>strong{color:#6049e0;font-size:18px}.fan-profile-panel .section-heading button{padding:0;border:0;background:transparent;color:#7466be;font-size:10px;font-weight:750}.fan-profile-progress-track{height:7px;overflow:hidden;border-radius:999px;background:#eceaf5}.fan-profile-progress-track span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#5b45e7,#9078ff)}.fan-profile-progress>p{margin:0;color:#898da0;font-size:9px}.fan-profile-featured-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}.fan-profile-featured-cards button{position:relative;padding:0;border:0;border-radius:13px;background:#eeebf9;overflow:hidden}.fan-profile-featured-cards img{display:block;width:100%;aspect-ratio:2/3;object-fit:cover}.fan-profile-featured-cards span{position:absolute;left:7px;bottom:7px;padding:4px 6px;border-radius:999px;background:#241c66d9;color:#fff;font-size:8px;font-weight:850}.fan-profile-trade{grid-template-columns:minmax(0,1fr) auto;align-items:center;background:linear-gradient(135deg,#f6f3ff,#fff)}.fan-profile-trade p{margin:5px 0 0;color:#85899c;font-size:9px;line-height:1.5}.fan-profile-trade>button{min-width:90px;height:40px;border:0;border-radius:11px;background:#624ce7;color:#fff;font-size:10px;font-weight:850}.fan-profile-trade>button:disabled{opacity:.45}
 .public-collection-summary{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;margin-top:16px;padding:16px;border:1px solid #ddd7f7;border-radius:18px;background:linear-gradient(135deg,#f4f0ff,#fff)}.public-collection-summary h2{margin:3px 0 4px;font-size:15px;letter-spacing:-.05em}.public-collection-summary p{margin:0;color:#85899b;font-size:9px;line-height:1.5}.public-collection-summary button{height:38px;padding:0 12px;border:0;border-radius:10px;background:#624ce7;color:#fff;font-size:10px;font-weight:850}.public-collection-summary button:disabled{opacity:.4}.public-collection-filters{display:grid;grid-template-columns:1fr 1fr auto;gap:7px;padding-top:12px}.public-collection-filters select,.public-collection-filters button{min-width:0;height:36px;padding:0 10px;border:1px solid #e0dcea;border-radius:10px;background:#fff;color:#666b80;font:inherit;font-size:9px;font-weight:700}.public-collection-filters button.active{border-color:#674fe7;background:#674fe7;color:#fff}.public-collection-grid{padding-top:12px}
 .trade-condition-check{display:grid;gap:5px;padding:14px 15px;border:1px solid #ded9f4;border-radius:15px;background:#f5f2ff}.trade-condition-check span{color:#5e49df;font-size:11px;font-weight:850}.trade-condition-check p{margin:0;color:#7d8195;font-size:9px;line-height:1.55}.trade-composer-content>.trade-proposal h2,.trade-composer-content>.trade-proposal>p{display:none}
+
+/* All detail routes inherit one phone canvas and one content gutter. */
+.public-collection-screen.detail-screen-shell,
+main.discover-artist-shell.detail-screen-shell {
+  padding: 0!important;
+}
+.public-collection-content { display:grid; align-content:start; }

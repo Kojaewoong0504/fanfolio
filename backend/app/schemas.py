@@ -71,6 +71,16 @@ class FanPasswordChange(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class FanPasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class FanPasswordResetConfirm(BaseModel):
+    token: str = Field(min_length=1)
+    new_password: str = Field(alias="newPassword", min_length=8, max_length=200)
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class ArtistPasswordChange(BaseModel):
     current_password: str = Field(alias="currentPassword", min_length=1, max_length=200)
     new_password: str = Field(alias="newPassword", min_length=12, max_length=200)
@@ -188,6 +198,7 @@ class ShopProductCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=1000)
     detail_content: list[dict] = Field(default_factory=list, alias="detailContent", max_length=20)
+    fulfillment: dict = Field(default_factory=dict)
     image_url: str | None = Field(default=None, alias="imageUrl", max_length=2048)
     price_points: int = Field(alias="pricePoints", gt=0)
     starts_at: datetime | None = Field(default=None, alias="startsAt")
@@ -199,6 +210,7 @@ class ShopProductUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=1000)
     detail_content: list[dict] | None = Field(default=None, alias="detailContent", max_length=20)
+    fulfillment: dict | None = None
     image_url: str | None = Field(default=None, alias="imageUrl", max_length=2048)
     price_points: int | None = Field(default=None, alias="pricePoints", gt=0)
     starts_at: datetime | None = Field(default=None, alias="startsAt")

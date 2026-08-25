@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ApiError, createTradeProposal, getMyCollection, getPublicCollection, resolveApiUrl, type CollectionCard, type PublicWantedCard } from '../api/client'
 import { InlineIcon } from '../App'
+import { DetailTopBar } from './DetailTopBar'
 
 type TradeSelection = { offeredUserCardId: string; requestedUserCardId: string }
 
@@ -38,9 +39,9 @@ export function TradeCardPicker({ recipientUserId, requestedUserCardIds, onBack,
   const wantedCardIds = new Set(wantedCards.map(card => card.cardId))
   const cardLabel = (card: CollectionCard) => `${card.rarity ?? 'N'} · ${card.memberName ?? card.name}`
 
-  return <main className="app-shell trade-picker-shell">
-    <header className="social-reference-topbar"><button type="button" onClick={onBack} aria-label="팬 프로필로 돌아가기"><InlineIcon name="back" /></button><h1>거래 제안</h1><span /></header>
-    <section className="trade-picker-content">
+  return <main className="app-shell trade-picker-shell detail-screen-shell">
+    <DetailTopBar title="거래 제안" onBack={onBack} backLabel="팬 프로필로 돌아가기" />
+    <section className="trade-picker-content detail-screen-content">
       <section className="trade-picker-intro"><InlineIcon name="rotate" /><div><b>서로 원하는 카드를 골라보세요</b><p>상대가 원하는 카드와 내가 보낼 카드를 선택해요.</p></div></section>
       {error ? <p role="alert">{error}</p> : loading ? <p role="status">카드를 불러오는 중...</p> : <>
         <section className="trade-picker-section"><div className="trade-picker-heading"><div><h2>상대가 원하는 카드</h2><p>받고 싶은 카드 {requestedCards.length}장</p></div><b>{requestedCards.length}장</b></div><div className="trade-picker-wanted-grid">{requestedCards.slice(0, 4).map(card => { const selected = card.userCardId === selectedRequestedId; return <button type="button" key={card.userCardId} className={`trade-picker-card ${selected ? 'selected' : ''}`} onClick={() => setSelectedRequestedId(card.userCardId)} aria-pressed={selected} aria-label={`${cardLabel(card)} ${selected ? '선택됨' : '선택'}`}><img src={resolveApiUrl(card.imageUrl)} alt={card.name} /><span>{card.rarity ?? 'N'}</span><em><InlineIcon name="star" /> 1</em>{(wantedCardIds.has(card.cardId) || selected) && <small>원하는 카드</small>}{selected && <i><InlineIcon name="check" /></i>}</button> })}</div></section>
@@ -104,7 +105,7 @@ export function TradeComposer({ recipientUserId, requestedUserCardIds, onBack, o
     catch (e) { setMessage(e instanceof ApiError ? e.message : '거래 제안을 보내지 못했어요.'); setSubmitting(false) }
   }
   return <main className="app-shell trade-composer-shell trade-composer-reference">
-    <header className="social-reference-topbar"><button type="button" onClick={onBack} aria-label="공개 컬렉션으로 돌아가기"><InlineIcon name="back" /></button><h1>컬렉션 매칭</h1><span /></header>
+    <DetailTopBar title="컬렉션 매칭" onBack={onBack} backLabel="공개 컬렉션으로 돌아가기" />
     <section className="trade-composer-content">
       <section className="trade-match-hero"><span className="trade-match-icon" aria-hidden="true"><InlineIcon name="puzzle" /></span><div><h2>서로 원하는 카드가 일치했어요</h2><p>보유한 중복 카드로 원하는 카드를 제안해보세요.</p></div></section>
       {error ? <p role="alert">{error}</p> : loading ? <p role="status">카드를 불러오는 중...</p> : <>

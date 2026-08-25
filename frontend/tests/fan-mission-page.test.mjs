@@ -30,8 +30,8 @@ test('mission page supports status tabs, progress, and reward claiming', () => {
 })
 
 test('mission detail header only keeps back navigation and the centered title', () => {
-  assert.match(missionSource, /aria-label="팬 레벨로 돌아가기"/)
-  assert.match(missionSource, /<h1>미션<\/h1>/)
+  assert.match(missionSource, /<DetailTopBar title="미션" onBack=/)
+  assert.match(missionSource, /backLabel="팬 레벨로 돌아가기"/)
   assert.doesNotMatch(missionSource, /mission-page-header-actions/)
   assert.doesNotMatch(missionSource, /aria-label="알림"/)
   assert.doesNotMatch(missionSource, /alt="프로필"/)

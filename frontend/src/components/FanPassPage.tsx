@@ -3,6 +3,7 @@ import { InlineIcon, NavItem } from '../App'
 import type { FanProgression, PassTier, RewardType } from '../api/client'
 import fanPassCard from '../assets/fan-pass-card.png'
 import { rewardArtworkUrl } from './FanGrowth'
+import { DetailTopBar } from './DetailTopBar'
 import './FanPassPage.css'
 
 type FanPassPageProps = {
@@ -12,7 +13,7 @@ type FanPassPageProps = {
   onRetry: () => void
   onBack: () => void
   onClaimPassTier: (tierId: string) => Promise<unknown>
-  onNavigate: (tab: 'discover' | 'collection' | 'home' | 'growth' | 'settings') => void
+  onNavigate: (tab: 'discover' | 'collection' | 'home' | 'growth' | 'shop') => void
   initialTierId?: string
   isGlobal?: boolean
 }
@@ -61,13 +62,10 @@ export function FanPassPage({ progression, loading, error, onRetry, onBack, onCl
   if (loading && !progression) return <main className="app-shell fan-pass-shell"><div className="fan-pass-loading">팬 패스를 불러오는 중이에요</div></main>
   if (error && !progression) return <main className="app-shell fan-pass-shell"><div className="fan-pass-error" role="alert"><b>팬 패스를 불러오지 못했어요</b><p>{error}</p><button type="button" onClick={onRetry}>다시 시도</button></div></main>
 
-  return <main className="app-shell fan-pass-shell">
-    <header className="fan-pass-header">
-      <button type="button" className="fan-pass-back" aria-label="팬 레벨로 돌아가기" onClick={onBack}><InlineIcon name="back" /></button>
-      <h1>{isGlobal ? '전체 팬 레벨' : '무료 팬 패스'}</h1>
-      <span className="fan-pass-header-spacer" aria-hidden="true" />
-    </header>
+  return <main className="app-shell fan-pass-shell detail-screen-shell">
+    <DetailTopBar title={isGlobal ? '전체 팬 레벨' : '무료 팬 패스'} onBack={onBack} backLabel="팬 레벨로 돌아가기" />
 
+    <div className="fan-pass-content detail-screen-content">
     <section className="fan-pass-summary" aria-labelledby="fan-pass-title">
       <div className="fan-pass-summary-copy">
         <span className="fan-pass-eyebrow">{isGlobal ? '전체 팬 레벨' : (season?.title ?? '드림스케이프 팬 레벨')}</span>
@@ -84,17 +82,21 @@ export function FanPassPage({ progression, loading, error, onRetry, onBack, onCl
       {tiers.length > 0 ? tiers.map(tier => {
         const status = tierStatus(tier, currentXp, currentTier?.id ?? null)
         return <SeasonTierCard key={tier.id} tier={tier} status={status} expanded={expandedTierId === tier.id} onToggle={() => setExpandedTierId(current => current === tier.id ? null : tier.id)} onClaim={onClaimPassTier} />
-      }) : <div className="fan-pass-empty">현재 공개된 시즌 패스가 없어요.</div>}
+      }) : <div className="fan-pass-empty-section">
+        <span className="fan-pass-empty-icon" aria-hidden="true"><InlineIcon name="calendar" /></span>
+        <div><b>시즌 패스 보상 여정</b><p>현재 공개된 시즌 패스가 없어요.</p><small>새 시즌이 공개되면 이곳에서 보상 여정을 확인할 수 있어요.</small></div>
+      </div>}
     </section>
 
     <section className="fan-pass-more" aria-label="팬 패스 안내"><span><InlineIcon name="sparkles" /></span><div><b>더 많은 XP를 모아보세요!</b><small>팬 활동을 통해 XP를 획득하고 다음 챕터로 나아가세요.</small></div><InlineIcon name="chevron" /></section>
+    </div>
 
     <nav className="bottom-nav" aria-label="주요 메뉴">
       <NavItem active={false} label="탐색" onClick={() => onNavigate('discover')} />
       <NavItem active={false} label="보관함" icon="collection" onClick={() => onNavigate('collection')} />
       <NavItem active={false} label="홈" icon="home" onClick={() => onNavigate('home')} />
       <NavItem active label="팬 레벨" icon="growth" onClick={() => onNavigate('growth')} />
-      <NavItem active={false} label="마이" icon="settings" onClick={() => onNavigate('settings')} />
+      <NavItem active={false} label="상점" icon="shop" onClick={() => onNavigate('shop')} />
     </nav>
   </main>
 }

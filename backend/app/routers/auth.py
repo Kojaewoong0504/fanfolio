@@ -1,3 +1,4 @@
+from datetime import UTC
 from uuid import uuid4
 
 from fastapi import APIRouter, Cookie, Header, Query, Request, Response, status
@@ -24,7 +25,7 @@ from app.dependencies import (
 )
 from app.errors import AppError
 from app.mailer import MailDeliveryError, deliver_magic_link
-from app.models import RefreshToken, Role, Session, User
+from app.models import MagicLink, RefreshToken, Role, Session, User
 from app.oauth import (
     authorization_url,
     consume_oauth_state,
@@ -43,12 +44,14 @@ from app.schemas import (
     ArtistPasswordLogin,
     FanPasswordChange,
     FanPasswordCredentials,
+    FanPasswordResetConfirm,
+    FanPasswordResetRequest,
     MagicLinkRequest,
     MagicLinkVerify,
     OAuthExchangeRequest,
 )
+from app.services import magic_link_token_hash, now, verify_magic_link
 from app.services import request_magic_link as create_magic_link
-from app.services import verify_magic_link
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -307,6 +310,68 @@ async def change_fan_password(
         raise AppError(422, "PASSWORD_UNCHANGED", "새 비밀번호는 현재 비밀번호와 달라야 합니다.")
     user.password_hash = hash_password(payload.new_password)
     await session.commit()
+    return {"ok": True, "data": {"changed": True}}
+
+
+@router.post("/fan/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
+async def request_fan_password_reset(
+    payload: FanPasswordResetRequest,
+    request: Request,
+    session: DbSession,
+) -> dict:
+    """Queue a generic reset response without revealing whether an account exists."""
+    email = str(payload.email).lower()
+    client_host = request.client.host if request.client else "unknown"
+    await enforce_rate_limit(
+        f"fan-password-reset:{email}:{client_host}", limit=5, window_seconds=15 * 60
+    )
+    user = await session.scalar(select(User).where(User.email == email, User.role == Role.FAN))
+    if user is not None and user.password_hash:
+        token = await create_magic_link(session, email=email, purpose="reset_password")
+        try:
+            await deliver_magic_link(email, token, "reset_password")
+        except MailDeliveryError as error:
+            raise AppError(
+                503,
+                "PASSWORD_RESET_DELIVERY_FAILED",
+                "재설정 안내를 보내지 못했습니다. 잠시 후 다시 시도해 주세요.",
+            ) from error
+    return {"ok": True, "data": {"delivery": "queued"}}
+
+
+@router.post("/fan/password-reset/confirm")
+async def confirm_fan_password_reset(
+    payload: FanPasswordResetConfirm,
+    session: DbSession,
+) -> dict:
+    """Consume a reset token and change only the matching fan password."""
+    async with session.begin():
+        link = await session.get(MagicLink, magic_link_token_hash(payload.token))
+        expires_at = (
+            link.expires_at.replace(tzinfo=UTC)
+            if link and link.expires_at.tzinfo is None
+            else link.expires_at
+            if link
+            else None
+        )
+        if (
+            not link
+            or link.purpose != "reset_password"
+            or link.consumed_at
+            or (expires_at and expires_at <= now())
+        ):
+            raise AppError(
+                401, "PASSWORD_RESET_INVALID", "유효하지 않거나 만료된 재설정 링크입니다."
+            )
+        user = await session.scalar(
+            select(User).where(User.email == link.email, User.role == Role.FAN)
+        )
+        if user is None:
+            raise AppError(
+                401, "PASSWORD_RESET_INVALID", "유효하지 않거나 만료된 재설정 링크입니다."
+            )
+        user.password_hash = hash_password(payload.new_password)
+        link.consumed_at = now()
     return {"ok": True, "data": {"changed": True}}
 
 

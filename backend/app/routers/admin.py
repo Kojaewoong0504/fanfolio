@@ -42,6 +42,8 @@ from app.models import (
     OrganizationArtist,
     PassSeason,
     PassTier,
+    PointLedger,
+    PointTransaction,
     RedeemCode,
     RedeemCodeBatch,
     RefreshToken,
@@ -1556,7 +1558,27 @@ async def adjust_fan_points(
     user = await session.get(User, payload.user_id)
     if user is None:
         raise AppError(404, "USER_NOT_FOUND", "팬을 찾을 수 없습니다.")
-    source_id = f"admin_adjustment:{payload.user_id}:{payload.idempotency_key or uuid4().hex}"
+    idempotency_key = payload.idempotency_key or uuid4().hex
+    existing_transaction = await session.scalar(
+        select(PointTransaction).where(
+            PointTransaction.user_id == user.id,
+            PointTransaction.operation == "adjustment",
+            PointTransaction.idempotency_key == idempotency_key,
+        )
+    )
+    if existing_transaction and existing_transaction.ledger_id:
+        ledger = await session.get(PointLedger, existing_transaction.ledger_id)
+        if ledger is not None:
+            return {
+                "ok": True,
+                "data": {
+                    "userId": user.id,
+                    "amount": payload.amount,
+                    "balance": ledger.balance_after,
+                    "replayed": True,
+                },
+            }
+    source_id = f"admin_adjustment:{payload.user_id}:{idempotency_key}"
     event = await record_engagement_event(
         session,
         user_id=user.id,
@@ -1585,6 +1607,16 @@ async def adjust_fan_points(
             description=payload.reason,
             metadata={"actorId": context.user.id},
         )
+    transaction = existing_transaction or PointTransaction(
+        id=f"point_tx_{uuid4().hex[:12]}",
+        user_id=user.id,
+        operation="adjustment",
+        idempotency_key=idempotency_key,
+        amount=payload.amount,
+        status="completed",
+    )
+    transaction.ledger_id = ledger.id
+    session.add(transaction)
     await record_audit(
         session,
         actor_user_id=context.user.id,
@@ -2081,6 +2113,7 @@ async def dashboard(context: CurrentAdmin, session: DbSession) -> dict:
         .join(RewardCatalog, RewardCatalog.id == RewardGrant.reward_id)
         .where(
             RewardGrant.claimed_at.is_(None),
+            RewardGrant.revoked_at.is_(None),
             RewardCatalog.status == "published",
             *reward_filters,
         )
@@ -2625,6 +2658,7 @@ def admin_shop_product_data(
         "name": product.name,
         "description": product.description,
         "detailContent": product.detail_content or [],
+        "fulfillment": product.fulfillment or {},
         "imageUrl": product.image_url,
         "pricePoints": product.price_points,
         "status": product.status,
@@ -2655,13 +2689,20 @@ async def validate_shop_product_payload(
     if artist is None:
         raise AppError(404, "ARTIST_NOT_FOUND", "아티스트를 찾을 수 없습니다.")
     context.require_artist(payload.artist_id)
-    if payload.product_type != "card_pack" or not payload.card_pack_id:
-        raise AppError(
-            422, "SHOP_PRODUCT_LINK_REQUIRED", "현재는 카드팩 상품만 등록할 수 있습니다."
-        )
-    pack = await session.get(CardPack, payload.card_pack_id)
-    if pack is None or pack.artist_id != payload.artist_id or pack.status != "published":
-        raise AppError(422, "SHOP_CARD_PACK_INVALID", "공개된 아티스트 카드팩을 연결해 주세요.")
+    pack = None
+    if payload.product_type == "card_pack":
+        if not payload.card_pack_id:
+            raise AppError(
+                422, "SHOP_PRODUCT_LINK_REQUIRED", "카드팩 상품은 공개 카드팩을 연결해 주세요."
+            )
+        pack = await session.get(CardPack, payload.card_pack_id)
+        if pack is None or pack.artist_id != payload.artist_id or pack.status != "published":
+            raise AppError(422, "SHOP_CARD_PACK_INVALID", "공개된 아티스트 카드팩을 연결해 주세요.")
+    else:
+        reward_id = str(payload.fulfillment.get("rewardId") or "")
+        reward = await session.get(RewardCatalog, reward_id) if reward_id else None
+        if reward is None or reward.status != "published":
+            raise AppError(422, "SHOP_REWARD_INVALID", "공개된 상품 보상을 연결해 주세요.")
     return artist, pack
 
 
@@ -2702,6 +2743,7 @@ async def create_admin_shop_product(
         name=payload.name,
         description=payload.description,
         detail_content=payload.detail_content,
+        fulfillment=payload.fulfillment,
         image_url=payload.image_url,
         price_points=payload.price_points,
         starts_at=payload.starts_at,
@@ -2734,6 +2776,7 @@ async def update_admin_shop_product(
         "name",
         "description",
         "detail_content",
+        "fulfillment",
         "image_url",
         "price_points",
         "starts_at",
@@ -2754,10 +2797,17 @@ async def publish_admin_shop_product(
     context.require_action("cards:write")
     product, artist, pack = await admin_shop_product_row(product_id, session)
     context.require_artist(product.artist_id)
-    if pack is None or pack.status != "published":
+    if product.product_type == "card_pack" and (pack is None or pack.status != "published"):
         raise AppError(
             422, "SHOP_CARD_PACK_INVALID", "공개된 카드팩을 연결해야 상품을 공개할 수 있습니다."
         )
+    if product.product_type != "card_pack":
+        reward_id = str((product.fulfillment or {}).get("rewardId") or "")
+        reward = await session.get(RewardCatalog, reward_id) if reward_id else None
+        if reward is None or reward.status != "published":
+            raise AppError(
+                422, "SHOP_REWARD_INVALID", "공개된 상품 보상을 연결해야 상품을 공개할 수 있습니다."
+            )
     product.status = "published"
     await session.commit()
     return {"ok": True, "data": admin_shop_product_data(product, artist, pack)}

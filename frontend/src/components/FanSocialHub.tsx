@@ -3,6 +3,7 @@ import { ApiError, followFan, resolveApiUrl, searchFans, unfollowFan, type FanSu
 import avatarFallback from '../assets/profile-avatar-generated.png'
 import { InlineIcon, VerifiedIcon } from '../App'
 import { ProfileAvatar } from './ProfileAvatar'
+import { DetailTopBar } from './DetailTopBar'
 
 type Props = {
   onBack: () => void
@@ -45,7 +46,7 @@ export function FanSocialHub({ onBack, onOpenProfile, onOpenCollection, onOpenTr
     catch (followError) { setError(followError instanceof ApiError ? followError.message : '팔로우 상태를 변경하지 못했어요.') }
   }
   return <main className="app-shell fan-social-shell fan-social-reference">
-    <header className="social-reference-topbar"><button type="button" onClick={onBack} aria-label="뒤로 가기"><InlineIcon name="back" /></button><h1>팬 찾기</h1><span /></header>
+    <DetailTopBar title="팬 찾기" onBack={onBack} />
     <section className="fan-social-content">
       <form className="fan-search-reference" onSubmit={submitSearch} role="search"><span aria-hidden="true"><InlineIcon name="search" /></span><input value={query} onChange={event => setQuery(event.target.value)} placeholder="닉네임 또는 카드를 검색해보세요" /></form>
       <div className="fan-recommendation-filters" role="tablist" aria-label="추천 팬 필터">{([['artist', '같은 아티스트'], ['tradable', '거래 가능'], ['wishlist', '찾는 카드 보유'], ['new', '신규 팬']] as const).map(([value, label]) => <button type="button" role="tab" aria-selected={filter === value} className={filter === value ? 'active' : ''} key={value} onClick={() => setFilter(value)}>{label}</button>)}</div>

@@ -240,3 +240,10 @@ test('reference entry routes and artist hub heading stay aligned with the approv
   assert.match(appSource, /const artistImage = artist\?\.imageUrl/)
   assert.doesNotMatch(appSource, /artist-hub-heading"><p className="eyebrow">ARTIST HUB<\/p><h2>탐색<\/h2>/)
 })
+
+test('horizontal home recommendations and collection pack rails hide browser scrollbars', () => {
+  assert.match(appCssSource, /\.home-recommendation-row\{[^}]*scrollbar-width:none/s)
+  assert.match(appCssSource, /\.home-recommendation-row::-webkit-scrollbar\{[^}]*display:none/s)
+  assert.match(referenceCssSource, /\.card-collection-pack-rail > button:not\(\.card-collection-all-packs\)\{/)
+  assert.match(referenceCssSource, /-webkit-line-clamp:2/)
+})

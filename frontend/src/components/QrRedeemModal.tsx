@@ -3,6 +3,7 @@ import type { IScannerControls } from '@zxing/browser'
 import { redeemCard, type RedemptionSource } from '../api/client'
 import '../App.css'
 import './QrRedeemModal.css'
+import { DetailTopBar } from './DetailTopBar'
 import { normalizeQrValue } from './qrUtils'
 import registrationCardImage from '../assets/card-registration-idol-generated.png'
 import qrScannerImage from '../assets/card-registration-qr-scanner-generated.png'
@@ -30,7 +31,6 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
   const videoRef = useRef<HTMLVideoElement>(null)
   const backdropRef = useRef<HTMLDivElement>(null)
   const scannerControlsRef = useRef<IScannerControls | null>(null)
-  const closeButtonRef = useRef<HTMLButtonElement>(null)
   const codeInputRef = useRef<HTMLInputElement>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
   const messageRef = useRef<HTMLParagraphElement>(null)
@@ -42,7 +42,7 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
 
   useEffect(() => {
     previousActiveElementRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    closeButtonRef.current?.focus()
+    document.querySelector<HTMLElement>('.redeem-modal .detail-topbar-back')?.focus()
     return () => previousActiveElementRef.current?.focus()
   }, [])
 
@@ -238,12 +238,13 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
   const title = step === 1 ? '카드 등록' : step === 2 ? (selectedMethod === 'manual' ? '인증 코드 입력' : selectedMethod === 'photo' ? '사진으로 등록' : 'QR 코드 스캔') : '카드 확인'
 
   return <div ref={backdropRef} className="modal-backdrop redeem-flow-backdrop" role="presentation" onClick={event => { if (event.target === event.currentTarget) onClose() }}>
-    <div className="modal redeem-modal redeem-flow-screen" data-step={step} role="dialog" aria-modal="true" aria-labelledby="redeem-title">
-      <header className="redeem-flow-topbar">
-        <button ref={closeButtonRef} type="button" className="redeem-flow-back" aria-label={step === 1 ? '카드 등록 닫기' : '이전 단계'} onClick={goBack}><RedeemIcon name="back" /></button>
-        <h2 id="redeem-title">{title}</h2>
-        <strong aria-label={`${step} / 4 단계`}><em>{step}</em> / 4</strong>
-      </header>
+    <div className="modal redeem-modal redeem-flow-screen" data-step={step} role="dialog" aria-modal="true" aria-label={title}>
+      <DetailTopBar
+        title={title}
+        onBack={goBack}
+        backLabel={step === 1 ? '카드 등록 닫기' : '이전 단계'}
+        right={<strong className="redeem-flow-step-count" aria-label={`${step} / 4 단계`}><em>{step}</em> / 4</strong>}
+      />
       <div className="redeem-flow-progress" role="progressbar" aria-label="카드 등록 진행률" aria-valuemin={0} aria-valuemax={4} aria-valuenow={step}><span style={{ width: `${step * 25}%` }} /></div>
 
       {step === 1 && <>
