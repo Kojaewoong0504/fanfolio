@@ -1,0 +1,52 @@
+import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
+import test from 'node:test'
+
+const source = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
+const css = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
+const indexCss = await readFile(new URL('../src/index.css', import.meta.url), 'utf8')
+const referenceCss = await readFile(new URL('../src/reference.css', import.meta.url), 'utf8')
+const fanPassSource = await readFile(new URL('../src/components/FanPassPage.tsx', import.meta.url), 'utf8')
+const missionSource = await readFile(new URL('../src/components/FanMissionPage.tsx', import.meta.url), 'utf8')
+const tradeInboxSource = await readFile(new URL('../src/components/TradeInbox.tsx', import.meta.url), 'utf8')
+
+test('app canvas reserves a stable scrollbar gutter and hides browser chrome', () => {
+  assert.match(indexCss, /scrollbar-gutter:\s*stable/)
+  assert.match(indexCss, /body::-webkit-scrollbar\s*\{[^}]*width:\s*0/s)
+  assert.match(indexCss, /scrollbar-width:\s*none/)
+})
+
+test('shared app shell and bottom navigation use one five-item geometry contract', () => {
+  assert.match(css, /--app-shell-width:\s*430px/)
+  assert.match(css, /--bottom-nav-height:\s*74px/)
+  assert.match(css, /\.bottom-nav\s*\{[^}]*height:\s*var\(--bottom-nav-height\)/s)
+  assert.match(css, /\.bottom-nav\s*\{[^}]*grid-template-columns:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\)/s)
+  assert.match(css, /\.shop-featured-pack\s*\{[^}]*box-sizing:\s*border-box[^}]*width:\s*100%/s)
+  assert.match(css, /\.shop-featured-pack\s*\{[^}]*overflow:\s*clip/s)
+})
+
+test('alerts route owns its detail header without duplicating the app header or bottom tabs', () => {
+  assert.match(source, /\{tab !== 'alerts' && <header className="app-header">/)
+  assert.match(source, /\{tab !== 'alerts' && <BottomNavigation active=\{tab\} onNavigate=\{navigateTab\} \/>\}/)
+})
+
+test('card collection controls and four-card grid stay inside the app canvas', () => {
+  assert.match(referenceCss, /\.card-collection-catalog\s*\{[^}]*min-width:\s*0[^}]*max-width:\s*100%/s)
+  assert.match(referenceCss, /\.card-collection-search\s*\{[^}]*min-width:\s*0[^}]*width:\s*100%/s)
+  assert.match(referenceCss, /\.card-collection-heading\s*\{[^}]*min-width:\s*0[^}]*max-width:\s*100%/s)
+  assert.match(referenceCss, /\.card-collection-grid\s*\{[^}]*min-width:\s*0[^}]*width:\s*100%/s)
+})
+
+test('fan pass uses the shared five-tab shop destination', () => {
+  assert.match(fanPassSource, /label="상점"/)
+  assert.match(fanPassSource, /onNavigate\('shop'\)/)
+  assert.doesNotMatch(fanPassSource, /label="마이"/)
+})
+
+test('secondary detail routes use the shared detail top bar', () => {
+  assert.match(missionSource, /import \{ DetailTopBar \} from '\.\/DetailTopBar'/)
+  assert.match(missionSource, /<DetailTopBar title="미션" onBack=/)
+  assert.match(tradeInboxSource, /import \{ DetailTopBar \} from '\.\/DetailTopBar'/)
+  assert.match(tradeInboxSource, /<DetailTopBar title="거래함" onBack=/)
+  assert.match(source, /<DetailTopBar title="알림" onBack=\{onBack\}/)
+})

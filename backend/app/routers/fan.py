@@ -39,11 +39,13 @@ from app.models import (
     Notification,
     PointBalance,
     PointLedger,
+    PointTransaction,
     RedeemCode,
     RewardCatalog,
     RewardGrant,
     Role,
     ShopOrder,
+    ShopOrderEntitlement,
     ShopProduct,
     User,
     UserCard,
@@ -64,6 +66,7 @@ from app.services import (
     claim_reward_grant,
     fan_pass_data,
     fan_progression_data,
+    grant_reward,
     grant_user_card,
     mission_period_key,
     notify_user_once,
@@ -72,6 +75,7 @@ from app.services import (
     record_audit,
     record_engagement_event,
     redeem,
+    reverse_points,
     spend_points,
     update_profile_equipment,
 )
@@ -121,6 +125,7 @@ def shop_product_data(
         "name": product.name,
         "description": product.description,
         "detailContent": product.detail_content or [],
+        "fulfillment": product.fulfillment or {},
         "imageUrl": product.image_url,
         "pricePoints": product.price_points,
         "status": product.status,
@@ -229,31 +234,39 @@ async def shop_orders(user: FanUser, session: DbSession) -> dict:
 
 
 @router.post("/me/shop/orders", status_code=status.HTTP_201_CREATED)
-async def create_shop_order(payload: ShopOrderCreate, user: FanUser, session: DbSession) -> dict:
+async def create_shop_order(
+    payload: ShopOrderCreate,
+    user: FanUser,
+    session: DbSession,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> dict:
     if payload.payment_method != "points":
         raise AppError(422, "SHOP_PAYMENT_METHOD_UNSUPPORTED", "현재는 포인트 결제만 지원합니다.")
+    request_key = idempotency_key or uuid4().hex
+    if idempotency_key:
+        existing_order = await session.scalar(
+            select(ShopOrder).where(
+                ShopOrder.user_id == user.id,
+                ShopOrder.idempotency_key == idempotency_key,
+            )
+        )
+        if existing_order is not None:
+            return {
+                "ok": True,
+                "data": {
+                    "id": existing_order.id,
+                    "productId": existing_order.product_id,
+                    "status": existing_order.status,
+                    "replayed": True,
+                },
+            }
     product = await session.scalar(select(ShopProduct).where(ShopProduct.id == payload.product_id))
     if product is None or not shop_product_is_sellable(product, datetime.now(UTC)):
         raise AppError(409, "SHOP_PRODUCT_UNAVAILABLE", "판매가 종료된 상품입니다.")
-    if product.product_type != "card_pack" or not product.card_pack_id:
+    if product.product_type == "card_pack" and not product.card_pack_id:
         raise AppError(409, "SHOP_PRODUCT_NOT_PURCHASABLE", "현재 구매할 수 없는 상품입니다.")
-    event = await record_engagement_event(
-        session,
-        user_id=user.id,
-        kind="points_spent",
-        source_type="shop_order",
-        source_id=f"{user.id}:{product.id}:{uuid4().hex}",
-        payload={"productId": product.id, "points": product.price_points},
-    )
-    await spend_points(
-        session,
-        user_id=user.id,
-        source_event_id=event.id,
-        rule_key=f"shop_order:{product.id}",
-        amount=product.price_points,
-        description=f"{product.name} 구매",
-        metadata={"productId": product.id, "cardPackId": product.card_pack_id},
-    )
+    if product.product_type != "card_pack" and not product.fulfillment.get("rewardId"):
+        raise AppError(409, "SHOP_PRODUCT_NOT_PURCHASABLE", "상품 지급 정보를 확인할 수 없습니다.")
     order = ShopOrder(
         id=f"shop_order_{uuid4().hex[:12]}",
         user_id=user.id,
@@ -262,13 +275,167 @@ async def create_shop_order(payload: ShopOrderCreate, user: FanUser, session: Db
         price_points=product.price_points,
         payment_method=payload.payment_method,
         status="completed",
+        idempotency_key=request_key,
     )
     session.add(order)
+    await session.flush()
+    event = await record_engagement_event(
+        session,
+        user_id=user.id,
+        kind="points_spent",
+        source_type="shop_order",
+        source_id=order.id,
+        payload={"productId": product.id, "points": product.price_points, "orderId": order.id},
+    )
+    ledger = await spend_points(
+        session,
+        user_id=user.id,
+        source_event_id=event.id,
+        rule_key=f"shop_order:{product.id}",
+        amount=product.price_points,
+        description=f"{product.name} 구매",
+        metadata={"productId": product.id, "cardPackId": product.card_pack_id, "orderId": order.id},
+    )
+    order.point_ledger_id = ledger.id
+    order.point_event_id = event.id
+    if product.product_type == "card_pack":
+        session.add(
+            ShopOrderEntitlement(
+                id=f"shop_entitlement_{uuid4().hex[:12]}",
+                order_id=order.id,
+                user_id=user.id,
+                pack_id=product.card_pack_id,
+                status="available",
+            )
+        )
+    else:
+        await grant_reward(
+            session,
+            user_id=user.id,
+            reward_id=str(product.fulfillment["rewardId"]),
+            source_event_id=event.id,
+            rule_key=f"shop_order:{order.id}",
+        )
+    session.add(
+        PointTransaction(
+            id=f"point_tx_{uuid4().hex[:12]}",
+            user_id=user.id,
+            operation="charge",
+            idempotency_key=request_key,
+            amount=-product.price_points,
+            ledger_id=ledger.id,
+            status="completed",
+        )
+    )
     await session.commit()
     return {
         "ok": True,
         "data": {"id": order.id, "productId": order.product_id, "status": order.status},
     }
+
+
+@router.post("/me/shop/orders/{order_id}/refund", status_code=status.HTTP_201_CREATED)
+async def refund_shop_order(
+    order_id: str,
+    user: FanUser,
+    session: DbSession,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> dict:
+    if not idempotency_key:
+        raise AppError(
+            422, "IDEMPOTENCY_KEY_REQUIRED", "환불 요청에는 Idempotency-Key가 필요합니다."
+        )
+    user_id = user.id
+    if session.in_transaction():
+        await session.rollback()
+    async with session.begin():
+        existing_transaction = await session.scalar(
+            select(PointTransaction).where(
+                PointTransaction.user_id == user_id,
+                PointTransaction.operation == "refund",
+                PointTransaction.idempotency_key == idempotency_key,
+            )
+        )
+        if existing_transaction and existing_transaction.ledger_id:
+            ledger = await session.get(PointLedger, existing_transaction.ledger_id)
+            if ledger is not None:
+                return {
+                    "ok": True,
+                    "data": {"orderId": order_id, "balance": ledger.balance_after},
+                }
+        order = await session.scalar(
+            select(ShopOrder)
+            .where(ShopOrder.id == order_id, ShopOrder.user_id == user_id)
+            .with_for_update()
+        )
+        if order is None:
+            raise AppError(404, "SHOP_ORDER_NOT_FOUND", "주문을 찾을 수 없습니다.")
+        if order.status != "completed" or not order.point_ledger_id:
+            raise AppError(409, "SHOP_ORDER_NOT_REFUNDABLE", "환불할 수 없는 주문입니다.")
+        entitlement = await session.scalar(
+            select(ShopOrderEntitlement)
+            .where(ShopOrderEntitlement.order_id == order.id)
+            .with_for_update()
+        )
+        if entitlement and entitlement.status == "opened":
+            raise AppError(
+                409, "SHOP_ORDER_NOT_REFUNDABLE", "이미 사용한 상품은 환불할 수 없습니다."
+            )
+        if entitlement:
+            entitlement.status = "revoked"
+        else:
+            reward_grant = await session.scalar(
+                select(RewardGrant)
+                .where(
+                    RewardGrant.user_id == user_id,
+                    RewardGrant.rule_key == f"shop_order:{order.id}",
+                )
+                .with_for_update()
+            )
+            if reward_grant is None or reward_grant.revoked_at is not None:
+                raise AppError(
+                    409, "SHOP_ORDER_NOT_REFUNDABLE", "지급 정보를 확인할 수 없는 주문입니다."
+                )
+            if reward_grant.claimed_at is not None:
+                raise AppError(
+                    409, "SHOP_ORDER_NOT_REFUNDABLE", "이미 수령한 보상은 환불할 수 없습니다."
+                )
+            reward_grant.revoked_at = datetime.now(UTC)
+        original = await session.get(PointLedger, order.point_ledger_id)
+        if original is None or original.amount >= 0:
+            raise AppError(409, "SHOP_ORDER_LEDGER_INVALID", "주문 원장을 확인할 수 없습니다.")
+        event = await record_engagement_event(
+            session,
+            user_id=user_id,
+            kind="points_refunded",
+            source_type="shop_refund",
+            source_id=f"{order.id}:{idempotency_key}",
+            payload={"orderId": order.id, "points": order.price_points},
+        )
+        ledger = await reverse_points(
+            session,
+            user_id=user_id,
+            source_event_id=event.id,
+            rule_key=f"shop_refund:{order.id}",
+            amount=order.price_points,
+            reversed_ledger_id=original.id,
+            description=f"{order.product_name} 환불",
+            metadata={"orderId": order.id},
+        )
+        transaction = PointTransaction(
+            id=f"point_tx_{uuid4().hex[:12]}",
+            user_id=user_id,
+            operation="refund",
+            idempotency_key=idempotency_key,
+            amount=order.price_points,
+            ledger_id=ledger.id,
+            status="completed",
+        )
+        session.add(transaction)
+        order.status = "refunded"
+        order.refund_transaction_id = transaction.id
+        order.refunded_at = datetime.now(UTC)
+        return {"ok": True, "data": {"orderId": order.id, "balance": ledger.balance_after}}
 
 
 def catalog_release_visible() -> object:
@@ -747,6 +914,19 @@ async def open_card_pack(
         )
         if pack is None:
             raise AppError(404, "CARD_PACK_NOT_FOUND", "공개된 카드팩을 찾을 수 없습니다.")
+        entitlement = await session.scalar(
+            select(ShopOrderEntitlement)
+            .where(
+                ShopOrderEntitlement.user_id == user_id,
+                ShopOrderEntitlement.pack_id == pack.id,
+                ShopOrderEntitlement.status == "available",
+            )
+            .order_by(ShopOrderEntitlement.created_at, ShopOrderEntitlement.id)
+            .with_for_update()
+        )
+        if entitlement:
+            entitlement.status = "opened"
+            entitlement.opened_at = datetime.now(UTC)
         if idempotency_key:
             existing = await session.scalar(
                 select(CardPackOpening)
@@ -1008,6 +1188,7 @@ async def missions(
                 RewardGrant.user_id == user.id,
                 RewardGrant.rule_key == f"mission:{mission.id}:{period_key}",
                 RewardGrant.claimed_at.is_(None),
+                RewardGrant.revoked_at.is_(None),
             )
             .limit(1)
         )
@@ -1038,6 +1219,7 @@ async def missions(
                         RewardGrant.rule_key
                         == f"mission:{mission.id}:{historical_progress.period_key}",
                         RewardGrant.claimed_at.is_(None),
+                        RewardGrant.revoked_at.is_(None),
                     )
                     .limit(1)
                 )
@@ -1186,6 +1368,7 @@ async def exchange_points(
             select(RewardGrant).where(
                 RewardGrant.user_id == user.id,
                 RewardGrant.source_event_id == existing_event.id,
+                RewardGrant.revoked_at.is_(None),
             )
         )
         if existing_grant:
@@ -1267,6 +1450,7 @@ async def claim_mission_rewards(mission_id: str, user: FanUser, session: DbSessi
                 RewardGrant.user_id == user.id,
                 RewardGrant.rule_key.like(f"mission:{mission_id}:%"),
                 RewardGrant.claimed_at.is_(None),
+                RewardGrant.revoked_at.is_(None),
             )
         )
     )

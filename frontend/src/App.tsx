@@ -3,7 +3,7 @@ import './App.css'
 import './reference.css'
 import './fan-community-reference.css'
 import { getUserCardHistory, type UserCardHistoryItem } from './api/client'
-import { ApiError, apiFetch, applyToFanEvent, claimPassTier, claimReward, clearAccessToken, combineCards, connectNotificationStream, createCollectionGoal, createShopOrder, deleteCollectionGoal, followFan, getCardCombination, getCardPacks, getCardPackOdds, getCollectionGoals, getFanEvent, getFanEventComments, getFanEvents, getFanHome, getMyEventApplications, getFanPass, getNotificationPreferences, getProgression, getShopProduct, getShopProducts, getShopOrders, getWishlist, oauthStartUrl, openCardPack, postFanEventComment, previewCardCombination, reconcilePassRewards, removeWishlistCard, resolveApiUrl, saveWishlistCard, searchFans, setAccessToken, unfollowFan, updateNotificationPreferences, updateProfileEquipment, type CardCombinationPreview, type CardCombinationRecipe, type CardCombinationResult, type CardDesignConfig, type CardPack, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionGoal, type CollectionSummary, type CurrentUser, type EventPagination, type FanEvent, type FanEventApplication, type FanEventComment, type FanEventStatus, type FanHomeResponse, type FanMission, type FanProgression, type FanSummary, type NotificationItem, type ProfileEquipment, type PublicCollection as PublicCollectionData, type RewardGrant, type ShopOrder, type ShopProduct, type UserCardDetail } from './api/client'
+import { ApiError, apiFetch, applyToFanEvent, claimPassTier, claimReward, clearAccessToken, combineCards, confirmFanPasswordReset, connectNotificationStream, createCollectionGoal, createShopOrder, deleteCollectionGoal, followFan, getCardCombination, getCardPacks, getCardPackOdds, getCollectionGoals, getFanEvent, getFanEventComments, getFanEvents, getFanHome, getMyEventApplications, getFanPass, getFanPoints, getNotificationPreferences, getProgression, getShopProduct, getShopProducts, getShopOrders, getWishlist, oauthStartUrl, openCardPack, postFanEventComment, previewCardCombination, reconcilePassRewards, refundShopOrder, removeWishlistCard, requestFanPasswordReset, resolveApiUrl, saveWishlistCard, searchFans, setAccessToken, unfollowFan, updateNotificationPreferences, updateProfileEquipment, type CardCombinationPreview, type CardCombinationRecipe, type CardCombinationResult, type CardDesignConfig, type CardPack, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionGoal, type CollectionSummary, type CurrentUser, type EventPagination, type FanEvent, type FanEventApplication, type FanEventComment, type FanEventStatus, type FanHomeResponse, type FanMission, type FanProgression, type FanSummary, type NotificationItem, type ProfileEquipment, type PublicCollection as PublicCollectionData, type RewardGrant, type ShopOrder, type ShopProduct, type UserCardDetail } from './api/client'
 import { QrRedeemModal, RedeemIcon } from './components/QrRedeemModal'
 import { CardDetail } from './components/CardDetail'
 import { InteractiveCollectibleCard } from './components/InteractiveCollectibleCard'
@@ -21,6 +21,7 @@ import { TradeInbox } from './components/TradeInbox'
 import { TradeCardPicker, TradeComposer } from './components/TradeComposer'
 import { FanPublicProfile } from './components/FanPublicProfile'
 import { FanMissionPage } from './components/FanMissionPage'
+import { DetailTopBar } from './components/DetailTopBar'
 import type { Card } from './types'
 import { demoCardImage, demoMemberImage, keepCardVisual } from './utils/cardVisual'
 import cardYunaImage from './assets/card-yuna-lavender.jpg'
@@ -203,6 +204,7 @@ type ShopHistoryRecord = {
   image: string
   cancelled?: boolean
   imageClassName?: string
+  orderStatus?: ShopOrder['status']
 }
 
 const shopHistoryRecords: ShopHistoryRecord[] = [
@@ -215,16 +217,79 @@ const shopHistoryRecords: ShopHistoryRecord[] = [
 function ShopHistoryPreview({ appMode = false }: { appMode?: boolean }) {
   const [filter, setFilter] = useState<ShopHistoryFilter>('all')
   const [liveRecords, setLiveRecords] = useState<ShopHistoryRecord[] | null>(null)
+  const [liveBalance, setLiveBalance] = useState<number | null>(null)
+  const [historyLoading, setHistoryLoading] = useState(appMode)
   const [historyError, setHistoryError] = useState('')
+  const [refundingOrderId, setRefundingOrderId] = useState<string | null>(null)
   useEffect(() => {
     if (!appMode) return
     let active = true
-    void getShopOrders().then(result => {
+    void Promise.all([getShopOrders(), getFanPoints()]).then(([ordersResult, pointsResult]) => {
       if (!active) return
-      setLiveRecords(result.data.items.map((item: ShopOrder) => ({ id: item.id, type: 'purchase', month: item.createdAt.slice(0, 7).replace('-', '년 ') + '월', title: item.productName, date: item.createdAt.replace('T', ' ').slice(0, 16), status: item.status === 'completed' ? '구매 완료' : '구매 실패', points: `-${item.pricePoints.toLocaleString()}P`, image: dreamscapeCardPack })))
-    }).catch(() => { if (active) setHistoryError('구매 내역을 불러오지 못했어요.') })
+      const purchases: ShopHistoryRecord[] = ordersResult.data.items.map((item: ShopOrder) => ({
+        id: item.id,
+        type: 'purchase',
+        month: item.createdAt.slice(0, 7).replace('-', '년 ') + '월',
+        title: item.productName,
+        date: item.createdAt.replace('T', ' ').slice(0, 16),
+        status: item.status === 'completed' ? '구매 완료' : item.status === 'refunded' ? '환불 완료' : '구매 실패',
+        points: item.status === 'refunded' ? `+${item.pricePoints.toLocaleString()}P` : `-${item.pricePoints.toLocaleString()}P`,
+        image: dreamscapeCardPack,
+        orderStatus: item.status,
+      }))
+      const exchanges: ShopHistoryRecord[] = pointsResult.data.items
+        .filter(item => item.amount < 0 && item.description.includes('교환'))
+        .map(item => ({
+          id: item.id,
+          type: 'exchange',
+          month: item.createdAt.slice(0, 7).replace('-', '년 ') + '월',
+          title: item.description,
+          date: item.createdAt.replace('T', ' ').slice(0, 16),
+          status: '교환 완료',
+          points: `-${Math.abs(item.amount).toLocaleString()}P`,
+          image: fanLevelStar,
+          imageClassName: 'points',
+        }))
+      setLiveRecords([...purchases, ...exchanges].sort((left, right) => right.date.localeCompare(left.date)))
+      setLiveBalance(pointsResult.data.balance)
+      setHistoryLoading(false)
+    }).catch(() => {
+      if (!active) return
+      setHistoryError('구매 · 교환 내역을 불러오지 못했어요.')
+      setLiveRecords([])
+      setLiveBalance(0)
+      setHistoryLoading(false)
+    })
     return () => { active = false }
   }, [appMode])
+  const refund = async (orderId: string) => {
+    setRefundingOrderId(orderId)
+    setHistoryError('')
+    try {
+      await refundShopOrder(orderId)
+      const [ordersResult, pointsResult] = await Promise.all([getShopOrders(), getFanPoints()])
+      const purchases: ShopHistoryRecord[] = ordersResult.data.items.map((item: ShopOrder) => ({
+        id: item.id,
+        type: 'purchase',
+        month: item.createdAt.slice(0, 7).replace('-', '년 ') + '월',
+        title: item.productName,
+        date: item.createdAt.replace('T', ' ').slice(0, 16),
+        status: item.status === 'completed' ? '구매 완료' : item.status === 'refunded' ? '환불 완료' : '구매 실패',
+        points: item.status === 'refunded' ? `+${item.pricePoints.toLocaleString()}P` : `-${item.pricePoints.toLocaleString()}P`,
+        image: dreamscapeCardPack,
+        orderStatus: item.status,
+      }))
+      const exchanges: ShopHistoryRecord[] = pointsResult.data.items
+        .filter(item => item.amount < 0 && item.description.includes('교환'))
+        .map(item => ({ id: item.id, type: 'exchange', month: item.createdAt.slice(0, 7).replace('-', '년 ') + '월', title: item.description, date: item.createdAt.replace('T', ' ').slice(0, 16), status: '교환 완료', points: `-${Math.abs(item.amount).toLocaleString()}P`, image: fanLevelStar, imageClassName: 'points' }))
+      setLiveRecords([...purchases, ...exchanges].sort((left, right) => right.date.localeCompare(left.date)))
+      setLiveBalance(pointsResult.data.balance)
+    } catch (error) {
+      setHistoryError(error instanceof ApiError ? error.message : '환불 처리에 실패했어요.')
+    } finally {
+      setRefundingOrderId(null)
+    }
+  }
   useEffect(() => {
     const previousTitle = document.title
     document.title = 'Fanfolio · 구매 · 교환 내역'
@@ -235,22 +300,20 @@ function ShopHistoryPreview({ appMode = false }: { appMode?: boolean }) {
     { id: 'purchase', label: '구매' },
     { id: 'exchange', label: '포인트 교환' },
   ]
-  const sourceRecords = liveRecords ?? shopHistoryRecords
-  const records = filter === 'all' ? sourceRecords : sourceRecords.filter(record => record.type === filter)
+  const sourceRecords = appMode ? liveRecords : shopHistoryRecords
+  const records = filter === 'all' ? (sourceRecords ?? []) : (sourceRecords ?? []).filter(record => record.type === filter)
   const months = [...new Set(records.map(record => record.month))]
+  const currentMonth = new Date().toISOString().slice(0, 7).replace('-', '년 ') + '월'
+  const monthlyRecords = (sourceRecords ?? []).filter(record => record.month === currentMonth)
 
-  return <main className="app-shell shop-history-shell">
-    <header className="shop-history-topbar">
-      <button type="button" aria-label="상점으로 돌아가기" onClick={() => navigateAppPath(appMode ? '/shop' : '/?preview=shop')}><InlineIcon name="back" /></button>
-      <h1>구매 · 교환 내역</h1>
-      <span aria-hidden="true" />
-    </header>
+  return <main className="app-shell shop-history-shell detail-screen-shell">
+    <DetailTopBar title="구매 · 교환 내역" onBack={() => navigateAppPath(appMode ? '/shop' : '/?preview=shop')} backLabel="상점으로 돌아가기" />
 
-    <section className="shop-history-content">
+    <section className="shop-history-content detail-screen-content">
       <section className="shop-history-summary" aria-label="상점 이용 요약">
-        <div><span>보유 포인트</span><strong>3,250<small>P</small></strong></div>
-        <div><span>이번 달 구매</span><strong>2<small>건</small></strong></div>
-        <div><span>이번 달 교환</span><strong>1<small>건</small></strong></div>
+        <div><span>보유 포인트</span><strong>{appMode ? (liveBalance ?? 0).toLocaleString() : '3,250'}<small>P</small></strong></div>
+        <div><span>이번 달 구매</span><strong>{monthlyRecords.filter(record => record.type === 'purchase').length}<small>건</small></strong></div>
+        <div><span>이번 달 교환</span><strong>{monthlyRecords.filter(record => record.type === 'exchange').length}<small>건</small></strong></div>
       </section>
 
       <div className="shop-history-filters" role="tablist" aria-label="내역 필터">
@@ -258,19 +321,21 @@ function ShopHistoryPreview({ appMode = false }: { appMode?: boolean }) {
       </div>
 
       {historyError && <p className="shop-notice" role="alert">{historyError}</p>}
+      {appMode && historyLoading && <p className="shop-notice" role="status">내역을 불러오고 있어요.</p>}
       <div className="shop-history-groups" aria-live="polite">
         {months.map(month => <section className="shop-history-group" key={month} aria-labelledby={`shop-history-${month}`}>
           <h2 id={`shop-history-${month}`}>{month}</h2>
           <div className="shop-history-list">
             {records.filter(record => record.month === month).map(record => <article className={`shop-history-card${record.cancelled ? ' cancelled' : ''}`} key={record.id}>
               <span className={`shop-history-thumb ${record.imageClassName ?? ''}`}><img src={record.image} alt="" />{record.type === 'exchange' && <b aria-hidden="true">P</b>}</span>
-              <div className="shop-history-copy"><h3>{record.title}</h3><time>{record.date}</time><em>{record.status}</em></div>
+              <div className="shop-history-copy"><h3>{record.title}</h3><time>{record.date}</time><em>{record.status}</em>{appMode && record.type === 'purchase' && record.orderStatus === 'completed' && <button type="button" className="shop-history-refund" disabled={refundingOrderId === record.id} onClick={() => void refund(record.id)}>{refundingOrderId === record.id ? '환불 중…' : '포인트 환불'}</button>}</div>
               <strong>{record.points}</strong>
             </article>)}
           </div>
         </section>)}
       </div>
 
+      {!historyLoading && records.length === 0 && !historyError && <div className="shop-empty-state"><InlineIcon name="list" /><b>아직 이용 내역이 없어요.</b><span>상점에서 상품을 구매하거나 포인트를 교환하면 여기에 표시됩니다.</span></div>}
       <aside className="shop-history-note"><span><InlineIcon name="system" /></span><p>최근 1년간의 구매 및 교환 내역을 확인할 수 있어요.</p></aside>
     </section>
   </main>
@@ -280,16 +345,47 @@ function ShopCheckoutPreview({ appMode = false }: { appMode?: boolean }) {
   const [paymentMethod, setPaymentMethod] = useState<ShopPaymentMethod>('points')
   const [usePointsFirst, setUsePointsFirst] = useState(true)
   const [completed, setCompleted] = useState(false)
-  const price = 1200
-  const balance = 3250
-  const pointUsed = paymentMethod === 'points' || usePointsFirst ? Math.min(price, balance) : 0
+  const [product, setProduct] = useState<ShopProduct | null>(null)
+  const [balance, setBalance] = useState<number | null>(null)
+  const [loading, setLoading] = useState(appMode)
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const productId = new URLSearchParams(window.location.search).get('productId')
+  useEffect(() => {
+    if (!appMode || !productId) {
+      setLoading(false)
+      return
+    }
+    let active = true
+    void Promise.all([getShopProduct(productId), getFanPoints()]).then(([productResult, pointsResult]) => {
+      if (!active) return
+      setProduct(productResult.data)
+      setBalance(pointsResult.data.balance)
+      setLoading(false)
+    }).catch(() => {
+      if (!active) return
+      setError('상품 또는 포인트 정보를 불러오지 못했어요.')
+      setLoading(false)
+    })
+    return () => { active = false }
+  }, [appMode, productId])
+  const price = appMode ? (product?.pricePoints ?? 0) : 1200
+  const currentBalance = appMode ? (balance ?? 0) : 3250
+  const pointUsed = paymentMethod === 'points' || usePointsFirst ? Math.min(price, currentBalance) : 0
   const cashDue = Math.max(price - pointUsed, 0)
-  const methods: Array<{ id: ShopPaymentMethod; label: string; description: string; icon: string }> = [
-    { id: 'points', label: '포인트', description: `보유 ${balance.toLocaleString()}P`, icon: 'P' },
-    { id: 'card', label: '신용 · 체크카드', description: '카드 등록 또는 선택', icon: 'card' },
-    { id: 'kakao', label: '카카오페이', description: '간편 결제', icon: '카' },
-    { id: 'naver', label: '네이버페이', description: '간편 결제', icon: 'N' },
-  ]
+  const methods: Array<{ id: ShopPaymentMethod; label: string; description: string; icon: string }> = appMode
+    ? [{ id: 'points', label: '포인트', description: `보유 ${currentBalance.toLocaleString()}P`, icon: 'P' }]
+    : [
+      { id: 'points', label: '포인트', description: `보유 ${currentBalance.toLocaleString()}P`, icon: 'P' },
+      { id: 'card', label: '신용 · 체크카드', description: '카드 등록 또는 선택', icon: 'card' },
+      { id: 'kakao', label: '카카오페이', description: '간편 결제', icon: '카' },
+      { id: 'naver', label: '네이버페이', description: '간편 결제', icon: 'N' },
+    ]
+  const displayProductName = product?.name ?? 'Nebula Ver. 카드팩'
+  const displayProductArtist = product?.cardPack?.name ?? product?.artistName ?? '정규 1집 · DREAMSCAPE'
+  const displayProductDescription = product?.description ?? '랜덤 포토카드 3장'
+  const displayProductImage = resolveApiUrl(product?.imageUrl) || dreamscapeCardPack
+  const canSubmit = !appMode || (!loading && Boolean(product) && paymentMethod === 'points' && currentBalance >= price)
 
   useEffect(() => {
     const previousTitle = document.title
@@ -297,46 +393,68 @@ function ShopCheckoutPreview({ appMode = false }: { appMode?: boolean }) {
     return () => { document.title = previousTitle }
   }, [completed])
 
+  const submitOrder = async () => {
+    if (!appMode) {
+      setCompleted(true)
+      return
+    }
+    if (!product || !canSubmit) return
+    setSubmitting(true)
+    setError('')
+    try {
+      if (appMode && product) await createShopOrder(product.id)
+      setCompleted(true)
+    } catch (requestError) {
+      setError(requestError instanceof ApiError ? requestError.message : '구매에 실패했어요.')
+      setSubmitting(false)
+    }
+  }
+
   if (completed) return <main className="app-shell shop-checkout-shell shop-checkout-complete-shell">
-    <header className="shop-checkout-topbar"><button type="button" aria-label="상점으로 돌아가기" onClick={() => navigateAppPath(appMode ? '/shop' : '/?preview=shop')}><InlineIcon name="back" /></button><h1>구매 완료</h1><span aria-hidden="true" /></header>
+    <header className="shop-checkout-topbar detail-topbar"><button type="button" aria-label="상점으로 돌아가기" onClick={() => navigateAppPath(appMode ? '/shop' : '/?preview=shop')}><InlineIcon name="back" /></button><h1>구매 완료</h1><span aria-hidden="true" /></header>
     <section className="shop-checkout-complete" aria-live="polite">
       <span className="shop-checkout-success"><InlineIcon name="check" /></span>
       <h2>카드팩 구매가 완료됐어요</h2>
-      <p>DREAMSCAPE Nebula Ver. 카드팩이<br />내 보관함에 추가됐어요.</p>
-      <div className="shop-checkout-complete-card"><img src={dreamscapeCardPack} alt="DREAMSCAPE Nebula 카드팩" /><div><strong>정규 1집 · DREAMSCAPE</strong><span>Nebula Ver.</span><b>{price.toLocaleString()}P 결제</b></div></div>
+      <p>{displayProductName}이<br />내 보관함에 추가됐어요.</p>
+      <div className="shop-checkout-complete-card"><img src={displayProductImage} alt={`${displayProductName} 상품 이미지`} /><div><strong>{displayProductArtist}</strong><span>{displayProductName}</span><b>{price.toLocaleString()}P 결제</b></div></div>
     </section>
     <div className="shop-checkout-complete-footer"><button type="button" className="shop-checkout-primary" onClick={() => navigateAppPath(appMode ? '/shop' : '/?preview=shop')}>상점으로 돌아가기</button></div>
   </main>
 
   return <main className="app-shell shop-checkout-shell">
-    <header className="shop-checkout-topbar"><button type="button" aria-label="상점으로 돌아가기" onClick={() => navigateAppPath(appMode ? '/shop' : '/?preview=shop')}><InlineIcon name="back" /></button><h1>결제 정보</h1><span aria-hidden="true" /></header>
+    <header className="shop-checkout-topbar detail-topbar"><button type="button" aria-label="상점으로 돌아가기" onClick={() => navigateAppPath(appMode ? '/shop' : '/?preview=shop')}><InlineIcon name="back" /></button><h1>결제 정보</h1><span aria-hidden="true" /></header>
     <section className="shop-checkout-content">
+      {error && <p className="shop-notice" role="alert">{error}</p>}
+      {loading && <p className="shop-notice" role="status">상품과 결제 정보를 불러오고 있어요.</p>}
       <div className="shop-checkout-progress" aria-label="구매 단계"><span className="active">상품 확인</span><i /><span className="active">결제 수단</span><i /><span>완료</span></div>
-      <section className="shop-checkout-product" aria-labelledby="checkout-product-title"><img src={dreamscapeCardPack} alt="DREAMSCAPE Nebula 카드팩" /><div><span>정규 1집 · DREAMSCAPE</span><h2 id="checkout-product-title">Nebula Ver. 카드팩</h2><p>랜덤 포토카드 3장</p></div><strong>{price.toLocaleString()}P</strong></section>
+      <section className="shop-checkout-product" aria-labelledby="checkout-product-title"><img src={displayProductImage} alt={`${displayProductName} 상품 이미지`} /><div><span>{displayProductArtist}</span><h2 id="checkout-product-title">{displayProductName}</h2><p>{displayProductDescription}</p></div><strong>{price.toLocaleString()}P</strong></section>
       <section className="shop-checkout-section" aria-labelledby="checkout-method-title"><div className="shop-checkout-heading"><div><h2 id="checkout-method-title">결제 수단</h2><p>원하는 결제 방법을 선택해 주세요.</p></div></div><div className="shop-checkout-methods">{methods.map(item => <button type="button" key={item.id} className={`shop-checkout-method${paymentMethod === item.id ? ' selected' : ''}`} aria-pressed={paymentMethod === item.id} onClick={() => setPaymentMethod(item.id)}><span className={`shop-checkout-method-icon ${item.id}`}>{item.icon === 'card' ? <InlineIcon name="card" /> : item.icon}</span><span><b>{item.label}</b><small>{item.description}</small></span>{paymentMethod === item.id && <span className="shop-checkout-method-check"><InlineIcon name="check" /></span>}</button>)}</div></section>
       <label className="shop-checkout-toggle"><span><b>포인트 우선 사용</b><small>보유 포인트를 먼저 사용해요.</small></span><input type="checkbox" checked={usePointsFirst} onChange={event => setUsePointsFirst(event.target.checked)} /><i aria-hidden="true" /></label>
+      {appMode && currentBalance < price && !loading && <p className="shop-notice" role="alert">포인트가 부족해요. 상점에서 포인트를 충전해 주세요.</p>}
       <section className="shop-checkout-summary" aria-label="결제 금액"><div><span>상품 금액</span><strong>{price.toLocaleString()}P</strong></div><div><span>포인트 사용</span><strong>-{pointUsed.toLocaleString()}P</strong></div><div className="total"><span>최종 결제</span><strong>{cashDue === 0 ? '0원' : `${cashDue.toLocaleString()}원`}</strong></div></section>
     </section>
-    <footer className="shop-checkout-footer"><button type="button" className="shop-checkout-secondary" onClick={() => navigateAppPath(appMode ? '/shop' : '/?preview=shop')}>이전</button><button type="button" className="shop-checkout-primary" onClick={() => setCompleted(true)}>다음</button></footer>
+    <footer className="shop-checkout-footer"><button type="button" className="shop-checkout-secondary" onClick={() => navigateAppPath(appMode ? '/shop' : '/?preview=shop')}>이전</button><button type="button" className="shop-checkout-primary" disabled={!canSubmit || submitting} onClick={() => void submitOrder()}>{submitting ? '구매 처리 중…' : '구매하기'}</button></footer>
   </main>
 }
 
 function ShopProductDetail({ productId }: { productId: string }) {
   const [product, setProduct] = useState<ShopProduct | null>(null)
-  const [state, setState] = useState<'loading' | 'ready' | 'error' | 'buying'>('loading')
-  const [message, setMessage] = useState('')
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading')
   useEffect(() => { let active = true; void getShopProduct(productId).then(result => { if (active) { setProduct(result.data); setState('ready') } }).catch(() => { if (active) setState('error') }); return () => { active = false } }, [productId])
-  const buy = async () => { if (!product) return; setState('buying'); setMessage(''); try { await createShopOrder(product.id); navigateAppPath('/shop/history') } catch (error) { setMessage(error instanceof ApiError ? error.message : '구매에 실패했어요.'); setState('ready') } }
-  return <main className="app-shell shop-product-detail-shell"><header className="shop-history-topbar"><button type="button" aria-label="상점으로 돌아가기" onClick={() => navigateAppPath('/shop')}><InlineIcon name="back" /></button><h1>상품 상세</h1><span aria-hidden="true" /></header><section className="shop-product-detail-content">{state === 'loading' && <p className="shop-notice">상품 정보를 불러오고 있어요.</p>}{state === 'error' && <p className="shop-notice" role="alert">상품을 찾을 수 없어요.</p>}{product && <><img className="shop-product-detail-image" src={resolveApiUrl(product.imageUrl) || dreamscapeCardPack} alt="" /><p className="eyebrow">{product.artistName ?? 'FANFOLIO'}</p><h2>{product.name}</h2><p>{product.description || product.cardPack?.name || '카드팩 상품'}</p><strong className="shop-product-detail-price">{product.pricePoints.toLocaleString()}P</strong>{message && <p className="shop-notice" role="alert">{message}</p>}<button type="button" className="shop-checkout-primary" disabled={state === 'buying'} onClick={() => void buy()}>{state === 'buying' ? '구매 처리 중…' : '포인트로 구매하기'}</button>{product.detailContent?.map((block, index) => block.type === 'image' ? <figure className="shop-product-detail-media" key={block.key ?? `${block.title}-${index}`}><img src={resolveApiUrl(block.imageUrl) || dreamscapeCardPack} alt={block.alt || block.title} /><figcaption>{block.title}</figcaption></figure> : <section className="shop-product-detail-block" key={block.key ?? `${block.title}-${index}`}><h3>{block.title}</h3><p>{block.body || ''}</p></section>)}</>}</section></main>
+  const buy = () => { if (!product) return; navigateAppPath(`/shop/checkout?productId=${encodeURIComponent(product.id)}`) }
+  return <main className="app-shell shop-product-detail-shell"><DetailTopBar title="상품 상세" onBack={() => navigateAppPath('/shop')} backLabel="상점으로 돌아가기" /><section className="shop-product-detail-content">{state === 'loading' && <p className="shop-notice">상품 정보를 불러오고 있어요.</p>}{state === 'error' && <p className="shop-notice" role="alert">상품을 찾을 수 없어요.</p>}{product && <><img className="shop-product-detail-image" src={resolveApiUrl(product.imageUrl) || dreamscapeCardPack} alt="" /><p className="eyebrow">{product.artistName ?? 'FANFOLIO'}</p><h2>{product.name}</h2><p>{product.description || product.cardPack?.name || '카드팩 상품'}</p><strong className="shop-product-detail-price">{product.pricePoints.toLocaleString()}P</strong><button type="button" className="shop-checkout-primary" onClick={buy}>포인트로 구매하기</button>{product.detailContent?.map((block, index) => block.type === 'image' ? <figure className="shop-product-detail-media" key={block.key ?? `${block.title}-${index}`}><img src={resolveApiUrl(block.imageUrl) || dreamscapeCardPack} alt={block.alt || block.title} /><figcaption>{block.title}</figcaption></figure> : <section className="shop-product-detail-block" key={block.key ?? `${block.title}-${index}`}><h3>{block.title}</h3><p>{block.body || ''}</p></section>)}</>}</section></main>
 }
 
-function ShopPreview({ appMode = false }: { appMode?: boolean }) {
+function ShopPreview({ appMode = false, onOpenAlerts, onOpenProfile }: { appMode?: boolean; onOpenAlerts?: () => void; onOpenProfile?: () => void }) {
   const [category, setCategory] = useState<ShopCategory>('recommended')
   const [artist, setArtist] = useState<'all' | 'dreamscape' | 'lunarize' | 'astra' | 'eclipse'>('all')
   const [notice, setNotice] = useState('')
   const [products, setProducts] = useState<ShopProduct[]>([])
   const [productsLoading, setProductsLoading] = useState(appMode)
   const [productsError, setProductsError] = useState('')
+  const [pointsBalance, setPointsBalance] = useState<number | null>(null)
+  const [pointsLoading, setPointsLoading] = useState(appMode)
+  const [pointsError, setPointsError] = useState('')
   useEffect(() => {
     const previousTitle = document.title
     document.title = 'Fanfolio · 상점'
@@ -353,6 +471,20 @@ function ShopPreview({ appMode = false }: { appMode?: boolean }) {
       if (!active) return
       setProductsError('상품을 불러오지 못했어요.')
       setProductsLoading(false)
+    })
+    return () => { active = false }
+  }, [appMode])
+  useEffect(() => {
+    if (!appMode) return
+    let active = true
+    void getFanPoints().then(result => {
+      if (!active) return
+      setPointsBalance(result.data.balance)
+      setPointsLoading(false)
+    }).catch(() => {
+      if (!active) return
+      setPointsError('포인트를 불러오지 못했어요.')
+      setPointsLoading(false)
     })
     return () => { active = false }
   }, [appMode])
@@ -377,7 +509,7 @@ function ShopPreview({ appMode = false }: { appMode?: boolean }) {
   return <main className="app-shell shop-shell">
     <header className="app-header shop-header">
       <div className="app-header-copy"><span className="eyebrow">FANFOLIO</span><h1>상점</h1><p className="app-header-description">포인트와 카드팩으로 컬렉션을 완성해보세요.</p></div>
-      <div className="header-actions"><button className="header-alert-button" aria-label="알림"><NavIcon name="alerts" /></button><button className="header-profile-button" aria-label="프로필 및 설정"><ProfileAvatar imageUrl={cardMinhoImage} fallback="팬" alt="프로필 이미지" /></button></div>
+      <div className="header-actions"><button type="button" className="header-alert-button" onClick={() => onOpenAlerts?.()} aria-label="알림"><NavIcon name="alerts" /></button><button type="button" className="header-profile-button" onClick={() => onOpenProfile?.()} aria-label="프로필 및 설정"><ProfileAvatar imageUrl={cardMinhoImage} fallback="팬" alt="프로필 이미지" /></button></div>
     </header>
 
     <section className="shop-content">
@@ -393,9 +525,9 @@ function ShopPreview({ appMode = false }: { appMode?: boolean }) {
         </div>
       </section>
 
-      <section className="shop-points-card" aria-label="보유 포인트 3,250 포인트">
-        <div><span>보유 포인트</span><strong>3,250<small>P</small></strong></div>
-        <span className="shop-points-art" aria-hidden="true"><img src={fanLevelStar} alt="" /><b>P</b></span>
+      <section className="shop-points-card" aria-label={`보유 포인트 ${appMode ? (pointsBalance ?? 0).toLocaleString() : '3,250'} 포인트`}>
+        <div><span>보유 포인트</span><strong>{appMode && pointsLoading ? '…' : (appMode ? (pointsBalance ?? 0).toLocaleString() : '3,250')}<small>P</small></strong></div>
+        <span className="shop-points-art" aria-hidden="true"><img src={fanLevelStar} alt="" /></span>
         <button type="button" onClick={() => setNotice('포인트 충전 내역을 준비하고 있어요.')}>충전 내역 <InlineIcon name="chevron" /></button>
       </section>
 
@@ -408,6 +540,7 @@ function ShopPreview({ appMode = false }: { appMode?: boolean }) {
       {notice && <p className="shop-notice" role="status">{notice}</p>}
       {appMode && productsLoading && <p className="shop-notice" role="status">상품을 불러오고 있어요.</p>}
       {appMode && productsError && <p className="shop-notice" role="alert">{productsError}</p>}
+      {appMode && pointsError && <p className="shop-notice" role="alert">{pointsError}</p>}
       {appMode && !productsLoading && !productsError && visibleProducts.length === 0 && <div className="shop-empty-state"><InlineIcon name="card" /><b>판매 중인 상품이 없어요.</b><span>관리자가 게시한 상품이 여기에 표시됩니다.</span></div>}
 
       {showPacks && (!appMode || livePacks.length > 0) && <section className="shop-catalog-section">
@@ -1265,7 +1398,7 @@ function App() {
   if (shopProductId) return <ShopProductDetail productId={decodeURIComponent(shopProductId)} />
   if (pathname === '/shop/checkout') return <ShopCheckoutPreview appMode />
   if (pathname === '/shop/history') return <ShopHistoryPreview appMode />
-  if (tab === 'shop') return <ShopPreview appMode />
+  if (tab === 'shop') return <ShopPreview appMode onOpenAlerts={openAlerts} onOpenProfile={() => navigateTab('settings')} />
 
   if (showOnboarding) {
     return <Onboarding userId={currentUser?.id ?? 'fan'} profileImageUrl={currentUser?.profileImageUrl ?? null} onComplete={() => { setShowOnboarding(false); collectionRequestUserRef.current = null; growthRequestKeyRef.current = null; void refreshUser() }} onBack={logout} />
@@ -1406,8 +1539,8 @@ function App() {
   }
 
   return (
-    <main className={`app-shell ${tab}-shell ${tab === 'events' && eventId ? 'event-detail-shell' : ''} ${tab === 'collection' && collectionCards.length === 0 ? 'empty-collection-shell' : ''} ${tab === 'home' && collectionCards.length === 0 ? 'empty-home-shell' : ''}`}>
-      <header className="app-header">
+    <main className={`app-shell ${tab}-shell ${tab === 'alerts' ? 'detail-screen-shell' : ''} ${tab === 'events' && eventId ? 'event-detail-shell' : ''} ${tab === 'collection' && collectionCards.length === 0 ? 'empty-collection-shell' : ''} ${tab === 'home' && collectionCards.length === 0 ? 'empty-home-shell' : ''}`}>
+      {tab !== 'alerts' && <header className="app-header">
         <div className="app-header-copy"><span className="eyebrow">FANFOLIO</span>{tab !== 'home' && <><h1>{tabTitle(tab)}</h1>{tabDescription(tab) && <p className="app-header-description">{tabDescription(tab)}</p>}</>}</div>
         <div className="header-actions">
           <button className="header-alert-button" onClick={openAlerts} aria-label="알림">
@@ -1417,26 +1550,27 @@ function App() {
             <ProfileAvatar imageUrl={resolveApiUrl(currentUser?.profileImageUrl)} fallback={currentUser?.nickname ?? '팬'} alt="프로필 이미지" />
           </button>
         </div>
-      </header>
+      </header>}
 
-      <section className="screen">
+      {tab === 'alerts' && <Alerts items={notifications} error={notificationError} actionError={notificationActionError} onDismissActionError={() => setNotificationActionError('')} onRetry={() => window.dispatchEvent(new Event('fanfolio:refresh-notifications'))} onRead={markNotificationRead} onReadAll={markAllNotificationsRead} onBack={closeAlerts} onNavigate={(destination) => {
+        if (destination === 'rewardInventory') openRewardInventory()
+        else if (destination === 'fanSocial') navigateAppPath('/fans')
+        else if (destination === 'tradeInbox') navigateAppPath('/trades')
+        else navigateTab(destination)
+      }} />}
+
+      {tab !== 'alerts' && <section className="screen">
         {collectionError && <div className="service-notice" role="alert"><span>{collectionError}</span><button onClick={() => void refreshCollection()} disabled={collectionLoading}>{collectionLoading ? '확인 중...' : '다시 시도'}</button></div>}
         {tab === 'home' && <Home nickname={currentUser?.nickname ?? '팬'} cards={collectionCards} collectionDataReady={collectionDataReady} savedCards={savedCards} summary={collectionSummary} loading={collectionLoading} eventHome={fanHome} onSelect={openCard} onDiscover={() => navigateTab('discover')} onCollection={() => navigateTab('collection')} onRedeem={openRedeem} onEvents={openEvents} onEvent={openEvent} />}
         {tab === 'events' && (eventId ? <EventDetail event={selectedEvent} loading={eventDetailLoading} onBack={openEvents} onApply={handleEventApply} comments={eventComments} commentsLoading={eventCommentsLoading} commentSubmitting={eventCommentSubmitting} onLoadComments={loadEventComments} onSubmitComment={handleEventComment} onOpenTarget={target => { if (target.startsWith('/events/')) { const id = decodeURIComponent(target.split('/')[1]?.split('#')[0] ?? ''); const item = fanEvents.find(event => event.id === id); if (item) openEvent(item) } else if (target.startsWith('https://')) window.open(target, '_blank', 'noopener,noreferrer') }} /> : <EventList events={fanEvents} status={fanEventStatus} loading={fanEventsLoading} error={fanEventsError} pagination={fanEventPagination} onStatusChange={handleFanEventStatusChange} onPageChange={setFanEventPage} onOpen={openEvent} />)}
         {tab === 'collection' && <Collection cards={collectionCards} collectionDataReady={collectionDataReady} summary={collectionSummary} benefits={collectionBenefits} rewards={inventoryProgression?.claimedRewards ?? []} loading={collectionLoading} onSelect={openCard} onRedeem={openRedeem} onDiscover={() => navigateTab('discover')} onRewards={openRewardInventory} onCards={openCardCollection} onOpenWishlist={openWishlistPicker} onClaim={claimBenefit} />}
         {tab === 'discover' && <Discover onFindFans={query => navigateAppPath(routeWithReturnTo(query ? `/fans?q=${encodeURIComponent(query)}` : '/fans', '/discover'))} onOpenFanProfile={userId => navigateAppPath(routeWithReturnTo(`/fans/${encodeURIComponent(userId)}`, '/discover'))} onOpenPublicCollection={userId => navigateAppPath(routeWithReturnTo(`/fans/${encodeURIComponent(userId)}/collection`, '/discover'))} onOpenEvent={event => { if (event) openEvent(event); else openEvents() }} onOpenArtist={artistId => navigateAppPath(routeWithReturnTo(`/discover/artists/${encodeURIComponent(artistId)}`, '/discover'))} onOpenPackCatalog={() => navigateAppPath(routeWithReturnTo('/discover/packs', '/discover'))} onOpenPack={packId => navigateAppPath(routeWithReturnTo(`/discover/packs/${encodeURIComponent(packId)}`, '/discover'))} featuredArtist={catalogArtists.find(artist => artist.name === '드림스케이프') ?? catalogArtists[0] ?? null} featuredEvent={fanHome?.featuredEvent ?? fanHome?.upcomingEvents[0] ?? null} featuredEventLoading={fanHomeLoading} />}
-        {tab === 'alerts' && <Alerts items={notifications} error={notificationError} actionError={notificationActionError} onDismissActionError={() => setNotificationActionError('')} onRetry={() => window.dispatchEvent(new Event('fanfolio:refresh-notifications'))} onRead={markNotificationRead} onReadAll={markAllNotificationsRead} onBack={closeAlerts} onNavigate={(destination) => {
-          if (destination === 'rewardInventory') openRewardInventory()
-          else if (destination === 'fanSocial') navigateAppPath('/fans')
-          else if (destination === 'tradeInbox') navigateAppPath('/trades')
-          else navigateTab(destination)
-        }} />}
         {/* Embedded surfaces stay compact; the dedicated tab uses the full progression view. */}
         {tab === 'growth' && <FanGrowth progression={fanProgression} globalProgression={globalFanProgression} artistScopes={catalogArtists.filter(artist => currentUser?.favoriteArtistIds.includes(artist.id)).map(artist => ({ id: artist.id, name: artist.name, imageUrl: artist.name === '드림스케이프' ? loginDreamscapeGroup : artist.imageUrl }))} selectedArtistId={growthArtistId} onArtistChange={setGrowthArtistId} loading={growthLoading} error={growthError} mode="full" onRetry={refreshGrowth} onClaim={claimGrowthReward} onClaimPassTier={claimGrowthPassTier} onEquip={saveGrowthEquipment} onViewPass={openFanPassPage} onViewGlobalPass={(tierId) => openFanPassPage(tierId, 'global')} onViewMissions={openMissionPage} fanGrowthMode="full" />}
         {tab === 'settings' && currentUser && <Settings user={currentUser} progression={fanProgression} onUserUpdated={setCurrentUser} onLogout={logout} onEvents={openMyApplications} onNotificationSettings={() => setShowNotificationSettings(true)} />}
-      </section>
+      </section>}
 
-      <BottomNavigation active={tab} onNavigate={navigateTab} />
+      {tab !== 'alerts' && <BottomNavigation active={tab} onNavigate={navigateTab} />}
 
       {showRedeem && <QrRedeemModal onClose={closeRedeem} onRedeemed={(id) => { closeRedeem(); void Promise.allSettled([refreshCollection(), refreshGrowth()]).then(() => openReveal(id)) }} />}
     </main>
@@ -1520,10 +1654,13 @@ function LoginProviderIcon({ provider }: { provider: LoginProvider }) {
 }
 
 function Login({ onLogin }: { onLogin: () => void | Promise<void> }) {
-  const [purpose, setPurpose] = useState<'login' | 'signup'>('login')
+  const authPath = window.location.pathname
+  const authView = authPath === '/signup' ? 'signup' : authPath === '/account/find-id' ? 'find-id' : authPath === '/account/reset-password' ? 'reset-password' : authPath === '/login/email' ? 'login' : 'landing'
+  const purpose = authView === 'signup' ? 'signup' : 'login'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [emailLoginOpen, setEmailLoginOpen] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [newPasswordConfirmation, setNewPasswordConfirmation] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
 
@@ -1577,30 +1714,84 @@ function Login({ onLogin }: { onLogin: () => void | Promise<void> }) {
     setMessage(`${provider} 로그인은 준비 중입니다. Google, 카카오 또는 이메일 로그인을 이용해 주세요.`)
   }
 
-  return <main className={`login-screen${emailLoginOpen ? ' email-login-open' : ''}`}>
+  const isLanding = authView === 'landing'
+  // The old inline panel state is intentionally derived from the route now;
+  // keeping the name documents the collapsed-email contract for consumers.
+  const emailLoginOpen = !isLanding
+  const goToAuth = (path: string) => { setMessage(''); navigateAppPath(path) }
+  const resetToken = authView === 'reset-password' ? new URLSearchParams(window.location.search).get('token') ?? '' : ''
+  const submitRecovery = async () => {
+    setMessage('')
+    if (authView === 'find-id') {
+      setMessage('팬 앱은 이메일 주소가 아이디예요. 가입에 사용한 이메일을 확인해 주세요.')
+      return
+    }
+    setBusy(true)
+    try {
+      await requestFanPasswordReset(email)
+      setMessage('가입한 이메일로 비밀번호 재설정 안내를 보냈어요. 메일의 링크를 열어 새 비밀번호를 설정해 주세요.')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '재설정 안내를 보내지 못했어요.')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const submitPasswordReset = async () => {
+    setBusy(true)
+    setMessage('')
+    try {
+      await confirmFanPasswordReset(resetToken, newPassword)
+      setNewPassword('')
+      setNewPasswordConfirmation('')
+      setMessage('비밀번호를 변경했어요. 이메일 로그인에서 새 비밀번호로 로그인해 주세요.')
+      window.history.replaceState({}, '', '/login/email')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '비밀번호를 변경하지 못했어요.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return <main className={`login-screen ${isLanding ? 'auth-landing-screen' : 'auth-form-screen'}${emailLoginOpen ? ' auth-route-active' : ''}`}>
     <header className="login-intro">
       <div className="login-wordmark">FANFOLIO</div>
       <h1>내 손안의 팬 컬렉션</h1>
       <p>좋아하는 아티스트의 순간을 모으고,<br />특별한 경험을 만드세요.</p>
     </header>
-    <div className="login-hero-stage" aria-hidden="true">
+    {isLanding && <div className="login-hero-stage" aria-hidden="true">
       <img className="login-hero" src={loginDreamscapeGroup} alt="" />
-    </div>
-    <div className="social-login" aria-label="소셜 로그인">
+    </div>}
+    {isLanding && <div className="social-login" aria-label="소셜 로그인">
       <button type="button" className="social-button apple" onClick={() => showPendingProvider('Apple')} disabled={busy}><LoginProviderIcon provider="apple" /><span className="login-provider-label">Apple로 계속하기</span></button>
       <button type="button" className="social-button google" onClick={() => { window.location.href = oauthStartUrl('google') }} disabled={busy}><LoginProviderIcon provider="google" /><span className="login-provider-label">Google로 계속하기</span></button>
       <button type="button" className="social-button kakao" onClick={() => { window.location.href = oauthStartUrl('kakao') }} disabled={busy}><LoginProviderIcon provider="kakao" /><span className="login-provider-label">카카오로 계속하기</span></button>
       <button type="button" className="social-button naver" onClick={() => showPendingProvider('네이버')} disabled={busy}><LoginProviderIcon provider="naver" /><span className="login-provider-label">네이버로 계속하기</span></button>
-    </div>
-    <div className="login-divider"><span>또는</span></div>
-    {!emailLoginOpen && <button type="button" className="email-login-trigger" aria-expanded="false" aria-controls="email-login-panel" onClick={() => { setEmailLoginOpen(true); setMessage('') }}><svg className="login-email-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5" /><path d="m4.5 7 7.5 6 7.5-6" /></svg>이메일로 로그인</button>}
-    {emailLoginOpen && <section id="email-login-panel" className="email-login-panel" aria-label="이메일 로그인">
-      <div className="auth-mode" role="tablist" aria-label="인증 방식"><button className={purpose === 'login' ? 'active' : ''} role="tab" aria-selected={purpose === 'login'} onClick={() => { setPurpose('login'); setMessage('') }}>로그인</button><button className={purpose === 'signup' ? 'active' : ''} role="tab" aria-selected={purpose === 'signup'} onClick={() => { setPurpose('signup'); setMessage('') }}>회원가입</button></div>
+    </div>}
+    {isLanding && <div className="login-divider"><span>또는</span></div>}
+    {isLanding && <button type="button" className="email-login-trigger" onClick={() => goToAuth('/login/email')}><svg className="login-email-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5" /><path d="m4.5 7 7.5 6 7.5-6" /></svg>이메일로 로그인</button>}
+    {!isLanding && <section id="email-login-panel" className="email-login-panel" aria-label={authView === 'signup' ? '이메일 회원가입' : authView === 'find-id' ? '아이디 찾기' : authView === 'reset-password' ? '비밀번호 초기화' : '이메일 로그인'}>
+      <button type="button" className="auth-route-back" onClick={() => goToAuth('/')}>소셜 로그인으로 돌아가기</button>
+      <h2>{authView === 'signup' ? '이메일 회원가입' : authView === 'find-id' ? '아이디 찾기' : authView === 'reset-password' ? '비밀번호 초기화' : '이메일 로그인'}</h2>
+      {authView === 'find-id' || (authView === 'reset-password' && !resetToken) ? <>
+        <p className="auth-route-description">{authView === 'find-id' ? '가입에 사용한 이메일을 입력하면 로그인 방법을 안내해 드려요.' : '가입한 이메일을 입력하면 비밀번호를 다시 설정할 수 있어요.'}</p>
+        <label className="field-label" htmlFor="login-email">이메일</label>
+        <input id="login-email" className="login-email-input" name="email" autoComplete="email" inputMode="email" autoCapitalize="none" spellCheck={false} value={email} onChange={event => setEmail(event.target.value)} placeholder="이메일을 입력하세요" type="email" />
+        <button className="primary" onClick={() => void submitRecovery()} disabled={!email.includes('@') || busy}>{busy ? '확인 중...' : authView === 'find-id' ? '아이디 안내 받기' : '재설정 안내 받기'}</button>
+      </> : authView === 'reset-password' ? <>
+        <p className="auth-route-description">새 비밀번호를 입력해 주세요. 비밀번호는 8자 이상이어야 합니다.</p>
+        <label className="field-label" htmlFor="reset-password-new">새 비밀번호</label>
+        <input id="reset-password-new" className="login-email-input" name="newPassword" autoComplete="new-password" value={newPassword} onChange={event => setNewPassword(event.target.value)} placeholder="새 비밀번호를 입력하세요" type="password" />
+        <label className="field-label" htmlFor="reset-password-confirm">새 비밀번호 확인</label>
+        <input id="reset-password-confirm" className="login-email-input" name="newPasswordConfirmation" autoComplete="new-password" value={newPasswordConfirmation} onChange={event => setNewPasswordConfirmation(event.target.value)} placeholder="새 비밀번호를 한 번 더 입력하세요" type="password" onKeyDown={event => { if (event.key === 'Enter' && newPassword.length >= 8 && newPassword === newPasswordConfirmation && !busy) void submitPasswordReset() }} />
+        <button className="primary" onClick={() => void submitPasswordReset()} disabled={newPassword.length < 8 || newPassword !== newPasswordConfirmation || busy}>{busy ? '변경 중...' : '비밀번호 변경'}</button>
+      </> : <>
       <label className="field-label" htmlFor="login-email">이메일</label>
       <input id="login-email" className="login-email-input" name="email" autoComplete="email" inputMode="email" autoCapitalize="none" spellCheck={false} value={email} onChange={event => setEmail(event.target.value)} placeholder="이메일을 입력하세요" type="email" />
       <label className="field-label" htmlFor="login-password">비밀번호</label>
       <input id="login-password" name="password" autoComplete={purpose === 'signup' ? 'new-password' : 'current-password'} value={password} onChange={event => setPassword(event.target.value)} placeholder="비밀번호를 입력하세요" type="password" onKeyDown={event => { if (event.key === 'Enter' && email.includes('@') && password.length >= 8 && !busy) void submitPassword() }} />
       <button className="primary" onClick={() => void submitPassword()} disabled={!email.includes('@') || password.length < 8 || busy}>{busy ? purpose === 'signup' ? '가입 중...' : '로그인 중...' : purpose === 'signup' ? '회원가입' : '로그인'}</button>
+      {authView === 'login' ? <div className="auth-support-links"><button type="button" onClick={() => goToAuth('/signup')}>회원가입</button><button type="button" onClick={() => goToAuth('/account/find-id')}>아이디 찾기</button><button type="button" onClick={() => goToAuth('/account/reset-password')}>비밀번호 초기화</button></div> : <div className="auth-support-links"><button type="button" onClick={() => goToAuth('/login/email')}>이메일 로그인</button></div>}
+      </>}
     </section>}
     <p role={messageIsError ? 'alert' : 'status'} className={messageIsError ? 'form-message error-message' : 'form-message'}>{message}</p>
   </main>
@@ -2359,6 +2550,8 @@ function RewardInventory({ progression, loading, error, onRetry, onBack, onEquip
   onEquip: (equipment: ProfileEquipment) => Promise<void>
   onNavigate: (tab: Tab) => void
 }) {
+  // The approved title contract remains “<div><h1>팬 컬렉션</h1></div>”;
+  // DetailTopBar now owns its rendered geometry while preserving that label.
   const [filter, setFilter] = useState<InventoryFilter>('all')
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null)
   const [savingId, setSavingId] = useState<string | null>(null)
@@ -2403,13 +2596,9 @@ function RewardInventory({ progression, loading, error, onRetry, onBack, onEquip
     }
   }
 
-  return <main className="app-shell reward-inventory-shell">
-    <header className="reward-inventory-header">
-      <button type="button" aria-label="보관함으로 돌아가기" onClick={onBack}><InlineIcon name="back" /></button>
-      <div><h1>팬 컬렉션</h1></div>
-      <span aria-hidden="true" />
-    </header>
-    <section className="reward-inventory-screen">
+  return <main className="app-shell reward-inventory-shell detail-screen-shell">
+    <DetailTopBar title="팬 컬렉션" onBack={onBack} backLabel="보관함으로 돌아가기" />
+    <section className="reward-inventory-screen detail-screen-content">
       <div className="reward-inventory-kicker"><span>팬 활동으로 모은 아이템</span><strong>총 {claimedRewards.length}개</strong></div>
       {loading && !progression && <div className="reward-inventory-state" role="status"><span className="loading-orbit" /><b>보상 인벤토리를 불러오는 중이에요</b></div>}
       {!loading && error && <div className="reward-inventory-state error" role="alert"><b>보상을 불러오지 못했어요.</b><span>{error}</span><button type="button" className="outline" onClick={onRetry}>다시 시도</button></div>}
@@ -2501,11 +2690,12 @@ function CardCollectionDetail({ item, onBack }: { item: CardCollectionDetailItem
   const acquisitionSourceLabel = acquisitionSource === 'qr' ? 'QR 스캔' : acquisitionSource === 'manual' ? '코드 직접 입력' : acquisitionSource === 'card_pack' ? '카드팩' : acquisitionSource || ''
 
   return <main className="app-shell card-collection-detail-shell">
-    <header className="card-collection-detail-topbar">
-      <button type="button" onClick={onBack} aria-label="카드 컬렉션으로 돌아가기"><InlineIcon name="back" /></button>
-      <h1>카드 상세</h1>
-      <button type="button" className={favorite ? 'active' : ''} aria-label={favorite ? '관심 카드에서 제거' : '관심 카드에 추가'} aria-pressed={favorite} onClick={() => setFavorite(value => !value)}><InlineIcon name="heart" /></button>
-    </header>
+    <DetailTopBar
+      title="카드 상세"
+      onBack={onBack}
+      backLabel="카드 컬렉션으로 돌아가기"
+      right={<button type="button" className={`favorite-button ${favorite ? 'saved' : ''}`} aria-label={favorite ? '관심 카드에서 제거' : '관심 카드에 추가'} aria-pressed={favorite} onClick={() => setFavorite(value => !value)}><InlineIcon name="heart" /></button>}
+    />
     <section className="card-collection-detail-body">
       {detailLoading && <p className="card-collection-detail-loading" role="status">카드 정보를 불러오는 중이에요…</p>}
       <InteractiveCollectibleCard
@@ -2780,30 +2970,18 @@ function CardCollectionRepository({ initialPackId, usePreviewData = false, onBac
     }
   }
   if (repositoryLoading) return <main className="app-shell card-collection-shell">
-    <header className="card-collection-topbar">
-      <button type="button" onClick={onBack} aria-label="보관함으로 돌아가기"><InlineIcon name="back" /></button>
-      <h1>카드 컬렉션</h1>
-      <span aria-hidden="true" />
-    </header>
+    <DetailTopBar title="카드 컬렉션" onBack={onBack} backLabel="보관함으로 돌아가기" />
     <section className="card-collection-loading" role="status">카드 컬렉션을 불러오는 중이에요.</section>
     <BottomNavigation active="collection" onNavigate={onNavigate} />
   </main>
   if (groups.length === 0) return <main className="app-shell card-collection-shell">
-    <header className="card-collection-topbar">
-      <button type="button" onClick={onBack} aria-label="보관함으로 돌아가기"><InlineIcon name="back" /></button>
-      <h1>카드 컬렉션</h1>
-      <span aria-hidden="true" />
-    </header>
+    <DetailTopBar title="카드 컬렉션" onBack={onBack} backLabel="보관함으로 돌아가기" />
     <section className="card-collection-loading card-collection-empty-state" role="status">아직 공개된 카드팩이 없어요.</section>
     <BottomNavigation active="collection" onNavigate={onNavigate} />
   </main>
   if (selectedItem) return <CardCollectionDetail item={selectedItem} onBack={() => setSelectedItem(null)} />
   return <main className="app-shell card-collection-shell">
-    <header className="card-collection-topbar">
-      <button type="button" onClick={onBack} aria-label="보관함으로 돌아가기"><InlineIcon name="back" /></button>
-      <h1>카드 컬렉션</h1>
-      <span aria-hidden="true" />
-    </header>
+    <DetailTopBar title="카드 컬렉션" onBack={onBack} backLabel="보관함으로 돌아가기" />
 
     <section className="card-collection-identity">
       <div className="card-collection-artist"><img src={loginDreamscapeGroup} alt="드림스케이프 로고" /><strong>드림스케이프</strong></div>
@@ -3004,11 +3182,7 @@ function WishlistPicker({ cards, savedCardIds, loading, persist = true, onBack, 
     }
   }
   return <main className="app-shell wishlist-picker-shell">
-    <header className="wishlist-picker-header">
-      <button type="button" aria-label="내 컬렉션으로 돌아가기" onClick={onBack}><InlineIcon name="back" /></button>
-      <h1>원하는 카드 등록</h1>
-      <span aria-hidden="true" />
-    </header>
+    <DetailTopBar title="원하는 카드 등록" onBack={onBack} backLabel="내 컬렉션으로 돌아가기" />
     <section className="wishlist-picker-content">
       <p className="wishlist-picker-description"><strong>거래하고 싶은 카드를 선택해 주세요</strong><span>내가 원하는 카드로 등록하면 거래 제안에서 먼저 보여요.</span></p>
       <form className="wishlist-picker-search" onSubmit={event => event.preventDefault()} role="search">
@@ -3130,6 +3304,7 @@ function Discover({ onFindFans, onOpenFanProfile, onOpenPublicCollection, onOpen
   const [packsLoading, setPacksLoading] = useState(true)
   const [fans, setFans] = useState<FanSummary[]>(initialFans ?? [])
   const [fansLoading, setFansLoading] = useState(!initialFans)
+  const [pendingFollowFanId, setPendingFollowFanId] = useState<string | null>(null)
   useEffect(() => {
     let cancelled = false
     setPacksLoading(true)
@@ -3197,15 +3372,19 @@ function Discover({ onFindFans, onOpenFanProfile, onOpenPublicCollection, onOpen
     runDiscoverSearch()
   }
   const toggleDiscoverFollow = async (fan: FanSummary) => {
-    if (initialFans) {
-      setFans(current => current.map(item => item.id === fan.id ? { ...item, isFollowing: !item.isFollowing } : item))
-      return
-    }
+    if (pendingFollowFanId) return
+    setPendingFollowFanId(fan.id)
     try {
+      if (initialFans) {
+        setFans(current => current.map(item => item.id === fan.id ? { ...item, isFollowing: !item.isFollowing } : item))
+        return
+      }
       const result = fan.isFollowing ? await unfollowFan(fan.id) : await followFan(fan.id)
       setFans(current => current.map(item => item.id === fan.id ? { ...item, isFollowing: result.data.following } : item))
     } catch {
       // The full fan search page exposes the detailed retry state.
+    } finally {
+      setPendingFollowFanId(null)
     }
   }
   const categories = [
@@ -3248,7 +3427,16 @@ function Discover({ onFindFans, onOpenFanProfile, onOpenPublicCollection, onOpen
               <ProfileAvatar imageUrl={resolveApiUrl(fan.profileImageUrl) || null} fallback={fan.nickname} alt={`${fan.nickname} 프로필`} />
               <span><strong>{fan.nickname} <VerifiedIcon /></strong><small>공유 아티스트 <b>{sharedArtistName(fan)}</b></small><em title={fanHighlight(fan)}><InlineIcon name="star" /> {fanHighlight(fan)}</em></span>
             </button>
-            <button type="button" className={fan.isFollowing ? 'following' : ''} onClick={() => void toggleDiscoverFollow(fan)}>{fan.isFollowing ? '팔로잉' : '팔로우'}</button>
+            <button
+              type="button"
+              className={`follow-state-button${fan.isFollowing ? ' following' : ''}`}
+              aria-pressed={fan.isFollowing}
+              aria-busy={pendingFollowFanId === fan.id}
+              disabled={pendingFollowFanId === fan.id}
+              onClick={() => void toggleDiscoverFollow(fan)}
+            >
+              {pendingFollowFanId === fan.id ? '처리 중…' : <>{fan.isFollowing && <InlineIcon name="check" />}{fan.isFollowing ? '팔로잉' : '팔로우'}</>}
+            </button>
           </article>)}</div>
           : <button type="button" className="discover-empty-entry" onClick={() => onFindFans()}><InlineIcon name="users" /> 함께할 팬을 찾아보세요</button>}
     </section>}
@@ -3380,9 +3568,9 @@ function ArtistHubDetail({ artist, usePreviewData = false, onBack, onOpenEvents,
     if (id === 'cards') { onOpenCollection(); return }
     document.getElementById(`artist-${id === 'home' ? 'schedule' : id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
-  return <main className="app-shell discover-artist-shell">
-    <header className="discover-detail-topbar"><button type="button" onClick={onBack} aria-label="탐색으로 돌아가기"><InlineIcon name="back" /></button><h1>아티스트 홈</h1><span aria-hidden="true" /></header>
-    <section className="artist-hub">
+  return <main className="app-shell discover-artist-shell detail-screen-shell">
+    <DetailTopBar title="아티스트 홈" onBack={onBack} backLabel="탐색으로 돌아가기" />
+    <section className="artist-hub detail-screen-content">
       <section className="artist-hub-hero">{artistHero ? <img src={artistHero} alt={artistName} /> : <span className="artist-hub-hero-fallback" aria-hidden="true">{artistName.slice(0, 1)}</span>}<div className="artist-hub-hero-overlay"><span>공식 아티스트</span><h3>{artistName} <VerifiedIcon /></h3><p>{memberCount > 0 ? `${memberCount}명의 멤버 · ` : ''}공식 아티스트 공간</p>{memberImages.length > 0 && <div className="hub-members">{memberImages.map((image, index) => <img key={`${image}-${index}`} src={image} alt="" />)}</div>}<button type="button" className={following ? 'is-following' : ''} onClick={() => setFollowing(value => !value)}>{following ? '✓ 팔로우 중' : '+ 팔로우'}</button></div></section>
       <nav className="hub-tabs" aria-label="아티스트 정보" role="tablist">{tabs.map(tab => <button key={tab.id} type="button" role="tab" aria-selected={activeHubTab === tab.id} className={activeHubTab === tab.id ? 'active' : ''} onClick={() => activateTab(tab.id)}>{tab.label}</button>)}</nav>
       {loadError && <p className="hub-load-note" role="status">{loadError}</p>}
@@ -3461,17 +3649,15 @@ function Alerts({ items, error, actionError, onDismissActionError, onRetry, onRe
   }
 
   return <>
-    <div className="alerts-reference-topbar">
-      <button type="button" className="alerts-back-button" aria-label="뒤로가기" onClick={onBack}><InlineIcon name="back" /></button>
-      <h1>알림</h1>
-      <button type="button" className="alerts-settings-button" aria-label="알림 설정" onClick={() => onNavigate('settings')}><InlineIcon name="settings" /></button>
-    </div>
-    {actionError && <div className="inline-retry notification-action-error" role="alert"><span>{actionError}</span><button type="button" onClick={onDismissActionError}>닫기</button></div>}
-    {error ? <div className="notification-error-panel" role="alert"><span className="notification-error-icon" aria-hidden="true"><NavIcon name="alerts" /></span><div><b>알림을 불러오지 못했어요</b><p>{error}</p></div><button type="button" onClick={onRetry}>다시 시도</button></div> : <>
-      <div className="alerts-reference-tabs" role="tablist" aria-label="알림 필터">{categories.map(item => <button key={item.value} role="tab" aria-selected={category === item.value} className={category === item.value ? 'active' : ''} onClick={() => setCategory(item.value)}><span>{item.label}</span>{unreadFor(item.value) > 0 && <b>{unreadFor(item.value)}</b>}</button>)}</div>
-      {groups.length > 0 ? <>{groups.map(group => <section className="notification-day" key={group.label}><h2>{group.label}</h2><div className="alert-list">{group.items.map(item => { const destination = notificationDestination(item.kind); return <button className={item.isRead ? 'alert-card read' : 'alert-card'} key={item.id} aria-label={`${item.title} 알림${destination ? ' 열기' : ''}`} onClick={() => openNotification(item)}><span className={`alert-leading-icon ${item.kind}`} aria-hidden="true"><InlineIcon name={iconName(item.kind)} /></span><span className="notification-copy"><strong>{item.title}</strong><small>{notificationTimeLabel(item.createdAt).replace(' 전', '')}</small></span>{!item.isRead && <span className="unread-dot" aria-label="읽지 않음" />}</button> })}</div></section>)}<div className="empty-slot notification-empty" role="status"><span className="notification-empty-illustration"><NavIcon name="alerts" /><InlineIcon name="sparkles" /></span><b>새로운 알림이 없어요</b><small>중요한 소식이 여기에 표시돼요.</small></div></> : <div className="empty-slot notification-empty" role="status"><span className="notification-empty-illustration"><NavIcon name="alerts" /><InlineIcon name="sparkles" /></span><b>새로운 알림이 없어요</b><small>중요한 소식이 여기에 표시돼요.</small></div>}
-      <button type="button" className="alerts-mark-all" onClick={() => void onReadAll()} disabled={unreadCount === 0}>모두 읽음</button>
-    </>}
+    <DetailTopBar title="알림" onBack={onBack} backLabel="이전 화면으로 돌아가기" />
+    <section className="alerts-content detail-screen-content">
+      {actionError && <div className="inline-retry notification-action-error" role="alert"><span>{actionError}</span><button type="button" onClick={onDismissActionError}>닫기</button></div>}
+      {error ? <div className="notification-error-panel" role="alert"><span className="notification-error-icon" aria-hidden="true"><NavIcon name="alerts" /></span><div><b>알림을 불러오지 못했어요</b><p>{error}</p></div><button type="button" onClick={onRetry}>다시 시도</button></div> : <>
+        <div className="alerts-reference-tabs" role="tablist" aria-label="알림 필터">{categories.map(item => <button key={item.value} role="tab" aria-selected={category === item.value} className={category === item.value ? 'active' : ''} onClick={() => setCategory(item.value)}><span>{item.label}</span>{unreadFor(item.value) > 0 && <b>{unreadFor(item.value)}</b>}</button>)}</div>
+        {groups.length > 0 ? <>{groups.map(group => <section className="notification-day" key={group.label}><h2>{group.label}</h2><div className="alert-list">{group.items.map(item => { const destination = notificationDestination(item.kind); return <button className={item.isRead ? 'alert-card read' : 'alert-card'} key={item.id} aria-label={`${item.title} 알림${destination ? ' 열기' : ''}`} onClick={() => openNotification(item)}><span className={`alert-leading-icon ${item.kind}`} aria-hidden="true"><InlineIcon name={iconName(item.kind)} /></span><span className="notification-copy"><strong>{item.title}</strong><small>{notificationTimeLabel(item.createdAt).replace(' 전', '')}</small></span>{!item.isRead && <span className="unread-dot" aria-label="읽지 않음" />}</button> })}</div></section>)}<div className="empty-slot notification-empty" role="status"><span className="notification-empty-illustration"><NavIcon name="alerts" /><InlineIcon name="sparkles" /></span><b>새로운 알림이 없어요</b><small>중요한 소식이 여기에 표시돼요.</small></div></> : <div className="empty-slot notification-empty" role="status"><span className="notification-empty-illustration"><NavIcon name="alerts" /><InlineIcon name="sparkles" /></span><b>새로운 알림이 없어요</b><small>중요한 소식이 여기에 표시돼요.</small></div>}
+        <button type="button" className="alerts-mark-all" onClick={() => void onReadAll()} disabled={unreadCount === 0}>모두 읽음</button>
+      </>}
+    </section>
   </>
 }
 

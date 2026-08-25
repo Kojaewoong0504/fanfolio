@@ -1,9 +1,15 @@
 .fan-pass-shell {
   min-height: 100vh;
-  padding: 18px 18px 108px;
+  width: min(100%, 430px);
+  margin: 0 auto;
+  padding: 0 0 108px;
   background: #fbfbff;
   color: #111a38;
 }
+
+/* Shared detail layout owns the canvas and content gutters. */
+.fan-pass-shell > .detail-topbar { width: 100%; }
+.fan-pass-content { display: grid; align-content: start; }
 
 .fan-pass-header { display: flex; align-items: center; justify-content: space-between; min-height: 44px; margin-bottom: 18px; }
 .fan-pass-header h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -.04em; }
@@ -62,10 +68,12 @@
 .fan-pass-more small { margin-top: 3px; color: #77819a; font-size: 11px; }
 .fan-pass-more > .inline-icon { color: #8b94aa; }
 .fan-pass-empty, .fan-pass-loading, .fan-pass-error { padding: 28px 20px; border: 1px solid #e8e6f2; border-radius: 18px; background: #fff; text-align: center; color: #707b95; }
+.fan-pass-empty-section{ display:grid; grid-template-columns:42px minmax(0,1fr); align-items:center; gap:12px; padding:16px; border:1px solid #e8e6f2; border-radius:18px; background:#fff; }
+.fan-pass-empty-icon { display:grid; place-items:center; width:42px; height:42px; border-radius:14px; background:#f0edff; color:#654be5; }
+.fan-pass-empty-icon .inline-icon { width:22px; height:22px; }
+.fan-pass-empty-section b { display:block; color:#202843; font-size:14px; }
+.fan-pass-empty-section p { margin:4px 0 0; color:#707b95; font-size:12px; }
+.fan-pass-empty-section small { display:block; margin-top:4px; color:#9a9db1; font-size:10px; line-height:1.4; }
 .fan-pass-error b { display: block; color: #202843; }
 .fan-pass-error p { margin: 8px 0 16px; font-size: 13px; }
 .fan-pass-error button { padding: 9px 16px; border: 0; border-radius: 10px; background: #543cf2; color: #fff; font-weight: 700; }
-
-@media (min-width: 600px) {
-  .fan-pass-shell { width: min(100%, 430px); margin: 0 auto; padding-inline: 24px; }
-}

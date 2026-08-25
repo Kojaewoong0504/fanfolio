@@ -505,6 +505,7 @@ class ShopProduct(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     detail_content: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
+    fulfillment: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     image_url: Mapped[str | None] = mapped_column(String, nullable=True)
     price_points: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
@@ -526,7 +527,10 @@ class ShopOrder(Base):
     __tablename__ = "shop_orders"
     __table_args__ = (
         CheckConstraint("payment_method IN ('points')", name="ck_shop_orders_payment_method"),
-        CheckConstraint("status IN ('completed', 'failed')", name="ck_shop_orders_status"),
+        CheckConstraint(
+            "status IN ('completed', 'failed', 'refunded')", name="ck_shop_orders_status"
+        ),
+        UniqueConstraint("user_id", "idempotency_key", name="uq_shop_orders_user_key"),
         Index("ix_shop_orders_user_created", "user_id", "created_at"),
     )
 
@@ -537,6 +541,35 @@ class ShopOrder(Base):
     price_points: Mapped[int] = mapped_column(Integer, nullable=False)
     payment_method: Mapped[str] = mapped_column(String(32), nullable=False, default="points")
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="completed")
+    idempotency_key: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    point_ledger_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    point_event_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    refund_transaction_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    refunded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class ShopOrderEntitlement(Base):
+    """One purchased card-pack use right, consumed when the pack is opened."""
+
+    __tablename__ = "shop_order_entitlements"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('available', 'opened', 'revoked')",
+            name="ck_shop_order_entitlements_status",
+        ),
+        UniqueConstraint("order_id", name="uq_shop_order_entitlements_order"),
+        Index("ix_shop_order_entitlements_user_pack", "user_id", "pack_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    order_id: Mapped[str] = mapped_column(ForeignKey("shop_orders.id", ondelete="CASCADE"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    pack_id: Mapped[str] = mapped_column(ForeignKey("card_packs.id", ondelete="RESTRICT"))
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="available")
+    opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
@@ -1134,6 +1167,39 @@ class PointBalance(Base):
     )
 
 
+class PointTransaction(Base):
+    """Durable idempotency record for every externally requested point mutation."""
+
+    __tablename__ = "point_transactions"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "operation",
+            "idempotency_key",
+            name="uq_point_transactions_user_operation_key",
+        ),
+        CheckConstraint(
+            "operation IN ('charge', 'refund', 'adjustment')",
+            name="ck_point_transactions_operation",
+        ),
+        CheckConstraint("status IN ('completed', 'failed')", name="ck_point_transactions_status"),
+        Index("ix_point_transactions_user_created", "user_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    operation: Mapped[str] = mapped_column(String(32), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    ledger_id: Mapped[str | None] = mapped_column(
+        ForeignKey("point_ledger.id", ondelete="SET NULL"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="completed")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
 class LevelPolicyVersion(Base):
     """Versioned fan-level policy so future threshold changes are explicit."""
 
@@ -1297,6 +1363,7 @@ class RewardGrant(Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
     claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class XpLedger(Base):

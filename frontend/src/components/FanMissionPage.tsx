@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiError, claimFanMission, getFanMissions, type FanMission } from '../api/client'
+import { DetailTopBar } from './DetailTopBar'
 import './FanMissionPage.css'
 
 type MissionStatus = 'active' | 'completed' | 'ended'
@@ -31,14 +32,13 @@ function MissionReward({ mission }: { mission: FanMission }) {
   return <span className="mission-page-reward">{xp > 0 && <b>+{xp} XP</b>}{points > 0 && <b>+{points} P</b>}</span>
 }
 
-function MissionGlyph({ kind }: { kind: 'flag' | 'comment' | 'pack' | 'calendar' | 'star' | 'back' | 'chevron' }) {
+function MissionGlyph({ kind }: { kind: 'flag' | 'comment' | 'pack' | 'calendar' | 'star' | 'chevron' }) {
   const path = {
     flag: <><path d="M6 20V4" /><path d="M7 5h10l-2.5 3L17 11H7" /></>,
     comment: <><path d="M5 5h14v10H9l-4 3Z" /><path d="M9 10h.01M12 10h.01M15 10h.01" /></>,
     pack: <><path d="M7 4h10l1 3v13H6V7Z" /><path d="M6 8h12M10 12l2-1 2 1-.5 2.3 1.5 1.5-2.2.2-.8 2-.8-2-2.2-.2 1.5-1.5Z" /></>,
     calendar: <><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M8 3v4M16 3v4M4 9h16" /><path d="m12 12 .7 1.4 1.6.2-1.2 1.1.3 1.6-1.4-.8-1.4.8.3-1.6-1.2-1.1 1.6-.2Z" /></>,
     star: <path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9Z" />,
-    back: <path d="m15 5-7 7 7 7" />,
     chevron: <path d="m9 6 6 6-6 6" />,
   }[kind]
   return <svg className={`mission-glyph mission-glyph-${kind}`} viewBox="0 0 24 24" aria-hidden="true">{path}</svg>
@@ -89,13 +89,9 @@ export function FanMissionPage({ onBack, onClaimed, initialMissions }: FanMissio
     }
   }
 
-  return <main className="app-shell mission-page-shell">
-    <header className="mission-page-topbar">
-      <button type="button" aria-label="팬 레벨로 돌아가기" onClick={onBack}><MissionGlyph kind="back" /></button>
-      <h1>미션</h1>
-      <span className="mission-page-topbar-spacer" aria-hidden="true" />
-    </header>
-    <section className="mission-page-body">
+  return <main className="app-shell mission-page-shell detail-screen-shell">
+    <DetailTopBar title="미션" onBack={onBack} backLabel="팬 레벨로 돌아가기" />
+    <section className="mission-page-body detail-screen-content">
       <article className="mission-page-hero">
         <span className="mission-page-hero-icon"><MissionGlyph kind="flag" /></span>
         <div><h2>미션으로 XP와 포인트를 모아보세요</h2><p>다양한 미션을 완료하고 보상을 받아보세요!</p></div>

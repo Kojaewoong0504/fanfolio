@@ -41,6 +41,7 @@ def test_smtp_mailer_sends_a_magic_link_message(monkeypatch: Any) -> None:
         frontend_url="https://fanfolio.example",
         mail_from="Fanfolio <no-reply@fanfolio.example>",
         smtp_host="smtp.example.com",
+        smtp_use_tls=False,
         smtp_username="mailer",
         smtp_password="secret",
     )
@@ -51,6 +52,39 @@ def test_smtp_mailer_sends_a_magic_link_message(monkeypatch: Any) -> None:
     assert sent[0]["To"] == "fan@example.com"
     assert sent[0]["Subject"] == "Fanfolio 로그인 링크"
     assert "https://fanfolio.example/login?token=test-token" in sent[0].get_content()
+
+
+def test_password_reset_mailer_targets_the_reset_route(monkeypatch: Any) -> None:
+    sent: list[EmailMessage] = []
+
+    class FakeSMTP:
+        def __init__(self, host: str, port: int, timeout: float) -> None:
+            pass
+
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def send_message(self, message: EmailMessage) -> None:
+            sent.append(message)
+
+    monkeypatch.setattr(mailer.smtplib, "SMTP", FakeSMTP)
+    settings = Settings(
+        app_env="test",
+        frontend_url="https://fanfolio.example",
+        mail_from="Fanfolio <no-reply@fanfolio.example>",
+        smtp_host="smtp.example.com",
+        smtp_use_tls=False,
+    )
+
+    mailer.SMTPMailer(settings).send_magic_link("fan@example.com", "reset-token", "reset_password")
+
+    assert sent[0]["Subject"] == "Fanfolio 비밀번호 재설정 링크"
+    assert (
+        "https://fanfolio.example/account/reset-password?token=reset-token" in sent[0].get_content()
+    )
 
 
 def test_smtp_mailer_sends_a_notification_message(monkeypatch: Any) -> None:

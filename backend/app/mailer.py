@@ -21,15 +21,18 @@ class MailDeliveryError(RuntimeError):
     """Raised when the configured provider cannot deliver an email."""
 
 
-def build_magic_link_url(token: str, settings: Settings) -> str:
+def build_magic_link_url(token: str, settings: Settings, purpose: str = "login") -> str:
     """Build the URL placed in the email without exposing it in the API body."""
     base_url = settings.frontend_url.rstrip("/")
-    return f"{base_url}/login?{urlencode({'token': token})}"
+    path = "/account/reset-password" if purpose == "reset_password" else "/login"
+    return f"{base_url}{path}?{urlencode({'token': token})}"
 
 
 def _message(email: str, token: str, purpose: str, settings: Settings) -> EmailMessage:
-    link = build_magic_link_url(token, settings)
-    action = "로그인" if purpose == "login" else "회원가입"
+    link = build_magic_link_url(token, settings, purpose)
+    action = (
+        "로그인" if purpose == "login" else "회원가입" if purpose == "signup" else "비밀번호 재설정"
+    )
     message = EmailMessage()
     message["From"] = settings.mail_from
     message["To"] = email
@@ -58,7 +61,7 @@ class ConsoleMailer:
             "Magic link for %s (%s): %s",
             email,
             purpose,
-            build_magic_link_url(token, get_settings()),
+            build_magic_link_url(token, get_settings(), purpose),
         )
 
     def send_notification(self, email: str, title: str, body: str) -> None:

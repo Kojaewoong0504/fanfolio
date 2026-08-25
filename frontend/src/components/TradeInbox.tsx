@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ApiError, getTradeProposals, respondToTradeProposal, resolveApiUrl, type TradeProposalDetail } from '../api/client'
+import { DetailTopBar } from './DetailTopBar'
 
 type Box = 'received' | 'sent'
 
@@ -62,11 +63,7 @@ export function TradeInbox({ onBack, onFindFans }: Props) {
     : trade.recipient.nickname ?? '팬'
 
   return <main className="app-shell trade-inbox-shell">
-    <header className="social-topbar">
-      <button type="button" onClick={onBack} aria-label="이전 화면으로 돌아가기">‹</button>
-      <div><span className="eyebrow">CARD TRADE</span><h1>거래함</h1></div>
-      <button type="button" className="social-trade-entry" onClick={onFindFans}>팬 찾기</button>
-    </header>
+    <DetailTopBar title="거래함" onBack={onBack} right={<button type="button" className="detail-topbar-action" onClick={onFindFans}>팬 찾기</button>} />
     <section className="trade-inbox-content">
       <div className="trade-inbox-tabs" role="tablist" aria-label="거래 제안함">
         <button type="button" role="tab" aria-selected={box === 'received'} className={box === 'received' ? 'active' : ''} onClick={() => setBox('received')}>받은 제안</button>

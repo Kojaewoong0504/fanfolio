@@ -228,6 +228,7 @@ export type ShopProduct = {
   name: string
   description?: string | null
   detailContent?: Array<{ key?: string; type?: 'text' | 'image'; title: string; body?: string | null; imageUrl?: string | null; alt?: string | null }> | null
+  fulfillment?: { rewardId?: string } | null
   imageUrl?: string | null
   pricePoints: number
   status: 'draft' | 'published' | 'archived'
@@ -242,7 +243,7 @@ export type ShopOrder = {
   productName: string
   pricePoints: number
   paymentMethod: 'points'
-  status: 'completed' | 'failed'
+  status: 'completed' | 'failed' | 'refunded'
   createdAt: string
 }
 
@@ -420,6 +421,20 @@ export function changeFanPassword(currentPassword: string, newPassword: string):
   return apiFetch<{ ok: true; data: { changed: true } }>('/auth/fan/change-password', {
     method: 'POST',
     body: JSON.stringify({ currentPassword, newPassword }),
+  })
+}
+
+export function requestFanPasswordReset(email: string): Promise<{ ok: true; data: { delivery: string } }> {
+  return apiFetch<{ ok: true; data: { delivery: string } }>('/auth/fan/password-reset/request', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  })
+}
+
+export function confirmFanPasswordReset(token: string, newPassword: string): Promise<{ ok: true; data: { changed: true } }> {
+  return apiFetch<{ ok: true; data: { changed: true } }>('/auth/fan/password-reset/confirm', {
+    method: 'POST',
+    body: JSON.stringify({ token, newPassword }),
   })
 }
 
@@ -843,7 +858,15 @@ export function getShopProduct(productId: string): Promise<{ ok: true; data: Sho
 export function createShopOrder(productId: string): Promise<{ ok: true; data: { id: string; productId: string; status: ShopOrder['status'] } }> {
   return apiFetch<{ ok: true; data: { id: string; productId: string; status: ShopOrder['status'] } }>('/me/shop/orders', {
     method: 'POST',
+    headers: { 'Idempotency-Key': `shop-order-${productId}-${crypto.randomUUID()}` },
     body: JSON.stringify({ productId, paymentMethod: 'points' }),
+  })
+}
+
+export function refundShopOrder(orderId: string): Promise<{ ok: true; data: { orderId: string; balance: number } }> {
+  return apiFetch<{ ok: true; data: { orderId: string; balance: number } }>(`/me/shop/orders/${encodeURIComponent(orderId)}/refund`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': `shop-refund-${orderId}` },
   })
 }
 

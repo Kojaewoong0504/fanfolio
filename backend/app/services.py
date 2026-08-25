@@ -495,6 +495,48 @@ async def spend_points(
     return ledger
 
 
+async def reverse_points(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    source_event_id: str,
+    rule_key: str,
+    amount: int,
+    reversed_ledger_id: str,
+    description: str | None = None,
+    metadata: dict | None = None,
+) -> PointLedger:
+    """Return spent points while preserving the original debit provenance."""
+    if amount <= 0:
+        raise AppError(422, "INVALID_POINT_AMOUNT", "point amount must be positive")
+    existing = await session.scalar(
+        select(PointLedger).where(
+            PointLedger.user_id == user_id,
+            PointLedger.source_event_id == source_event_id,
+            PointLedger.rule_key == rule_key,
+        )
+    )
+    if existing:
+        return existing
+    balance = await _get_or_create_point_balance_for_update(session, user_id=user_id)
+    balance.balance += amount
+    ledger = PointLedger(
+        id=f"point_{uuid4().hex[:12]}",
+        user_id=user_id,
+        source_event_id=source_event_id,
+        rule_key=rule_key,
+        transaction_type="reverse",
+        amount=amount,
+        balance_after=balance.balance,
+        description=description,
+        reversed_ledger_id=reversed_ledger_id,
+        metadata_json=metadata or {},
+    )
+    session.add(ledger)
+    await session.flush()
+    return ledger
+
+
 def base_xp_for(event: EngagementEvent) -> int:
     if event.kind == "card_collected":
         return 30
@@ -1055,6 +1097,7 @@ async def _reward_grant_with_catalog(
             .where(
                 RewardGrant.id == grant_id,
                 RewardGrant.user_id == user_id,
+                RewardGrant.revoked_at.is_(None),
                 RewardCatalog.status == "published",
             )
         )
@@ -1067,7 +1110,11 @@ async def _locked_reward_grant_with_catalog(
 ) -> tuple[RewardGrant, RewardCatalog] | None:
     grant = await session.scalar(
         select(RewardGrant)
-        .where(RewardGrant.id == grant_id, RewardGrant.user_id == user_id)
+        .where(
+            RewardGrant.id == grant_id,
+            RewardGrant.user_id == user_id,
+            RewardGrant.revoked_at.is_(None),
+        )
         .with_for_update()
     )
     if grant is None:
@@ -1095,7 +1142,11 @@ async def _equipment_data(session: AsyncSession, *, user_id: str) -> dict:
         await session.execute(
             select(RewardGrant.id, RewardCatalog.reward_type)
             .join(RewardCatalog, RewardCatalog.id == RewardGrant.reward_id)
-            .where(RewardGrant.user_id == user_id, RewardGrant.id.in_(equipped_reward_ids))
+            .where(
+                RewardGrant.user_id == user_id,
+                RewardGrant.id.in_(equipped_reward_ids),
+                RewardGrant.revoked_at.is_(None),
+            )
         )
     ).all()
     reward_type_by_grant_id = {grant_id: reward_type for grant_id, reward_type in rows}
@@ -1198,6 +1249,7 @@ async def fan_progression_data(
             .where(
                 RewardGrant.user_id == user_id,
                 RewardGrant.claimed_at.is_(None),
+                RewardGrant.revoked_at.is_(None),
                 RewardCatalog.status == "published",
                 reward_scope_filter,
             )
@@ -1211,6 +1263,7 @@ async def fan_progression_data(
             .where(
                 RewardGrant.user_id == user_id,
                 RewardGrant.claimed_at.is_not(None),
+                RewardGrant.revoked_at.is_(None),
                 RewardCatalog.status == "published",
                 reward_scope_filter,
             )

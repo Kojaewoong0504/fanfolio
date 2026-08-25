@@ -233,13 +233,21 @@ test('fan pass opens as a dedicated page with a vertical season journey', () => 
 })
 
 test('fan pass bottom navigation delegates to the app tab router', () => {
-  assert.match(fanPassSource, /onNavigate: \(tab: 'discover' \| 'collection' \| 'home' \| 'growth' \| 'settings'\) => void/)
+  assert.match(fanPassSource, /onNavigate: \(tab: 'discover' \| 'collection' \| 'home' \| 'growth' \| 'shop'\) => void/)
   assert.match(fanPassSource, /onClick=\{\(\) => onNavigate\('discover'\)\}/)
   assert.match(fanPassSource, /onClick=\{\(\) => onNavigate\('collection'\)\}/)
   assert.match(fanPassSource, /onClick=\{\(\) => onNavigate\('home'\)\}/)
-  assert.match(fanPassSource, /onClick=\{\(\) => onNavigate\('settings'\)\}/)
+  assert.match(fanPassSource, /onClick=\{\(\) => onNavigate\('shop'\)\}/)
   assert.match(appSource, /onNavigate=\{navigateTab\}/)
   assert.match(appSource, /const navigateTab = \(nextTab: Tab\) => \{[\s\S]*?setShowFanPassPage\(false\)/)
+})
+
+test('global fan pass uses shared canvas spacing and intentional empty state', () => {
+  assert.doesNotMatch(fanPassCssSource, /width: calc\(100% \+ 48px\)/)
+  assert.doesNotMatch(fanPassCssSource, /width: calc\(100% \+ 36px\)/)
+  assert.match(fanPassSource, /fan-pass-empty-section/)
+  assert.match(fanPassSource, /시즌 패스 보상/)
+  assert.match(fanPassCssSource, /\.fan-pass-empty-section\{/)
 })
 
 test('fan growth styles preserve card UI, 360px layout, touch targets, and no horizontal overflow', async () => {
