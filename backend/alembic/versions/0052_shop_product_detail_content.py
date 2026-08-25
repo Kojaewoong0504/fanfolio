@@ -23,4 +23,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_column("shop_products", "detail_content")
+    inspector = sa.inspect(op.get_bind())
+    columns = {column["name"] for column in inspector.get_columns("shop_products")}
+    if "detail_content" in columns:
+        op.drop_column("shop_products", "detail_content")
