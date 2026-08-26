@@ -3527,7 +3527,7 @@ function Discover({ onFindFans, onOpenFanProfile, onOpenPublicCollection, onOpen
       ? <div className="discover-loading-card" role="status" aria-label="이벤트를 불러오는 중">이벤트를 불러오는 중이에요.</div>
       : featuredEvent
         ? <button type="button" className="discover-event-entry" onClick={() => onOpenEvent(featuredEvent)}>
-          {featuredEventImage ? <img src={featuredEventImage} alt="" /> : <span className="discover-media-placeholder"><InlineIcon name="calendar" /></span>}
+          {featuredEventImage ? <AuthenticatedImage src={featuredEvent?.heroUrl} fallback={dreamscapeHero} alt="" /> : <span className="discover-media-placeholder"><InlineIcon name="calendar" /></span>}
           <span><small>진행 중인 이벤트</small><strong>{featuredEvent.title}</strong><em>{featuredEvent.summary}</em></span><b>{featuredEvent.status === 'active' ? 'NOW' : '더보기'}</b><i><InlineIcon name="chevron" /></i>
         </button>
         : <button type="button" className="discover-empty-entry" onClick={() => onOpenEvent(null)}><InlineIcon name="calendar" /> 진행 중인 이벤트가 없어요.</button>)}
