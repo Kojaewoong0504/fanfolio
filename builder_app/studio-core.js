@@ -145,6 +145,13 @@ export function buildDesignConfig({ form = {}, editor = {} } = {}) {
 
   const frontSource = compactObject({
     ...existingFront,
+    preset:
+      existingFront.preset ??
+      (editor.effect === 'none'
+        ? 'none'
+        : editor.tool === 'motion'
+          ? 'motion'
+          : 'hologram'),
     material: editor.material ?? existingFront.material,
     foilPattern: editor.foilPattern ?? existingFront.foilPattern,
     foilCoverage: editor.foilCoverage ?? existingFront.foilCoverage,

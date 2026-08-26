@@ -239,6 +239,16 @@ test('trade composer submits the displayed requested card once', () => {
   assert.match(tradeComposerSource, /disabled=\{!confirmed \|\| submitting\}/)
 })
 
+test('trade confirmation preserves the offered card selected by the picker after async loading', () => {
+  assert.match(tradeComposerSource, /const preferredCard = initialOfferedUserCardId[\s\S]*availableCards\.find\(card => card\.userCardId === initialOfferedUserCardId\)/)
+  assert.match(tradeComposerSource, /setSelectedOfferedUserCardId\(\(preferredCard \?\? availableCards\[0\] \?\? mine\.data\.cards\[0\]\)\?\.userCardId \?\? null\)/)
+})
+
+test('trade picker exposes an in-place retry when collection loading fails', () => {
+  assert.match(tradeComposerSource, /setRetryNonce\(value => value \+ 1\)/)
+  assert.match(tradeComposerSource, /다시 시도/)
+})
+
 test('trade proposal starts with a four-column card picker and continues to confirmation', () => {
   assert.match(tradeComposerSource, /function TradeCardPicker/)
   assert.match(tradeComposerSource, /상대가 원하는 카드/)

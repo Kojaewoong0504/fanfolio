@@ -8,6 +8,8 @@ from app.db.session import SessionLocal
 from app.models import (
     AdminArtistAssignment,
     AdminMembership,
+    Notification,
+    NotificationDelivery,
     Organization,
     OrganizationArtist,
     Role,
@@ -208,3 +210,123 @@ def test_admin_notification_list_and_read_update_are_user_scoped(
         assert_success(other_manager.get("/api/admin/notifications"))["items"][0]["entityId"]
         == card["id"]
     )
+
+
+def test_root_operations_metrics_exposes_notification_delivery_status(
+    app: FastAPI,
+) -> None:
+    root = admin_client(
+        app,
+        asyncio.run(
+            create_admin_actor(
+                user_id="delivery_metrics_root",
+                access_level="root",
+                organization_id=None,
+                assigned_artist_ids=[],
+            )
+        ),
+    )
+
+    async def seed_deliveries() -> None:
+        async with SessionLocal() as session:
+            notification = Notification(
+                id="delivery_metrics_notification",
+                user_id="delivery_metrics_root",
+                kind="system",
+                title="Delivery metrics",
+                event_key="delivery-metrics:1",
+            )
+            session.add(notification)
+            session.add_all(
+                [
+                    NotificationDelivery(
+                        id="delivery_metrics_email_delivered",
+                        notification_id=notification.id,
+                        channel="email",
+                        destination="fan@example.test",
+                        idempotency_key="delivery-metrics:email:1",
+                        status="delivered",
+                    ),
+                    NotificationDelivery(
+                        id="delivery_metrics_push_retry",
+                        notification_id=notification.id,
+                        channel="push",
+                        destination="fcm-token-metrics",
+                        idempotency_key="delivery-metrics:push:1",
+                        status="retry",
+                    ),
+                    NotificationDelivery(
+                        id="delivery_metrics_push_dead",
+                        notification_id=notification.id,
+                        channel="push",
+                        destination="fcm-token-dead",
+                        idempotency_key="delivery-metrics:push:2",
+                        status="dead_letter",
+                    ),
+                ]
+            )
+            await session.commit()
+
+    asyncio.run(seed_deliveries())
+    delivery = assert_success(root.get("/api/admin/card-operations/metrics"))[
+        "notificationDelivery"
+    ]
+    assert delivery["email"]["delivered"] == 1
+    assert delivery["push"]["retry"] == 1
+    assert delivery["push"]["dead_letter"] == 1
+
+
+def test_root_can_retry_failed_notification_delivery_without_exposing_destination(
+    app: FastAPI,
+    seeded: dict[str, object],
+) -> None:
+    root = admin_client(
+        app,
+        asyncio.run(
+            create_admin_actor(
+                user_id="delivery_retry_root",
+                access_level="root",
+                organization_id=None,
+                assigned_artist_ids=[],
+            )
+        ),
+    )
+
+    async def seed_delivery() -> None:
+        async with SessionLocal() as session:
+            notification = Notification(
+                id="delivery_retry_notification",
+                user_id="delivery_retry_root",
+                kind="system",
+                title="Retry delivery",
+                event_key="delivery-retry:1",
+            )
+            session.add(notification)
+            session.add(
+                NotificationDelivery(
+                    id="delivery_retry_dead_letter",
+                    notification_id=notification.id,
+                    channel="email",
+                    destination="private@example.test",
+                    idempotency_key="delivery-retry:email:1",
+                    status="dead_letter",
+                    attempt_count=3,
+                    last_error="provider unavailable",
+                )
+            )
+            await session.commit()
+
+    asyncio.run(seed_delivery())
+    queue = assert_success(
+        root.get("/api/admin/notification-deliveries?status=dead_letter&channel=email")
+    )
+    assert queue["items"][0]["id"] == "delivery_retry_dead_letter"
+    assert "destination" not in queue["items"][0]
+    assert queue["items"][0]["notification"]["title"] == "Retry delivery"
+    response = assert_success(
+        root.post("/api/admin/notification-deliveries/delivery_retry_dead_letter/retry")
+    )
+    assert response["id"] == "delivery_retry_dead_letter"
+    assert response["status"] == "pending"
+    assert response["attemptCount"] == 3
+    assert "destination" not in response

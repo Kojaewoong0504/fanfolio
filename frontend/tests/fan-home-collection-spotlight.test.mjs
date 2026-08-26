@@ -81,6 +81,10 @@ test('collection landing keeps recent cards concise and opens the dedicated card
   assert.match(referenceCssSource, /main\.collection-shell \.app-header \{ min-height:0!important; margin-bottom:0!important; \}/)
 })
 
+test('collection recent card badges preserve the rarity returned by the collection API', () => {
+  assert.match(appSource, /const rarity = card\.rarity \?\? \(index === 0 \? 'UR' : index < 3 \? 'SR' : index === 3 \? 'R' : 'N'\)/)
+})
+
 test('card collection repository supports admin-named groups, version packs, and a four-column catalog', () => {
   assert.match(appSource, /window\.location\.pathname === '\/collection\/cards'/)
   assert.match(appSource, /preview === 'card-collection'/)

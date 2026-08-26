@@ -14,6 +14,14 @@ test('card acquisition keeps QR and manual redemption on one typed client contra
   assert.doesNotMatch(redeemSource, /apiFetch<[\s\S]*>\('\/redemptions'/)
 })
 
+test('redemption confirmation previews the card resolved by the entered code', () => {
+  assert.match(clientSource, /export function previewRedemption\(code: string, source: RedemptionSource\)/)
+  assert.match(clientSource, /'\/redemptions\/preview'/)
+  assert.match(redeemSource, /previewRedemption\(code, source\)/)
+  assert.match(redeemSource, /preview\.card\.name/)
+  assert.doesNotMatch(redeemSource, /하린 · Nebula Ver\./)
+})
+
 test('every successful acquisition refreshes collection before entering the reveal route', () => {
   assert.match(appSource, /const handleCardPackOpened[\s\S]*?refreshCollection\(\)[\s\S]*?openReveal\(userCardId\)/)
   assert.match(appSource, /onRedeemed=\{\(id\) => \{ closeRedeem\(\); void Promise\.allSettled\(\[refreshCollection\(\), refreshGrowth\(\)\]\)\.then\(\(\) => openReveal\(id\)\) \}\}/)

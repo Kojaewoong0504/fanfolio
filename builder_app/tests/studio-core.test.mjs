@@ -28,6 +28,15 @@ test('uses the visual-editor image asset without asking for the same file again'
   assert.equal(payload.imageAssetId, 'asset_card')
 })
 
+test('emits a backend-supported effect preset for hologram recipes', () => {
+  const payload = buildCardPayload({
+    form: { name: '홀로그램 카드' },
+    editor: { tool: 'hologram', effect: 'holographic', effectPreset: 'stardust' },
+  })
+
+  assert.equal(payload.designConfig.front.preset, 'hologram')
+})
+
 test('blocks review when an enabled voice card has no voice asset', () => {
   const result = reviewReadiness({ hasVoice: true, voiceAssetId: null })
 
@@ -235,6 +244,7 @@ test('serializes voice, motion and hologram settings into the shared design cont
     interaction: 'tilt',
     intensity: 0.78,
     angle: 135,
+    preset: 'hologram',
     lenticularAssetId: null,
     effect: 'holographic',
     effectPreset: 'aurora',
@@ -278,6 +288,7 @@ test('serializes premium hologram tuning so fan previews can match the studio', 
     interaction: 'tilt',
     intensity: 0.72,
     angle: 210,
+    preset: 'hologram',
     lenticularAssetId: null,
     effect: 'holographic',
     effectPreset: 'moonlight',

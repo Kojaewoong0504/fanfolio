@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 
 from fastapi import FastAPI
@@ -131,6 +132,90 @@ def test_fan_can_follow_and_trade_then_accept_transfers_cards(
     assert accepted["status"] == "accepted"
     collection = assert_success(actors["otherFan"].get("/api/me/collection"))
     assert collection["cards"][0]["userCardId"] == ids["userCard_tradeable"]
+
+
+def test_concurrent_trade_acceptance_has_one_winner(
+    app: FastAPI, actors: dict[str, TestClient]
+) -> None:
+    ids = seed_social_cards()
+    proposal = assert_success(
+        actors["fan"].post(
+            "/api/me/trades",
+            json={
+                "recipientUserId": "otherFan",
+                "offeredUserCardIds": [ids["userCard_tradeable"]],
+                "requestedUserCardIds": [],
+            },
+        ),
+        201,
+    )
+
+    def accept_once() -> int:
+        client = TestClient(app)
+        client.cookies.set("fanfolio_session", "test-session-other-fan")
+        response = client.post(f"/api/me/trades/{proposal['id']}/accept")
+        return response.status_code
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        statuses = list(executor.map(lambda _: accept_once(), range(2)))
+
+    assert sorted(statuses) == [200, 409]
+    detail = assert_success(actors["otherFan"].get(f"/api/me/trades/{proposal['id']}"))
+    assert detail["status"] == "accepted"
+
+
+def test_pending_trade_marks_cards_unavailable_in_collection(
+    app: FastAPI, actors: dict[str, TestClient]
+) -> None:
+    ids = seed_social_cards()
+    proposal = assert_success(
+        actors["fan"].post(
+            "/api/me/trades",
+            json={
+                "recipientUserId": "otherFan",
+                "offeredUserCardIds": [ids["userCard_tradeable"]],
+                "requestedUserCardIds": [],
+            },
+        ),
+        201,
+    )
+    assert proposal["status"] == "pending"
+
+    collection = assert_success(actors["fan"].get("/api/me/collection"))
+    offered = next(
+        card for card in collection["cards"] if card["userCardId"] == ids["userCard_tradeable"]
+    )
+    assert offered["tradable"] is False
+
+
+def test_trade_lifecycle_is_visible_in_admin_audit_logs(
+    app: FastAPI, actors: dict[str, TestClient]
+) -> None:
+    ids = seed_social_cards()
+    proposal = assert_success(
+        actors["fan"].post(
+            "/api/me/trades",
+            json={
+                "recipientUserId": "otherFan",
+                "offeredUserCardIds": [ids["userCard_tradeable"]],
+                "requestedUserCardIds": [],
+            },
+        ),
+        201,
+    )
+    assert_success(actors["otherFan"].post(f"/api/me/trades/{proposal['id']}/accept"))
+
+    logs = assert_success(
+        actors["admin"].get("/api/admin/audit-logs", params={"q": proposal["id"]})
+    )
+    actions = {item["action"] for item in logs["items"]}
+    assert {"trade.created", "trade.completed"}.issubset(actions)
+
+    fan360 = assert_success(actors["admin"].get("/api/admin/users/fan/360"))
+    assert any(
+        item["id"] == proposal["id"] and item["status"] == "accepted" for item in fan360["trades"]
+    )
+    assert any(item["kind"] == "trade_accepted" for item in fan360["recentNotifications"])
 
 
 def test_trade_policy_rejects_expiring_combined_and_locked_cards(

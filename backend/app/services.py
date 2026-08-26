@@ -15,7 +15,6 @@ from app.core.config import get_settings
 from app.db.session import SessionLocal
 from app.errors import AppError
 from app.image_processing import remove_light_background_bytes
-from app.mailer import MailDeliveryError, deliver_notification_email
 from app.models import (
     AchievementDefinition,
     AchievementProgress,
@@ -56,6 +55,7 @@ from app.models import (
     PointBalance,
     PointLedger,
     ProfileEquipment,
+    PushDevice,
     RedeemCode,
     RedeemCodeBatch,
     RefreshToken,
@@ -72,7 +72,9 @@ from app.models import (
     UserCard,
     XpLedger,
 )
+from app.notification_delivery import build_delivery
 from app.passwords import hash_password, verify_password
+from app.retry import decide_retry
 from app.storage import configured_asset_storage
 
 logger = logging.getLogger(__name__)
@@ -1809,7 +1811,7 @@ async def process_engagement_event(event_id: str) -> None:
                 "ENGAGEMENT_EVENT_NOT_FOUND",
                 "처리할 팬 성장 이벤트를 찾을 수 없습니다.",
             )
-        if event.status == "processed":
+        if event.status in {"processed", "dead_letter"}:
             return
         next_attempt_count = (event.attempt_count or 0) + 1
         event.attempt_count = next_attempt_count
@@ -1834,6 +1836,7 @@ async def process_engagement_event(event_id: str) -> None:
             await update_pass_progress(session, event=event)
             event.status = "processed"
             event.processed_at = now()
+            event.next_attempt_at = None
             await session.commit()
         except Exception as exc:
             await session.rollback()
@@ -1841,7 +1844,16 @@ async def process_engagement_event(event_id: str) -> None:
                 select(EngagementEvent).where(EngagementEvent.id == event_id).with_for_update()
             )
             if failed_event is not None:
-                failed_event.status = "failed"
+                decision = decide_retry(
+                    attempt_count=next_attempt_count,
+                    now=now(),
+                    max_attempts=get_settings().engagement_event_max_attempts,
+                    base_delay_seconds=get_settings().engagement_event_retry_base_seconds,
+                    max_delay_seconds=get_settings().engagement_event_retry_max_seconds,
+                )
+                failed_event.status = decision.status
+                failed_event.next_attempt_at = decision.next_attempt_at
+                failed_event.dead_lettered_at = now() if decision.status == "dead_letter" else None
                 failed_event.attempt_count = next_attempt_count
                 if isinstance(exc, AppError):
                     failed_event.error_code = exc.code
@@ -1852,6 +1864,33 @@ async def process_engagement_event(event_id: str) -> None:
                 failed_event.error_message = (failed_event.error_message or "")[:500]
                 await session.commit()
             raise
+
+
+async def retry_failed_engagement_events(limit: int = 100) -> int:
+    """Re-dispatch failed growth events whose backoff window has elapsed."""
+    current_time = now()
+    async with SessionLocal() as session:
+        event_ids = list(
+            await session.scalars(
+                select(EngagementEvent.id)
+                .where(
+                    EngagementEvent.status == "failed",
+                    EngagementEvent.next_attempt_at.is_not(None),
+                    EngagementEvent.next_attempt_at <= current_time,
+                )
+                .order_by(EngagementEvent.next_attempt_at)
+                .limit(limit)
+            )
+        )
+    processed = 0
+    for event_id in event_ids:
+        try:
+            await process_engagement_event(event_id)
+        except Exception:
+            logger.exception("Retry of engagement event %s failed", event_id)
+        else:
+            processed += 1
+    return processed
 
 
 async def revoke_card_growth(
@@ -2355,12 +2394,19 @@ async def seed_core(session: AsyncSession) -> dict:
         ("artist", Role.ARTIST),
     ]
     for user_id, role in users:
+        username = "seed-dreamscape-studio" if role == Role.ARTIST else None
+        password = {
+            Role.FAN: "test-fan-password",
+            Role.ADMIN: "test-admin-password",
+            Role.ARTIST: "test-artist-password",
+        }.get(role)
         session.add(
             User(
                 id=user_id,
                 email=f"{user_id}@example.com",
                 role=role,
-                password_hash=hash_password("test-admin-password") if role == Role.ADMIN else None,
+                username=username,
+                password_hash=hash_password(password) if password else None,
             )
         )
         session.add(
@@ -2626,24 +2672,22 @@ async def record_audit(
 async def notify_fans(session: AsyncSession, *, kind: str, title: str, body: str) -> None:
     fans = await session.scalars(select(User).where(User.role == Role.FAN))
     for fan in fans:
-        session.add(
-            Notification(
-                id=f"notification_{uuid4().hex[:12]}",
-                user_id=fan.id,
-                kind=kind,
-                title=title,
-                body=body,
-            )
+        notification = Notification(
+            id=f"notification_{uuid4().hex[:12]}",
+            user_id=fan.id,
+            kind=kind,
+            title=title,
+            body=body,
         )
+        session.add(notification)
         if fan.notification_email_enabled and fan.email:
-            try:
-                await deliver_notification_email(fan.email, title, body)
-            except MailDeliveryError:
-                # In-app delivery is the source of truth; an SMTP outage must
-                # not roll back the card/drop event transaction.
-                logger.warning(
-                    "Could not deliver notification email to %s", fan.email, exc_info=True
+            session.add(
+                build_delivery(
+                    notification_id=notification.id,
+                    channel="email",
+                    destination=fan.email,
                 )
+            )
 
 
 def review_snapshot(card: Card) -> dict:
@@ -2717,18 +2761,18 @@ async def notify_admin_once(
         )
     ):
         return
-    session.add(
-        Notification(
-            id=f"notification_{uuid4().hex[:12]}",
-            user_id=user_id,
-            kind=kind,
-            title=title,
-            body=body,
-            entity_type=entity_type,
-            entity_id=entity_id,
-            event_key=event_key,
-        )
+    notification = Notification(
+        id=f"notification_{uuid4().hex[:12]}",
+        user_id=user_id,
+        kind=kind,
+        title=title,
+        body=body,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        event_key=event_key,
     )
+    session.add(notification)
+    await _queue_notification_deliveries(session, notification)
 
 
 async def notify_user_once(
@@ -2750,18 +2794,43 @@ async def notify_user_once(
         )
     ):
         return
-    session.add(
-        Notification(
-            id=f"notification_{uuid4().hex[:12]}",
-            user_id=user_id,
-            kind=kind,
-            title=title,
-            body=body,
-            entity_type=entity_type,
-            entity_id=entity_id,
-            event_key=event_key,
-        )
+    notification = Notification(
+        id=f"notification_{uuid4().hex[:12]}",
+        user_id=user_id,
+        kind=kind,
+        title=title,
+        body=body,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        event_key=event_key,
     )
+    session.add(notification)
+    await _queue_notification_deliveries(session, notification)
+
+
+async def _queue_notification_deliveries(session: AsyncSession, notification: Notification) -> None:
+    recipient = await session.get(User, notification.user_id)
+    if recipient is None:
+        return
+    if recipient.notification_email_enabled and recipient.email:
+        session.add(
+            build_delivery(
+                notification_id=notification.id,
+                channel="email",
+                destination=recipient.email,
+            )
+        )
+    devices = await session.scalars(
+        select(PushDevice).where(PushDevice.user_id == recipient.id, PushDevice.enabled.is_(True))
+    )
+    for device in devices:
+        session.add(
+            build_delivery(
+                notification_id=notification.id,
+                channel="push",
+                destination=device.token,
+            )
+        )
 
 
 async def notify_partner_reviewers(session: AsyncSession, *, card: Card) -> None:
@@ -2895,6 +2964,41 @@ async def verify_magic_link(session: AsyncSession, *, token: str) -> dict:
             "userId": user.id,
         }
     return result
+
+
+async def preview_redeem(session: AsyncSession, user: User, code_value: str) -> Card:
+    """Resolve a redeem code without consuming it or opening a write transaction."""
+    code = await session.scalar(select(RedeemCode).where(RedeemCode.code == code_value))
+    if not code:
+        raise AppError(404, "REDEEM_CODE_NOT_FOUND", "코드를 찾을 수 없습니다.")
+    if code.disabled_at:
+        raise AppError(409, "REDEEM_CODE_DISABLED", "비활성화된 코드입니다.")
+    if code.used_count >= code.max_uses:
+        raise AppError(409, "REDEEM_CODE_ALREADY_USED", "사용할 수 없는 코드입니다.")
+    already_owned = await session.scalar(
+        select(UserCard.id).where(
+            UserCard.user_id == user.id,
+            UserCard.redeem_code_id == code.code,
+        )
+    )
+    if already_owned:
+        raise AppError(409, "REDEEM_CODE_ALREADY_USED", "이미 사용한 코드입니다.")
+    expires_at = (
+        code.expires_at.replace(tzinfo=UTC)
+        if code.expires_at and code.expires_at.tzinfo is None
+        else code.expires_at
+    )
+    if expires_at and expires_at < now():
+        raise AppError(409, "REDEEM_CODE_EXPIRED", "만료된 코드입니다.")
+    card = await session.scalar(select(Card).where(Card.id == code.card_id))
+    if card is None or card.status != "published":
+        raise AppError(409, "CARD_NOT_PUBLISHED", "공개되지 않은 카드입니다.")
+    drop = await session.get(Drop, code.drop_id)
+    if drop is None or drop.status != "live":
+        raise AppError(409, "DROP_NOT_LIVE", "현재 진행 중인 드롭이 아닙니다.")
+    if card.drop_id is None or code.drop_id != card.drop_id:
+        raise AppError(409, "CARD_DROP_MISMATCH", "카드 발행 드롭과 코드 드롭이 일치하지 않습니다.")
+    return card
 
 
 async def redeem(

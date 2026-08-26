@@ -21,6 +21,7 @@ from app.models import (
     Follow,
     Member,
     Role,
+    TradeHold,
     TradeItem,
     TradeLock,
     TradeProposal,
@@ -29,7 +30,12 @@ from app.models import (
     UserCard,
 )
 from app.schemas import CollectionVisibilityUpdate, TradeProposalCreate
-from app.services import notify_followers_of_card, notify_user_once, record_engagement_event
+from app.services import (
+    notify_followers_of_card,
+    notify_user_once,
+    record_audit,
+    record_engagement_event,
+)
 from app.tasks import enqueue_engagement_event
 
 router = APIRouter(prefix="/api", tags=["social"])
@@ -375,6 +381,40 @@ async def update_collection_visibility(
     return {"ok": True, "data": {"public": visibility.public_enabled}}
 
 
+@router.post("/me/blocks/{user_id}", status_code=status.HTTP_201_CREATED)
+async def block_fan(user_id: str, user: FanUser, session: DbSession) -> dict:
+    if user_id == user.id:
+        raise AppError(422, "SELF_BLOCK_NOT_ALLOWED", "자기 자신은 차단할 수 없습니다.")
+    target = await session.get(User, user_id)
+    if not target or target.role != Role.FAN:
+        raise AppError(404, "FAN_NOT_FOUND", "차단할 팬을 찾을 수 없습니다.")
+    existing = await session.scalar(
+        select(UserBlock).where(UserBlock.blocker_id == user.id, UserBlock.blocked_id == user_id)
+    )
+    if existing:
+        return {"ok": True, "data": {"blockedUserId": user_id, "blocked": True}}
+    session.add(UserBlock(id=str(uuid4()), blocker_id=user.id, blocked_id=user_id))
+    await session.execute(
+        delete(Follow).where(
+            or_(
+                (Follow.follower_id == user.id) & (Follow.following_id == user_id),
+                (Follow.follower_id == user_id) & (Follow.following_id == user.id),
+            )
+        )
+    )
+    await session.commit()
+    return {"ok": True, "data": {"blockedUserId": user_id, "blocked": True}}
+
+
+@router.delete("/me/blocks/{user_id}")
+async def unblock_fan(user_id: str, user: FanUser, session: DbSession) -> dict:
+    await session.execute(
+        delete(UserBlock).where(UserBlock.blocker_id == user.id, UserBlock.blocked_id == user_id)
+    )
+    await session.commit()
+    return {"ok": True, "data": {"blockedUserId": user_id, "blocked": False}}
+
+
 @router.post("/me/follows/{user_id}", status_code=status.HTTP_201_CREATED)
 async def follow_fan(
     user_id: str,
@@ -694,6 +734,14 @@ async def create_trade(
         for item in items
     ]
     session.add_all([proposal, *items, *locks])
+    await record_audit(
+        session,
+        actor_user_id=user.id,
+        action="trade.created",
+        entity_type="trade",
+        entity_id=proposal.id,
+        details={"offeredUserCardIds": offered_ids, "requestedUserCardIds": requested_ids},
+    )
     await notify_user_once(
         session,
         user_id=recipient.id,
@@ -727,6 +775,13 @@ async def _load_pending_proposal(
         raise AppError(403, "TRADE_NOT_ALLOWED", "이 거래를 처리할 권한이 없습니다.")
     if proposal.status != "pending":
         raise AppError(409, "TRADE_NOT_PENDING", "대기 중인 거래만 처리할 수 있습니다.")
+    held = await session.scalar(
+        select(TradeHold).where(
+            TradeHold.proposal_id == proposal.id, TradeHold.released_at.is_(None)
+        )
+    )
+    if held is not None:
+        raise AppError(409, "TRADE_ON_HOLD", "운영 검토 중인 거래는 처리할 수 없습니다.")
     if _as_utc(proposal.expires_at) <= datetime.now(UTC):
         await _expire_trade_proposal(session, proposal)
         await session.commit()
@@ -734,8 +789,7 @@ async def _load_pending_proposal(
     return proposal
 
 
-@router.post("/me/trades/{proposal_id}/accept")
-async def accept_trade(
+async def _accept_trade_once(
     proposal_id: str,
     user: FanUser,
     session: DbSession,
@@ -780,6 +834,14 @@ async def accept_trade(
     proposal.status = "accepted"
     proposal.responded_at = now
     await session.execute(delete(TradeLock).where(TradeLock.proposal_id == proposal.id))
+    await record_audit(
+        session,
+        actor_user_id=user.id,
+        action="trade.completed",
+        entity_type="trade",
+        entity_id=proposal.id,
+        details={"proposerId": proposal.proposer_id, "recipientId": proposal.recipient_id},
+    )
     await notify_user_once(
         session,
         user_id=proposal.proposer_id,
@@ -823,6 +885,24 @@ async def accept_trade(
     return {"ok": True, "data": {"id": proposal.id, "status": proposal.status}}
 
 
+@router.post("/me/trades/{proposal_id}/accept")
+async def accept_trade(
+    proposal_id: str,
+    user: FanUser,
+    session: DbSession,
+    background_tasks: BackgroundTasks,
+) -> dict:
+    try:
+        return await _accept_trade_once(proposal_id, user, session, background_tasks)
+    except IntegrityError as error:
+        await session.rollback()
+        raise AppError(
+            409,
+            "TRADE_STATE_CONFLICT",
+            "거래가 이미 처리되었거나 카드 소유자가 변경되었습니다.",
+        ) from error
+
+
 async def _reject_or_cancel(
     proposal_id: str, user: FanUser, session: DbSession, role: str, status_value: str
 ) -> dict:
@@ -830,6 +910,14 @@ async def _reject_or_cancel(
     proposal.status = status_value
     proposal.responded_at = datetime.now(UTC)
     await session.execute(delete(TradeLock).where(TradeLock.proposal_id == proposal.id))
+    await record_audit(
+        session,
+        actor_user_id=user.id,
+        action=f"trade.{status_value}",
+        entity_type="trade",
+        entity_id=proposal.id,
+        details={"proposerId": proposal.proposer_id, "recipientId": proposal.recipient_id},
+    )
     notified_user_id = proposal.proposer_id if status_value == "rejected" else proposal.recipient_id
     kind = "trade_rejected" if status_value == "rejected" else "trade_cancelled"
     await notify_user_once(

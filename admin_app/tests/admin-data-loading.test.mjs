@@ -18,8 +18,41 @@ test('optional workspace modules cannot block the administrator shell', () => {
   assert.match(source, /loadOptionalOrganizations\(\)/)
 })
 
+test('fan growth request failures cannot hide core administrator data', () => {
+  assert.match(source, /async function loadOptionalFanGrowth\(\)[\s\S]*?catch \(error\)/)
+  assert.match(source, /await loadOptionalFanGrowth\(\)/)
+  assert.match(source, /Optional fan growth data unavailable/)
+})
+
+test('root workspace request failures cannot hide core administrator data', () => {
+  assert.match(source, /async function loadOptionalAdminRequest\(/)
+  assert.match(source, /loadOptionalAdminRequest\("\/admin\/drops"/)
+  assert.match(source, /loadOptionalAdminRequest\("\/admin\/redeem-code-batches"/)
+  assert.match(source, /loadOptionalAdminRequest\(`\/admin\/users\?/)
+})
+
+test('approved card flow creates a drop inside the card drop-link panel', () => {
+  assert.doesNotMatch(source, /id: "drops", label: "드롭 운영"/)
+  assert.doesNotMatch(source, /drops: dropsView/)
+  assert.match(source, /id="drop-link-form"/)
+  assert.match(source, /id="drop-form" data-card-id=/)
+  assert.match(source, /async function createDrop\(/)
+  assert.match(source, /createDrop\(event\)/)
+  assert.match(source, /data-native-datetime/)
+  assert.match(source, /input\[type="datetime-local"\]\:not\(\[data-native-datetime\]\)/)
+  assert.match(source, /class="secondary submit-drop" data-id=/)
+  assert.match(source, /class="primary drop-status" data-id=.*data-status="live"/)
+  assert.match(source, /\["approved", "drop_ready"\]\.includes\(status\)/)
+})
+
 test('admin API errors retain the failing endpoint and status for diagnosis', () => {
   assert.match(source, /error\.path = path/)
   assert.match(source, /HTTP \$\{error\.status\}/)
   assert.match(source, /const endpoint = error\.path/)
+})
+
+test('safe GET requests retry transient network failures during session restoration', () => {
+  assert.match(source, /async function fetchWithRetry\(/)
+  assert.match(source, /network failure/i)
+  assert.match(source, /method === "GET"/)
 })

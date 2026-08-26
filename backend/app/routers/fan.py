@@ -8,15 +8,17 @@ from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Header, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import and_, case, desc, func, or_, select, update
+from sqlalchemy import and_, case, delete, desc, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.dependencies import DbSession, FanUser, OptionalCurrentUser
 from app.download_signing import download_url, verify_download_token
 from app.errors import AppError
 from app.models import (
+    AdminMembership,
     Artist,
     Asset,
+    AuditLog,
     Card,
     CardCombinationMaterial,
     CardEffectVersion,
@@ -40,26 +42,38 @@ from app.models import (
     PointBalance,
     PointLedger,
     PointTransaction,
+    PushDevice,
     RedeemCode,
+    RefreshToken,
     RewardCatalog,
     RewardGrant,
     Role,
+    Session,
     ShopOrder,
     ShopOrderEntitlement,
     ShopProduct,
+    SupportMessage,
+    SupportTicket,
+    TradeLock,
+    TradeProposal,
     User,
     UserCard,
 )
 from app.rate_limit import enforce_rate_limit
 from app.schemas import (
+    AccountDeletionRequest,
     CollectionGoalCreate,
     NotificationPreferencesUpdate,
     PointExchangeRequest,
     ProfileEquipmentUpdate,
     ProfileUpdate,
+    PushDeviceRegister,
+    PushDeviceUnregister,
     ReadNotification,
     RedemptionRequest,
+    ReportCreate,
     ShopOrderCreate,
+    SupportTicketCreate,
 )
 from app.services import (
     claim_pass_tier,
@@ -69,7 +83,9 @@ from app.services import (
     grant_reward,
     grant_user_card,
     mission_period_key,
+    notify_admin_once,
     notify_user_once,
+    preview_redeem,
     reconcile_claimed_global_pass_reward_grants,
     record_analytics_event,
     record_audit,
@@ -83,6 +99,157 @@ from app.storage import configured_asset_storage, storage_response
 from app.tasks import enqueue_engagement_event
 
 router = APIRouter(prefix="/api", tags=["fan"])
+
+
+@router.get("/me/privacy/export")
+async def export_personal_data(user: FanUser, session: DbSession) -> dict:
+    """Return the fan's portable data without credentials or payment secrets."""
+    cards = (
+        await session.scalars(
+            select(UserCard).where(UserCard.user_id == user.id).order_by(UserCard.acquired_at)
+        )
+    ).all()
+    orders = (
+        await session.scalars(
+            select(ShopOrder).where(ShopOrder.user_id == user.id).order_by(ShopOrder.created_at)
+        )
+    ).all()
+    tickets = (
+        await session.scalars(
+            select(SupportTicket)
+            .where(SupportTicket.user_id == user.id)
+            .order_by(SupportTicket.created_at)
+        )
+    ).all()
+    notifications = (
+        await session.scalars(
+            select(Notification)
+            .where(Notification.user_id == user.id)
+            .order_by(Notification.created_at)
+        )
+    ).all()
+    ledger = (
+        await session.scalars(
+            select(PointLedger)
+            .where(PointLedger.user_id == user.id)
+            .order_by(PointLedger.created_at)
+        )
+    ).all()
+    return {
+        "ok": True,
+        "data": {
+            "profile": {
+                "id": user.id,
+                "email": user.email,
+                "nickname": user.nickname,
+                "role": user.role.value,
+                "favoriteArtistIds": user.favorite_artist_ids or [],
+                "favoriteMemberIds": user.favorite_member_ids or [],
+                "onboardingCompleted": user.onboarding_completed,
+                "notificationEmailEnabled": user.notification_email_enabled,
+            },
+            "collection": [
+                {
+                    "id": card.id,
+                    "cardId": card.card_id,
+                    "serialNumber": card.serial_number,
+                    "acquisitionSource": card.acquisition_source,
+                    "acquiredAt": card.acquired_at.isoformat(),
+                }
+                for card in cards
+            ],
+            "orders": [
+                {
+                    "id": order.id,
+                    "productId": order.product_id,
+                    "productName": order.product_name,
+                    "pricePoints": order.price_points,
+                    "status": order.status,
+                    "createdAt": order.created_at.isoformat(),
+                }
+                for order in orders
+            ],
+            "points": [
+                {
+                    "id": entry.id,
+                    "transactionType": entry.transaction_type,
+                    "amount": entry.amount,
+                    "description": entry.description,
+                    "createdAt": entry.created_at.isoformat(),
+                }
+                for entry in ledger
+            ],
+            "supportTickets": [
+                {
+                    "id": ticket.id,
+                    "category": ticket.category,
+                    "subject": ticket.subject,
+                    "status": ticket.status,
+                    "createdAt": ticket.created_at.isoformat(),
+                }
+                for ticket in tickets
+            ],
+            "notifications": [
+                {
+                    "id": notification.id,
+                    "kind": notification.kind,
+                    "title": notification.title,
+                    "body": notification.body,
+                    "isRead": notification.is_read,
+                    "createdAt": notification.created_at.isoformat(),
+                }
+                for notification in notifications
+            ],
+        },
+    }
+
+
+@router.delete("/me/privacy/account", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_account(
+    payload: AccountDeletionRequest, user: FanUser, session: DbSession
+) -> Response:
+    """Anonymize identity while retaining immutable ownership and accounting history."""
+    if payload.confirmation != "DELETE MY ACCOUNT":
+        raise AppError(
+            422,
+            "INVALID_ACCOUNT_DELETION_CONFIRMATION",
+            "계정 삭제를 진행하려면 확인 문구를 정확히 입력해 주세요.",
+        )
+    now_value = datetime.now(UTC)
+    user.email = None
+    user.username = None
+    user.nickname = "탈퇴한 사용자"
+    user.profile_image_url = None
+    user.favorite_artist_ids = []
+    user.favorite_member_ids = []
+    user.onboarding_completed = False
+    user.notification_email_enabled = False
+    user.password_hash = None
+    user.must_change_password = False
+    user.deleted_at = now_value
+    await session.execute(delete(Session).where(Session.user_id == user.id))
+    await session.execute(
+        update(RefreshToken)
+        .where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None))
+        .values(revoked_at=now_value)
+    )
+    await session.execute(
+        update(PushDevice).where(PushDevice.user_id == user.id).values(enabled=False)
+    )
+    session.add(
+        AuditLog(
+            id=f"audit_{uuid4().hex[:16]}",
+            actor_user_id=None,
+            action="account.deleted",
+            entity_type="user",
+            entity_id=user.id,
+            details={"reason": "self_service"},
+        )
+    )
+    await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -131,6 +298,13 @@ def shop_product_data(
         "status": product.status,
         "startsAt": product.starts_at.isoformat() if product.starts_at else None,
         "endsAt": product.ends_at.isoformat() if product.ends_at else None,
+        "inventoryLimit": product.inventory_limit,
+        "soldCount": product.sold_count,
+        "perUserLimit": product.per_user_limit,
+        "scheduledPublishAt": product.scheduled_publish_at.isoformat()
+        if product.scheduled_publish_at
+        else None,
+        "exposureSlot": product.exposure_slot,
         "cardPack": {
             "id": pack.id,
             "name": pack.name,
@@ -260,13 +434,29 @@ async def create_shop_order(
                     "replayed": True,
                 },
             }
-    product = await session.scalar(select(ShopProduct).where(ShopProduct.id == payload.product_id))
+    product = await session.scalar(
+        select(ShopProduct).where(ShopProduct.id == payload.product_id).with_for_update()
+    )
     if product is None or not shop_product_is_sellable(product, datetime.now(UTC)):
         raise AppError(409, "SHOP_PRODUCT_UNAVAILABLE", "판매가 종료된 상품입니다.")
     if product.product_type == "card_pack" and not product.card_pack_id:
         raise AppError(409, "SHOP_PRODUCT_NOT_PURCHASABLE", "현재 구매할 수 없는 상품입니다.")
     if product.product_type != "card_pack" and not product.fulfillment.get("rewardId"):
         raise AppError(409, "SHOP_PRODUCT_NOT_PURCHASABLE", "상품 지급 정보를 확인할 수 없습니다.")
+    if product.inventory_limit is not None and product.sold_count >= product.inventory_limit:
+        raise AppError(409, "SHOP_PRODUCT_SOLD_OUT", "상품 재고가 모두 소진되었습니다.")
+    if product.per_user_limit is not None:
+        user_purchase_count = await session.scalar(
+            select(func.count())
+            .select_from(ShopOrder)
+            .where(
+                ShopOrder.user_id == user.id,
+                ShopOrder.product_id == product.id,
+                ShopOrder.status == "completed",
+            )
+        )
+        if (user_purchase_count or 0) >= product.per_user_limit:
+            raise AppError(409, "SHOP_PRODUCT_USER_LIMIT", "1인 구매 한도를 초과했습니다.")
     order = ShopOrder(
         id=f"shop_order_{uuid4().hex[:12]}",
         user_id=user.id,
@@ -278,6 +468,7 @@ async def create_shop_order(
         idempotency_key=request_key,
     )
     session.add(order)
+    product.sold_count += 1
     await session.flush()
     event = await record_engagement_event(
         session,
@@ -537,6 +728,40 @@ async def me(user: FanUser, session: DbSession) -> dict:
     }
 
 
+@router.post("/redemptions/preview")
+async def redemption_preview(
+    payload: RedemptionRequest,
+    request: Request,
+    user: FanUser,
+    session: DbSession,
+) -> dict:
+    normalized_code = payload.code.strip().upper()
+    client_host = request.client.host if request.client else "unknown"
+    await enforce_rate_limit(
+        f"redemption-preview:{user.id}:{client_host}", limit=20, window_seconds=60
+    )
+    card = await preview_redeem(session, user, normalized_code)
+    artist = await session.get(Artist, card.artist_id) if card.artist_id else None
+    member = await session.get(Member, card.member_id) if card.member_id else None
+    return {
+        "ok": True,
+        "data": {
+            "card": {
+                "id": card.id,
+                "name": card.name,
+                "imageUrl": card_image_url(card),
+                "isOfficial": card.is_official,
+                "artistId": card.artist_id,
+                "artistName": artist.name if artist else None,
+                "memberId": card.member_id,
+                "memberName": member.name if member else None,
+                "rarity": card.rarity,
+                "seasonName": card.season_name,
+            },
+        },
+    }
+
+
 @router.post("/redemptions", status_code=status.HTTP_201_CREATED)
 async def create_redemption(
     payload: RedemptionRequest,
@@ -625,6 +850,20 @@ async def collection(user: FanUser, session: DbSession) -> dict:
             )
         )
     ).all()
+    locked_card_ids = (
+        set(
+            await session.scalars(
+                select(TradeLock.user_card_id)
+                .join(TradeProposal, TradeProposal.id == TradeLock.proposal_id)
+                .where(
+                    TradeProposal.status == "pending",
+                    TradeLock.user_card_id.in_([uc.id for uc, _, _, _ in rows]),
+                )
+            )
+        )
+        if rows
+        else set()
+    )
     cards = [
         {
             "userCardId": uc.id,
@@ -646,6 +885,7 @@ async def collection(user: FanUser, session: DbSession) -> dict:
             "tradable": bool(card.tradable)
             and uc.expires_at is None
             and uc.trade_locked_at is None
+            and uc.id not in locked_card_ids
             and uc.acquisition_source != "combination",
             "serialNumber": uc.serial_number,
             "acquiredAt": uc.acquired_at.isoformat(),
@@ -771,8 +1011,9 @@ async def collection_goals(user: FanUser, session: DbSession) -> dict:
         )
     ).all()
     items = [await _collection_goal_data(goal, user, session) for goal in goals]
-    if session.dirty or session.new:
-        await session.commit()
+    # Completion is derived during this read and may enqueue a notification
+    # after SQLAlchemy autoflushes the new rows. Persist both explicitly.
+    await session.commit()
     return {"ok": True, "data": {"items": items}}
 
 
@@ -1901,6 +2142,92 @@ async def update_notification_preferences(
     return {"ok": True, "data": {"emailEnabled": user.notification_email_enabled}}
 
 
+def push_device_data(device: PushDevice) -> dict:
+    return {
+        "deviceId": device.id,
+        "platform": device.platform,
+        "deviceName": device.device_name,
+        "enabled": device.enabled,
+        "tokenPreview": f"…{device.token[-8:]}",
+        "lastSeenAt": device.last_seen_at.isoformat(),
+    }
+
+
+@router.get("/me/push-devices")
+async def list_push_devices(user: FanUser, session: DbSession) -> dict:
+    devices = (
+        await session.scalars(
+            select(PushDevice)
+            .where(PushDevice.user_id == user.id, PushDevice.enabled.is_(True))
+            .order_by(PushDevice.last_seen_at.desc(), PushDevice.id.desc())
+        )
+    ).all()
+    return {"ok": True, "data": {"items": [push_device_data(device) for device in devices]}}
+
+
+@router.put("/me/push-devices")
+async def register_push_device(
+    payload: PushDeviceRegister, user: FanUser, session: DbSession
+) -> dict:
+    device = await session.scalar(select(PushDevice).where(PushDevice.token == payload.token))
+    now = datetime.now(UTC)
+    if device and device.user_id != user.id:
+        raise AppError(
+            409,
+            "PUSH_DEVICE_OWNED_BY_ANOTHER_USER",
+            "이미 다른 계정에 등록된 기기입니다.",
+        )
+    if device is None:
+        device = PushDevice(
+            id=f"push_device_{uuid4().hex}",
+            user_id=user.id,
+            token=payload.token,
+            platform=payload.platform,
+            device_name=payload.device_name,
+            enabled=True,
+            last_seen_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(device)
+    else:
+        device.platform = payload.platform
+        device.device_name = payload.device_name
+        device.enabled = True
+        device.last_seen_at = now
+        device.updated_at = now
+    await session.commit()
+    return {"ok": True, "data": push_device_data(device)}
+
+
+@router.delete("/me/push-devices/{device_id}")
+async def unregister_push_device(device_id: str, user: FanUser, session: DbSession) -> dict:
+    device = await session.scalar(
+        select(PushDevice).where(PushDevice.id == device_id, PushDevice.user_id == user.id)
+    )
+    if device is None:
+        raise AppError(404, "PUSH_DEVICE_NOT_FOUND", "등록된 기기를 찾을 수 없습니다.")
+    device.enabled = False
+    device.updated_at = datetime.now(UTC)
+    await session.commit()
+    return {"ok": True, "data": {"deviceId": device.id, "enabled": False}}
+
+
+@router.delete("/me/push-devices")
+async def unregister_push_device_by_token(
+    payload: PushDeviceUnregister, user: FanUser, session: DbSession
+) -> dict:
+    device = await session.scalar(
+        select(PushDevice).where(PushDevice.token == payload.token, PushDevice.user_id == user.id)
+    )
+    if device is None:
+        return {"ok": True, "data": {"removed": False}}
+    device.enabled = False
+    device.updated_at = datetime.now(UTC)
+    await session.commit()
+    return {"ok": True, "data": {"deviceId": device.id, "removed": True}}
+
+
 @router.get("/me/cards/{user_card_id}")
 async def card_detail(user_card_id: str, user: FanUser, session: DbSession) -> dict:
     row = (
@@ -2266,6 +2593,10 @@ async def catalog(
                     "artistName": artist.name if artist else None,
                     "memberId": member.id if member else c.member_id,
                     "memberName": member.name if member else None,
+                    "rarity": c.rarity,
+                    "seasonName": c.season_name,
+                    "signatureText": c.signature_text,
+                    "issueLimit": c.issue_limit,
                 }
                 for c, artist, member in cards
             ],
@@ -2275,6 +2606,135 @@ async def catalog(
             },
         },
     }
+
+
+async def _support_message_data(session: DbSession, message: SupportMessage) -> dict:
+    author = await session.get(User, message.author_user_id)
+    return {
+        "id": message.id,
+        "authorUserId": message.author_user_id,
+        "authorRole": author.role.value if author else "unknown",
+        "body": message.body,
+        "createdAt": message.created_at.isoformat(),
+    }
+
+
+async def _support_ticket_data(session: DbSession, ticket: SupportTicket) -> dict:
+    messages = list(
+        await session.scalars(
+            select(SupportMessage)
+            .where(SupportMessage.ticket_id == ticket.id)
+            .order_by(SupportMessage.created_at, SupportMessage.id)
+        )
+    )
+    return {
+        "id": ticket.id,
+        "category": ticket.category,
+        "subject": ticket.subject,
+        "status": ticket.status,
+        "assignedAdminId": ticket.assigned_admin_id,
+        "createdAt": ticket.created_at.isoformat(),
+        "updatedAt": ticket.updated_at.isoformat(),
+        "closedAt": ticket.closed_at.isoformat() if ticket.closed_at else None,
+        "messages": [await _support_message_data(session, message) for message in messages],
+    }
+
+
+@router.post("/me/support-tickets", status_code=status.HTTP_201_CREATED)
+async def create_support_ticket(
+    payload: SupportTicketCreate,
+    user: FanUser,
+    session: DbSession,
+) -> dict:
+    ticket = SupportTicket(
+        id=f"support_{uuid4().hex[:12]}",
+        user_id=user.id,
+        category=payload.category,
+        subject=payload.subject.strip(),
+        status="open",
+    )
+    message = SupportMessage(
+        id=f"support_message_{uuid4().hex[:12]}",
+        ticket_id=ticket.id,
+        author_user_id=user.id,
+        body=payload.body.strip(),
+    )
+    session.add_all([ticket, message])
+    admins = await session.scalars(
+        select(AdminMembership).where(AdminMembership.status == "active")
+    )
+    for membership in admins:
+        await notify_admin_once(
+            session,
+            user_id=membership.user_id,
+            kind="support_ticket_created",
+            title="새 고객센터 문의가 접수됐어요",
+            body=f"{ticket.subject} 문의를 확인해 주세요.",
+            entity_type="support_ticket",
+            entity_id=ticket.id,
+            event_key=f"support:{ticket.id}:created:{membership.user_id}",
+        )
+    await session.commit()
+    return {"ok": True, "data": await _support_ticket_data(session, ticket)}
+
+
+@router.get("/me/support-tickets")
+async def list_support_tickets(user: FanUser, session: DbSession) -> dict:
+    tickets = list(
+        await session.scalars(
+            select(SupportTicket)
+            .where(SupportTicket.user_id == user.id)
+            .order_by(SupportTicket.updated_at.desc(), SupportTicket.id.desc())
+        )
+    )
+    return {
+        "ok": True,
+        "data": {"items": [await _support_ticket_data(session, ticket) for ticket in tickets]},
+    }
+
+
+@router.get("/me/support-tickets/{ticket_id}")
+async def get_support_ticket(ticket_id: str, user: FanUser, session: DbSession) -> dict:
+    ticket = await session.scalar(
+        select(SupportTicket).where(SupportTicket.id == ticket_id, SupportTicket.user_id == user.id)
+    )
+    if ticket is None:
+        raise AppError(404, "SUPPORT_TICKET_NOT_FOUND", "문의 내역을 찾을 수 없습니다.")
+    return {"ok": True, "data": await _support_ticket_data(session, ticket)}
+
+
+@router.post("/me/reports", status_code=status.HTTP_201_CREATED)
+async def create_report(payload: ReportCreate, user: FanUser, session: DbSession) -> dict:
+    ticket = SupportTicket(
+        id=f"support_{uuid4().hex[:12]}",
+        user_id=user.id,
+        category="report",
+        subject=f"신고: {payload.reason}",
+        status="open",
+    )
+    message = SupportMessage(
+        id=f"support_message_{uuid4().hex[:12]}",
+        ticket_id=ticket.id,
+        author_user_id=user.id,
+        body=f"대상 유형: {payload.target_type}\n대상 ID: {payload.target_id}\n{payload.body}",
+    )
+    session.add_all([ticket, message])
+    admins = await session.scalars(
+        select(AdminMembership).where(AdminMembership.status == "active")
+    )
+    for membership in admins:
+        await notify_admin_once(
+            session,
+            user_id=membership.user_id,
+            kind="report_received",
+            title="새 신고가 접수됐어요",
+            body=f"{ticket.subject} 신고를 확인해 주세요.",
+            entity_type="support_ticket",
+            entity_id=ticket.id,
+            event_key=f"support:{ticket.id}:report:{membership.user_id}",
+        )
+    await session.commit()
+    return {"ok": True, "data": await _support_ticket_data(session, ticket)}
 
 
 @router.get("/notifications")

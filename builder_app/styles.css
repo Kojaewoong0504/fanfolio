@@ -2876,6 +2876,18 @@ input[type='range'] {
   font-size: 21px;
 }
 
+.card-comments-panel { margin-top: 22px; padding-top: 20px; border-top: 1px solid #e7e5f2; }
+.card-comment-list { display: grid; gap: 10px; margin: 14px 0; }
+.card-comment { position: relative; padding: 12px 14px; border: 1px solid #e4e2ef; border-radius: 12px; background: #fff; }
+.card-comment.resolved { opacity: .68; }
+.card-comment > div { display: flex; align-items: center; gap: 8px; }
+.card-comment p { margin: 7px 0; white-space: pre-wrap; }
+.card-comment small { color: #8d8aa1; }
+.comment-status { font-size: 11px; color: #6657ed; }
+.card-comment .text-button { margin-top: 7px; }
+.card-comment-form { display: grid; gap: 8px; }
+.card-comment-form textarea, .card-comment-form input { width: 100%; }
+
 .readiness-score {
   width: 52px;
   height: 52px;

@@ -15,6 +15,7 @@ export function TradeCardPicker({ recipientUserId, requestedUserCardIds, onBack,
   const [selectedRequestedId, setSelectedRequestedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [retryNonce, setRetryNonce] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -32,7 +33,7 @@ export function TradeCardPicker({ recipientUserId, requestedUserCardIds, onBack,
       setSelectedRequestedId((requestedFromRoute[0] ?? requestedFromWishlist[0] ?? mergedRequested[0])?.userCardId ?? null)
     }).catch(errorValue => { if (active) setError(errorValue instanceof ApiError ? errorValue.message : '거래할 카드를 불러오지 못했어요.') }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [recipientUserId, requestedUserCardIds])
+  }, [recipientUserId, requestedUserCardIds, retryNonce])
 
   const selectedOffered = cards.find(card => card.userCardId === selectedOfferedId)
   const selectedRequested = requestedCards.find(card => card.userCardId === selectedRequestedId)
@@ -43,7 +44,7 @@ export function TradeCardPicker({ recipientUserId, requestedUserCardIds, onBack,
     <DetailTopBar title="거래 제안" onBack={onBack} backLabel="팬 프로필로 돌아가기" />
     <section className="trade-picker-content detail-screen-content">
       <section className="trade-picker-intro"><InlineIcon name="rotate" /><div><b>서로 원하는 카드를 골라보세요</b><p>상대가 원하는 카드와 내가 보낼 카드를 선택해요.</p></div></section>
-      {error ? <p role="alert">{error}</p> : loading ? <p role="status">카드를 불러오는 중...</p> : <>
+      {error ? <div className="trade-picker-error"><p role="alert">{error}</p><button type="button" onClick={() => { setError(''); setLoading(true); setRetryNonce(value => value + 1) }}>다시 시도</button></div> : loading ? <p role="status">카드를 불러오는 중...</p> : <>
         <section className="trade-picker-section"><div className="trade-picker-heading"><div><h2>상대가 원하는 카드</h2><p>받고 싶은 카드 {requestedCards.length}장</p></div><b>{requestedCards.length}장</b></div><div className="trade-picker-wanted-grid">{requestedCards.slice(0, 4).map(card => { const selected = card.userCardId === selectedRequestedId; return <button type="button" key={card.userCardId} className={`trade-picker-card ${selected ? 'selected' : ''}`} onClick={() => setSelectedRequestedId(card.userCardId)} aria-pressed={selected} aria-label={`${cardLabel(card)} ${selected ? '선택됨' : '선택'}`}><img src={resolveApiUrl(card.imageUrl)} alt={card.name} /><span>{card.rarity ?? 'N'}</span><em><InlineIcon name="star" /> 1</em>{(wantedCardIds.has(card.cardId) || selected) && <small>원하는 카드</small>}{selected && <i><InlineIcon name="check" /></i>}</button> })}</div></section>
         <section className="trade-picker-section"><div className="trade-picker-heading"><div><h2>내가 보낼 카드</h2><p>교환할 카드 1장을 선택해 주세요.</p></div><b>{cards.length}장</b></div><div className="trade-picker-offered-grid">{cards.slice(0, 8).map(card => { const selected = card.userCardId === selectedOfferedId; return <button type="button" key={card.userCardId} className={`trade-picker-card ${selected ? 'selected' : ''}`} onClick={() => setSelectedOfferedId(card.userCardId)} aria-pressed={selected} aria-label={`${cardLabel(card)} ${selected ? '선택 해제' : '선택'}`}><img src={resolveApiUrl(card.imageUrl)} alt={card.name} /><span>{card.rarity ?? 'N'}</span><em><InlineIcon name="star" /> 1</em>{selected && <i><InlineIcon name="check" /></i>}</button> })}</div></section>
         {selectedOffered && selectedRequested && <div className="trade-picker-summary"><img src={resolveApiUrl(selectedOffered.imageUrl)} alt="내가 보낼 카드" /><span>선택한 카드 <b>{selectedOffered.name}</b><small>받고 싶은 카드: {selectedRequested.name}</small></span><InlineIcon name="chevron" /></div>}
@@ -76,9 +77,14 @@ export function TradeComposer({ recipientUserId, requestedUserCardIds, onBack, o
     void Promise.all([getMyCollection(), getPublicCollection(recipientUserId)])
       .then(([mine, theirs]) => {
         if (!active) return
+        const availableCards = mine.data.cards.filter(card => card.tradable !== false)
         setCards(mine.data.cards)
         setRequestedCards(theirs.data.cards)
         setRecipientNickname(theirs.data.nickname ?? recipientUserId)
+        const preferredCard = initialOfferedUserCardId
+          ? availableCards.find(card => card.userCardId === initialOfferedUserCardId)
+          : undefined
+        setSelectedOfferedUserCardId((preferredCard ?? availableCards[0] ?? mine.data.cards[0])?.userCardId ?? null)
       })
       .catch(e => { if (active) setError(e instanceof ApiError ? e.message : '거래할 컬렉션을 불러오지 못했어요.') })
       .finally(() => { if (active) setLoading(false) })

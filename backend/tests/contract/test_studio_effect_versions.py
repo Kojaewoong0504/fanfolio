@@ -72,6 +72,22 @@ def test_artist_effect_version_rejects_unsafe_config_and_accepts_preset(
     assert version["version"] == 1
 
 
+def test_artist_effect_version_normalizes_legacy_studio_preset_names(
+    app: FastAPI, actors: dict[str, TestClient], seeded: dict
+) -> None:
+    card = create_studio_card(actors["artist"], seeded)
+
+    version = assert_success(
+        actors["artist"].post(
+            f"/api/artist/cards/{card['id']}/effect-versions",
+            json={"designConfig": {"front": {"effectPreset": "stardust"}}},
+        ),
+        201,
+    )
+
+    assert version["designConfig"]["front"]["preset"] == "hologram"
+
+
 def test_effect_config_rejects_back_lenticular_and_unsafe_asset_references(
     app: FastAPI, actors: dict[str, TestClient], seeded: dict
 ) -> None:

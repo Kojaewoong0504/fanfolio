@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import type { IScannerControls } from '@zxing/browser'
-import { redeemCard, type RedemptionSource } from '../api/client'
+import { previewRedemption, redeemCard, type RedemptionPreview, type RedemptionSource } from '../api/client'
 import '../App.css'
 import './QrRedeemModal.css'
 import { DetailTopBar } from './DetailTopBar'
@@ -28,6 +28,8 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
   const [scanning, setScanning] = useState(false)
   const [readingImage, setReadingImage] = useState(false)
   const [isDemo, setIsDemo] = useState(false)
+  const [preview, setPreview] = useState<RedemptionPreview | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const backdropRef = useRef<HTMLDivElement>(null)
   const scannerControlsRef = useRef<IScannerControls | null>(null)
@@ -186,6 +188,19 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
   }, [scanning, source, step])
 
   useEffect(() => {
+    if (step !== 3 || isDemo || !code.trim()) return
+    let cancelled = false
+    setPreview(null)
+    setPreviewLoading(true)
+    setMessage('카드 정보를 확인하는 중입니다.')
+    void previewRedemption(code, source)
+      .then(result => { if (!cancelled) { setPreview(result.data); setMessage('카드 정보를 확인했습니다.') } })
+      .catch(error => { if (!cancelled) setMessage(error instanceof Error ? error.message : '카드 정보를 확인할 수 없습니다.') })
+      .finally(() => { if (!cancelled) setPreviewLoading(false) })
+    return () => { cancelled = true }
+  }, [code, isDemo, source, step])
+
+  useEffect(() => {
     if (!message || !isRedemptionErrorMessage(message)) return
     const frame = window.requestAnimationFrame(() => messageRef.current?.scrollIntoView({ block: 'nearest' }))
     return () => window.cancelAnimationFrame(frame)
@@ -317,11 +332,11 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
       {step === 3 && <section className="redeem-flow-confirm">
         <div className="redeem-flow-intro"><h1>카드 정보를 확인해 주세요</h1><p>등록할 카드가 맞는지 확인한 뒤 컬렉션에 추가해요.</p></div>
         <article className="redeem-flow-confirm-card">
-          <div className="redeem-flow-confirm-image"><img src={registrationCardImage} alt="하린 Nebula 버전 카드" /><span>SR</span></div>
-          <div><small>드림스케이프 2026 SPRING</small><h3>하린 · Nebula Ver.</h3><b>SR</b><p>{isDemo ? '샘플 미리보기 카드' : '입력한 인증 코드'}</p></div>
+          <div className="redeem-flow-confirm-image"><img src={preview ? preview.card.imageUrl : registrationCardImage} alt={preview ? `${preview.card.memberName ?? ''} ${preview.card.name} 카드` : '카드 정보 확인 중'} /><span>{preview?.card.rarity ?? (isDemo ? 'SR' : '…')}</span></div>
+          <div><small>{preview?.card.seasonName ?? (isDemo ? '샘플 카드' : '인증 코드 카드')}</small><h3>{preview ? `${preview.card.memberName ? `${preview.card.memberName} · ` : ''}${preview.card.name}` : isDemo ? '샘플 미리보기 카드' : '카드 정보를 확인하는 중…'}</h3><b>{preview?.card.rarity ?? (isDemo ? 'SR' : '')}</b><p>{isDemo ? '샘플 미리보기 카드' : '입력한 인증 코드로 확인된 카드'}</p></div>
         </article>
         <div className="redeem-flow-confirm-notice"><RedeemIcon name="scan" /><span><b>등록할 카드 정보를 확인해 주세요</b><small>등록하기를 누르면 서버에서 인증번호를 최종 확인한 뒤 컬렉션에 추가해요.</small></span></div>
-        <button type="button" className="primary redeem-flow-step-button" disabled={saving} onClick={confirmRegistration}>{saving ? '등록 중...' : '이 카드 등록하기'}</button>
+        <button type="button" className="primary redeem-flow-step-button" disabled={saving || previewLoading || (!isDemo && !preview)} onClick={confirmRegistration}>{saving ? '등록 중...' : previewLoading ? '카드 확인 중...' : '이 카드 등록하기'}</button>
       </section>}
 
       {message && <p ref={messageRef} className={messageIsError ? 'form-message error-message' : 'form-message'} role={messageIsError ? 'alert' : 'status'}>{message}</p>}

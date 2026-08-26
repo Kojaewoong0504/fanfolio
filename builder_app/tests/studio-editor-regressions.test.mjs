@@ -96,7 +96,7 @@ async function loadMotionHarness(options = {}) {
   context.clearTimeout = context.window.clearTimeout
 
   const source = (await readFile(appUrl, 'utf8'))
-    .replace(/^import \{[\s\S]*?\} from '\.\/studio-core\.js'\n\n/, '')
+    .replace(/^import \{[\s\S]*?\} from '\.\/studio-core\.js(?:\?[^']*)?'\n\n/, '')
     .replace(/\nbootstrap\(\)\s*$/, '')
   vm.runInNewContext(
     `${source}

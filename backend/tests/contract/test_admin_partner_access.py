@@ -225,6 +225,8 @@ def test_partner_action_map_includes_company_admin_and_drop_code_scope() -> None
             "events:submit",
             "audit:read",
             "statistics:read",
+            "support:read",
+            "support:write",
         }
     )
     assert {"drops:read", "drops:write", "drops:submit"} <= PARTNER_ACTIONS["manager"]

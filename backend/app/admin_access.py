@@ -41,6 +41,8 @@ ROOT_ACTIONS = frozenset(
         "engagement:approve_global",
         "engagement:points_adjust",
         "engagement:retry",
+        "support:read",
+        "support:write",
     }
 )
 
@@ -49,6 +51,8 @@ PLATFORM_ACTIONS = frozenset(
         "cards:read",
         "cards:review_platform",
         "notifications:read",
+        "support:read",
+        "support:write",
         "engagement:approve_global",
         "events:read",
         "events:review",
@@ -78,6 +82,8 @@ PARTNER_ACTIONS = {
             "engagement:approve",
             "audit:read",
             "statistics:read",
+            "support:read",
+            "support:write",
         }
     ),
     "manager": frozenset(
@@ -98,6 +104,8 @@ PARTNER_ACTIONS = {
             "engagement:write",
             "audit:read",
             "statistics:read",
+            "support:read",
+            "support:write",
         }
     ),
     "editor": frozenset(
@@ -115,6 +123,8 @@ PARTNER_ACTIONS = {
             "engagement:write",
             "audit:read",
             "statistics:read",
+            "support:read",
+            "support:write",
         }
     ),
     "viewer": frozenset(
@@ -126,6 +136,7 @@ PARTNER_ACTIONS = {
             "codes:read",
             "audit:read",
             "statistics:read",
+            "support:read",
         }
     ),
 }

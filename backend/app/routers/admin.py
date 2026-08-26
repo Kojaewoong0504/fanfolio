@@ -20,17 +20,20 @@ from app.models import (
     AchievementDefinition,
     AdminMembership,
     AnalyticsEvent,
+    ApprovalRequest,
     Artist,
     ArtistProfile,
     Asset,
     AuditLog,
     Card,
+    CardCollaborationComment,
     CardCombination,
     CardEffectVersion,
     CardPack,
     CardPackCard,
     CardPackOpening,
     CollectionCampaign,
+    ContentCalendarEntry,
     Drop,
     EngagementEvent,
     LevelPolicyVersion,
@@ -38,10 +41,12 @@ from app.models import (
     Member,
     MissionDefinition,
     Notification,
+    NotificationDelivery,
     Organization,
     OrganizationArtist,
     PassSeason,
     PassTier,
+    PointBalance,
     PointLedger,
     PointTransaction,
     RedeemCode,
@@ -50,7 +55,13 @@ from app.models import (
     RewardCatalog,
     RewardGrant,
     Role,
+    ShopOrder,
+    ShopOrderEntitlement,
     ShopProduct,
+    SupportEvidence,
+    SupportMessage,
+    SupportTicket,
+    TradeHold,
     TradeItem,
     TradeProposal,
     User,
@@ -70,6 +81,8 @@ from app.schemas import (
     AdminCardUpdate,
     AdminNotificationReadRequest,
     AdminUserRoleUpdate,
+    ApprovalCreateRequest,
+    ApprovalDecisionRequest,
     ArtistAccountCreate,
     ArtistReviewSubmitRequest,
     CardEffectReviewDecision,
@@ -77,6 +90,8 @@ from app.schemas import (
     CodeBatchRequest,
     CollectionCampaignCreate,
     CollectionCampaignUpdate,
+    ContentCalendarCreate,
+    ContentCalendarUpdate,
     DropCardLinkRequest,
     DropCreateRequest,
     DropStatusUpdate,
@@ -90,6 +105,9 @@ from app.schemas import (
     RewardCatalogCreate,
     ShopProductCreate,
     ShopProductUpdate,
+    SupportMessageCreate,
+    SupportTicketActionRequest,
+    SupportTicketUpdate,
 )
 from app.services import (
     active_review_request,
@@ -97,10 +115,12 @@ from app.services import (
     grant_points,
     notify_fans,
     notify_platform_reviewers,
+    notify_user_once,
     record_audit,
     record_engagement_event,
     record_review_decision,
     release_card_data,
+    reverse_points,
     spend_points,
     submit_card_for_release_review,
 )
@@ -184,6 +204,113 @@ def _statistics_change(current: float, previous: float) -> float:
     if previous == 0:
         return 100.0 if current else 0.0
     return round((current - previous) / previous * 100, 1)
+
+
+def _calendar_entry_data(entry: ContentCalendarEntry) -> dict[str, object]:
+    return {
+        "id": entry.id,
+        "contentType": entry.content_type,
+        "contentId": entry.content_id,
+        "title": entry.title,
+        "startsAt": entry.starts_at.isoformat(),
+        "endsAt": entry.ends_at.isoformat(),
+        "status": entry.status,
+        "notes": entry.notes,
+        "createdBy": entry.created_by,
+    }
+
+
+async def _calendar_conflict(
+    session: DbSession,
+    *,
+    content_type: str,
+    content_id: str,
+    starts_at: datetime,
+    ends_at: datetime,
+    exclude_id: str | None = None,
+) -> bool:
+    query = select(ContentCalendarEntry.id).where(
+        ContentCalendarEntry.content_type == content_type,
+        ContentCalendarEntry.content_id == content_id,
+        ContentCalendarEntry.status != "cancelled",
+        ContentCalendarEntry.starts_at < ends_at,
+        ContentCalendarEntry.ends_at > starts_at,
+    )
+    if exclude_id:
+        query = query.where(ContentCalendarEntry.id != exclude_id)
+    return await session.scalar(query) is not None
+
+
+@router.get("/content-calendar")
+async def list_content_calendar(context: CurrentAdmin, session: DbSession) -> dict:
+    context.require_action("cards:read")
+    entries = (
+        await session.scalars(
+            select(ContentCalendarEntry).order_by(
+                ContentCalendarEntry.starts_at, ContentCalendarEntry.created_at
+            )
+        )
+    ).all()
+    return {"ok": True, "data": {"items": [_calendar_entry_data(entry) for entry in entries]}}
+
+
+@router.post("/content-calendar", status_code=status.HTTP_201_CREATED)
+async def create_content_calendar(
+    payload: ContentCalendarCreate, context: CurrentAdmin, session: DbSession
+) -> dict:
+    context.require_action("cards:write")
+    if await _calendar_conflict(
+        session,
+        content_type=payload.content_type,
+        content_id=payload.content_id,
+        starts_at=payload.starts_at,
+        ends_at=payload.ends_at,
+    ):
+        raise AppError(409, "CALENDAR_ENTRY_CONFLICT", "같은 콘텐츠에 겹치는 일정이 있습니다.")
+    entry = ContentCalendarEntry(
+        id=f"calendar_{uuid4().hex[:12]}",
+        content_type=payload.content_type,
+        content_id=payload.content_id,
+        title=payload.title,
+        starts_at=payload.starts_at,
+        ends_at=payload.ends_at,
+        notes=payload.notes,
+        created_by=context.user.id,
+    )
+    session.add(entry)
+    await session.commit()
+    return {"ok": True, "data": {"entry": _calendar_entry_data(entry)}}
+
+
+@router.patch("/content-calendar/{entry_id}")
+async def update_content_calendar(
+    entry_id: str,
+    payload: ContentCalendarUpdate,
+    context: CurrentAdmin,
+    session: DbSession,
+) -> dict:
+    context.require_action("cards:write")
+    entry = await session.get(ContentCalendarEntry, entry_id)
+    if not entry:
+        raise AppError(404, "CALENDAR_ENTRY_NOT_FOUND", "일정을 찾을 수 없습니다.")
+    values = payload.model_dump(exclude_unset=True, by_alias=False)
+    starts_at = values.get("starts_at", entry.starts_at)
+    ends_at = values.get("ends_at", entry.ends_at)
+    if ends_at <= starts_at:
+        raise AppError(422, "INVALID_CALENDAR_WINDOW", "종료 시각은 시작 시각보다 뒤여야 합니다.")
+    if await _calendar_conflict(
+        session,
+        content_type=entry.content_type,
+        content_id=entry.content_id,
+        starts_at=starts_at,
+        ends_at=ends_at,
+        exclude_id=entry.id,
+    ):
+        raise AppError(409, "CALENDAR_ENTRY_CONFLICT", "같은 콘텐츠에 겹치는 일정이 있습니다.")
+    for field, value in values.items():
+        setattr(entry, field, value)
+    await session.commit()
+    return {"ok": True, "data": {"entry": _calendar_entry_data(entry)}}
 
 
 @router.get("/statistics")
@@ -669,6 +796,710 @@ async def read_admin_notification(
     notification.read_at = datetime.now(UTC) if payload.read else None
     await session.commit()
     return {"ok": True, "data": notification_data(notification)}
+
+
+@router.post("/notification-deliveries/{delivery_id}/retry")
+async def retry_notification_delivery(
+    delivery_id: str,
+    context: CurrentAdmin,
+    session: DbSession,
+) -> dict:
+    context.require_action("engagement:retry")
+    delivery = await session.get(NotificationDelivery, delivery_id)
+    if delivery is None:
+        raise AppError(404, "DELIVERY_NOT_FOUND", "알림 전달 작업을 찾을 수 없습니다.")
+    if delivery.status not in {"failed", "retry", "dead_letter"}:
+        raise AppError(409, "DELIVERY_NOT_RETRYABLE", "실패한 전달 작업만 재시도할 수 있습니다.")
+    delivery.status = "pending"
+    delivery.next_attempt_at = None
+    delivery.last_error = None
+    delivery.sent_at = None
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="notification_delivery.retried",
+        entity_type="notification_delivery",
+        entity_id=delivery.id,
+        details={"channel": delivery.channel},
+    )
+    await session.commit()
+    return {
+        "ok": True,
+        "data": {
+            "id": delivery.id,
+            "channel": delivery.channel,
+            "status": delivery.status,
+            "attemptCount": delivery.attempt_count,
+            "nextAttemptAt": delivery.next_attempt_at.isoformat()
+            if delivery.next_attempt_at
+            else None,
+        },
+    }
+
+
+@router.get("/notification-deliveries")
+async def list_notification_deliveries(
+    context: CurrentAdmin,
+    session: DbSession,
+    delivery_status: str | None = Query(default=None, alias="status"),
+    channel: str | None = None,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, alias="pageSize", ge=1, le=100),
+) -> dict:
+    context.require_action("engagement:retry")
+    filters = []
+    if delivery_status:
+        filters.append(NotificationDelivery.status == delivery_status)
+    if channel:
+        filters.append(NotificationDelivery.channel == channel)
+    total = await session.scalar(
+        select(func.count()).select_from(NotificationDelivery).where(*filters)
+    )
+    rows = list(
+        await session.scalars(
+            select(NotificationDelivery)
+            .where(*filters)
+            .order_by(NotificationDelivery.created_at.desc(), NotificationDelivery.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+    )
+    notification_ids = {row.notification_id for row in rows}
+    notifications = (
+        {
+            notification.id: notification
+            for notification in await session.scalars(
+                select(Notification).where(Notification.id.in_(notification_ids))
+            )
+        }
+        if notification_ids
+        else {}
+    )
+    return {
+        "ok": True,
+        "data": {
+            "items": [
+                {
+                    "id": row.id,
+                    "notificationId": row.notification_id,
+                    "channel": row.channel,
+                    "status": row.status,
+                    "attemptCount": row.attempt_count,
+                    "nextAttemptAt": row.next_attempt_at.isoformat()
+                    if row.next_attempt_at
+                    else None,
+                    "lastError": row.last_error,
+                    "sentAt": row.sent_at.isoformat() if row.sent_at else None,
+                    "createdAt": row.created_at.isoformat(),
+                    "notification": {
+                        "kind": notifications[row.notification_id].kind,
+                        "title": notifications[row.notification_id].title,
+                    }
+                    if row.notification_id in notifications
+                    else None,
+                }
+                for row in rows
+            ],
+            "pagination": {"page": page, "pageSize": page_size, "total": total or 0},
+        },
+    }
+
+
+async def _admin_support_ticket_data(session: DbSession, ticket: SupportTicket) -> dict:
+    owner = await session.get(User, ticket.user_id)
+    messages = list(
+        await session.scalars(
+            select(SupportMessage)
+            .where(SupportMessage.ticket_id == ticket.id)
+            .order_by(SupportMessage.created_at, SupportMessage.id)
+        )
+    )
+    authors = (
+        {
+            author.id: author
+            for author in await session.scalars(
+                select(User).where(User.id.in_({message.author_user_id for message in messages}))
+            )
+        }
+        if messages
+        else {}
+    )
+    evidence = list(
+        await session.scalars(
+            select(SupportEvidence)
+            .where(SupportEvidence.ticket_id == ticket.id)
+            .order_by(SupportEvidence.created_at, SupportEvidence.id)
+        )
+    )
+    return {
+        "id": ticket.id,
+        "userId": ticket.user_id,
+        "userEmail": owner.email if owner else None,
+        "userNickname": owner.nickname if owner else None,
+        "category": ticket.category,
+        "subject": ticket.subject,
+        "status": ticket.status,
+        "assignedAdminId": ticket.assigned_admin_id,
+        "evidence": [
+            {
+                "id": item.id,
+                "kind": item.kind,
+                "referenceId": item.reference_id,
+                "note": item.note,
+                "createdAt": item.created_at.isoformat(),
+            }
+            for item in evidence
+        ],
+        "createdAt": ticket.created_at.isoformat(),
+        "updatedAt": ticket.updated_at.isoformat(),
+        "closedAt": ticket.closed_at.isoformat() if ticket.closed_at else None,
+        "messages": [
+            {
+                "id": message.id,
+                "authorUserId": message.author_user_id,
+                "authorRole": authors.get(message.author_user_id).role.value
+                if authors.get(message.author_user_id)
+                else "unknown",
+                "body": message.body,
+                "createdAt": message.created_at.isoformat(),
+            }
+            for message in messages
+        ],
+    }
+
+
+@router.get("/support-tickets")
+async def admin_support_tickets(
+    context: CurrentAdmin,
+    session: DbSession,
+    status_filter: str | None = Query(default=None, alias="status"),
+    category: str | None = None,
+    q: str | None = None,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, alias="pageSize", ge=1, le=100),
+) -> dict:
+    context.require_action("support:read")
+    filters = []
+    if status_filter:
+        filters.append(SupportTicket.status == status_filter)
+    if category:
+        filters.append(SupportTicket.category == category)
+    if q:
+        pattern = f"%{q.strip()}%"
+        filters.append(
+            or_(SupportTicket.subject.ilike(pattern), SupportTicket.user_id.ilike(pattern))
+        )
+    total = await session.scalar(select(func.count()).select_from(SupportTicket).where(*filters))
+    tickets = list(
+        await session.scalars(
+            select(SupportTicket)
+            .where(*filters)
+            .order_by(SupportTicket.updated_at.desc(), SupportTicket.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+    )
+    return {
+        "ok": True,
+        "data": {
+            "items": [await _admin_support_ticket_data(session, ticket) for ticket in tickets],
+            "pagination": {"page": page, "pageSize": page_size, "total": total or 0},
+        },
+    }
+
+
+@router.get("/support-tickets/{ticket_id}")
+async def admin_support_ticket(ticket_id: str, context: CurrentAdmin, session: DbSession) -> dict:
+    context.require_action("support:read")
+    ticket = await session.get(SupportTicket, ticket_id)
+    if ticket is None:
+        raise AppError(404, "SUPPORT_TICKET_NOT_FOUND", "문의 내역을 찾을 수 없습니다.")
+    return {"ok": True, "data": await _admin_support_ticket_data(session, ticket)}
+
+
+@router.patch("/support-tickets/{ticket_id}")
+async def update_admin_support_ticket(
+    ticket_id: str,
+    payload: SupportTicketUpdate,
+    context: CurrentAdmin,
+    session: DbSession,
+) -> dict:
+    context.require_action("support:write")
+    ticket = await session.get(SupportTicket, ticket_id)
+    if ticket is None:
+        raise AppError(404, "SUPPORT_TICKET_NOT_FOUND", "문의 내역을 찾을 수 없습니다.")
+    allowed_transitions = {
+        "open": {"open", "in_progress"},
+        "in_progress": {"in_progress", "answered", "closed"},
+        "answered": {"answered", "in_progress", "closed"},
+        "closed": {"closed", "open"},
+    }
+    next_status = payload.status or ticket.status
+    if next_status not in allowed_transitions[ticket.status]:
+        raise AppError(
+            409,
+            "SUPPORT_TICKET_INVALID_TRANSITION",
+            f"{ticket.status} 상태에서는 {next_status} 상태로 변경할 수 없습니다.",
+        )
+    if ticket.status == "closed" and next_status not in {"open", "closed"}:
+        raise AppError(
+            409, "SUPPORT_TICKET_REOPEN_REQUIRED", "종료된 문의는 먼저 다시 열어 주세요."
+        )
+    previous_status = ticket.status
+    ticket.status = next_status
+    if payload.assigned_admin_id is not None:
+        assignee = await session.get(User, payload.assigned_admin_id)
+        if assignee is None or assignee.role.value != "admin":
+            raise AppError(
+                422, "SUPPORT_ASSIGNEE_INVALID", "활성 관리자만 담당자로 지정할 수 있습니다."
+            )
+        ticket.assigned_admin_id = assignee.id
+    elif payload.status in {"in_progress", "answered"}:
+        ticket.assigned_admin_id = context.user.id
+    ticket.closed_at = datetime.now(UTC) if next_status == "closed" else None
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="support_ticket.status_changed",
+        entity_type="support_ticket",
+        entity_id=ticket.id,
+        details={"previousStatus": previous_status, "nextStatus": ticket.status},
+    )
+    await session.commit()
+    return {"ok": True, "data": await _admin_support_ticket_data(session, ticket)}
+
+
+@router.post("/support-tickets/{ticket_id}/actions", status_code=status.HTTP_201_CREATED)
+async def act_on_support_ticket(
+    ticket_id: str,
+    payload: SupportTicketActionRequest,
+    context: CurrentAdmin,
+    session: DbSession,
+) -> dict:
+    """Record case actions and stage high-impact mutations for dual approval."""
+    context.require_action("support:write")
+    ticket = await session.get(SupportTicket, ticket_id)
+    if ticket is None:
+        raise AppError(404, "SUPPORT_TICKET_NOT_FOUND", "문의 내역을 찾을 수 없습니다.")
+    if payload.action == "grant_points" and not payload.amount:
+        raise AppError(422, "INVALID_POINT_AMOUNT", "포인트 조정 금액은 0이 아닌 정수여야 합니다.")
+    now = datetime.now(UTC)
+    if payload.action == "assign":
+        assignee_id = payload.reference_id or context.user.id
+        assignee = await session.get(User, assignee_id)
+        if assignee is None or assignee.role.value != "admin":
+            raise AppError(
+                422, "SUPPORT_ASSIGNEE_INVALID", "활성 관리자만 담당자로 지정할 수 있습니다."
+            )
+        ticket.assigned_admin_id = assignee.id
+        session.add(
+            SupportEvidence(
+                id=f"evidence_{uuid4().hex[:12]}",
+                ticket_id=ticket.id,
+                actor_user_id=context.user.id,
+                kind="assignment",
+                reference_id=assignee.id,
+                note=payload.note,
+            )
+        )
+    elif payload.action == "record_evidence":
+        if not payload.reference_id and not payload.note:
+            raise AppError(422, "SUPPORT_EVIDENCE_REQUIRED", "근거 ID 또는 운영 메모가 필요합니다.")
+        session.add(
+            SupportEvidence(
+                id=f"evidence_{uuid4().hex[:12]}",
+                ticket_id=ticket.id,
+                actor_user_id=context.user.id,
+                kind="case_note",
+                reference_id=payload.reference_id,
+                note=payload.note,
+            )
+        )
+    elif payload.action == "hold_trade":
+        if not payload.reference_id:
+            raise AppError(422, "TRADE_REFERENCE_REQUIRED", "거래 ID가 필요합니다.")
+        proposal = await session.get(TradeProposal, payload.reference_id)
+        if proposal is None:
+            raise AppError(404, "TRADE_NOT_FOUND", "거래를 찾을 수 없습니다.")
+        if proposal.status != "pending":
+            raise AppError(409, "TRADE_NOT_PENDING", "대기 중인 거래만 보류할 수 있습니다.")
+        existing = await session.scalar(
+            select(TradeHold).where(TradeHold.proposal_id == proposal.id)
+        )
+        if existing and existing.released_at is None:
+            raise AppError(409, "TRADE_ALREADY_HELD", "이미 보류된 거래입니다.")
+        session.add(
+            TradeHold(
+                id=f"trade_hold_{uuid4().hex[:12]}",
+                proposal_id=proposal.id,
+                ticket_id=ticket.id,
+                reason=payload.note,
+                created_at=now,
+            )
+        )
+        session.add(
+            SupportEvidence(
+                id=f"evidence_{uuid4().hex[:12]}",
+                ticket_id=ticket.id,
+                actor_user_id=context.user.id,
+                kind="trade_hold",
+                reference_id=proposal.id,
+                note=payload.note,
+            )
+        )
+    elif payload.action == "release_trade":
+        if not payload.reference_id:
+            raise AppError(422, "TRADE_REFERENCE_REQUIRED", "거래 ID가 필요합니다.")
+        hold = await session.scalar(
+            select(TradeHold).where(
+                TradeHold.proposal_id == payload.reference_id,
+                TradeHold.released_at.is_(None),
+            )
+        )
+        if hold is None:
+            raise AppError(404, "TRADE_HOLD_NOT_FOUND", "활성 거래 보류를 찾을 수 없습니다.")
+        hold.released_at = now
+        session.add(
+            SupportEvidence(
+                id=f"evidence_{uuid4().hex[:12]}",
+                ticket_id=ticket.id,
+                actor_user_id=context.user.id,
+                kind="trade_release",
+                reference_id=payload.reference_id,
+                note=payload.note,
+            )
+        )
+    elif payload.action in {"refund_order", "grant_points"}:
+        if not payload.reference_id:
+            raise AppError(422, "ACTION_REFERENCE_REQUIRED", "대상 ID가 필요합니다.")
+        approval = ApprovalRequest(
+            id=f"approval_{uuid4().hex[:12]}",
+            kind=payload.action,
+            entity_type="shop_order" if payload.action == "refund_order" else "user",
+            entity_id=payload.reference_id,
+            requested_by=context.user.id,
+            payload={"ticketId": ticket.id, "amount": payload.amount},
+            reason=payload.note,
+        )
+        session.add(approval)
+        session.add(
+            SupportEvidence(
+                id=f"evidence_{uuid4().hex[:12]}",
+                ticket_id=ticket.id,
+                actor_user_id=context.user.id,
+                kind="approval_requested",
+                reference_id=approval.id,
+                note=payload.note,
+            )
+        )
+    elif payload.action == "resolve":
+        ticket.status = "closed"
+        ticket.closed_at = now
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action=f"support_ticket.{payload.action}",
+        entity_type="support_ticket",
+        entity_id=ticket.id,
+        details={"referenceId": payload.reference_id, "note": payload.note},
+    )
+    await session.commit()
+    return {"ok": True, "data": await _admin_support_ticket_data(session, ticket)}
+
+
+def approval_data(item: ApprovalRequest) -> dict:
+    return {
+        "id": item.id,
+        "kind": item.kind,
+        "entityType": item.entity_type,
+        "entityId": item.entity_id,
+        "requestedBy": item.requested_by,
+        "approvedBy": item.approved_by,
+        "status": item.status,
+        "payload": item.payload or {},
+        "reason": item.reason,
+        "createdAt": item.created_at.isoformat(),
+        "decidedAt": item.decided_at.isoformat() if item.decided_at else None,
+    }
+
+
+async def _execute_approved_refund(
+    item: ApprovalRequest, context: CurrentAdmin, session: DbSession
+) -> dict:
+    order = await session.scalar(
+        select(ShopOrder).where(ShopOrder.id == item.entity_id).with_for_update()
+    )
+    if order is None:
+        raise AppError(404, "SHOP_ORDER_NOT_FOUND", "환불할 주문을 찾을 수 없습니다.")
+    if order.status != "completed" or not order.point_ledger_id:
+        raise AppError(409, "SHOP_ORDER_NOT_REFUNDABLE", "환불할 수 없는 주문입니다.")
+    entitlement = await session.scalar(
+        select(ShopOrderEntitlement)
+        .where(ShopOrderEntitlement.order_id == order.id)
+        .with_for_update()
+    )
+    if entitlement and entitlement.status == "opened":
+        raise AppError(409, "SHOP_ORDER_NOT_REFUNDABLE", "이미 사용한 상품은 환불할 수 없습니다.")
+    if entitlement:
+        entitlement.status = "revoked"
+    else:
+        reward_grant = await session.scalar(
+            select(RewardGrant)
+            .where(
+                RewardGrant.user_id == order.user_id,
+                RewardGrant.rule_key == f"shop_order:{order.id}",
+            )
+            .with_for_update()
+        )
+        if (
+            reward_grant is None
+            or reward_grant.revoked_at is not None
+            or reward_grant.claimed_at is not None
+        ):
+            raise AppError(
+                409, "SHOP_ORDER_NOT_REFUNDABLE", "지급 정보를 확인할 수 없는 주문입니다."
+            )
+        reward_grant.revoked_at = datetime.now(UTC)
+    original = await session.get(PointLedger, order.point_ledger_id)
+    if original is None or original.amount >= 0:
+        raise AppError(409, "SHOP_ORDER_LEDGER_INVALID", "주문 원장을 확인할 수 없습니다.")
+    event = await record_engagement_event(
+        session,
+        user_id=order.user_id,
+        kind="points_refunded",
+        source_type="admin_shop_refund",
+        source_id=f"{order.id}:{item.id}",
+        payload={"orderId": order.id, "points": order.price_points, "approvalId": item.id},
+    )
+    ledger = await reverse_points(
+        session,
+        user_id=order.user_id,
+        source_event_id=event.id,
+        rule_key=f"admin_shop_refund:{order.id}",
+        amount=order.price_points,
+        reversed_ledger_id=original.id,
+        description=f"{order.product_name} 관리자 환불",
+        metadata={"orderId": order.id, "approvalId": item.id, "actorId": context.user.id},
+    )
+    transaction = PointTransaction(
+        id=f"point_tx_{uuid4().hex[:12]}",
+        user_id=order.user_id,
+        operation="refund",
+        idempotency_key=f"approval:{item.id}",
+        amount=order.price_points,
+        ledger_id=ledger.id,
+        status="completed",
+    )
+    session.add(transaction)
+    order.status = "refunded"
+    order.refund_transaction_id = transaction.id
+    order.refunded_at = datetime.now(UTC)
+    return {"orderId": order.id, "balance": ledger.balance_after}
+
+
+async def _execute_approved_point_adjustment(
+    item: ApprovalRequest, context: CurrentAdmin, session: DbSession
+) -> dict:
+    amount = int((item.payload or {}).get("amount") or 0)
+    if amount == 0:
+        raise AppError(422, "INVALID_POINT_AMOUNT", "승인된 조정 포인트가 없습니다.")
+    user = await session.get(User, item.entity_id)
+    if user is None or user.role.value != "fan":
+        raise AppError(404, "FAN_NOT_FOUND", "포인트를 조정할 팬을 찾을 수 없습니다.")
+    event = await record_engagement_event(
+        session,
+        user_id=user.id,
+        kind="points_adjusted",
+        source_type="approved_admin_point_adjustment",
+        source_id=item.id,
+        payload={"amount": amount, "approvalId": item.id},
+    )
+    ledger = await (
+        grant_points(
+            session,
+            user_id=user.id,
+            source_event_id=event.id,
+            rule_key=f"approved_admin_adjustment:{item.id}",
+            amount=amount,
+            description=item.reason or "승인된 관리자 포인트 조정",
+            metadata={"actorId": context.user.id},
+        )
+        if amount > 0
+        else spend_points(
+            session,
+            user_id=user.id,
+            source_event_id=event.id,
+            rule_key=f"approved_admin_adjustment:{item.id}",
+            amount=abs(amount),
+            description=item.reason or "승인된 관리자 포인트 조정",
+            metadata={"actorId": context.user.id},
+        )
+    )
+    transaction = PointTransaction(
+        id=f"point_tx_{uuid4().hex[:12]}",
+        user_id=user.id,
+        operation="adjustment",
+        idempotency_key=f"approval:{item.id}",
+        amount=amount,
+        ledger_id=ledger.id,
+        status="completed",
+    )
+    session.add(transaction)
+    return {"userId": user.id, "amount": amount, "balance": ledger.balance_after}
+
+
+@router.get("/approvals")
+async def list_admin_approvals(context: CurrentAdmin, session: DbSession) -> dict:
+    context.require_action("audit:read")
+    items = list(
+        await session.scalars(
+            select(ApprovalRequest).order_by(ApprovalRequest.created_at.desc()).limit(100)
+        )
+    )
+    return {"ok": True, "data": {"items": [approval_data(item) for item in items]}}
+
+
+@router.post("/approvals", status_code=status.HTTP_201_CREATED)
+async def create_admin_approval(
+    payload: ApprovalCreateRequest, context: CurrentAdmin, session: DbSession
+) -> dict:
+    context.require_action("audit:read")
+    duplicate = await session.scalar(
+        select(ApprovalRequest).where(
+            ApprovalRequest.kind == payload.kind,
+            ApprovalRequest.entity_type == payload.entity_type,
+            ApprovalRequest.entity_id == payload.entity_id,
+            ApprovalRequest.status == "pending",
+        )
+    )
+    if duplicate:
+        return {"ok": True, "data": approval_data(duplicate), "replayed": True}
+    item = ApprovalRequest(
+        id=f"approval_{uuid4().hex[:12]}",
+        kind=payload.kind,
+        entity_type=payload.entity_type,
+        entity_id=payload.entity_id,
+        requested_by=context.user.id,
+        payload=payload.payload,
+        reason=payload.reason,
+    )
+    session.add(item)
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="approval.requested",
+        entity_type=payload.entity_type,
+        entity_id=payload.entity_id,
+        details={"kind": payload.kind},
+    )
+    await session.commit()
+    return {"ok": True, "data": approval_data(item)}
+
+
+@router.post("/approvals/{approval_id}/approve")
+async def approve_admin_approval(
+    approval_id: str, payload: ApprovalDecisionRequest, context: CurrentAdmin, session: DbSession
+) -> dict:
+    context.require_action("audit:read")
+    item = await session.get(ApprovalRequest, approval_id)
+    if item is None:
+        raise AppError(404, "APPROVAL_NOT_FOUND", "승인 요청을 찾을 수 없습니다.")
+    if item.status != "pending":
+        return {"ok": True, "data": {**approval_data(item), "replayed": True}}
+    if item.requested_by == context.user.id:
+        raise AppError(409, "APPROVAL_SELF_APPROVAL", "요청자 본인은 승인할 수 없습니다.")
+    execution = None
+    if item.kind == "refund_order":
+        execution = await _execute_approved_refund(item, context, session)
+    elif item.kind == "grant_points":
+        execution = await _execute_approved_point_adjustment(item, context, session)
+    item.status = "approved"
+    item.approved_by = context.user.id
+    item.decided_at = datetime.now(UTC)
+    if item.kind == "product_publish":
+        product = await session.get(ShopProduct, item.entity_id)
+        if product is not None:
+            product.status = "published"
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="approval.approved",
+        entity_type=item.entity_type,
+        entity_id=item.entity_id,
+        details={"approvalId": item.id},
+    )
+    await session.commit()
+    return {"ok": True, "data": {**approval_data(item), "execution": execution}}
+
+
+@router.post("/approvals/{approval_id}/reject")
+async def reject_admin_approval(
+    approval_id: str, payload: ApprovalDecisionRequest, context: CurrentAdmin, session: DbSession
+) -> dict:
+    context.require_action("audit:read")
+    item = await session.get(ApprovalRequest, approval_id)
+    if item is None:
+        raise AppError(404, "APPROVAL_NOT_FOUND", "승인 요청을 찾을 수 없습니다.")
+    if item.status != "pending":
+        return {"ok": True, "data": approval_data(item), "replayed": True}
+    item.status = "rejected"
+    item.approved_by = context.user.id
+    item.reason = payload.reason or item.reason
+    item.decided_at = datetime.now(UTC)
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="approval.rejected",
+        entity_type=item.entity_type,
+        entity_id=item.entity_id,
+        details={"approvalId": item.id},
+    )
+    await session.commit()
+    return {"ok": True, "data": approval_data(item)}
+
+
+@router.post("/support-tickets/{ticket_id}/messages", status_code=status.HTTP_201_CREATED)
+async def reply_admin_support_ticket(
+    ticket_id: str,
+    payload: SupportMessageCreate,
+    context: CurrentAdmin,
+    session: DbSession,
+) -> dict:
+    context.require_action("support:write")
+    ticket = await session.get(SupportTicket, ticket_id)
+    if ticket is None:
+        raise AppError(404, "SUPPORT_TICKET_NOT_FOUND", "문의 내역을 찾을 수 없습니다.")
+    if ticket.status == "closed":
+        raise AppError(409, "SUPPORT_TICKET_CLOSED", "종료된 문의에는 답변할 수 없습니다.")
+    message = SupportMessage(
+        id=f"support_message_{uuid4().hex[:12]}",
+        ticket_id=ticket.id,
+        author_user_id=context.user.id,
+        body=payload.body.strip(),
+    )
+    ticket.status = "answered"
+    ticket.assigned_admin_id = context.user.id
+    session.add(message)
+    await notify_user_once(
+        session,
+        user_id=ticket.user_id,
+        kind="support_ticket_answered",
+        title="고객센터 문의에 답변이 도착했어요",
+        body=ticket.subject,
+        entity_type="support_ticket",
+        entity_id=ticket.id,
+        event_key=f"support:{ticket.id}:answer:{message.id}",
+    )
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="support_ticket.replied",
+        entity_type="support_ticket",
+        entity_id=ticket.id,
+        details={"messageId": message.id},
+    )
+    await session.commit()
+    return {"ok": True, "data": await _admin_support_ticket_data(session, ticket)}
 
 
 def drop_data(drop: Drop) -> dict:
@@ -2255,6 +3086,15 @@ async def card_operations_metrics(context: CurrentAdmin, session: DbSession) -> 
         .group_by(Card.id, Card.name)
         .order_by(Card.name, Card.id)
     )
+    delivery_summary: dict[str, dict[str, int]] = {}
+    if context.is_root:
+        delivery_rows = await session.execute(
+            select(
+                NotificationDelivery.channel, NotificationDelivery.status, func.count()
+            ).group_by(NotificationDelivery.channel, NotificationDelivery.status)
+        )
+        for channel, delivery_status, count in delivery_rows:
+            delivery_summary.setdefault(channel, {})[delivery_status] = count
     return {
         "ok": True,
         "data": {
@@ -2277,6 +3117,130 @@ async def card_operations_metrics(context: CurrentAdmin, session: DbSession) -> 
             "cards": [
                 {"cardId": card_id, "cardName": name, "holders": count}
                 for card_id, name, count in holder_rows
+            ],
+            "notificationDelivery": delivery_summary,
+        },
+    }
+
+
+@router.get("/operations/overview")
+async def operations_overview(context: CurrentAdmin, session: DbSession) -> dict:
+    """Return one permission-scoped queue summary for the operations dashboard."""
+    _require_scoped_action(context, "audit:read")
+    card_scope = _card_scope_filters(context)
+    product_scope = (
+        [] if context.is_root else [ShopProduct.artist_id.in_(context.assigned_artist_ids)]
+    )
+
+    failed_deliveries = (
+        await session.scalar(
+            select(func.count())
+            .select_from(NotificationDelivery)
+            .where(NotificationDelivery.status.in_(("failed", "dead_letter")))
+        )
+        or 0
+    )
+    retryable_deliveries = (
+        await session.scalar(
+            select(func.count())
+            .select_from(NotificationDelivery)
+            .where(NotificationDelivery.status == "retry")
+        )
+        or 0
+    )
+    failed_events = (
+        await session.scalar(
+            select(func.count())
+            .select_from(EngagementEvent)
+            .where(EngagementEvent.status.in_(("failed", "dead_letter")))
+        )
+        or 0
+    )
+    open_support = (
+        await session.scalar(
+            select(func.count())
+            .select_from(SupportTicket)
+            .where(SupportTicket.status.in_(("open", "in_progress")))
+        )
+        or 0
+    )
+    pending_trades = (
+        await session.scalar(
+            select(func.count())
+            .select_from(TradeProposal)
+            .join(TradeItem, TradeItem.proposal_id == TradeProposal.id)
+            .join(UserCard, UserCard.id == TradeItem.user_card_id)
+            .join(Card, Card.id == UserCard.card_id)
+            .where(TradeProposal.status == "pending", *card_scope)
+        )
+        or 0
+    )
+    refunded_orders = (
+        await session.scalar(
+            select(func.count())
+            .select_from(ShopOrder)
+            .join(ShopProduct, ShopProduct.id == ShopOrder.product_id)
+            .where(ShopOrder.status == "refunded", *product_scope)
+        )
+        or 0
+    )
+    failed_point_transactions = (
+        await session.scalar(
+            select(func.count())
+            .select_from(PointTransaction)
+            .where(PointTransaction.status == "failed")
+        )
+        or 0
+    )
+    unclaimed_rewards = (
+        await session.scalar(
+            select(func.count())
+            .select_from(RewardGrant)
+            .where(RewardGrant.claimed_at.is_(None), RewardGrant.revoked_at.is_(None))
+        )
+        or 0
+    )
+    recent_logs = list(
+        await session.scalars(
+            select(AuditLog)
+            .where(
+                AuditLog.action.in_(
+                    (
+                        "notification_delivery.retried",
+                        "support_ticket.replied",
+                        "support_ticket.status_changed",
+                        "shop_order.refunded",
+                        "trade.accepted",
+                        "reward.revoked",
+                    )
+                )
+            )
+            .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+            .limit(10)
+        )
+    )
+    return {
+        "ok": True,
+        "data": {
+            "queues": {
+                "failedDeliveries": failed_deliveries,
+                "retryableDeliveries": retryable_deliveries,
+                "failedEngagementEvents": failed_events,
+                "openSupportTickets": open_support,
+                "pendingTrades": pending_trades,
+                "refundedOrders": refunded_orders,
+                "failedPointTransactions": failed_point_transactions if context.is_root else 0,
+                "unclaimedRewards": unclaimed_rewards,
+            },
+            "recentActions": [
+                {
+                    "id": log.id,
+                    "action": log.action,
+                    "entityType": log.entity_type,
+                    "entityId": log.entity_id,
+                    "createdAt": log.created_at.isoformat(),
+                }
+                for log in recent_logs
             ],
         },
     }
@@ -2664,6 +3628,14 @@ def admin_shop_product_data(
         "status": product.status,
         "startsAt": product.starts_at.isoformat() if product.starts_at else None,
         "endsAt": product.ends_at.isoformat() if product.ends_at else None,
+        "inventoryLimit": product.inventory_limit,
+        "soldCount": product.sold_count,
+        "perUserLimit": product.per_user_limit,
+        "scheduledPublishAt": product.scheduled_publish_at.isoformat()
+        if product.scheduled_publish_at
+        else None,
+        "exposureSlot": product.exposure_slot,
+        "fanSegment": product.fan_segment or {},
     }
 
 
@@ -2748,6 +3720,11 @@ async def create_admin_shop_product(
         price_points=payload.price_points,
         starts_at=payload.starts_at,
         ends_at=payload.ends_at,
+        inventory_limit=payload.inventory_limit,
+        per_user_limit=payload.per_user_limit,
+        scheduled_publish_at=payload.scheduled_publish_at,
+        exposure_slot=payload.exposure_slot,
+        fan_segment=payload.fan_segment,
         status="draft",
     )
     session.add(product)
@@ -2782,6 +3759,11 @@ async def update_admin_shop_product(
         "starts_at",
         "ends_at",
         "status",
+        "inventory_limit",
+        "per_user_limit",
+        "scheduled_publish_at",
+        "exposure_slot",
+        "fan_segment",
     ):
         value = getattr(payload, field)
         if value is not None:
@@ -2868,6 +3850,39 @@ async def scoped_effect_version_or_404(
     if not version or version.card_id != card_id:
         raise AppError(404, "EFFECT_VERSION_NOT_FOUND", "효과 버전을 찾을 수 없습니다.")
     return card, version
+
+
+def admin_collaboration_comment_data(comment: CardCollaborationComment) -> dict:
+    return {
+        "id": comment.id,
+        "cardId": comment.card_id,
+        "authorUserId": comment.author_user_id,
+        "body": comment.body,
+        "mentionUserId": comment.mention_user_id,
+        "status": comment.status,
+        "reviewVersion": comment.review_version,
+        "createdAt": comment.created_at.isoformat() if comment.created_at else None,
+        "updatedAt": comment.updated_at.isoformat() if comment.updated_at else None,
+    }
+
+
+@router.get("/cards/{card_id}/comments")
+async def admin_card_comments(card_id: str, context: CurrentAdmin, session: DbSession) -> dict:
+    _require_scoped_action(context, "cards:read")
+    card = await session.get(Card, card_id)
+    if not card:
+        raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
+    context.require_organization(card.organization_id)
+    context.require_artist(card.artist_id)
+    comments = await session.scalars(
+        select(CardCollaborationComment)
+        .where(CardCollaborationComment.card_id == card_id)
+        .order_by(CardCollaborationComment.created_at.desc())
+    )
+    return {
+        "ok": True,
+        "data": {"items": [admin_collaboration_comment_data(item) for item in comments]},
+    }
 
 
 def admin_effect_version_data(version: CardEffectVersion) -> dict:
@@ -3649,6 +4664,134 @@ async def list_users(
                     "total": total or 0,
                 }
             },
+        },
+    }
+
+
+@router.get("/users/{user_id}/360")
+async def get_user_360(user_id: str, admin: RootAdminUser, session: DbSession) -> dict:
+    """Return a read-only, privacy-scoped support view for one fan."""
+    user = await session.get(User, user_id)
+    if user is None or user.role != Role.FAN:
+        raise AppError(404, "USER_NOT_FOUND", "팬 계정을 찾을 수 없습니다.")
+
+    balance = await session.scalar(select(PointBalance).where(PointBalance.user_id == user.id))
+    card_rows = list(
+        (
+            await session.execute(
+                select(UserCard, Card)
+                .join(Card, Card.id == UserCard.card_id)
+                .where(UserCard.user_id == user.id)
+                .order_by(UserCard.acquired_at.desc(), UserCard.id.desc())
+                .limit(20)
+            )
+        ).all()
+    )
+    orders = list(
+        await session.scalars(
+            select(ShopOrder)
+            .where(ShopOrder.user_id == user.id)
+            .order_by(ShopOrder.created_at.desc(), ShopOrder.id.desc())
+            .limit(10)
+        )
+    )
+    trades = list(
+        await session.scalars(
+            select(TradeProposal)
+            .where(or_(TradeProposal.proposer_id == user.id, TradeProposal.recipient_id == user.id))
+            .order_by(TradeProposal.created_at.desc(), TradeProposal.id.desc())
+            .limit(10)
+        )
+    )
+    tickets = list(
+        await session.scalars(
+            select(SupportTicket)
+            .where(SupportTicket.user_id == user.id)
+            .order_by(SupportTicket.updated_at.desc(), SupportTicket.id.desc())
+            .limit(10)
+        )
+    )
+    notifications = list(
+        await session.scalars(
+            select(Notification)
+            .where(Notification.user_id == user.id)
+            .order_by(Notification.created_at.desc(), Notification.id.desc())
+            .limit(10)
+        )
+    )
+    return {
+        "ok": True,
+        "data": {
+            "profile": {
+                "id": user.id,
+                "email": user.email,
+                "nickname": user.nickname,
+                "profileImageUrl": user.profile_image_url,
+                "onboardingCompleted": user.onboarding_completed,
+                "emailNotificationsEnabled": user.notification_email_enabled,
+            },
+            "account": {
+                "pointBalance": balance.balance if balance else 0,
+                "cardCount": await session.scalar(
+                    select(func.count()).select_from(UserCard).where(UserCard.user_id == user.id)
+                )
+                or 0,
+                "openSupportTickets": sum(
+                    ticket.status in {"open", "in_progress"} for ticket in tickets
+                ),
+            },
+            "cards": [
+                {
+                    "id": user_card.id,
+                    "cardId": card.id,
+                    "name": card.name,
+                    "rarity": card.rarity,
+                    "serialNumber": user_card.serial_number,
+                    "acquiredAt": user_card.acquired_at.isoformat(),
+                    "tradeLocked": user_card.trade_locked_at is not None,
+                }
+                for user_card, card in card_rows
+            ],
+            "orders": [
+                {
+                    "id": order.id,
+                    "productName": order.product_name,
+                    "pricePoints": order.price_points,
+                    "status": order.status,
+                    "createdAt": order.created_at.isoformat(),
+                }
+                for order in orders
+            ],
+            "trades": [
+                {
+                    "id": trade.id,
+                    "role": "proposer" if trade.proposer_id == user.id else "recipient",
+                    "status": trade.status,
+                    "expiresAt": trade.expires_at.isoformat(),
+                    "createdAt": trade.created_at.isoformat(),
+                }
+                for trade in trades
+            ],
+            "supportTickets": [
+                {
+                    "id": ticket.id,
+                    "category": ticket.category,
+                    "subject": ticket.subject,
+                    "status": ticket.status,
+                    "updatedAt": ticket.updated_at.isoformat(),
+                }
+                for ticket in tickets
+            ],
+            "recentNotifications": [
+                {
+                    "id": notification.id,
+                    "kind": notification.kind,
+                    "title": notification.title,
+                    "isRead": notification.is_read,
+                    "createdAt": notification.created_at.isoformat(),
+                }
+                for notification in notifications
+            ],
         },
     }
 

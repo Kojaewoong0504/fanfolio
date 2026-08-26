@@ -1,3 +1,4 @@
+import os
 import re
 from functools import lru_cache
 
@@ -18,6 +19,10 @@ class Settings(BaseSettings):
     repair_demo_card_assets: bool = False
     storage_dir: str = "./storage"
     storage_backend: str = "local"
+    r2_account_id: str = ""
+    r2_bucket: str = ""
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
     s3_endpoint_url: str = ""
     s3_region: str = "ap-northeast-2"
     s3_bucket: str = ""
@@ -45,6 +50,14 @@ class Settings(BaseSettings):
     allow_data_bootstrap: bool = False
     mail_delivery_mode: str = "console"
     mail_from: str = "Fanfolio <no-reply@localhost>"
+    resend_api_key: str = ""
+    resend_base_url: str = "https://api.resend.com"
+    push_delivery_mode: str = "console"
+    firebase_project_id: str = ""
+    firebase_client_email: str = ""
+    firebase_private_key: str = ""
+    firebase_token_url: str = "https://oauth2.googleapis.com/token"
+    firebase_api_base_url: str = "https://fcm.googleapis.com"
     jwt_access_secret: str = "dev-access-secret-change-me-32-bytes"
     jwt_refresh_secret: str = "dev-refresh-secret-change-me-32-bytes"
     jwt_issuer: str = "fanfolio"
@@ -66,11 +79,22 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_use_tls: bool = True
     task_queue_mode: str = "inline"
+    engagement_event_max_attempts: int = 5
+    engagement_event_retry_base_seconds: int = 30
+    engagement_event_retry_max_seconds: int = 3600
     upload_cleanup_interval_seconds: int = 15 * 60
     celery_broker_url: str = "redis://localhost:6379/0"
     celery_result_backend: str = "redis://localhost:6379/0"
     rate_limit_backend: str = "memory"
     rate_limit_redis_url: str = "redis://localhost:6379/1"
+
+    def __init__(self, **values: object) -> None:
+        # Local integration credentials must never leak into the isolated test
+        # runtime. Explicit env files (used by production-template tests) are
+        # still honored, while normal test Settings instances use defaults.
+        if "_env_file" not in values and os.getenv("APP_ENV") == "test":
+            values["_env_file"] = None
+        super().__init__(**values)
 
     @property
     def allowed_origins(self) -> list[str]:
@@ -145,14 +169,45 @@ class Settings(BaseSettings):
         """Use browser-safe auth rules in both staging and production."""
         return self.app_env in {"staging", "production"}
 
+    @property
+    def object_storage_endpoint(self) -> str:
+        """Return the configured R2 endpoint, with legacy S3 fallback."""
+        if self.storage_backend == "r2" and self.r2_account_id:
+            return f"https://{self.r2_account_id}.r2.cloudflarestorage.com"
+        return self.s3_endpoint_url
+
+    @property
+    def object_storage_bucket(self) -> str:
+        """Return the bucket name without exposing provider-specific details."""
+        return self.r2_bucket or self.s3_bucket
+
+    @property
+    def object_storage_access_key(self) -> str:
+        """Return the active object-storage access key, preferring R2 names."""
+        return self.r2_access_key_id or self.s3_access_key_id
+
+    @property
+    def object_storage_secret_key(self) -> str:
+        """Return the active object-storage secret, preferring R2 names."""
+        return self.r2_secret_access_key or self.s3_secret_access_key
+
     def validate_runtime(self) -> None:
         """Fail fast when a production process would start with unsafe defaults."""
-        if self.storage_backend not in {"local", "s3", "supabase"}:
-            raise ValueError("STORAGE_BACKEND must be local, s3, or supabase")
+        if self.storage_backend not in {"local", "r2", "s3", "supabase"}:
+            raise ValueError("STORAGE_BACKEND must be local, r2, s3, or supabase")
         if self.database_statement_cache_size < 0:
             raise ValueError("DATABASE_STATEMENT_CACHE_SIZE cannot be negative")
+        if self.storage_backend == "r2" and not self.object_storage_bucket:
+            raise ValueError("R2_BUCKET is required for Cloudflare R2 storage")
         if self.storage_backend in {"s3", "supabase"} and not self.s3_bucket:
             raise ValueError("S3_BUCKET is required for remote storage backends")
+        if self.storage_backend == "r2":
+            if not self.object_storage_endpoint:
+                raise ValueError("R2_ACCOUNT_ID or S3_ENDPOINT_URL is required for Cloudflare R2")
+            if not self.object_storage_access_key or not self.object_storage_secret_key:
+                raise ValueError(
+                    "R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY are required for Cloudflare R2"
+                )
         if self.storage_backend == "supabase":
             if not self.s3_endpoint_url.endswith("/storage/v1/s3"):
                 raise ValueError("S3_ENDPOINT_URL must be the Supabase Storage S3 endpoint")
@@ -162,6 +217,20 @@ class Settings(BaseSettings):
                 )
         if self.upload_cleanup_interval_seconds <= 0:
             raise ValueError("UPLOAD_CLEANUP_INTERVAL_SECONDS must be positive")
+        if self.push_delivery_mode not in {"console", "fcm"}:
+            raise ValueError("PUSH_DELIVERY_MODE must be console or fcm")
+        if self.push_delivery_mode == "fcm":
+            missing = [
+                name
+                for name, value in (
+                    ("FIREBASE_PROJECT_ID", self.firebase_project_id),
+                    ("FIREBASE_CLIENT_EMAIL", self.firebase_client_email),
+                    ("FIREBASE_PRIVATE_KEY", self.firebase_private_key),
+                )
+                if not value
+            ]
+            if missing:
+                raise ValueError(f"{' and '.join(missing)} are required for FCM push delivery")
         if not self.is_hosted:
             return
         if len(self.data_protection_key) < 32:
@@ -197,10 +266,14 @@ class Settings(BaseSettings):
             # object storage remain production launch gates.
             self._validate_hosted_auth_secrets()
             return
-        if self.mail_delivery_mode != "smtp":
-            raise ValueError("MAIL_DELIVERY_MODE must be smtp in production")
-        if not self.smtp_host or not self.mail_from:
-            raise ValueError("SMTP_HOST and MAIL_FROM are required in production")
+        if self.mail_delivery_mode not in {"smtp", "resend"}:
+            raise ValueError("MAIL_DELIVERY_MODE must be smtp or resend in production")
+        if self.mail_delivery_mode == "smtp" and not self.smtp_host:
+            raise ValueError("SMTP_HOST is required when MAIL_DELIVERY_MODE is smtp")
+        if self.mail_delivery_mode == "resend" and not self.resend_api_key:
+            raise ValueError("RESEND_API_KEY is required when MAIL_DELIVERY_MODE is resend")
+        if not self.mail_from or "localhost" in self.mail_from:
+            raise ValueError("MAIL_FROM must use a verified sender in production")
         if self.rate_limit_backend != "redis":
             raise ValueError("RATE_LIMIT_BACKEND must be redis in production")
         if not self.rate_limit_redis_url:

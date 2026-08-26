@@ -22,6 +22,20 @@ export function clearAccessToken(): void {
   accessToken = null
 }
 
+export async function registerPushDevice(token: string): Promise<void> {
+  await apiFetch('/me/push-devices', {
+    method: 'PUT',
+    body: JSON.stringify({ token, platform: 'web', deviceName: navigator.userAgent.slice(0, 120) }),
+  })
+}
+
+export async function unregisterPushDevice(token: string): Promise<void> {
+  await apiFetch('/me/push-devices', {
+    method: 'DELETE',
+    body: JSON.stringify({ token }),
+  })
+}
+
 async function refreshAccessToken(): Promise<string | null> {
   if (refreshInFlight) return refreshInFlight
   refreshInFlight = (async () => {
@@ -325,6 +339,11 @@ export type CatalogCard = {
   artistName?: string | null
   memberId?: string | null
   memberName?: string | null
+  rarity?: string | null
+  seasonName?: string | null
+  cardType?: string | null
+  signatureText?: string | null
+  issueLimit?: number | null
 }
 
 export type CatalogSort = 'recommended' | 'name' | 'rarity'
@@ -788,6 +807,18 @@ export async function apiFetch<T>(path: string, init?: RequestInit, allowRefresh
   }
 }
 
+export async function exportPersonalData(): Promise<Record<string, unknown>> {
+  const result = await apiFetch<{ ok: true; data: Record<string, unknown> }>('/me/privacy/export')
+  return result.data
+}
+
+export async function deleteFanAccount(confirmation: string): Promise<void> {
+  await apiFetch<void>('/me/privacy/account', {
+    method: 'DELETE',
+    body: JSON.stringify({ confirmation }),
+  })
+}
+
 function growthScopeQuery(artistId?: string | null): string {
   return artistId ? `?artistId=${encodeURIComponent(artistId)}` : '?scope=global'
 }
@@ -827,6 +858,28 @@ export type CardRedemption = {
   serialNumber: number
 }
 
+export type RedemptionPreview = {
+  card: {
+    id: string
+    name: string
+    imageUrl: string
+    isOfficial: boolean
+    artistId?: string | null
+    artistName?: string | null
+    memberId?: string | null
+    memberName?: string | null
+    rarity?: string | null
+    seasonName?: string | null
+  }
+}
+
+export function previewRedemption(code: string, source: RedemptionSource): Promise<{ ok: true, data: RedemptionPreview }> {
+  return apiFetch<{ ok: true, data: RedemptionPreview }>('/redemptions/preview', {
+    method: 'POST',
+    body: JSON.stringify({ code, source }),
+  })
+}
+
 export function redeemCard(code: string, source: RedemptionSource): Promise<{ ok: true, data: CardRedemption }> {
   return apiFetch<{ ok: true, data: CardRedemption }>('/redemptions', {
     method: 'POST',
@@ -837,6 +890,14 @@ export function redeemCard(code: string, source: RedemptionSource): Promise<{ ok
 export function getCardPacks(artistId?: string | null): Promise<{ ok: true, data: { items: CardPack[] } }> {
   const query = artistId ? `?artistId=${encodeURIComponent(artistId)}` : ''
   return apiFetch<{ ok: true, data: { items: CardPack[] } }>(`/catalog/card-packs${query}`)
+}
+
+export function getCatalogCards(filters?: { artistId?: string; sort?: CatalogSort }): Promise<{ ok: true, data: { items: CatalogCard[] } }> {
+  const params = new URLSearchParams()
+  if (filters?.artistId) params.set('artistId', filters.artistId)
+  if (filters?.sort) params.set('sort', filters.sort)
+  const query = params.size ? `?${params.toString()}` : ''
+  return apiFetch<{ ok: true, data: { items: CatalogCard[] } }>(`/catalog/cards${query}`)
 }
 
 export function getCardPackOdds(packId: string): Promise<{ ok: true, data: { pack: CardPack, items: CardPackCard[], totalProbability: number } }> {

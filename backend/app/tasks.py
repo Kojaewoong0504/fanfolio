@@ -4,10 +4,12 @@ from celery import Celery
 from starlette.background import BackgroundTasks
 
 from app.core.config import get_settings
+from app.notification_delivery import process_due_notification_deliveries
 from app.services import (
     cleanup_expired_uploads,
     process_background_removal,
     process_engagement_event,
+    retry_failed_engagement_events,
 )
 
 settings = get_settings()
@@ -23,7 +25,15 @@ celery_app.conf.update(
         "cleanup-expired-uploads": {
             "task": "fanfolio.cleanup_expired_uploads",
             "schedule": settings.upload_cleanup_interval_seconds,
-        }
+        },
+        "retry-failed-engagement-events": {
+            "task": "fanfolio.retry_failed_engagement_events",
+            "schedule": 60,
+        },
+        "deliver-notification-outbox": {
+            "task": "fanfolio.process_notification_deliveries",
+            "schedule": 30,
+        },
     },
 )
 
@@ -54,6 +64,16 @@ def enqueue_engagement_event(event_id: str, background_tasks: BackgroundTasks) -
         process_engagement_event_task.delay(event_id)
         return
     background_tasks.add_task(process_engagement_event, event_id)
+
+
+@celery_app.task(name="fanfolio.retry_failed_engagement_events")
+def retry_failed_engagement_events_task() -> int:
+    return asyncio.run(retry_failed_engagement_events())
+
+
+@celery_app.task(name="fanfolio.process_notification_deliveries")
+def process_notification_deliveries_task() -> int:
+    return asyncio.run(process_due_notification_deliveries())
 
 
 @celery_app.task(name="fanfolio.cleanup_expired_uploads")

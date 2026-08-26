@@ -49,6 +49,14 @@ if [[ -n "$PODMAN_CONNECTION" ]]; then
   podman_args=(--connection "$PODMAN_CONNECTION")
 fi
 
+podman_compose_version() {
+  if [[ -n "$PODMAN_CONNECTION" ]]; then
+    podman --connection "$PODMAN_CONNECTION" compose version
+  else
+    podman compose version
+  fi
+}
+
 if [[ "$COMPOSE_PROVIDER" != "podman" ]] && command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
   COMPOSE=(docker compose)
 elif [[ "$COMPOSE_PROVIDER" != "docker" ]] && command -v podman-compose >/dev/null 2>&1 && podman-compose version >/dev/null 2>&1; then
@@ -59,8 +67,12 @@ elif [[ "$COMPOSE_PROVIDER" != "docker" ]] && command -v podman-compose >/dev/nu
     # supported environment variable so every generated command inherits it.
     export CONTAINER_CONNECTION="$PODMAN_CONNECTION"
   fi
-elif [[ "$COMPOSE_PROVIDER" != "docker" ]] && command -v podman >/dev/null 2>&1 && podman "${podman_args[@]}" compose version >/dev/null 2>&1; then
-  COMPOSE=(podman "${podman_args[@]}" compose)
+elif [[ "$COMPOSE_PROVIDER" != "docker" ]] && command -v podman >/dev/null 2>&1 && podman_compose_version >/dev/null 2>&1; then
+  if [[ -n "$PODMAN_CONNECTION" ]]; then
+    COMPOSE=(podman --connection "$PODMAN_CONNECTION" compose)
+  else
+    COMPOSE=(podman compose)
+  fi
 else
   echo "Docker Compose 또는 Podman Compose가 필요합니다." >&2
   if [[ "$COMPOSE_PROVIDER" == "podman" ]] || {

@@ -21,7 +21,18 @@ test('discover search submits reliably and resolves every loaded pack before fan
   assert.match(discoverSource, /enterKeyHint="search"/)
   assert.match(discoverSource, /event\.key === 'Enter'/)
   assert.match(discoverSource, /packs\.find\(pack =>/)
+  assert.match(discoverSource, /cards\.find\(card =>/)
+  assert.match(discoverSource, /onOpenCard\(toCatalogCard\(matchedCard\)\)/)
   assert.match(discoverSource, /onFindFans\(query\)/)
+})
+
+test('discover loads the live card catalog and exposes card loading and empty states', () => {
+  assert.match(source, /getCatalogCards/)
+  assert.match(source, /seasonName: card\.seasonName/)
+  assert.match(source, /issueLimit: card\.issueLimit/)
+  assert.match(discoverSource, /cardsLoading/)
+  assert.match(discoverSource, /카드를 불러오는 중/)
+  assert.match(discoverSource, /공개 카드가 아직 없어요/)
 })
 
 test('discover shows loading or honest empty states instead of temporary demo content', () => {

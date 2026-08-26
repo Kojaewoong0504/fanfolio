@@ -114,6 +114,15 @@ def test_alembic_upgrade_creates_the_current_schema(tmp_path: Path) -> None:
             row[1] for row in connection.execute("PRAGMA table_info(notifications)").fetchall()
         }
         assert {"kind", "title", "body", "created_at"} <= notification_columns
+        engagement_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(engagement_events)").fetchall()
+        }
+        assert {"next_attempt_at", "dead_lettered_at"} <= engagement_columns
+        delivery_columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(notification_deliveries)").fetchall()
+        }
+        assert {"notification_id", "channel", "status", "idempotency_key"} <= delivery_columns
         asset_columns = {
             row[1] for row in connection.execute("PRAGMA table_info(assets)").fetchall()
         }
@@ -148,6 +157,18 @@ def test_alembic_upgrade_creates_the_current_schema(tmp_path: Path) -> None:
             "admin_artist_assignments",
         } <= partner_tables
         assert {"fan_wishlist_items", "collection_goals"} <= partner_tables
+        assert "push_devices" in partner_tables
+        push_device_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(push_devices)").fetchall()
+        }
+        assert {
+            "user_id",
+            "token",
+            "platform",
+            "enabled",
+            "last_seen_at",
+            "updated_at",
+        } <= push_device_columns
         organization_columns = {
             row[1] for row in connection.execute("PRAGMA table_info(organizations)").fetchall()
         }
@@ -967,3 +988,44 @@ def test_growth_missions_points_migration_downgrades_cleanly(tmp_path: Path) -> 
             row[1] for row in connection.execute("PRAGMA table_info(engagement_events)")
         }
         assert not {"error_code", "error_message", "attempt_count"} & engagement_columns
+
+
+def test_shop_order_status_migration_allows_refunds_on_legacy_sqlite_schema(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "legacy-shop-orders.db"
+    with sqlite3.connect(database_path) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE shop_orders (
+                id VARCHAR PRIMARY KEY,
+                user_id VARCHAR NOT NULL,
+                product_id VARCHAR NOT NULL,
+                product_name VARCHAR(200) NOT NULL,
+                price_points INTEGER NOT NULL,
+                payment_method VARCHAR(32) NOT NULL,
+                status VARCHAR(32) NOT NULL,
+                created_at DATETIME NOT NULL,
+                CONSTRAINT ck_shop_orders_status CHECK (status IN ('completed', 'failed'))
+            );
+            CREATE TABLE users (id VARCHAR PRIMARY KEY);
+            CREATE TABLE artists (id VARCHAR PRIMARY KEY);
+            CREATE TABLE shop_products (id VARCHAR PRIMARY KEY);
+            CREATE TABLE card_packs (id VARCHAR PRIMARY KEY);
+            INSERT INTO shop_orders
+                (id, user_id, product_id, product_name, price_points, payment_method, status, created_at)
+            VALUES ('order_1', 'fan_1', 'product_1', 'Pack', 1200, 'points', 'completed', CURRENT_TIMESTAMP);
+            CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY);
+            INSERT INTO alembic_version (version_num) VALUES ('0062_shop_product_operations');
+            """
+        )
+
+    backend_dir = Path(__file__).parents[2]
+    upgraded = run_alembic(backend_dir, database_path, "upgrade", "head")
+    assert upgraded.returncode == 0, upgraded.stderr
+
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("UPDATE shop_orders SET status='refunded' WHERE id='order_1'")
+        assert connection.execute(
+            "SELECT status FROM shop_orders WHERE id='order_1'"
+        ).fetchone() == ("refunded",)

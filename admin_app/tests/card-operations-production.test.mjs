@@ -67,3 +67,26 @@ test('production issuance creation collects the backend batch contract', () => {
   assert.match(view, /name="prefix"/)
   assert.match(extractFunction('createBatch'), /state\.view = "batches"/)
 })
+
+test('partner-scoped operations explain root access boundaries before submission', () => {
+  const issuance = extractFunction('issuanceCreationView')
+  const dropLink = extractFunction('dropLinkDrawer')
+  assert.match(issuance, /!isRoot\(\)/)
+  assert.match(issuance, /기업 담당자 계정/)
+  assert.match(issuance, /운영 가이드에서 권한 확인/)
+  assert.match(dropLink, /!isRoot\(\)/)
+  assert.match(dropLink, /기업 담당자 계정/)
+})
+
+test('root review view explains when company review is still required', () => {
+  const reviewPanel = extractFunction('reviewPanel')
+  assert.match(reviewPanel, /pending_partner_review/)
+  assert.match(reviewPanel, /기업 검수 담당자/)
+  assert.match(reviewPanel, /회사 검수 대기/)
+})
+
+test('content calendar uses the administrator-scoped API contract', () => {
+  assert.match(source, /api\("\/admin\/content-calendar"\)/)
+  assert.match(source, /api\("\/admin\/content-calendar", \{/)
+  assert.match(source, /api\(`\/admin\/content-calendar\//)
+})
