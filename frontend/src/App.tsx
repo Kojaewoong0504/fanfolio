@@ -31,6 +31,7 @@ import cardMinhoImage from './assets/card-minho-midnight.jpg'
 import cardJayImage from './assets/card-jay-rosegold.jpg'
 import fanWeekNightStage from './assets/fan-week-night-stage.png'
 import fanWeekLavenderMeet from './assets/fan-week-lavender-meet.png'
+import loginDreamscapeGroup from './assets/login/dreamscape-group.png'
 import appleLoginIcon from './assets/login/apple.svg'
 import googleLoginIcon from './assets/login/google.svg'
 import kakaoLoginIcon from './assets/login/kakao.svg'
@@ -42,7 +43,6 @@ import fanLevelStar from './assets/fan-level-star-v2.png'
 import profileDecorationsImage from './assets/profile-decorations-generated.png'
 
 const dreamscapeHero = dreamscapeDemoAssets.hero
-const loginDreamscapeGroup = dreamscapeDemoAssets.group
 const dreamscapeCardPack = dreamscapeDemoAssets.cardPack
 const collectionCardHarinGenerated = dreamscapeMemberById.member_harin.image
 const collectionCardDoyunGenerated = dreamscapeMemberById.member_yuna.image
