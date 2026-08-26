@@ -15,6 +15,28 @@ test('admin can issue a one-time replacement password for an existing account', 
   assert.match(source, /data-artist-reset/)
 })
 
+test('artist account issuance refreshes the account list independently of the full dashboard load', () => {
+  assert.match(source, /async function loadArtistAccounts\(\)/)
+  assert.match(source, /await loadArtistAccounts\(\)/)
+  assert.match(source, /state\.artistAccounts = result\.data\.items/)
+})
+
+test('artist account issuance can bind the new studio account to an artist catalog', () => {
+  assert.match(source, /name="artistId"/)
+  assert.match(source, /artist-profiles\/\$\{[^}]+\}/)
+  assert.match(source, /verificationStatus: "pending"/)
+})
+
+test('service users view passes its declared role options to the select', () => {
+  assert.match(source, /const roleOptions = \[/)
+  assert.match(source, /id: "user-role-filter"[\s\S]*options: roleOptions/)
+})
+
+test('successful admin data loads clear a previously rendered error', () => {
+  assert.match(source, /async function loadData\(\) \{\s*state\.error = ""/)
+  assert.match(source, /if \(!canViewFanGrowth\(\)[\s\S]*?state\.error = "";\s*\n  \}/)
+})
+
 test('hosted admin routes authentication through its same-origin API proxy', async () => {
   assert.doesNotMatch(source, /https:\/\/fanfolio-api\.onrender\.com\/api/)
   assert.match(source, /:\s*["']\/api["']/)

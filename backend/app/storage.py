@@ -114,7 +114,7 @@ def configured_asset_storage() -> AssetStorage:
     settings = get_settings()
     if settings.storage_backend == "local":
         return local_asset_storage(settings.storage_dir)
-    if settings.storage_backend in {"s3", "supabase"}:
+    if settings.storage_backend in {"r2", "s3", "supabase"}:
         return S3AssetStorage.from_settings(settings)
     raise ValueError(f"unsupported STORAGE_BACKEND: {settings.storage_backend}")
 
@@ -223,17 +223,18 @@ class S3AssetStorage:
         import boto3
         from botocore.config import Config
 
+        is_r2 = settings.storage_backend == "r2"
         client = boto3.client(
             "s3",
-            endpoint_url=settings.s3_endpoint_url,
-            region_name=settings.s3_region,
-            aws_access_key_id=settings.s3_access_key_id or None,
-            aws_secret_access_key=settings.s3_secret_access_key or None,
+            endpoint_url=settings.object_storage_endpoint,
+            region_name="auto" if is_r2 else settings.s3_region,
+            aws_access_key_id=settings.object_storage_access_key or None,
+            aws_secret_access_key=settings.object_storage_secret_key or None,
             config=Config(s3={"addressing_style": "path"}),
         )
         return cls(
             client=client,
-            bucket=settings.s3_bucket,
+            bucket=settings.object_storage_bucket,
             key_prefix=settings.s3_key_prefix,
         )
 

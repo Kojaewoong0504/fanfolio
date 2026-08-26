@@ -83,6 +83,64 @@ def test_supabase_storage_rejects_missing_server_side_s3_credentials() -> None:
         raise AssertionError("Supabase Storage must not start without server-side credentials")
 
 
+def test_cloudflare_r2_storage_uses_the_s3_compatible_configuration() -> None:
+    settings = Settings(
+        app_env="test",
+        storage_backend="r2",
+        r2_account_id="account-id",
+        r2_bucket="fanfolio-assets",
+        r2_access_key_id="r2-access-key",
+        r2_secret_access_key="r2-secret-key",
+    )
+
+    settings.validate_runtime()
+
+
+def test_cloudflare_r2_storage_rejects_missing_bucket() -> None:
+    settings = Settings(
+        app_env="test",
+        storage_backend="r2",
+        r2_account_id="account-id",
+        r2_access_key_id="r2-access-key",
+        r2_secret_access_key="r2-secret-key",
+    )
+
+    try:
+        settings.validate_runtime()
+    except ValueError as error:
+        assert "R2_BUCKET" in str(error)
+    else:
+        raise AssertionError("R2 must not start without a bucket")
+
+
+def test_fcm_push_requires_firebase_server_credentials() -> None:
+    settings = Settings(
+        app_env="test",
+        push_delivery_mode="fcm",
+        firebase_project_id="fnafolio",
+        firebase_client_email="firebase-adminsdk@example.iam.gserviceaccount.com",
+        firebase_private_key="-----BEGIN PRIVATE KEY-----\nkey\n-----END PRIVATE KEY-----\n",
+    )
+
+    settings.validate_runtime()
+
+
+def test_fcm_push_rejects_missing_project_id() -> None:
+    settings = Settings(
+        app_env="test",
+        push_delivery_mode="fcm",
+        firebase_client_email="firebase-adminsdk@example.iam.gserviceaccount.com",
+        firebase_private_key="private-key",
+    )
+
+    try:
+        settings.validate_runtime()
+    except ValueError as error:
+        assert "FIREBASE_PROJECT_ID" in str(error)
+    else:
+        raise AssertionError("FCM must not start without a Firebase project id")
+
+
 def test_staging_uses_hosted_security_without_requiring_deferred_integrations() -> None:
     settings = Settings(
         app_env="staging",

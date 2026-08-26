@@ -63,6 +63,7 @@ class User(Base):
     favorite_member_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     notification_email_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Follow(Base):
@@ -91,6 +92,74 @@ class UserBlock(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     blocker_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     blocked_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class SupportTicket(Base):
+    """A fan support request tracked through the operations queue."""
+
+    __tablename__ = "support_tickets"
+    __table_args__ = (
+        CheckConstraint(
+            "category IN ('general', 'card', 'trade', 'order', 'report')",
+            name="ck_support_tickets_category",
+        ),
+        CheckConstraint(
+            "status IN ('open', 'in_progress', 'answered', 'closed')",
+            name="ck_support_tickets_status",
+        ),
+        Index("ix_support_tickets_user_created", "user_id", "created_at"),
+        Index("ix_support_tickets_status_updated", "status", "updated_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    category: Mapped[str] = mapped_column(String(20), nullable=False)
+    subject: Mapped[str] = mapped_column(String(160), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="open")
+    assigned_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class SupportMessage(Base):
+    """An immutable message in a support ticket conversation."""
+
+    __tablename__ = "support_messages"
+    __table_args__ = (Index("ix_support_messages_ticket_created", "ticket_id", "created_at"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    ticket_id: Mapped[str] = mapped_column(ForeignKey("support_tickets.id", ondelete="CASCADE"))
+    author_user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    body: Mapped[str] = mapped_column(String(4000), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class SupportEvidence(Base):
+    """Structured case evidence and operator notes, separate from fan messages."""
+
+    __tablename__ = "support_evidence"
+    __table_args__ = (Index("ix_support_evidence_ticket_created", "ticket_id", "created_at"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    ticket_id: Mapped[str] = mapped_column(ForeignKey("support_tickets.id", ondelete="CASCADE"))
+    actor_user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    reference_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    note: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
@@ -403,6 +472,34 @@ class CardEffectVersion(Base):
     )
 
 
+class CardCollaborationComment(Base):
+    """Scoped feedback thread shared by studio authors and card operators."""
+
+    __tablename__ = "card_collaboration_comments"
+    __table_args__ = (
+        Index("ix_card_collab_comments_card_created", "card_id", "created_at"),
+        Index("ix_card_collab_comments_card_status", "card_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    card_id: Mapped[str] = mapped_column(ForeignKey("cards.id", ondelete="CASCADE"))
+    author_user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    body: Mapped[str] = mapped_column(String(500), nullable=False)
+    mention_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="open")
+    review_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
 class CardReviewRequest(Base):
     __tablename__ = "card_review_requests"
     __table_args__ = (
@@ -511,6 +608,16 @@ class ShopProduct(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
     starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    inventory_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sold_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    per_user_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    scheduled_publish_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    exposure_slot: Mapped[str] = mapped_column(String(40), nullable=False, default="shop")
+    fan_segment: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=dict, server_default=sa.text("'{}'")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
@@ -953,6 +1060,24 @@ class TradeLock(Base):
     )
 
 
+class TradeHold(Base):
+    """An explicit operational hold that prevents a trade from being accepted."""
+
+    __tablename__ = "trade_holds"
+    __table_args__ = (UniqueConstraint("proposal_id", name="uq_trade_holds_proposal"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    proposal_id: Mapped[str] = mapped_column(ForeignKey("trade_proposals.id", ondelete="CASCADE"))
+    ticket_id: Mapped[str | None] = mapped_column(
+        ForeignKey("support_tickets.id", ondelete="SET NULL"), nullable=True
+    )
+    reason: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
 class CardOwnershipLedger(Base):
     """Append-only ownership event for every card grant or transfer."""
 
@@ -1015,6 +1140,10 @@ class EngagementEvent(Base):
     error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
     attempt_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
+    )
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    dead_lettered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
 
@@ -1503,6 +1632,64 @@ class Notification(Base):
     )
 
 
+class PushDevice(Base):
+    """An authenticated fan's current push-capable device registration."""
+
+    __tablename__ = "push_devices"
+    __table_args__ = (
+        UniqueConstraint("token", name="uq_push_devices_token"),
+        Index("ix_push_devices_user_enabled", "user_id", "enabled"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    token: Mapped[str] = mapped_column(String(4096), nullable=False)
+    platform: Mapped[str] = mapped_column(String(20), nullable=False)
+    device_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class NotificationDelivery(Base):
+    """Durable, idempotent delivery attempt for an in-app notification."""
+
+    __tablename__ = "notification_deliveries"
+    __table_args__ = (
+        UniqueConstraint(
+            "notification_id", "channel", "destination", name="uq_notification_delivery_target"
+        ),
+        Index("ix_notification_deliveries_due", "status", "next_attempt_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    notification_id: Mapped[str] = mapped_column(
+        ForeignKey("notifications.id", ondelete="CASCADE"), nullable=False
+    )
+    channel: Mapped[str] = mapped_column(String(20), nullable=False)
+    destination: Mapped[str] = mapped_column(String(4096), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    attempt_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
     id: Mapped[str] = mapped_column(String, primary_key=True)
@@ -1520,6 +1707,68 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
+
+
+class ContentCalendarEntry(Base):
+    """A scheduled card, event, or product publication window."""
+
+    __tablename__ = "content_calendar_entries"
+    __table_args__ = (
+        Index(
+            "ix_content_calendar_content_window",
+            "content_type",
+            "content_id",
+            "starts_at",
+            "ends_at",
+        ),
+        Index("ix_content_calendar_starts_at", "starts_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    content_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    content_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="scheduled")
+    notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class ApprovalRequest(Base):
+    """Two-person approval record for high-impact administrator mutations."""
+
+    __tablename__ = "approval_requests"
+    __table_args__ = (
+        Index("ix_approval_requests_status_created", "status", "created_at"),
+        Index("ix_approval_requests_entity", "entity_type", "entity_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(60), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(60), nullable=False)
+    entity_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    requested_by: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    approved_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    payload: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=dict, server_default=sa.text("'{}'")
+    )
+    reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Asset(Base):

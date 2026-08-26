@@ -54,7 +54,7 @@ async def current_user(
             raise AuthTokenError()
         claims = decode_access_token(raw_token, expected_client=client or "")
         user = await session.get(User, str(claims["sub"]))
-        if not user or user.role.value != claims.get("role"):
+        if not user or user.deleted_at is not None or user.role.value != claims.get("role"):
             raise AuthTokenError()
         return user
     if get_settings().is_hosted:
@@ -70,7 +70,7 @@ async def current_user(
     user = await session.scalar(
         select(User).join(Session, Session.user_id == User.id).where(Session.token == token)
     )
-    if not user:
+    if not user or user.deleted_at is not None:
         raise AppError(401, "AUTH_REQUIRED", "유효하지 않은 세션입니다.")
     return user
 
@@ -136,7 +136,11 @@ async def optional_current_user(
         except AuthTokenError:
             return None
         user = await session.get(User, str(claims["sub"]))
-        return user if user and user.role.value == claims.get("role") else None
+        return (
+            user
+            if user and user.deleted_at is None and user.role.value == claims.get("role")
+            else None
+        )
     if get_settings().is_hosted:
         return None
     scoped_token = {
@@ -147,9 +151,10 @@ async def optional_current_user(
     token = scoped_token or fanfolio_session or session_header
     if not token:
         return None
-    return await session.scalar(
+    user = await session.scalar(
         select(User).join(Session, Session.user_id == User.id).where(Session.token == token)
     )
+    return user if user and user.deleted_at is None else None
 
 
 OptionalCurrentUser = Annotated[User | None, Depends(optional_current_user)]

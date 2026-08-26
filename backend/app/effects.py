@@ -12,6 +12,7 @@ from typing import Any
 from app.errors import AppError
 
 ALLOWED_PRESETS = {"none", "light", "glow", "foil", "hologram", "particles", "motion"}
+LEGACY_PRESETS = {"aurora": "hologram", "moonlight": "hologram", "stardust": "hologram"}
 ALLOWED_INTERACTIONS = {"static", "tilt", "lenticular"}
 HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
@@ -27,6 +28,7 @@ def validate_effect_config(config: Any) -> dict:
         if not isinstance(side, dict):
             raise AppError(422, "INVALID_EFFECT_CONFIG", "효과 설정 형식을 확인해 주세요.")
         preset = side.get("preset", side.get("effectPreset", "none"))
+        preset = LEGACY_PRESETS.get(preset, preset)
         if preset not in ALLOWED_PRESETS:
             raise AppError(422, "INVALID_EFFECT_CONFIG", "지원하지 않는 효과 프리셋입니다.")
         interaction = side.get("interaction", "static" if side_name == "back" else "tilt")

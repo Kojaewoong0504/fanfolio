@@ -164,10 +164,10 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
         onImageError={imageError}
         enableDeviceMotion
       />
-      <p className="detail-kicker">{detail?.card.seasonName ?? '드림스케이프 2026 SPRING'}</p>
+      <p className="detail-kicker">{detail?.card.seasonName ?? card.seasonName ?? '드림스케이프 2026 SPRING'}</p>
       <h2 id="card-detail-title" className="detail-title">{detail?.card.memberName ?? card.member} · {detail?.card.name ?? card.title}</h2>
       <dl className="detail-reference-meta">
-        {detail?.card.rarity && <div><dt><InlineIcon name="star" />등급</dt><dd>{detail.card.rarity}</dd></div>}
+        {(detail?.card.rarity ?? card.rarity) && <div><dt><InlineIcon name="star" />등급</dt><dd>{detail?.card.rarity ?? card.rarity}</dd></div>}
         <div><dt><InlineIcon name="grid" />카드 번호</dt><dd>{detail ? `DS-${String(detail.serialNumber).padStart(3, '0')}` : safeBackDetail.serialLabel}</dd></div>
         <div><dt><InlineIcon name="calendar" />획득일</dt><dd>{detail ? new Date(detail.acquiredAt).toLocaleDateString('ko-KR') : '최근 획득'}</dd></div>
         <div className="detail-meta-secondary"><dt>아티스트</dt><dd>{detail?.card.artistName ?? card.artist}</dd></div>

@@ -81,6 +81,35 @@ class FanPasswordResetConfirm(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class AccountDeletionRequest(BaseModel):
+    confirmation: str = Field(min_length=1, max_length=40)
+
+
+class ContentCalendarCreate(BaseModel):
+    content_type: Literal["card", "event", "product"] = Field(alias="contentType")
+    content_id: str = Field(alias="contentId", min_length=1, max_length=160)
+    title: str = Field(min_length=1, max_length=160)
+    starts_at: datetime = Field(alias="startsAt")
+    ends_at: datetime = Field(alias="endsAt")
+    notes: str | None = Field(default=None, max_length=2000)
+    model_config = ConfigDict(populate_by_name=True)
+
+    @model_validator(mode="after")
+    def validate_window(self) -> "ContentCalendarCreate":
+        if self.ends_at <= self.starts_at:
+            raise ValueError("endsAt must be after startsAt")
+        return self
+
+
+class ContentCalendarUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=160)
+    starts_at: datetime | None = Field(default=None, alias="startsAt")
+    ends_at: datetime | None = Field(default=None, alias="endsAt")
+    status: Literal["scheduled", "published", "cancelled"] | None = None
+    notes: str | None = Field(default=None, max_length=2000)
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class ArtistPasswordChange(BaseModel):
     current_password: str = Field(alias="currentPassword", min_length=1, max_length=200)
     new_password: str = Field(alias="newPassword", min_length=12, max_length=200)
@@ -140,6 +169,45 @@ class TradeProposalCreate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class SupportTicketCreate(BaseModel):
+    category: Literal["general", "card", "trade", "order", "report"]
+    subject: str = Field(min_length=2, max_length=160)
+    body: str = Field(min_length=2, max_length=4000)
+
+
+class SupportMessageCreate(BaseModel):
+    body: str = Field(min_length=2, max_length=4000)
+
+
+class SupportTicketUpdate(BaseModel):
+    status: Literal["open", "in_progress", "answered", "closed"] | None = None
+    assigned_admin_id: str | None = Field(default=None, alias="assignedAdminId")
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class SupportTicketActionRequest(BaseModel):
+    action: Literal[
+        "assign",
+        "record_evidence",
+        "hold_trade",
+        "release_trade",
+        "refund_order",
+        "grant_points",
+        "resolve",
+    ]
+    reference_id: str | None = Field(default=None, alias="referenceId", max_length=160)
+    note: str | None = Field(default=None, max_length=2000)
+    amount: int | None = None
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ReportCreate(BaseModel):
+    target_type: Literal["user", "trade", "card"] = Field(alias="targetType")
+    target_id: str = Field(alias="targetId", min_length=1, max_length=160)
+    reason: str = Field(min_length=2, max_length=120)
+    body: str = Field(min_length=2, max_length=4000)
+
+
 class ArtistProfileUpdate(BaseModel):
     nickname: str | None = Field(default=None, min_length=1, max_length=40)
     email_enabled: bool | None = Field(default=None, alias="emailEnabled")
@@ -149,6 +217,17 @@ class ArtistProfileUpdate(BaseModel):
 class NotificationPreferencesUpdate(BaseModel):
     email_enabled: bool = Field(alias="emailEnabled")
     model_config = ConfigDict(populate_by_name=True)
+
+
+class PushDeviceRegister(BaseModel):
+    token: str = Field(min_length=1, max_length=4096)
+    platform: Literal["web", "ios", "android"]
+    device_name: str | None = Field(default=None, alias="deviceName", max_length=120)
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class PushDeviceUnregister(BaseModel):
+    token: str = Field(min_length=1, max_length=4096)
 
 
 class ReadNotification(BaseModel):
@@ -203,6 +282,11 @@ class ShopProductCreate(BaseModel):
     price_points: int = Field(alias="pricePoints", gt=0)
     starts_at: datetime | None = Field(default=None, alias="startsAt")
     ends_at: datetime | None = Field(default=None, alias="endsAt")
+    inventory_limit: int | None = Field(default=None, alias="inventoryLimit", ge=0)
+    per_user_limit: int | None = Field(default=None, alias="perUserLimit", ge=1)
+    scheduled_publish_at: datetime | None = Field(default=None, alias="scheduledPublishAt")
+    exposure_slot: str = Field(default="shop", alias="exposureSlot", min_length=1, max_length=40)
+    fan_segment: dict = Field(default_factory=dict, alias="fanSegment")
     model_config = ConfigDict(populate_by_name=True)
 
 
@@ -216,6 +300,13 @@ class ShopProductUpdate(BaseModel):
     starts_at: datetime | None = Field(default=None, alias="startsAt")
     ends_at: datetime | None = Field(default=None, alias="endsAt")
     status: Literal["draft", "published", "archived"] | None = None
+    inventory_limit: int | None = Field(default=None, alias="inventoryLimit", ge=0)
+    per_user_limit: int | None = Field(default=None, alias="perUserLimit", ge=1)
+    scheduled_publish_at: datetime | None = Field(default=None, alias="scheduledPublishAt")
+    exposure_slot: str | None = Field(
+        default=None, alias="exposureSlot", min_length=1, max_length=40
+    )
+    fan_segment: dict | None = Field(default=None, alias="fanSegment")
     model_config = ConfigDict(populate_by_name=True)
 
 
@@ -743,6 +834,19 @@ class PointAdjustmentRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class ApprovalCreateRequest(BaseModel):
+    kind: Literal["points_adjustment", "shop_refund", "product_publish", "odds_change"]
+    entity_type: str = Field(alias="entityType", min_length=1, max_length=60)
+    entity_id: str = Field(alias="entityId", min_length=1, max_length=160)
+    payload: dict = Field(default_factory=dict)
+    reason: str | None = Field(default=None, max_length=1000)
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ApprovalDecisionRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=1000)
+
+
 class RewardCatalogCreate(BaseModel):
     """A fan-facing reward that can be attached to an achievement or pass tier."""
 
@@ -822,6 +926,25 @@ class CollectionGoalCreate(BaseModel):
 
 class ArtistReviewSubmitRequest(BaseModel):
     review_note: str | None = Field(default=None, alias="reviewNote", max_length=500)
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class CardCollaborationCommentCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=500)
+    mention_user_id: str | None = Field(default=None, alias="mentionUserId")
+    review_version: int | None = Field(default=None, alias="reviewVersion", ge=1)
+    model_config = ConfigDict(populate_by_name=True)
+
+    @model_validator(mode="after")
+    def normalize_body(self):
+        self.body = self.body.strip()
+        if not self.body:
+            raise ValueError("INVALID_COMMENT")
+        return self
+
+
+class CardCollaborationCommentUpdate(BaseModel):
+    status: Literal["open", "resolved"]
     model_config = ConfigDict(populate_by_name=True)
 
 

@@ -15,8 +15,10 @@ from app.models import (
     Asset,
     BackgroundRemovalJob,
     Card,
+    CardCollaborationComment,
     CardEffectVersion,
     Member,
+    User,
     UserCard,
 )
 from app.rate_limit import enforce_rate_limit
@@ -25,6 +27,8 @@ from app.schemas import (
     ArtistCardUpdate,
     ArtistProfileUpdate,
     ArtistReviewSubmitRequest,
+    CardCollaborationCommentCreate,
+    CardCollaborationCommentUpdate,
     CardEffectVersionCreate,
     CardEffectVersionUpdate,
 )
@@ -342,6 +346,74 @@ async def validate_design_assets(
 async def get_card(card_id: str, user: ArtistUser, session: DbSession) -> dict:
     card = await owned_card(card_id, user, session)
     return {"ok": True, "data": card_data(card)}
+
+
+def collaboration_comment_data(comment: CardCollaborationComment) -> dict:
+    return {
+        "id": comment.id,
+        "cardId": comment.card_id,
+        "authorUserId": comment.author_user_id,
+        "body": comment.body,
+        "mentionUserId": comment.mention_user_id,
+        "status": comment.status,
+        "reviewVersion": comment.review_version,
+        "createdAt": comment.created_at.isoformat() if comment.created_at else None,
+        "updatedAt": comment.updated_at.isoformat() if comment.updated_at else None,
+    }
+
+
+@router.get("/artist/cards/{card_id}/comments")
+async def list_card_comments(card_id: str, user: ArtistUser, session: DbSession) -> dict:
+    await owned_card(card_id, user, session)
+    comments = await session.scalars(
+        select(CardCollaborationComment)
+        .where(CardCollaborationComment.card_id == card_id)
+        .order_by(CardCollaborationComment.created_at.desc())
+    )
+    return {"ok": True, "data": {"items": [collaboration_comment_data(item) for item in comments]}}
+
+
+@router.post("/artist/cards/{card_id}/comments", status_code=status.HTTP_201_CREATED)
+async def create_card_comment(
+    card_id: str,
+    payload: CardCollaborationCommentCreate,
+    user: ArtistUser,
+    session: DbSession,
+) -> dict:
+    card = await owned_card(card_id, user, session)
+    if payload.mention_user_id:
+        mentioned = await session.get(User, payload.mention_user_id)
+        if mentioned is None or mentioned.role.value not in {"artist", "admin"}:
+            raise AppError(404, "MENTION_USER_NOT_FOUND", "멘션할 운영 사용자를 찾을 수 없습니다.")
+    comment = CardCollaborationComment(
+        id=f"comment_{uuid4().hex[:12]}",
+        card_id=card.id,
+        author_user_id=user.id,
+        body=payload.body,
+        mention_user_id=payload.mention_user_id,
+        review_version=payload.review_version or card.review_version or None,
+        status="open",
+    )
+    session.add(comment)
+    await session.commit()
+    return {"ok": True, "data": collaboration_comment_data(comment)}
+
+
+@router.patch("/artist/cards/{card_id}/comments/{comment_id}")
+async def update_card_comment(
+    card_id: str,
+    comment_id: str,
+    payload: CardCollaborationCommentUpdate,
+    user: ArtistUser,
+    session: DbSession,
+) -> dict:
+    await owned_card(card_id, user, session)
+    comment = await session.get(CardCollaborationComment, comment_id)
+    if comment is None or comment.card_id != card_id:
+        raise AppError(404, "COMMENT_NOT_FOUND", "협업 코멘트를 찾을 수 없습니다.")
+    comment.status = payload.status
+    await session.commit()
+    return {"ok": True, "data": collaboration_comment_data(comment)}
 
 
 async def effect_version_or_404(

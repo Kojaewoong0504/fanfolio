@@ -6,7 +6,7 @@ import {
   responsiveStudioMode,
   reviewReadiness,
   studioDashboard,
-} from './studio-core.js'
+} from './studio-core.js?v=effects-contract-20260826'
 
 const isLocalHost = ['localhost', '127.0.0.1'].includes(window.location.hostname)
 const localApiQuery = isLocalHost
@@ -265,6 +265,8 @@ const state = {
   jobStatus: '',
   reviewError: '',
   submissionMessage: '',
+  collaborationComments: [],
+  collaborationCommentError: '',
 }
 
 function icon(name, className = '') {
@@ -981,6 +983,14 @@ function currentReadiness() {
   })
 }
 
+function collaborationCommentsPanel() {
+  const comments = state.collaborationComments || []
+  const rows = comments.length
+    ? comments.map((comment) => `<article class="card-comment ${comment.status === 'resolved' ? 'resolved' : ''}"><div><strong>${esc(comment.authorUserId)}</strong><span class="comment-status">${comment.status === 'resolved' ? '해결됨' : '미해결'}</span></div><p>${esc(comment.body)}</p><small>${comment.reviewVersion ? `검수 버전 v${comment.reviewVersion} · ` : ''}${esc(comment.createdAt || '')}</small>${comment.status !== 'resolved' ? `<button type="button" class="text-button" data-collaboration-comment="${esc(comment.id)}">해결 처리</button>` : ''}</article>`).join('')
+    : `<div class="empty-inline"><div><strong>아직 협업 코멘트가 없어요.</strong><span>운영팀과 확인할 내용을 남기면 이 카드의 검수 버전에 연결됩니다.</span></div></div>`
+  return `<section class="card-comments-panel"><div class="review-panel-heading"><div><span>COLLABORATION</span><h3>협업 코멘트</h3></div><span class="readiness-score">${comments.filter((item) => item.status !== 'resolved').length}</span></div><div class="card-comment-list">${rows}</div><form class="card-comment-form" data-collaboration-comment-form><textarea name="body" maxlength="500" rows="3" placeholder="운영팀에 전달할 피드백을 남겨 주세요." required></textarea><input name="mentionUserId" type="text" maxlength="80" placeholder="멘션할 운영자 ID (선택)" /><button type="submit" class="secondary-button" ${state.busy ? 'disabled' : ''}>코멘트 남기기</button></form>${state.collaborationCommentError ? `<p class="review-error" role="alert">${esc(state.collaborationCommentError)}</p>` : ''}</section>`
+}
+
 function reviewStage() {
   const currentCard = state.cards.find((item) => item.id === state.cardId) || {
     status: state.form.status,
@@ -1006,6 +1016,7 @@ function reviewStage() {
       <label class="review-note">운영팀에 전달할 메모<textarea data-review-note maxlength="500" rows="4" placeholder="공개 희망일, 미디어 확인 포인트 등을 적어 주세요.">${esc(state.reviewNote)}</textarea><small>${state.reviewNote.length}/500</small></label>
       ${state.reviewError ? `<p class="review-error" role="alert">${esc(state.reviewError)}</p>` : ''}
       <div class="review-actions"><button type="button" class="secondary-button" data-editor-stage="preview">팬 화면 다시 보기</button><button type="button" class="primary-button" data-action="submit-review" ${!readiness.ready || state.busy ? 'disabled' : ''}>${state.busy ? '요청 중...' : `검수 요청 보내기 ${icon('send')}`}</button></div>
+      ${collaborationCommentsPanel()}
     </div>
   </section>`
 }
@@ -1445,6 +1456,8 @@ async function openCard(cardId) {
   state.view = 'editor'
   state.saveStatus = 'saved'
   render()
+  state.collaborationComments = []
+  void loadCollaborationComments(card.id)
   const media = [
     ['imageSrc', card.imageUrl],
     ['voiceSrc', card.voiceUrl],
@@ -2023,6 +2036,50 @@ async function submitReview() {
   }
 }
 
+async function loadCollaborationComments(cardId, renderAfter = true) {
+  if (!cardId) return
+  try {
+    const result = await api(`/artist/cards/${encodeURIComponent(cardId)}/comments`)
+    state.collaborationComments = result.data.items || []
+    state.collaborationCommentError = ''
+    if (renderAfter && state.view === 'editor') render()
+  } catch (error) {
+    state.collaborationCommentError = error.message
+    if (renderAfter && state.view === 'editor') render()
+  }
+}
+
+async function createCollaborationComment(form) {
+  if (!state.cardId) return
+  const values = Object.fromEntries(new FormData(form).entries())
+  state.collaborationCommentError = ''
+  try {
+    await api(`/artist/cards/${encodeURIComponent(state.cardId)}/comments`, {
+      method: 'POST',
+      body: JSON.stringify(values),
+    })
+    form.reset()
+    await loadCollaborationComments(state.cardId, false)
+  } catch (error) {
+    state.collaborationCommentError = error.message
+  }
+  render()
+}
+
+async function resolveCollaborationComment(commentId) {
+  if (!state.cardId) return
+  try {
+    await api(`/artist/cards/${encodeURIComponent(state.cardId)}/comments/${encodeURIComponent(commentId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'resolved' }),
+    })
+    await loadCollaborationComments(state.cardId, false)
+  } catch (error) {
+    state.collaborationCommentError = error.message
+  }
+  render()
+}
+
 async function saveProfile(formElement) {
   const form = new FormData(formElement)
   try {
@@ -2108,6 +2165,7 @@ app.addEventListener('submit', (event) => {
   if (event.target.id === 'change-password-form') changePassword(event.target)
   if (event.target.id === 'profile-form') saveProfile(event.target)
   if (event.target.id === 'card-details-form') saveDraft({ nextStage: 'preview' })
+  if (event.target.matches('[data-collaboration-comment-form]')) createCollaborationComment(event.target)
 })
 
 app.addEventListener('click', async (event) => {
@@ -2259,6 +2317,11 @@ app.addEventListener('click', async (event) => {
     return
   }
   const action = event.target.closest('[data-action]')?.dataset.action
+  const comment = event.target.closest('[data-collaboration-comment]')
+  if (comment) {
+    resolveCollaborationComment(comment.dataset.collaborationComment)
+    return
+  }
   if (!action) return
   if (action === 'toggle-sidebar') {
     state.sidebarCollapsed = !state.sidebarCollapsed

@@ -1,7 +1,11 @@
+import asyncio
 from typing import Any
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
+from app.db.session import SessionLocal
+from app.models import NotificationDelivery
 from tests.conftest import assert_error, assert_success
 
 
@@ -232,14 +236,8 @@ def test_admin_can_configure_a_collection_campaign(
 
 
 def test_publishing_a_card_creates_audit_log_and_fan_notification(
-    actors: dict[str, TestClient], seeded: dict[str, Any], monkeypatch: Any
+    actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:
-    sent: list[tuple[str, str, str]] = []
-
-    async def fake_deliver(email: str, title: str, body: str) -> None:
-        sent.append((email, title, body))
-
-    monkeypatch.setattr("app.services.deliver_notification_email", fake_deliver)
     assert_success(
         actors["fan"].patch("/api/me/notification-preferences", json={"emailEnabled": True})
     )
@@ -255,9 +253,22 @@ def test_publishing_a_card_creates_audit_log_and_fan_notification(
     log = next(item for item in logs["items"] if item["action"] == "card.published")
     assert log["actorId"] == "admin"
     assert log["entityId"] == "card_draft"
-    assert sent == [
-        ("fan@example.com", "새 카드가 공개되었어요", "비공개 카드 카드를 확인해보세요.")
-    ]
+
+    async def load_deliveries() -> list[NotificationDelivery]:
+        async with SessionLocal() as session:
+            return list(
+                await session.scalars(
+                    select(NotificationDelivery).where(
+                        NotificationDelivery.notification_id == event["id"]
+                    )
+                )
+            )
+
+    deliveries = asyncio.run(load_deliveries())
+    assert len(deliveries) == 1
+    assert deliveries[0].channel == "email"
+    assert deliveries[0].destination == "fan@example.com"
+    assert deliveries[0].status == "pending"
 
 
 def test_admin_can_review_an_artist_card_before_publishing(

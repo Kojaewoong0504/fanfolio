@@ -131,3 +131,51 @@ def test_console_mailer_is_rejected_in_production() -> None:
         assert "not allowed" in str(error)
     else:
         raise AssertionError("production must not fall back to console mail delivery")
+
+
+def test_resend_mailer_posts_an_email_without_logging_the_api_key(monkeypatch: Any) -> None:
+    requests: list[tuple[str, dict[str, str], bytes]] = []
+
+    class FakeResponse:
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"id":"email-id"}'
+
+    def fake_urlopen(request: Any, timeout: float) -> FakeResponse:
+        requests.append((request.full_url, dict(request.header_items()), request.data))
+        assert timeout == 10.0
+        return FakeResponse()
+
+    monkeypatch.setattr(mailer.urllib.request, "urlopen", fake_urlopen)
+    settings = Settings(
+        app_env="test",
+        mail_from="Fanfolio <no-reply@fanfolio.example>",
+        resend_api_key="re_test_secret",
+    )
+
+    mailer.ResendMailer(settings).send_notification(
+        "fan@example.com", "새 카드가 공개되었어요", "새 카드를 확인해 보세요."
+    )
+
+    assert len(requests) == 1
+    url, headers, payload = requests[0]
+    assert url == "https://api.resend.com/emails"
+    assert headers["Authorization"] == "Bearer re_test_secret"
+    assert b'"to": ["fan@example.com"]' in payload
+    assert '"subject": "Fanfolio 알림: 새 카드가 공개되었어요"'.encode() in payload
+
+
+def test_resend_mailer_requires_api_key() -> None:
+    settings = Settings(app_env="test", mail_from="Fanfolio <no-reply@fanfolio.example>")
+
+    try:
+        mailer.ResendMailer(settings).send_notification("fan@example.com", "title", "body")
+    except mailer.MailDeliveryError as error:
+        assert "RESEND_API_KEY" in str(error)
+    else:
+        raise AssertionError("Resend must not send without an API key")

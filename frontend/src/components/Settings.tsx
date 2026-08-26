@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 
-import { apiFetch, changeFanPassword, resolveApiUrl, type CatalogArtist, type CatalogMember, type CurrentUser, type FanProgression } from '../api/client'
+import { apiFetch, changeFanPassword, deleteFanAccount, exportPersonalData, resolveApiUrl, type CatalogArtist, type CatalogMember, type CurrentUser, type FanProgression } from '../api/client'
 import profileDecorations from '../assets/profile-decorations-generated.png'
 import { ProfileAvatar } from './ProfileAvatar'
 
@@ -36,11 +36,39 @@ function SettingsInfoScreenView({
   screen,
   language,
   onLanguageChange,
+  supportMode,
+  supportSubject,
+  supportCategory,
+  supportBody,
+  supportSaving,
+  supportMessage,
+  onSupportModeChange,
+  onSupportSubjectChange,
+  onSupportCategoryChange,
+  onSupportBodyChange,
+  onSupportSubmit,
+  onPrivacyExport,
+  onAccountDelete,
+  privacyMessage,
   onBack,
 }: {
   screen: Exclude<SettingsInfoScreen, null>
   language: 'ko' | 'en'
   onLanguageChange: (language: 'ko' | 'en') => void
+  supportMode: 'faq' | 'form'
+  supportSubject: string
+  supportCategory: 'general' | 'card' | 'trade' | 'order' | 'report'
+  supportBody: string
+  supportSaving: boolean
+  supportMessage: string
+  onSupportModeChange: (mode: 'faq' | 'form') => void
+  onSupportSubjectChange: (subject: string) => void
+  onSupportCategoryChange: (category: 'general' | 'card' | 'trade' | 'order' | 'report') => void
+  onSupportBodyChange: (body: string) => void
+  onSupportSubmit: () => void
+  onPrivacyExport: () => void
+  onAccountDelete: (confirmation: string) => void
+  privacyMessage: string
   onBack: () => void
 }) {
   const titles = {
@@ -85,9 +113,25 @@ function SettingsInfoScreenView({
             <p>팬폴리오 이용 중 궁금한 점을 확인해 보세요.</p>
           </div>
           <section className="settings-info-card settings-support-list" aria-label="고객센터 메뉴">
-            <button type="button"><span><strong>자주 묻는 질문</strong><small>많이 찾는 도움말을 확인해 보세요.</small></span><Chevron /></button>
-            <button type="button"><span><strong>문의하기</strong><small>support@fanfolio.app</small></span><Chevron /></button>
+            <button type="button" className={supportMode === 'faq' ? 'is-selected' : ''} onClick={() => onSupportModeChange('faq')}><span><strong>자주 묻는 질문</strong><small>많이 찾는 도움말을 확인해 보세요.</small></span><Chevron /></button>
+            <button type="button" className={supportMode === 'form' ? 'is-selected' : ''} onClick={() => onSupportModeChange('form')}><span><strong>문의하기</strong><small>답변은 알림과 이메일로 안내해 드려요.</small></span><Chevron /></button>
           </section>
+          {supportMode === 'faq' ? <section className="settings-info-card settings-support-faq" aria-label="자주 묻는 질문">
+            <details><summary>카드 등록이 완료되지 않아요</summary><p>QR 코드, 인증 코드, 카드 사진 중 하나를 선택해 다시 시도해 주세요. 계속 실패하면 문의를 남겨 주세요.</p></details>
+            <details><summary>거래 제안은 어떻게 확인하나요?</summary><p>보관함에서 원하는 카드를 등록하면 거래 제안 화면에서 먼저 확인할 수 있어요.</p></details>
+            <details><summary>알림을 받지 못했어요</summary><p>알림 설정과 브라우저 권한을 확인해 주세요. 중요한 안내는 알림함에서도 확인할 수 있습니다.</p></details>
+          </section> : <form className="settings-info-card settings-support-form" aria-label="고객센터 문의 폼" onSubmit={event => { event.preventDefault(); onSupportSubmit() }}>
+            <label htmlFor="support-category">문의 유형</label>
+            <select id="support-category" value={supportCategory} onChange={event => onSupportCategoryChange(event.target.value as typeof supportCategory)}>
+              <option value="general">일반 문의</option><option value="card">카드 등록</option><option value="trade">거래</option><option value="order">주문·교환</option><option value="report">신고</option>
+            </select>
+            <label htmlFor="support-subject">제목</label>
+            <input id="support-subject" value={supportSubject} onChange={event => onSupportSubjectChange(event.target.value)} maxLength={160} required />
+            <label htmlFor="support-body">문의 내용</label>
+            <textarea id="support-body" value={supportBody} onChange={event => onSupportBodyChange(event.target.value)} maxLength={4000} rows={6} required />
+            <button className="settings-support-submit" type="submit" disabled={supportSaving || supportSubject.trim().length < 2 || supportBody.trim().length < 2}>{supportSaving ? '접수 중...' : '문의 접수하기'}</button>
+            {supportMessage && <p className="settings-info-note" role="status">{supportMessage}</p>}
+          </form>}
           <section className="settings-info-card settings-support-hours">
             <strong>운영 안내</strong>
             <p>평일 10:00 - 18:00</p>
@@ -117,6 +161,15 @@ function SettingsInfoScreenView({
             <p>개인정보는 보관 목적이 달성되거나 회원이 삭제를 요청한 경우 지체 없이 파기합니다.</p>
             <h3>문의</h3>
             <p>개인정보 처리방침에 관한 문의는 support@fanfolio.app으로 보내 주세요.</p>
+            <section className="settings-info-card settings-privacy-actions" aria-label="개인정보 권리 행사">
+              <strong>내 정보 관리</strong>
+              <p>내 서비스 이용 정보를 JSON 파일로 내려받거나 계정을 삭제할 수 있어요.</p>
+              <button type="button" onClick={onPrivacyExport}>개인정보 내보내기</button>
+              <label htmlFor="account-delete-confirmation">계정 삭제 확인 문구</label>
+              <input id="account-delete-confirmation" placeholder="DELETE MY ACCOUNT" onChange={event => { event.currentTarget.dataset.confirmation = event.target.value }} />
+              <button type="button" className="settings-danger-action" onClick={event => onAccountDelete(event.currentTarget.parentElement?.querySelector<HTMLInputElement>('#account-delete-confirmation')?.value ?? '')}>계정 삭제</button>
+              {privacyMessage && <p className="settings-info-note" role="status">{privacyMessage}</p>}
+            </section>
           </>}
         </article>
       )}
@@ -141,6 +194,13 @@ export function Settings({
 }) {
   const [panel, setPanel] = useState<MyPanel>(null)
   const [infoScreen, setInfoScreen] = useState<SettingsInfoScreen>(null)
+  const [supportMode, setSupportMode] = useState<'faq' | 'form'>('faq')
+  const [supportSubject, setSupportSubject] = useState('')
+  const [supportCategory, setSupportCategory] = useState<'general' | 'card' | 'trade' | 'order' | 'report'>('general')
+  const [supportBody, setSupportBody] = useState('')
+  const [supportSaving, setSupportSaving] = useState(false)
+  const [supportMessage, setSupportMessage] = useState('')
+  const [privacyMessage, setPrivacyMessage] = useState('')
   const [language, setLanguage] = useState<'ko' | 'en'>('ko')
   const [profileOpen, setProfileOpen] = useState(false)
   const [passwordOpen, setPasswordOpen] = useState(false)
@@ -161,6 +221,53 @@ export function Settings({
   const [passwordSaving, setPasswordSaving] = useState(false)
   const [passwordMessage, setPasswordMessage] = useState('')
   const profileImageInputRef = useRef<HTMLInputElement>(null)
+
+  const submitSupportTicket = async () => {
+    setSupportSaving(true)
+    setSupportMessage('')
+    try {
+      await apiFetch('/me/support-tickets', {
+        method: 'POST',
+        body: JSON.stringify({ category: supportCategory, subject: supportSubject.trim(), body: supportBody.trim() }),
+      })
+      setSupportSubject('')
+      setSupportBody('')
+      setSupportMessage('문의가 접수되었습니다. 답변이 등록되면 알림으로 알려드릴게요.')
+    } catch {
+      setSupportMessage('문의 접수에 실패했어요. 잠시 후 다시 시도해 주세요.')
+    } finally {
+      setSupportSaving(false)
+    }
+  }
+
+  const downloadPersonalData = async () => {
+    try {
+      const data = await exportPersonalData()
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `fanfolio-personal-data-${new Date().toISOString().slice(0, 10)}.json`
+      link.click()
+      URL.revokeObjectURL(url)
+      setPrivacyMessage('개인정보 파일을 내려받았어요.')
+    } catch {
+      setPrivacyMessage('개인정보 내보내기에 실패했어요. 잠시 후 다시 시도해 주세요.')
+    }
+  }
+
+  const requestAccountDeletion = async (confirmation: string) => {
+    if (confirmation !== 'DELETE MY ACCOUNT') {
+      setPrivacyMessage('계정 삭제 확인 문구를 정확히 입력해 주세요.')
+      return
+    }
+    try {
+      await deleteFanAccount(confirmation)
+      await onLogout()
+    } catch {
+      setPrivacyMessage('계정 삭제에 실패했어요. 잠시 후 다시 시도해 주세요.')
+    }
+  }
 
   useEffect(() => {
     if (!profileOpen) return
@@ -356,7 +463,7 @@ export function Settings({
         <button className="my-logout" type="button" onClick={() => void onLogout()}>로그아웃</button>
       </div>
 
-      {infoScreen && <SettingsInfoScreenView screen={infoScreen} language={language} onLanguageChange={setLanguage} onBack={() => setInfoScreen(null)} />}
+      {infoScreen && <SettingsInfoScreenView screen={infoScreen} language={language} onLanguageChange={setLanguage} supportMode={supportMode} supportSubject={supportSubject} supportCategory={supportCategory} supportBody={supportBody} supportSaving={supportSaving} supportMessage={supportMessage} onSupportModeChange={mode => { setSupportMode(mode); setSupportMessage('') }} onSupportSubjectChange={setSupportSubject} onSupportCategoryChange={setSupportCategory} onSupportBodyChange={setSupportBody} onSupportSubmit={() => void submitSupportTicket()} onPrivacyExport={() => void downloadPersonalData()} onAccountDelete={confirmation => void requestAccountDeletion(confirmation)} privacyMessage={privacyMessage} onBack={() => setInfoScreen(null)} />}
 
       {profileOpen && (
         <section className="profile-decorate-screen" aria-label={passwordOpen ? '비밀번호 변경' : '프로필 꾸미기'}>

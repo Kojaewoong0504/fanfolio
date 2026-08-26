@@ -162,7 +162,7 @@ test('root-only artist profile review data is not requested by partner administr
   const rootBranch = source.slice(rootBranchStart, rootBranchEnd)
 
   assert.doesNotMatch(partnerSafePrelude, /api\(["']\/admin\/artist-profiles["']\)/)
-  assert.match(rootBranch, /api\(["']\/admin\/artist-profiles["']\)/)
+  assert.match(rootBranch, /loadOptionalAdminRequest\(["']\/admin\/artist-profiles["']/)
 })
 
 test('root navigation includes partner operations while partner navigation is scoped', () => {
@@ -233,6 +233,15 @@ test('partner card detail exposes the scoped review request action', () => {
   assert.match(source, /\/admin\/cards\/\$\{[^}]+\}\/submit-review/)
 })
 
+test('scoped drop and issuance failures preserve the backend permission message', () => {
+  const link = functionBody('linkApprovedCardToDrop')
+  const batch = functionBody('createBatch')
+  assert.match(link, /catch \(error\)/)
+  assert.match(link, /error\?\.message/)
+  assert.match(batch, /catch \(error\)/)
+  assert.match(batch, /error\?\.message/)
+})
+
 test('assigned artists expose an editable profile drawer for authorized staff', () => {
   assert.match(source, /artist-edit-drawer/)
   assert.match(source, /cards:write|artists:write/)
@@ -301,7 +310,7 @@ test('admin brand mark is the actual Fanfolio app icon and missing media has a r
 
 test('admin entrypoint busts stale app script caches after a deployment', async () => {
   const html = await readFile(new URL('../index.html', import.meta.url), 'utf8')
-  assert.match(html, /app\.js\?v=season-pass-admin-20260818/)
+  assert.match(html, /app\.js\?v=local-qa-bootstrap-calendar-20260826/)
 })
 
 test('partner logo picker is optional and exposes preview replacement and removal controls', () => {

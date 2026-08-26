@@ -7,8 +7,12 @@ server in production without changing the auth endpoint.
 """
 
 import asyncio
+import hashlib
+import json
 import logging
 import smtplib
+import urllib.error
+import urllib.request
 from email.message import EmailMessage
 from urllib.parse import urlencode
 
@@ -98,11 +102,62 @@ class SMTPMailer:
             raise MailDeliveryError(f"SMTP {message_kind} delivery failed") from error
 
 
-def _mailer(settings: Settings) -> ConsoleMailer | SMTPMailer:
+class ResendMailer:
+    """HTTP adapter for Resend's email API.
+
+    A verified sender domain is intentionally configured outside the app. Until
+    that exists, this adapter remains opt-in and development continues to use
+    the console provider.
+    """
+
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
+
+    def send_magic_link(self, email: str, token: str, purpose: str) -> None:
+        self._send(_message(email, token, purpose, self.settings), "magic-link")
+
+    def send_notification(self, email: str, title: str, body: str) -> None:
+        self._send(_notification_message(email, title, body, self.settings), "notification")
+
+    def _send(self, message: EmailMessage, message_kind: str) -> None:
+        if not self.settings.resend_api_key:
+            raise MailDeliveryError("RESEND_API_KEY is required for Resend delivery")
+        payload = json.dumps(
+            {
+                "from": message["From"],
+                "to": [message["To"]],
+                "subject": message["Subject"],
+                "text": message.get_content(),
+            },
+            ensure_ascii=False,
+        ).encode("utf-8")
+        idempotency_key = hashlib.sha256(payload).hexdigest()
+        request = urllib.request.Request(
+            f"{self.settings.resend_base_url.rstrip('/')}/emails",
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {self.settings.resend_api_key}",
+                "Content-Type": "application/json",
+                "Idempotency-Key": idempotency_key,
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=10.0) as response:
+                response.read()
+        except (OSError, urllib.error.URLError, urllib.error.HTTPError) as error:
+            raise MailDeliveryError(f"Resend {message_kind} delivery failed") from error
+
+
+def _mailer(settings: Settings) -> ConsoleMailer | SMTPMailer | ResendMailer:
     if settings.mail_delivery_mode == "smtp":
         if not settings.smtp_host or not settings.mail_from:
             raise MailDeliveryError("SMTP mail settings are incomplete")
         return SMTPMailer(settings)
+    if settings.mail_delivery_mode == "resend":
+        if not settings.resend_api_key or not settings.mail_from:
+            raise MailDeliveryError("Resend mail settings are incomplete")
+        return ResendMailer(settings)
     if settings.mail_delivery_mode == "console" and settings.app_env in {"development", "test"}:
         return ConsoleMailer()
     raise MailDeliveryError("Mail delivery mode is not allowed for this environment")
