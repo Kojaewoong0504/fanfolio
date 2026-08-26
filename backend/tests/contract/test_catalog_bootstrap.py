@@ -55,3 +55,11 @@ def test_demo_catalog_bootstrap_creates_onboarding_catalog(client) -> None:
             ("member_yuna", "유나", "/assets/demo/dreamscape/yuna.png"),
         ],
     )
+
+
+def test_bundled_demo_assets_are_served_by_api(client) -> None:
+    response = client.get("/assets/demo/dreamscape/group.png")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/png")
+    assert len(response.content) > 100_000
