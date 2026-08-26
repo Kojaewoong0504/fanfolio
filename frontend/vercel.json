@@ -28,6 +28,10 @@
   ],
   "routes": [
     {
+      "src": "/assets/(.*)",
+      "dest": "https://fanfolio-api.onrender.com/assets/$1"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "https://fanfolio-api.onrender.com/api/$1"
     },
