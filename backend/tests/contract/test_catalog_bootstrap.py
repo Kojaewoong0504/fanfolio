@@ -3,7 +3,7 @@ import asyncio
 from sqlalchemy import select
 
 from app.db.session import SessionLocal
-from app.models import Artist, Card, Member
+from app.models import Artist, Card, CardPack, CardPackCard, Member, ShopProduct
 from app.services import ensure_demo_catalog
 
 
@@ -16,11 +16,42 @@ def test_demo_catalog_bootstrap_creates_onboarding_catalog(client) -> None:
 
     asyncio.run(bootstrap())
 
-    async def read_catalog() -> tuple[int, int, int]:
+    async def read_catalog() -> tuple[int, int, int, int, int, int, list[tuple[str, str, str]]]:
         async with SessionLocal() as session:
             artists = await session.scalars(select(Artist))
             members = await session.scalars(select(Member))
             cards = await session.scalars(select(Card).where(Card.status == "published"))
-            return len(list(artists)), len(list(members)), len(list(cards))
+            packs = await session.scalars(select(CardPack).where(CardPack.status == "published"))
+            products = await session.scalars(
+                select(ShopProduct).where(ShopProduct.status == "published")
+            )
+            links = await session.scalars(
+                select(CardPackCard).where(CardPackCard.pack_id == "demo_pack_dreamscape_nebula")
+            )
+            dreamscape_members = await session.scalars(
+                select(Member).where(Member.artist_id == "artist_nova3").order_by(Member.id)
+            )
+            return (
+                len(list(artists)),
+                len(list(members)),
+                len(list(cards)),
+                len(list(packs)),
+                len(list(products)),
+                len(list(links)),
+                [(member.id, member.name, member.image_url or "") for member in dreamscape_members],
+            )
 
-    assert asyncio.run(read_catalog()) == (4, 12, 1)
+    assert asyncio.run(read_catalog()) == (
+        4,
+        13,
+        4,
+        1,
+        1,
+        4,
+        [
+            ("member_jei", "세나", "/assets/demo/dreamscape/sena.png"),
+            ("member_minho", "하린", "/assets/demo/dreamscape/harin.png"),
+            ("member_rina", "리나", "/assets/demo/dreamscape/rina.png"),
+            ("member_yuna", "유나", "/assets/demo/dreamscape/yuna.png"),
+        ],
+    )
