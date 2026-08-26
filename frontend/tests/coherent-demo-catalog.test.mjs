@@ -22,3 +22,7 @@ test('hosted fan app proxies API-served catalog assets and keeps the login visua
   assert.match(vercel, /"src": "\/assets\/demo\/\(\.\*\)"/)
   assert.match(app, /loginDreamscapeGroup from '\.\/assets\/login\/dreamscape-group\.png'/)
 })
+
+test('discover event hero uses the authenticated media loader', () => {
+  assert.match(app, /featuredEventImage \? <AuthenticatedImage src=\{featuredEvent\?\.heroUrl\} fallback=\{dreamscapeHero\}/)
+})
