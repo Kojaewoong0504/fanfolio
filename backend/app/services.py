@@ -1914,19 +1914,24 @@ async def ensure_demo_catalog(session: AsyncSession) -> None:
     environment cannot grant access or manufacture collectible inventory.
     """
     artist_rows = (
-        ("artist_nova3", "드림스케이프", "/src/assets/hero.png"),
+        ("artist_nova3", "드림스케이프", "/assets/demo/dreamscape/group.png"),
         ("artist_luminous", "루미너스", "/src/assets/fan-week-lavender-meet.png"),
         ("artist_velora", "벨로라", "/src/assets/fan-week-night-stage.png"),
         ("artist_stellon", "스텔라온", "/src/assets/login/dreamscape-group.png"),
     )
     for artist_id, name, image_url in artist_rows:
-        if await session.get(Artist, artist_id) is None:
-            session.add(Artist(id=artist_id, name=name, image_url=image_url))
+        artist = await session.get(Artist, artist_id)
+        if artist is None:
+            artist = Artist(id=artist_id)
+            session.add(artist)
+        artist.name = name
+        artist.image_url = image_url
 
     member_rows = (
         ("member_yuna", "artist_nova3", "유나"),
-        ("member_minho", "artist_nova3", "민호"),
-        ("member_jei", "artist_nova3", "제이"),
+        ("member_minho", "artist_nova3", "하린"),
+        ("member_jei", "artist_nova3", "세나"),
+        ("member_rina", "artist_nova3", "리나"),
         ("member_luminous_arin", "artist_luminous", "아린"),
         ("member_luminous_ian", "artist_luminous", "이안"),
         ("member_luminous_sena", "artist_luminous", "세나"),
@@ -1937,27 +1942,112 @@ async def ensure_demo_catalog(session: AsyncSession) -> None:
         ("member_stellon_roa", "artist_stellon", "로아"),
         ("member_stellon_siwoo", "artist_stellon", "시우"),
     )
+    member_images = {
+        "member_yuna": "/assets/demo/dreamscape/yuna.png",
+        "member_minho": "/assets/demo/dreamscape/harin.png",
+        "member_jei": "/assets/demo/dreamscape/sena.png",
+        "member_rina": "/assets/demo/dreamscape/rina.png",
+    }
     for member_id, artist_id, name in member_rows:
-        if await session.get(Member, member_id) is None:
-            session.add(Member(id=member_id, artist_id=artist_id, name=name))
+        member = await session.get(Member, member_id)
+        if member is None:
+            member = Member(id=member_id)
+            session.add(member)
+        member.artist_id = artist_id
+        member.name = name
+        member.image_url = member_images.get(member_id)
 
-    if await session.get(Card, "card_demo_published") is None:
-        session.add(
-            Card(
-                id="card_demo_published",
-                name="컴백 기념 사인 카드",
-                status="published",
-                release_policy="partner_and_platform",
-                release_status="published",
-                artist_id="artist_nova3",
-                member_id="member_yuna",
-                season_name="2026 SPRING",
-                rarity="Special",
-                signature_text="오늘 와줘서 고마워",
-                issue_limit=500,
-                image_url="/src/assets/hero.png",
-            )
+    card_specs = (
+        (
+            "card_demo_published",
+            "Nebula Yuna Ver.",
+            "member_yuna",
+            "UR",
+            "/assets/demo/dreamscape/yuna.png",
+        ),
+        (
+            "card_demo_harin",
+            "Nebula Harin Ver.",
+            "member_minho",
+            "SR",
+            "/assets/demo/dreamscape/harin.png",
+        ),
+        (
+            "card_demo_sena",
+            "Starlight Sena Ver.",
+            "member_jei",
+            "R",
+            "/assets/demo/dreamscape/sena.png",
+        ),
+        (
+            "card_demo_rina",
+            "Midnight Rina Ver.",
+            "member_rina",
+            "N",
+            "/assets/demo/dreamscape/rina.png",
+        ),
+    )
+    for card_id, name, member_id, rarity, image_url in card_specs:
+        card = await session.get(Card, card_id)
+        if card is None:
+            card = Card(id=card_id)
+            session.add(card)
+        card.name = name
+        card.status = "published"
+        card.release_policy = "partner_and_platform"
+        card.release_status = "published"
+        card.is_official = True
+        card.artist_id = "artist_nova3"
+        card.member_id = member_id
+        card.season_name = "정규 1집 · DREAMSCAPE"
+        card.rarity = rarity
+        card.image_url = image_url
+        card.tradable = True
+
+    pack = await session.get(CardPack, "demo_pack_dreamscape_nebula")
+    if pack is None:
+        pack = CardPack(
+            id="demo_pack_dreamscape_nebula",
+            artist_id="artist_nova3",
+            name="DREAMSCAPE Nebula Ver.",
         )
+        session.add(pack)
+    pack.artist_id = "artist_nova3"
+    pack.name = "DREAMSCAPE Nebula Ver."
+    pack.season_name = "정규 1집 · DREAMSCAPE"
+    pack.version = "v1.0"
+    pack.image_url = "/assets/demo/dreamscape/card-pack.png"
+    pack.description = "드림스케이프 정규 1집의 공개 카드를 확인하고 수집해보세요."
+    pack.status = "published"
+    pack.published_at = pack.published_at or now()
+    for position, (card_id, _name, _member_id, _rarity, _image_url) in enumerate(
+        card_specs, start=1
+    ):
+        link_id = f"demo_pack_dreamscape_card_{position}"
+        link = await session.get(CardPackCard, link_id)
+        if link is None:
+            link = CardPackCard(id=link_id, pack_id=pack.id, card_id=card_id)
+            session.add(link)
+        link.pack_id = pack.id
+        link.card_id = card_id
+        link.position = position
+        link.probability = 25.0
+        link.enabled = True
+
+    product = await session.get(ShopProduct, "demo_shop_dreamscape_nebula")
+    if product is None:
+        product = ShopProduct(id="demo_shop_dreamscape_nebula")
+        session.add(product)
+    product.artist_id = "artist_nova3"
+    product.product_type = "card_pack"
+    product.card_pack_id = pack.id
+    product.name = "DREAMSCAPE Nebula Ver. 카드팩"
+    product.description = "드림스케이프 멤버 카드 4종 중 1장을 만날 수 있어요."
+    product.image_url = pack.image_url
+    product.price_points = 1200
+    product.status = "published"
+    product.starts_at = None
+    product.ends_at = None
     await session.commit()
 
 
@@ -2011,30 +2101,30 @@ async def ensure_fan_community_demo(session: AsyncSession, *, password: str) -> 
         {
             "id": "local_demo_card_harin",
             "name": "Nebula Harin Ver.",
-            "member_id": "member_yuna",
+            "member_id": "member_minho",
             "rarity": "UR",
-            "image_url": "/src/assets/collection-card-harin-generated.png",
+            "image_url": "/assets/demo/dreamscape/harin.png",
         },
         {
             "id": "local_demo_card_doyun",
-            "name": "Nebula Doyun Ver.",
-            "member_id": "member_minho",
+            "name": "Nebula Sena Ver.",
+            "member_id": "member_jei",
             "rarity": "SR",
-            "image_url": "/src/assets/collection-card-doyun-generated.png",
+            "image_url": "/assets/demo/dreamscape/sena.png",
         },
         {
             "id": "local_demo_card_minjae",
-            "name": "Starlight Minjae Ver.",
-            "member_id": "member_jei",
+            "name": "Starlight Rina Ver.",
+            "member_id": "member_rina",
             "rarity": "R",
-            "image_url": "/src/assets/collection-card-minjae-generated.png",
+            "image_url": "/assets/demo/dreamscape/rina.png",
         },
         {
             "id": "local_demo_card_jay",
-            "name": "Midnight Jay Ver.",
+            "name": "Midnight Yuna Ver.",
             "member_id": "member_yuna",
             "rarity": "N",
-            "image_url": "/src/assets/collection-card-jay-generated.png",
+            "image_url": "/assets/demo/dreamscape/yuna.png",
         },
     )
     for spec in card_specs:
@@ -2064,7 +2154,7 @@ async def ensure_fan_community_demo(session: AsyncSession, *, password: str) -> 
     pack.name = "DREAMSCAPE Nebula Ver."
     pack.season_name = "정규 1집 · DREAMSCAPE"
     pack.version = "v1.0"
-    pack.image_url = "/src/assets/card-pack-dreamscape-generated.png"
+    pack.image_url = "/assets/demo/dreamscape/card-pack.png"
     pack.description = "드림스케이프 정규 1집의 공개 카드를 확인하고 수집해보세요."
     pack.status = "published"
     pack.published_at = pack.published_at or now()
@@ -2460,7 +2550,11 @@ async def seed_core(session: AsyncSession) -> dict:
     )
     session.add_all(
         [
-            Artist(id="artist_nova3", name="드림스케이프", image_url="/src/assets/hero.png"),
+            Artist(
+                id="artist_nova3",
+                name="드림스케이프",
+                image_url="/assets/demo/dreamscape/group.png",
+            ),
             Artist(
                 id="artist_luminous",
                 name="루미너스",
@@ -2477,8 +2571,9 @@ async def seed_core(session: AsyncSession) -> dict:
                 image_url="/src/assets/login/dreamscape-group.png",
             ),
             Member(id="member_yuna", artist_id="artist_nova3", name="유나"),
-            Member(id="member_minho", artist_id="artist_nova3", name="민호"),
-            Member(id="member_jei", artist_id="artist_nova3", name="제이"),
+            Member(id="member_minho", artist_id="artist_nova3", name="하린"),
+            Member(id="member_jei", artist_id="artist_nova3", name="세나"),
+            Member(id="member_rina", artist_id="artist_nova3", name="리나"),
             Member(id="member_luminous_arin", artist_id="artist_luminous", name="아린"),
             Member(id="member_luminous_ian", artist_id="artist_luminous", name="이안"),
             Member(id="member_luminous_sena", artist_id="artist_luminous", name="세나"),
@@ -2500,7 +2595,7 @@ async def seed_core(session: AsyncSession) -> dict:
                 rarity="Special",
                 signature_text="오늘 와줘서 고마워",
                 issue_limit=500,
-                image_url="/src/assets/hero.png",
+                image_url="/assets/demo/dreamscape/yuna.png",
                 drop_id="drop_live",
             ),
             Card(
@@ -2508,7 +2603,7 @@ async def seed_core(session: AsyncSession) -> dict:
                 name="비공개 카드",
                 status="draft",
                 artist_id="artist_nova3",
-                image_url="/src/assets/hero.png",
+                image_url="/assets/demo/dreamscape/yuna.png",
                 drop_id="drop_live",
             ),
             Drop(id="drop_live", name="NOVA-3 Comeback Live Drop", status="live"),

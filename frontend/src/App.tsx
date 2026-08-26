@@ -25,27 +25,29 @@ import { FanMissionPage } from './components/FanMissionPage'
 import { DetailTopBar } from './components/DetailTopBar'
 import type { Card } from './types'
 import { demoCardImage, demoMemberImage, keepCardVisual } from './utils/cardVisual'
+import { dreamscapeDemoAssets, dreamscapeDemoMembers, dreamscapeMemberById } from './assets/demo-catalog'
 import cardYunaImage from './assets/card-yuna-lavender.jpg'
 import cardMinhoImage from './assets/card-minho-midnight.jpg'
 import cardJayImage from './assets/card-jay-rosegold.jpg'
-import collectionCardHarinGenerated from './assets/collection-card-harin-generated.png'
-import collectionCardDoyunGenerated from './assets/collection-card-doyun-generated.png'
-import collectionCardMinjaeGenerated from './assets/collection-card-minjae-generated.png'
-import collectionCardJayGenerated from './assets/collection-card-jay-generated.png'
-import dreamscapeHero from './assets/dreamscape-hero-v2.png'
 import fanWeekNightStage from './assets/fan-week-night-stage.png'
 import fanWeekLavenderMeet from './assets/fan-week-lavender-meet.png'
-import loginDreamscapeGroup from './assets/login/dreamscape-group.png'
 import appleLoginIcon from './assets/login/apple.svg'
 import googleLoginIcon from './assets/login/google.svg'
 import kakaoLoginIcon from './assets/login/kakao.svg'
 import naverLoginIcon from './assets/login/naver.svg'
 import registrationCardImage from './assets/card-registration-idol-generated.png'
 import mysteryCardImage from './assets/card-reveal-mystery-generated.png'
-import dreamscapeCardPack from './assets/card-pack-dreamscape-generated.png'
 import registrationCompleteCelebration from './assets/registration-complete-celebration-v2.png'
 import fanLevelStar from './assets/fan-level-star-v2.png'
 import profileDecorationsImage from './assets/profile-decorations-generated.png'
+
+const dreamscapeHero = dreamscapeDemoAssets.hero
+const loginDreamscapeGroup = dreamscapeDemoAssets.group
+const dreamscapeCardPack = dreamscapeDemoAssets.cardPack
+const collectionCardHarinGenerated = dreamscapeMemberById.member_harin.image
+const collectionCardDoyunGenerated = dreamscapeMemberById.member_yuna.image
+const collectionCardMinjaeGenerated = dreamscapeMemberById.member_sena.image
+const collectionCardJayGenerated = dreamscapeMemberById.member_rina.image
 
 type Tab = 'home' | 'discover' | 'collection' | 'growth' | 'shop' | 'settings' | 'alerts' | 'events'
 
@@ -137,10 +139,10 @@ const fanMissionPreviewItems: FanMission[] = [
 ]
 
 const fanCommunityPreviewCards: CollectionCard[] = [
-  { userCardId: 'preview-user-card-1', cardId: 'preview-card-1', name: 'Nebula Ver.', imageUrl: collectionCardHarinGenerated, isOfficial: true, serialNumber: 12, acquiredAt: '2026-08-20T10:00:00Z', artistId: 'dreamscape', artistName: '드림스케이프', memberId: 'harin', memberName: '하린', rarity: 'UR', seasonName: '정규 1집 · DREAMSCAPE', cardType: 'photo', acquisitionSource: 'card_pack', tradable: true },
-  { userCardId: 'preview-user-card-2', cardId: 'preview-card-2', name: 'Nebula Ver.', imageUrl: collectionCardDoyunGenerated, isOfficial: true, serialNumber: 37, acquiredAt: '2026-08-19T10:00:00Z', artistId: 'dreamscape', artistName: '드림스케이프', memberId: 'doyun', memberName: '도윤', rarity: 'SR', seasonName: '정규 1집 · DREAMSCAPE', cardType: 'photo', acquisitionSource: 'card_pack', tradable: true },
-  { userCardId: 'preview-user-card-3', cardId: 'preview-card-3', name: 'Starlight Ver.', imageUrl: collectionCardMinjaeGenerated, isOfficial: true, serialNumber: 81, acquiredAt: '2026-08-18T10:00:00Z', artistId: 'dreamscape', artistName: '드림스케이프', memberId: 'minjae', memberName: '민재', rarity: 'R', seasonName: '정규 1집 · DREAMSCAPE', cardType: 'photo', acquisitionSource: 'card_pack', tradable: false },
-  { userCardId: 'preview-user-card-4', cardId: 'preview-card-4', name: 'Midnight Ver.', imageUrl: collectionCardJayGenerated, isOfficial: true, serialNumber: 104, acquiredAt: '2026-08-17T10:00:00Z', artistId: 'dreamscape', artistName: '드림스케이프', memberId: 'jay', memberName: '제이', rarity: 'N', seasonName: '2026 SUMMER', cardType: 'photo', acquisitionSource: 'event', tradable: true },
+  { userCardId: 'preview-user-card-1', cardId: 'preview-card-1', name: 'Nebula Ver.', imageUrl: dreamscapeMemberById.member_yuna.image, isOfficial: true, serialNumber: 12, acquiredAt: '2026-08-20T10:00:00Z', artistId: 'dreamscape', artistName: '드림스케이프', memberId: 'member_yuna', memberName: '유나', rarity: 'UR', seasonName: '정규 1집 · DREAMSCAPE', cardType: 'photo', acquisitionSource: 'card_pack', tradable: true },
+  { userCardId: 'preview-user-card-2', cardId: 'preview-card-2', name: 'Nebula Ver.', imageUrl: dreamscapeMemberById.member_harin.image, isOfficial: true, serialNumber: 37, acquiredAt: '2026-08-19T10:00:00Z', artistId: 'dreamscape', artistName: '드림스케이프', memberId: 'member_harin', memberName: '하린', rarity: 'SR', seasonName: '정규 1집 · DREAMSCAPE', cardType: 'photo', acquisitionSource: 'card_pack', tradable: true },
+  { userCardId: 'preview-user-card-3', cardId: 'preview-card-3', name: 'Starlight Ver.', imageUrl: dreamscapeMemberById.member_sena.image, isOfficial: true, serialNumber: 81, acquiredAt: '2026-08-18T10:00:00Z', artistId: 'dreamscape', artistName: '드림스케이프', memberId: 'member_sena', memberName: '세나', rarity: 'R', seasonName: '정규 1집 · DREAMSCAPE', cardType: 'photo', acquisitionSource: 'card_pack', tradable: false },
+  { userCardId: 'preview-user-card-4', cardId: 'preview-card-4', name: 'Midnight Ver.', imageUrl: dreamscapeMemberById.member_rina.image, isOfficial: true, serialNumber: 104, acquiredAt: '2026-08-17T10:00:00Z', artistId: 'dreamscape', artistName: '드림스케이프', memberId: 'member_rina', memberName: '리나', rarity: 'N', seasonName: '2026 SUMMER', cardType: 'photo', acquisitionSource: 'event', tradable: true },
 ]
 
 const fanCommunityPreviewCollection: PublicCollectionData = {
@@ -2057,19 +2059,15 @@ function homeHeroTitleLines(title: string): string[] {
   return [words.slice(0, Math.ceil(words.length / 2)).join(' '), words.slice(Math.ceil(words.length / 2)).join(' ')]
 }
 const fallbackHomeCards: Card[] = [
-  { id: 'home-stardust-hologram', title: 'Nebula Ver.', artist: '드림스케이프', member: '하린', image: cardMinhoImage },
-  { id: 'home-stardust-photo', title: 'Nebula Ver.', artist: '드림스케이프', member: '도윤', image: cardJayImage },
-  { id: 'home-dream-moment', title: 'Nebula Ver.', artist: '드림스케이프', member: '제이', image: cardYunaImage },
+  { id: 'home-stardust-yuna', title: 'Nebula Ver.', artist: '드림스케이프', member: '유나', image: dreamscapeMemberById.member_yuna.image },
+  { id: 'home-stardust-harin', title: 'Nebula Ver.', artist: '드림스케이프', member: '하린', image: dreamscapeMemberById.member_harin.image },
+  { id: 'home-dream-moment', title: 'Nebula Ver.', artist: '드림스케이프', member: '세나', image: dreamscapeMemberById.member_sena.image },
 ]
 const fallbackCollectionCards: Card[] = [
-  { id: 'collection-generated-harin-nebula', title: 'Nebula Ver.', artist: '드림스케이프', member: '하린', image: collectionCardHarinGenerated },
-  { id: 'collection-generated-doyun-nebula', title: 'Nebula Ver.', artist: '드림스케이프', member: '도윤', image: collectionCardDoyunGenerated },
-  { id: 'collection-generated-minjae-nebula', title: 'Nebula Ver.', artist: '드림스케이프', member: '민재', image: collectionCardMinjaeGenerated },
-  { id: 'collection-generated-jay-nebula', title: 'Nebula Ver.', artist: '드림스케이프', member: '제이', image: collectionCardJayGenerated },
-  { id: 'collection-generated-harin-starlight', title: 'Starlight Ver.', artist: '드림스케이프', member: '하린', image: collectionCardHarinGenerated },
-  { id: 'collection-generated-doyun-starlight', title: 'Starlight Ver.', artist: '드림스케이프', member: '도윤', image: collectionCardDoyunGenerated },
-  { id: 'collection-generated-minjae-starlight', title: 'Starlight Ver.', artist: '드림스케이프', member: '민재', image: collectionCardMinjaeGenerated },
-  { id: 'collection-generated-jay-starlight', title: 'Starlight Ver.', artist: '드림스케이프', member: '제이', image: collectionCardJayGenerated },
+  ...dreamscapeDemoMembers.flatMap((member, index) => [
+    { id: `collection-${member.id}-nebula`, title: 'Nebula Ver.', artist: '드림스케이프', member: member.name, image: member.image, rarity: (['UR', 'SR', 'R', 'N'] as const)[index] },
+    { id: `collection-${member.id}-starlight`, title: 'Starlight Ver.', artist: '드림스케이프', member: member.name, image: member.image, rarity: (['UR', 'SR', 'R', 'N'] as const)[index] },
+  ]),
 ]
 
 type CardCollectionSlot = {
@@ -2116,12 +2114,12 @@ type CardCollectionDetailItem = {
 }
 
 const collectionPortraits = [collectionCardHarinGenerated, collectionCardDoyunGenerated, collectionCardMinjaeGenerated, collectionCardJayGenerated]
-const collectionMembers = ['하린', '도윤', '민재', '제이']
+const collectionMembers = dreamscapeDemoMembers.map(member => member.name)
 const collectionArtistMessages: Record<string, string> = {
   하린: '우리의 첫 번째 꿈을 함께 기억해 줘서 고마워요.',
-  도윤: '이 카드를 볼 때마다 오늘의 무대를 떠올려 주세요.',
-  민재: '늘 같은 자리에서 응원해 주는 마음, 잊지 않을게요.',
-  제이: '다음 장면에서도 우리 함께 반짝여요.',
+  유나: '우리의 첫 번째 꿈을 함께 기억해 줘서 고마워요.',
+  세나: '늘 같은 자리에서 응원해 주는 마음, 잊지 않을게요.',
+  리나: '다음 장면에서도 우리 함께 반짝여요.',
 }
 
 function formatCardCopies(copies: number) {
@@ -2300,7 +2298,7 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
   const newCards = eventHome ? eventHome.newCards.map(toCatalogCard) : import.meta.env.DEV ? fallbackHomeCards : []
   const activeEvent = eventHome ? eventHome.upcomingEvents[0] ?? eventHome.featuredEvent : import.meta.env.DEV ? fallbackHomeEvent : null
   const completionRate = Math.min(100, Math.max(0, summary.completionRate))
-  const artistImage = artist?.imageUrl ? (resolveApiUrl(artist.imageUrl) || cardYunaImage) : cardYunaImage
+  const artistImage = artist?.imageUrl ? (resolveApiUrl(artist.imageUrl) || dreamscapeHero) : dreamscapeHero
 
   useEffect(() => {
     if (heroSlides.length < 2) return
@@ -2382,12 +2380,12 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
       <div className="section-heading"><h2 id="home-artist-title">관심 아티스트</h2><button type="button" onClick={onDiscover}>전체 보기 <InlineIcon name="chevron" /></button></div>
       <article className="home-artist-card">
         <button type="button" className="home-artist-primary" onClick={onDiscover} aria-label={`${artist.name} 아티스트 홈 보기`}>
-          <img className="home-artist-backdrop" src={dreamscapeHero} alt="" />
+          <img className="home-artist-backdrop" src={artistImage} alt="" />
           <span className="home-artist-copy">
             <small className="home-artist-badge">추천 아티스트</small>
             <b>{artist.name} <span className="home-artist-verified" aria-label="공식 인증"><VerifiedIcon /></span></b>
             <em>4명의 멤버</em>
-            <span className="home-artist-members">{[artistImage, cardMinhoImage, cardJayImage, cardYunaImage].map((image, index) => <img key={`${image}-${index}`} src={image} alt="" />)}</span>
+            <span className="home-artist-members">{dreamscapeDemoMembers.map((member, index) => <img key={`${member.id}-${index}`} src={member.image} alt="" />)}</span>
           </span>
         </button>
         <FavoriteControl
@@ -3580,9 +3578,7 @@ function ArtistHubDetail({ artist, usePreviewData = false, onBack, onOpenEvents,
   const artistName = artist?.name ?? (usePreviewData ? '드림스케이프' : '아티스트')
   const artistHero = resolveApiUrl(artist?.imageUrl) || (usePreviewData ? dreamscapeHero : '')
   const previewCards: Card[] = [
-    { id: 'discover-nebula-harin', title: 'Nebula Ver.', artist: artist?.name ?? '드림스케이프', member: '하린', image: cardYunaImage, rarity: 'UR' },
-    { id: 'discover-nebula-doyun', title: 'Nebula Ver.', artist: artist?.name ?? '드림스케이프', member: '도윤', image: cardMinhoImage, rarity: 'SR' },
-    { id: 'discover-nebula-jay', title: 'Nebula Ver.', artist: artist?.name ?? '드림스케이프', member: '제이', image: cardJayImage, rarity: 'SR' },
+    ...dreamscapeDemoMembers.slice(0, 3).map((member, index) => ({ id: `discover-nebula-${member.id}`, title: 'Nebula Ver.', artist: artist?.name ?? '드림스케이프', member: member.name, image: member.image, rarity: (['UR', 'SR', 'R'] as const)[index] })),
   ]
   const remoteCards = packs.flatMap(pack => pack.cards.map(card => ({
     id: card.cardId,
@@ -3603,7 +3599,7 @@ function ArtistHubDetail({ artist, usePreviewData = false, onBack, onOpenEvents,
   const newsEvents = [...visibleEvents].sort((first, second) => new Date(second.startsAt).getTime() - new Date(first.startsAt).getTime()).slice(0, 2)
   const artistEvent = visibleEvents.find(event => event.status === 'active') ?? visibleEvents.find(event => event.status === 'upcoming') ?? visibleEvents[0] ?? null
   const remoteMemberImages = [...new Map(packs.flatMap(pack => pack.cards).map(card => [card.memberId ?? card.cardId, resolveApiUrl(card.imageUrl)])).values()].filter(Boolean).slice(0, 4)
-  const memberImages = usePreviewData ? [cardYunaImage, cardMinhoImage, cardJayImage, collectionCardHarinGenerated] : remoteMemberImages
+  const memberImages = usePreviewData ? dreamscapeDemoMembers.map(member => member.image) : remoteMemberImages
   const memberCount = memberImages.length
   const eventTypeLabel = (event: FanEvent) => event.eventType === 'card_drop' || event.eventType === 'card' ? '카드 드롭' : event.eventType === 'announcement' ? '소식' : '팬 이벤트'
   const eventDate = (value: string) => {

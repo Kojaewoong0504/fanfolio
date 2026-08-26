@@ -1,0 +1,47 @@
+{
+  "version": "2026-08-26.1",
+  "group": {
+    "id": "artist_nova3",
+    "name": "드림스케이프",
+    "englishName": "DREAMSCAPE",
+    "identity": "four-member female group",
+    "palette": ["#B9A7FF", "#172052", "#F7F4FF", "#C9C4E8"],
+    "assets": {
+      "group": "group.png",
+      "eventHero": "event-hero.png",
+      "cardPack": "card-pack.png"
+    }
+  },
+  "members": [
+    {
+      "id": "member_yuna",
+      "name": "유나",
+      "role": "리더 · 보컬",
+      "visual": "soft oval face, long espresso hair with lavender streaks, calm gaze",
+      "asset": "yuna.png"
+    },
+    {
+      "id": "member_harin",
+      "name": "하린",
+      "role": "메인 보컬",
+      "visual": "heart-shaped face, ash-brown shoulder-length bob, bright eyes",
+      "asset": "harin.png"
+    },
+    {
+      "id": "member_sena",
+      "name": "세나",
+      "role": "퍼포먼스 · 보컬",
+      "visual": "round face, warm chestnut long waves, warm expression",
+      "asset": "sena.png"
+    },
+    {
+      "id": "member_rina",
+      "name": "리나",
+      "role": "래퍼 · 퍼포먼스",
+      "visual": "defined oval face, long black hair with a pale violet ribbon highlight",
+      "asset": "rina.png"
+    }
+  ],
+  "invariants": ["face identity", "face shape", "eye shape", "skin tone", "base hair silhouette", "identifying hair accent"],
+  "variants": ["outfit", "pose", "lighting", "background", "seasonal hair accent", "card frame"]
+}
