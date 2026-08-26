@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 
 const source = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
+const referenceCss = await readFile(new URL('../src/reference.css', import.meta.url), 'utf8')
 const discoverSource = source.slice(source.indexOf('function Discover('), source.indexOf('function ArtistHubDetail('))
 const artistHubSource = source.slice(source.indexOf('function ArtistHubDetail('), source.indexOf('function notificationTimeLabel('))
 const liveArtistRoute = source.slice(source.indexOf('if (discoverArtistSlug)'), source.indexOf('if (showCardCollection)'))
@@ -26,6 +27,10 @@ test('discover hub exposes working category and destination controls', () => {
   assert.doesNotMatch(source, /preview-nebula/)
   assert.match(source, /setActiveCategory/)
   assert.match(source, /aria-selected=\{activeCategory === category\.id\}/)
+})
+
+test('discover category tabs reserve one column for every category', () => {
+  assert.match(referenceCss, /main\.discover-shell \.discover-categories \{[^}]*grid-template-columns: repeat\(5,minmax\(0,1fr\)\)/)
 })
 
 test('discover destinations use dedicated routes and detail surfaces', () => {
