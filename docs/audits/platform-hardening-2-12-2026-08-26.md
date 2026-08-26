@@ -42,3 +42,15 @@
 | 회귀·출시 게이트 | 코드 게이트 통과 / 인프라 게이트 보류 | 관리자 149 passed, 빌더 54 passed, 팬앱 233 passed, 백엔드 473 passed·2 skipped, 프론트엔드 production build 및 `git diff --check` 통과. 격리 `scripts/e2e-smoke.sh`는 8004 백엔드 헬스체크 실패로 중단됨. |
 
 따라서 현재 판정은 **로컬 기능·브라우저·코드 회귀 게이트 통과, 실제 운영 인프라와 격리 E2E 환경 게이트 보류**다. 다음 출시 전 조치는 Compose 런타임 기동, 운영 비밀키 주입, PostgreSQL/Redis/SMTP/스토리지 연결, 실제 백업 복원 증적 확보 순서다.
+
+## 병합 후 호스팅 검증 보정
+
+실제 배포 기준을 Render·Vercel·Supabase·Cloudflare R2·Resend·Firebase로 정정했다. Compose는 현재 배포 경로의 출시 게이트가 아니다.
+
+- `https://fanfolio-api.onrender.com/api/health`: 콜드스타트 약 60초 후 `200`, `{"status":"healthy"}`.
+- `https://fanfolio-fan.vercel.app/`: `200`, 실제 인증 팬 홈과 이벤트·아티스트·카드 콘텐츠 렌더링 확인.
+- `https://fanfolio-admin-one.vercel.app/`: `200`, 관리자 로그인 화면 렌더링 확인. 로컬 bootstrap 계정은 호스팅 DB에 존재하지 않아 로그인 실패.
+- `https://fanfolio-studio.vercel.app/`: `200`, 실제 스튜디오 세션으로 홈 렌더링 확인.
+- Vercel 팬앱·관리자·스튜디오의 `/api/health` 프록시: 모두 `200`.
+
+남은 호스팅 검증은 관리자 운영 계정으로 실제 로그인하는 단계와 Supabase/R2/Resend/Firebase의 자격증명 기반 기능 호출이다. 해당 계정·서비스 자격증명을 코드나 로컬 테스트 계정으로 대체해 통과 처리하지 않는다.
