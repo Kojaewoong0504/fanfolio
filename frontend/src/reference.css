@@ -3670,7 +3670,7 @@ main.discover-shell .hub-event-promo > i { color: #8a8da0 !important; font-size:
 /* Discover journeys — functional hub plus dedicated detail destinations. */
 main.discover-shell .discover-hub { display: grid; gap: 18px; padding-bottom: 8px; }
 main.discover-shell .discover-hub-intro p { margin: 0; color: #7d8195; font-size: 14px; line-height: 1.55; letter-spacing: -.03em; }
-main.discover-shell .discover-categories { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 7px; padding: 4px; border: 1px solid #e5e2f1; border-radius: 14px; background: #fff; }
+main.discover-shell .discover-categories { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 7px; padding: 4px; border: 1px solid #e5e2f1; border-radius: 14px; background: #fff; }
 main.discover-shell .discover-categories button { min-height: 36px; padding: 0 8px; border: 0; border-radius: 10px; background: transparent; color: #7d8094; font-size: 12px; font-weight: 750; cursor: pointer; }
 main.discover-shell .discover-categories button.active { background: #624ce7; color: #fff; box-shadow: 0 5px 14px #624ce72e; }
 main.discover-shell .discover-featured-section { display: grid; gap: 10px; }
