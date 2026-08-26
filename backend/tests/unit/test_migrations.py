@@ -1,5 +1,6 @@
 import importlib.util
 import os
+import re
 import sqlite3
 import subprocess
 from pathlib import Path
@@ -88,6 +89,18 @@ def test_alembic_uses_the_same_render_postgres_normalization_as_the_app() -> Non
     source = (backend_dir / "alembic/env.py").read_text(encoding="utf-8")
 
     assert "get_settings().async_database_url" in source
+
+
+def test_alembic_revision_identifiers_fit_render_version_column() -> None:
+    backend_dir = Path(__file__).parents[2]
+    migration_files = sorted((backend_dir / "alembic/versions").glob("*.py"))
+
+    for migration_file in migration_files:
+        source = migration_file.read_text(encoding="utf-8")
+        for field in ("revision", "down_revision"):
+            match = re.search(rf"^{field}:.*?= \"([^\"]+)\"$", source, re.MULTILINE)
+            if match:
+                assert len(match.group(1)) <= 32, migration_file.name
 
 
 def test_alembic_upgrade_creates_the_current_schema(tmp_path: Path) -> None:
