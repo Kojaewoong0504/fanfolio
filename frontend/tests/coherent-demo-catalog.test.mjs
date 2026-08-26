@@ -19,6 +19,6 @@ test('preview cards no longer pair old member names with unrelated portraits', (
 
 test('hosted fan app proxies API-served catalog assets and keeps the login visual', () => {
   const vercel = fs.readFileSync(new URL('../vercel.json', import.meta.url), 'utf8')
-  assert.match(vercel, /"src": "\/assets\/\(\.\*\)"/)
+  assert.match(vercel, /"src": "\/assets\/demo\/\(\.\*\)"/)
   assert.match(app, /loginDreamscapeGroup from '\.\/assets\/login\/dreamscape-group\.png'/)
 })
