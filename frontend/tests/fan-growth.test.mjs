@@ -93,6 +93,18 @@ test('full fan level view exposes the supplied reference composition while keepi
   assert.match(source, /currentValue[\s\S]{0,80}targetValue/, 'mission progress must remain data-driven')
 })
 
+test('fan growth keeps global growth as a detail entry instead of a duplicate top scope tab', () => {
+  const scopeTabs = fanGrowthSource.match(/<div className="fan-growth-scope-tabs"[\s\S]*?<\/div>/)?.[0] ?? ''
+  assert.match(scopeTabs, /artistScopes\.map\(artist => <button/)
+  assert.doesNotMatch(
+    scopeTabs,
+    />전체 팬<\/button>/,
+    'the global scope should be opened from the account-wide growth card below',
+  )
+  assert.match(fanGrowthSource, /className="fan-growth-global-section"/)
+  assert.match(fanGrowthSource, /<b>전체 팬 레벨<\/b>/)
+})
+
 test('fan growth renders admin-selected reward artwork for presets and uploaded assets', () => {
   assert.match(apiSource, /metadata\?: Record<string, unknown>/)
   assert.match(fanGrowthSource, /function rewardArtworkUrl/)

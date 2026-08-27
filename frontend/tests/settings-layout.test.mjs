@@ -48,3 +48,9 @@ test('my page utility menus open as dedicated mobile screens', () => {
   assert.match(settingsSource, /이용 약관[\s\S]*settings-info-screen/)
   assert.match(settingsSource, /개인정보 처리방침[\s\S]*settings-info-screen/)
 })
+
+test('profile editor supports searching the artist catalog without losing multi-select state', () => {
+  assert.match(settingsSource, /const \[artistQuery, setArtistQuery\] = useState\(''\)/)
+  assert.match(settingsSource, /aria-label="아티스트 검색"/)
+  assert.match(settingsSource, /artists\.filter\(artist => artist\.name\.toLowerCase\(\)\.includes\(artistQuery\.trim\(\)\.toLowerCase\(\)\)\)/)
+})

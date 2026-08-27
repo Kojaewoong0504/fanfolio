@@ -65,6 +65,19 @@ body main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-
 .fan-growth.full.fan-growth-reference .fan-growth-milestone-track{height:4px;margin:0 28px!important;border-radius:99px;background:#e4e3ed}
 .fan-growth.full.fan-growth-reference .fan-growth-milestone-track-fill{background:#5b50e8}
 
+/* Multi-artist growth scope: segmented control replaces browser-default
+   buttons while keeping the global level as the separate detail entry below. */
+.fan-growth.full.fan-growth-reference .fan-growth-scope{display:grid;gap:var(--fan-space-sm);margin:0 0 var(--fan-space-md);padding:var(--fan-space-md) 14px;border:1px solid var(--fan-line-subtle);border-radius:var(--fan-radius-xl);background:var(--fan-surface-card);box-shadow:0 7px 18px rgba(74,63,220,.04)}
+.fan-growth.full.fan-growth-reference .fan-growth-scope-heading{display:grid;grid-template-columns:28px minmax(0,1fr);column-gap:8px;align-items:center;min-width:0}
+.fan-growth.full.fan-growth-reference .fan-growth-scope-avatar{grid-row:span 2;display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#eceaff;color:var(--fan-brand-primary);font-size:11px;font-weight:800}
+.fan-growth.full.fan-growth-reference .fan-growth-scope-eyebrow{color:#858ba2;font-size:10px;line-height:1.2}
+.fan-growth.full.fan-growth-reference .fan-growth-scope-heading strong{overflow:hidden;color:#293251;font-size:13px;line-height:1.25;text-overflow:ellipsis;white-space:nowrap}
+.fan-growth.full.fan-growth-reference .fan-growth-scope-heading p{grid-column:2;margin:1px 0 0;overflow:hidden;color:#858ba2;font-size:10px;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}
+.fan-growth.full.fan-growth-reference .fan-growth-scope-tabs{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:4px;padding:3px;border-radius:12px;background:#f3f1ff}
+.fan-growth.full.fan-growth-reference .fan-growth-scope-tabs button{min-width:0;min-height:34px;padding:0 8px;overflow:hidden;border:0;border-radius:9px;background:transparent;color:#747b91;font-size:11px;font-weight:700;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+.fan-growth.full.fan-growth-reference .fan-growth-scope-tabs button.is-active{background:var(--fan-brand-primary);color:#fff;box-shadow:0 4px 10px rgba(91,80,232,.22)}
+.fan-growth.full.fan-growth-reference .fan-growth-scope-tabs button:focus-visible{outline:3px solid #9e95ff;outline-offset:1px}
+
 /* Final 430px geometry overrides older desktop growth rules in reference.css. */
 main.growth-shell > .app-header + .screen > .fan-growth.full.fan-growth-reference > .fan-growth-artist-heading{margin-bottom:8px!important}
 main.growth-shell > .app-header + .screen > .fan-growth.full.fan-growth-reference > .fan-growth-milestone-section{margin-top:8px!important;padding:14px 14px 10px!important;border:1px solid #e7e5f1!important;border-radius:20px!important;background:#fff!important;box-shadow:0 7px 18px rgba(74,63,220,.04)!important;overflow:visible!important}

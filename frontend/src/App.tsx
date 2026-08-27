@@ -49,6 +49,15 @@ const collectionCardDoyunGenerated = dreamscapeMemberById.member_yuna.image
 const collectionCardMinjaeGenerated = dreamscapeMemberById.member_sena.image
 const collectionCardJayGenerated = dreamscapeMemberById.member_rina.image
 
+function normalizeCatalogArtistImage(artist: CatalogArtist): CatalogArtist {
+  const imageUrl = artist.id === 'artist_nova3' || artist.name === '드림스케이프'
+    ? loginDreamscapeGroup
+    : artist.id === 'artist_luminous' || artist.name === '루미너스'
+      ? fanWeekLavenderMeet
+      : artist.imageUrl
+  return imageUrl === artist.imageUrl ? artist : { ...artist, imageUrl }
+}
+
 type Tab = 'home' | 'discover' | 'collection' | 'growth' | 'shop' | 'settings' | 'alerts' | 'events'
 
 const cardRoutePreviewKey = 'fanfolio.card-route-preview'
@@ -119,13 +128,13 @@ const fanGrowthPreviewProgression: FanProgression = {
     { id: 'preview-grant-4', rewardId: 'preview-theme-1', type: 'collection_theme', name: '응원 메시지 배경', metadata: { artistName: '드림스케이프', imagePreset: 'music', description: '응원 메시지에 사용할 수 있는 영구 배경이에요.' }, grantedAt: '2026-08-18T10:00:00Z', claimedAt: '2026-08-18T10:00:00Z' },
   ],
   pass: { seasons: [{
-    id: 'preview-season', title: '드림스케이프 팬 레벨', organizationId: null, artistId: 'dreamscape', status: 'active', isPaid: false, startsAt: null, endsAt: null,
+    id: 'preview-season', title: '드림스케이프 Season 01 Pass', organizationId: null, artistId: 'dreamscape', status: 'active', isPaid: true, premiumEnabled: true, premiumPricePoints: 1200, isPurchased: false, startsAt: null, endsAt: null,
     progress: { currentXp: 0, claimedTierIds: ['preview-tier-1'] },
     tiers: [
-      { id: 'preview-tier-1', tier: 1, requiredXp: 0, rewardId: 'preview-badge-1', claimed: true, claimable: false, reward: { id: 'preview-badge-1', type: 'badge', name: '팬 시작 배지', metadata: {} } },
-      { id: 'preview-tier-2', tier: 2, requiredXp: 100, rewardId: 'preview-badge-2', claimed: false, claimable: false, reward: { id: 'preview-badge-2', type: 'digital_bonus', name: '미공개 콘텐츠', metadata: { imagePreset: 'ticket' } } },
-      { id: 'preview-tier-3', tier: 3, requiredXp: 200, rewardId: 'preview-badge-3', claimed: false, claimable: false, reward: { id: 'preview-badge-3', type: 'badge', name: '팬 전용 배지', metadata: {} } },
-      { id: 'preview-tier-4', tier: 4, requiredXp: 300, rewardId: 'preview-badge-4', claimed: false, claimable: false, reward: { id: 'preview-badge-4', type: 'digital_bonus', name: '디지털 포토카드', metadata: { imagePreset: 'music' } } },
+      { id: 'preview-tier-1', tier: 1, requiredXp: 0, rewardId: 'preview-badge-1', claimed: true, claimable: false, reward: { id: 'preview-badge-1', type: 'badge', name: 'Season Badge', metadata: {} }, premiumRewardId: 'preview-premium-1', premiumReward: { id: 'preview-premium-1', type: 'digital_bonus', name: 'Premium Photocard', metadata: { imagePreset: 'ticket' } }, premiumClaimed: false, premiumClaimable: false },
+      { id: 'preview-tier-2', tier: 2, requiredXp: 100, rewardId: 'preview-badge-2', claimed: false, claimable: false, reward: { id: 'preview-badge-2', type: 'digital_bonus', name: '미공개 콘텐츠', metadata: { imagePreset: 'ticket' } }, premiumRewardId: 'preview-premium-2', premiumReward: { id: 'preview-premium-2', type: 'profile_frame', name: 'Premium Frame', metadata: { imagePreset: 'crystal' } }, premiumClaimed: false, premiumClaimable: false },
+      { id: 'preview-tier-3', tier: 3, requiredXp: 200, rewardId: 'preview-badge-3', claimed: false, claimable: false, reward: { id: 'preview-badge-3', type: 'badge', name: 'Fan Points 200P', metadata: {} }, premiumRewardId: 'preview-premium-3', premiumReward: { id: 'preview-premium-3', type: 'digital_bonus', name: 'Limited Card Pack', metadata: { imagePreset: 'music' } }, premiumClaimed: false, premiumClaimable: false },
+      { id: 'preview-tier-4', tier: 4, requiredXp: 300, rewardId: 'preview-badge-4', claimed: false, claimable: false, reward: { id: 'preview-badge-4', type: 'digital_bonus', name: 'Artist Message', metadata: { imagePreset: 'music' } }, premiumRewardId: 'preview-premium-4', premiumReward: { id: 'preview-premium-4', type: 'collection_theme', name: 'Special Polaroid', metadata: { imagePreset: 'crystal' } }, premiumClaimed: false, premiumClaimable: false },
     ],
   }] },
   equipment: { titleRewardId: null, badgeRewardIds: ['preview-grant-1'], frameRewardId: null, themeRewardId: null, publicProfileEnabled: true },
@@ -168,7 +177,26 @@ function FanGrowthPreview() {
   const [showPass, setShowPass] = useState(() => previewMode === 'fan-pass' || previewMode === 'fan-global-pass')
   const [passScope, setPassScope] = useState<'artist' | 'global'>(() => previewMode === 'fan-global-pass' ? 'global' : 'artist')
   const [passTargetTierId, setPassTargetTierId] = useState<string | undefined>()
-  if (showPass) return <FanPassPage progression={fanGrowthPreviewProgression} loading={false} error="" onRetry={() => {}} onBack={() => { setShowPass(false); setPassScope('artist'); setPassTargetTierId(undefined); window.history.pushState({}, '', '/?preview=fan-growth') }} onClaimPassTier={async () => ({})} onNavigate={tab => window.location.assign(pathForTab(tab))} initialTierId={passTargetTierId} isGlobal={passScope === 'global'} />
+  const previewPassProgression: FanProgression = {
+    ...fanGrowthPreviewProgression,
+    pass: {
+      ...fanGrowthPreviewProgression.pass,
+      seasons: fanGrowthPreviewProgression.pass.seasons.map(season => ({
+        ...season,
+        isPaid: true,
+        premiumEnabled: true,
+        premiumPricePoints: 1200,
+        tiers: season.tiers.map(tier => ({
+          ...tier,
+          premiumRewardId: `preview-premium-${tier.tier}`,
+          premiumReward: { id: `preview-premium-${tier.tier}`, type: tier.tier % 2 === 0 ? 'profile_frame' : 'digital_bonus', name: tier.tier % 2 === 0 ? '프리미엄 프레임' : '한정 포토카드', metadata: { imagePreset: tier.tier % 2 === 0 ? 'crystal' : 'ticket' } },
+          premiumClaimed: false,
+          premiumClaimable: false,
+        })),
+      })),
+    },
+  }
+  if (showPass) return <FanPassPage progression={previewPassProgression} loading={false} error="" onRetry={() => {}} onBack={() => { setShowPass(false); setPassScope('artist'); setPassTargetTierId(undefined); window.history.pushState({}, '', '/?preview=fan-growth') }} onClaimPassTier={async () => ({})} onPurchasePass={async () => {}} onNavigate={tab => window.location.assign(pathForTab(tab))} initialTierId={passTargetTierId} isGlobal={passScope === 'global'} />
   const onViewPass = (tierId?: string) => { setPassTargetTierId(tierId); setShowPass(true); window.history.pushState({}, '', '/?preview=fan-pass') }
   const onViewGlobalPass = (tierId?: string) => { setPassScope('global'); setPassTargetTierId(tierId); setShowPass(true); window.history.pushState({}, '', '/?preview=fan-global-pass') }
   const artistScopes = [{ id: 'dreamscape', name: '드림스케이프', imageUrl: loginDreamscapeGroup }]
@@ -491,9 +519,9 @@ function ShopProductDetail({ productId }: { productId: string }) {
   return <main className="app-shell shop-product-detail-shell"><DetailTopBar title="상품 상세" onBack={() => navigateAppPath('/shop')} backLabel="상점으로 돌아가기" /><section className="shop-product-detail-content">{state === 'loading' && <p className="shop-notice">상품 정보를 불러오고 있어요.</p>}{state === 'error' && <p className="shop-notice" role="alert">상품을 찾을 수 없어요.</p>}{product && <><img className="shop-product-detail-image" src={resolveApiUrl(product.imageUrl) || dreamscapeCardPack} alt="" /><p className="eyebrow">{product.artistName ?? 'FANFOLIO'}</p><h2>{product.name}</h2><p>{product.description || product.cardPack?.name || '카드팩 상품'}</p><strong className="shop-product-detail-price">{product.pricePoints.toLocaleString()}P</strong><button type="button" className="shop-checkout-primary" onClick={buy}>포인트로 구매하기</button>{product.detailContent?.map((block, index) => block.type === 'image' ? <figure className="shop-product-detail-media" key={block.key ?? `${block.title}-${index}`}><img src={resolveApiUrl(block.imageUrl) || dreamscapeCardPack} alt={block.alt || block.title} /><figcaption>{block.title}</figcaption></figure> : <section className="shop-product-detail-block" key={block.key ?? `${block.title}-${index}`}><h3>{block.title}</h3><p>{block.body || ''}</p></section>)}</>}</section></main>
 }
 
-function ShopPreview({ appMode = false, onOpenAlerts, onOpenProfile }: { appMode?: boolean; onOpenAlerts?: () => void; onOpenProfile?: () => void }) {
+function ShopPreview({ appMode = false, onOpenAlerts, onOpenProfile, favoriteArtists = [] }: { appMode?: boolean; onOpenAlerts?: () => void; onOpenProfile?: () => void; favoriteArtists?: CatalogArtist[] }) {
   const [category, setCategory] = useState<ShopCategory>('recommended')
-  const [artist, setArtist] = useState<'all' | 'dreamscape' | 'lunarize' | 'astra' | 'eclipse'>('all')
+  const [artist, setArtist] = useState<string | null>(null)
   const [notice, setNotice] = useState('')
   const [products, setProducts] = useState<ShopProduct[]>([])
   const [productsLoading, setProductsLoading] = useState(appMode)
@@ -509,7 +537,9 @@ function ShopPreview({ appMode = false, onOpenAlerts, onOpenProfile }: { appMode
   useEffect(() => {
     if (!appMode) return
     let active = true
-    void getShopProducts().then(result => {
+    setProductsLoading(true)
+    setProductsError('')
+    void getShopProducts({ artistId: artist ?? undefined }).then(result => {
       if (!active) return
       setProducts(result.data.items)
       setProductsLoading(false)
@@ -519,7 +549,7 @@ function ShopPreview({ appMode = false, onOpenAlerts, onOpenProfile }: { appMode
       setProductsLoading(false)
     })
     return () => { active = false }
-  }, [appMode])
+  }, [appMode, artist])
   useEffect(() => {
     if (!appMode) return
     let active = true
@@ -543,7 +573,15 @@ function ShopPreview({ appMode = false, onOpenAlerts, onOpenProfile }: { appMode
   const showPacks = category === 'recommended' || category === 'packs'
   const showPoints = category === 'recommended' || category === 'points'
   const showLimited = category === 'recommended' || category === 'limited'
-  const visibleProducts = artist === 'all' ? products : products.filter(product => product.artistId === artist)
+  const previewArtists: CatalogArtist[] = [
+    { id: 'dreamscape', name: '드림스케이프', imageUrl: loginDreamscapeGroup },
+    { id: 'lunarize', name: '루나라이즈', imageUrl: cardYunaImage },
+    { id: 'astra', name: '아스트라', imageUrl: cardMinhoImage },
+    { id: 'eclipse', name: '이클립스', imageUrl: cardJayImage },
+  ]
+  const shopFavoriteArtists = favoriteArtists.length > 0 ? favoriteArtists : previewArtists
+  const selectedArtistId = artist
+  const visibleProducts = appMode || selectedArtistId === null ? products : products.filter(product => product.artistId === selectedArtistId)
   const livePacks = visibleProducts.filter(product => product.productType === 'card_pack')
   const livePointItems = visibleProducts.filter(product => product.productType === 'point_item')
   const liveLimitedItems = visibleProducts.filter(product => product.productType === 'limited_item')
@@ -562,11 +600,8 @@ function ShopPreview({ appMode = false, onOpenAlerts, onOpenProfile }: { appMode
       <section className="shop-artist-section" aria-labelledby="shop-artist-title">
         <h2 id="shop-artist-title">관심 아티스트</h2>
         <div className="shop-artist-list">
-          <button type="button" className={artist === 'all' ? 'selected' : ''} aria-label="전체 아티스트 상품 보기" aria-pressed={artist === 'all'} onClick={() => setArtist('all')}><span className="shop-artist-all"><InlineIcon name="card" /></span><b>전체</b></button>
-          <button type="button" className={artist === 'dreamscape' ? 'selected' : ''} aria-pressed={artist === 'dreamscape'} onClick={() => setArtist('dreamscape')}><img src={loginDreamscapeGroup} alt="" /><b>드림스케이프</b></button>
-          <button type="button" className={artist === 'lunarize' ? 'selected' : ''} aria-pressed={artist === 'lunarize'} onClick={() => setArtist('lunarize')}><img src={cardYunaImage} alt="" /><b>루나라이즈</b></button>
-          <button type="button" className={artist === 'astra' ? 'selected' : ''} aria-pressed={artist === 'astra'} onClick={() => setArtist('astra')}><img src={cardMinhoImage} alt="" /><b>아스트라</b></button>
-          <button type="button" className={artist === 'eclipse' ? 'selected' : ''} aria-pressed={artist === 'eclipse'} onClick={() => setArtist('eclipse')}><img src={cardJayImage} alt="" /><b>이클립스</b></button>
+          <button type="button" className={artist === null ? 'selected' : ''} aria-label="전체 아티스트 상품 보기" aria-pressed={artist === null} onClick={() => setArtist(null)}><span className="shop-artist-all"><InlineIcon name="card" /></span><b>전체</b></button>
+          {shopFavoriteArtists.map(item => <button type="button" className={artist === item.id ? 'selected' : ''} aria-pressed={artist === item.id} key={item.id} onClick={() => setArtist(item.id)}>{item.imageUrl ? <img src={resolveApiUrl(item.imageUrl)} alt="" /> : <span className="shop-artist-all"><InlineIcon name="users" /></span>}<b>{item.name}</b></button>)}
           <button type="button" onClick={() => onOpenProfile?.()}><span className="shop-artist-add"><InlineIcon name="plus" /></span><b>아티스트 추가</b></button>
         </div>
       </section>
@@ -847,7 +882,7 @@ function App() {
   useEffect(() => {
     if (!signedIn) return
     void apiFetch<{ ok: true, data: { items: CatalogArtist[] } }>('/catalog/artists')
-      .then(result => setCatalogArtists(result.data.items))
+      .then(result => setCatalogArtists(result.data.items.map(normalizeCatalogArtistImage)))
       .catch(() => setCatalogArtists([]))
   }, [signedIn])
 
@@ -1441,7 +1476,7 @@ function App() {
 
   if (import.meta.env.DEV) {
     const preview = new URLSearchParams(window.location.search).get('preview')
-    if (preview === 'fan-pass' || preview === 'fan-global-pass') return <FanPassPage progression={fanGrowthPreviewProgression} loading={false} error="" onRetry={() => {}} onBack={() => { window.history.pushState({}, '', '/?preview=fan-growth'); window.dispatchEvent(new PopStateEvent('popstate')) }} onClaimPassTier={async () => ({})} onNavigate={tab => window.location.assign(pathForTab(tab))} isGlobal={preview === 'fan-global-pass'} />
+    if (preview === 'fan-pass' || preview === 'fan-global-pass') return <FanPassPage progression={fanGrowthPreviewProgression} loading={false} error="" onRetry={() => {}} onBack={() => { window.history.pushState({}, '', '/?preview=fan-growth'); window.dispatchEvent(new PopStateEvent('popstate')) }} onClaimPassTier={async () => ({})} onPurchasePass={async () => {}} onNavigate={tab => window.location.assign(pathForTab(tab))} isGlobal={preview === 'fan-global-pass'} />
     if (preview === 'fan-growth') return <FanGrowthPreview />
     if (preview === 'shop') return <ShopPreview />
     if (preview === 'shop-checkout') return <ShopCheckoutPreview />
@@ -1473,7 +1508,7 @@ function App() {
   if (pathname === '/shop/checkout') return <ShopCheckoutPreview appMode />
   if (pathname === '/shop/points') return <PointChargePage appMode />
   if (pathname === '/shop/history') return <ShopHistoryPreview appMode />
-  if (tab === 'shop') return <ShopPreview appMode onOpenAlerts={openAlerts} onOpenProfile={() => navigateTab('settings')} />
+  if (tab === 'shop') return <ShopPreview appMode favoriteArtists={catalogArtists.filter(artist => currentUser?.favoriteArtistIds.includes(artist.id))} onOpenAlerts={openAlerts} onOpenProfile={() => navigateTab('settings')} />
 
   if (showOnboarding) {
     return <Onboarding userId={currentUser?.id ?? 'fan'} profileImageUrl={currentUser?.profileImageUrl ?? null} onComplete={() => { setShowOnboarding(false); collectionRequestUserRef.current = null; growthRequestKeyRef.current = null; void refreshUser() }} onBack={logout} />
@@ -1638,8 +1673,8 @@ function App() {
         {collectionError && <div className="service-notice" role="alert"><span>{collectionError}</span><button onClick={() => void refreshCollection()} disabled={collectionLoading}>{collectionLoading ? '확인 중...' : '다시 시도'}</button></div>}
         {tab === 'home' && <Home nickname={currentUser?.nickname ?? '팬'} cards={collectionCards} collectionDataReady={collectionDataReady} savedCards={savedCards} summary={collectionSummary} loading={collectionLoading} eventHome={fanHome} onSelect={openCard} onDiscover={() => navigateTab('discover')} onCollection={() => navigateTab('collection')} onRedeem={openRedeem} onEvents={openEvents} onEvent={openEvent} />}
         {tab === 'events' && (eventId ? <EventDetail event={selectedEvent} loading={eventDetailLoading} onBack={openEvents} onApply={handleEventApply} comments={eventComments} commentsLoading={eventCommentsLoading} commentSubmitting={eventCommentSubmitting} onLoadComments={loadEventComments} onSubmitComment={handleEventComment} onOpenTarget={target => { if (target.startsWith('/events/')) { const id = decodeURIComponent(target.split('/')[1]?.split('#')[0] ?? ''); const item = fanEvents.find(event => event.id === id); if (item) openEvent(item) } else if (target.startsWith('https://')) window.open(target, '_blank', 'noopener,noreferrer') }} /> : <EventList events={fanEvents} status={fanEventStatus} loading={fanEventsLoading} error={fanEventsError} pagination={fanEventPagination} onStatusChange={handleFanEventStatusChange} onPageChange={setFanEventPage} onOpen={openEvent} />)}
-        {tab === 'collection' && <Collection cards={collectionCards} collectionDataReady={collectionDataReady} summary={collectionSummary} benefits={collectionBenefits} rewards={inventoryProgression?.claimedRewards ?? []} loading={collectionLoading} onSelect={openCard} onRedeem={openRedeem} onDiscover={() => navigateTab('discover')} onRewards={openRewardInventory} onCards={openCardCollection} onOpenWishlist={openWishlistPicker} onClaim={claimBenefit} />}
-        {tab === 'discover' && <Discover onFindFans={query => navigateAppPath(routeWithReturnTo(query ? `/fans?q=${encodeURIComponent(query)}` : '/fans', '/discover'))} onOpenFanProfile={userId => navigateAppPath(routeWithReturnTo(`/fans/${encodeURIComponent(userId)}`, '/discover'))} onOpenPublicCollection={userId => navigateAppPath(routeWithReturnTo(`/fans/${encodeURIComponent(userId)}/collection`, '/discover'))} onOpenEvent={event => { if (event) openEvent(event); else openEvents() }} onOpenArtist={artistId => navigateAppPath(routeWithReturnTo(`/discover/artists/${encodeURIComponent(artistId)}`, '/discover'))} onOpenPackCatalog={() => navigateAppPath(routeWithReturnTo('/discover/packs', '/discover'))} onOpenPack={packId => navigateAppPath(routeWithReturnTo(`/discover/packs/${encodeURIComponent(packId)}`, '/discover'))} onOpenCard={openCard} featuredArtist={catalogArtists.find(artist => artist.name === '드림스케이프') ?? catalogArtists[0] ?? null} featuredEvent={fanHome?.featuredEvent ?? fanHome?.upcomingEvents[0] ?? null} featuredEventLoading={fanHomeLoading} />}
+        {tab === 'collection' && <Collection cards={collectionCards} collectionDataReady={collectionDataReady} favoriteArtists={catalogArtists.filter(artist => currentUser?.favoriteArtistIds.includes(artist.id))} summary={collectionSummary} benefits={collectionBenefits} rewards={inventoryProgression?.claimedRewards ?? []} loading={collectionLoading} onSelect={openCard} onRedeem={openRedeem} onDiscover={() => navigateTab('discover')} onRewards={openRewardInventory} onCards={openCardCollection} onOpenWishlist={openWishlistPicker} onClaim={claimBenefit} />}
+        {tab === 'discover' && <Discover favoriteArtists={catalogArtists.filter(artist => currentUser?.favoriteArtistIds.includes(artist.id))} onFindFans={query => navigateAppPath(routeWithReturnTo(query ? `/fans?q=${encodeURIComponent(query)}` : '/fans', '/discover'))} onOpenFanProfile={userId => navigateAppPath(routeWithReturnTo(`/fans/${encodeURIComponent(userId)}`, '/discover'))} onOpenPublicCollection={userId => navigateAppPath(routeWithReturnTo(`/fans/${encodeURIComponent(userId)}/collection`, '/discover'))} onOpenEvent={event => { if (event) openEvent(event); else openEvents() }} onOpenArtist={artistId => navigateAppPath(routeWithReturnTo(`/discover/artists/${encodeURIComponent(artistId)}`, '/discover'))} onOpenPackCatalog={() => navigateAppPath(routeWithReturnTo('/discover/packs', '/discover'))} onOpenPack={packId => navigateAppPath(routeWithReturnTo(`/discover/packs/${encodeURIComponent(packId)}`, '/discover'))} onOpenCard={openCard} featuredArtist={catalogArtists.find(artist => artist.name === '드림스케이프') ?? catalogArtists[0] ?? null} featuredEvent={fanHome?.featuredEvent ?? fanHome?.upcomingEvents[0] ?? null} featuredEventLoading={fanHomeLoading} />}
         {/* Embedded surfaces stay compact; the dedicated tab uses the full progression view. */}
         {tab === 'growth' && <FanGrowth progression={fanProgression} globalProgression={globalFanProgression} artistScopes={catalogArtists.filter(artist => currentUser?.favoriteArtistIds.includes(artist.id)).map(artist => ({ id: artist.id, name: artist.name, imageUrl: artist.name === '드림스케이프' ? loginDreamscapeGroup : artist.imageUrl }))} selectedArtistId={growthArtistId} onArtistChange={setGrowthArtistId} loading={growthLoading} error={growthError} mode="full" onRetry={refreshGrowth} onClaim={claimGrowthReward} onClaimPassTier={claimGrowthPassTier} onEquip={saveGrowthEquipment} onViewPass={openFanPassPage} onViewGlobalPass={(tierId) => openFanPassPage(tierId, 'global')} onViewMissions={openMissionPage} fanGrowthMode="full" />}
         {tab === 'settings' && currentUser && <Settings user={currentUser} progression={fanProgression} onUserUpdated={setCurrentUser} onLogout={logout} onEvents={openMyApplications} onNotificationSettings={() => setShowNotificationSettings(true)} />}
@@ -2345,6 +2380,8 @@ function HomeRecommendations({ cards, onSelect, onDiscover }: { cards: Card[], o
 }
 
 function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome, onSelect, onDiscover, onCollection, onRedeem, onEvents, onEvent }: HomeProps) {
+  const [activeHomeArtistId, setActiveHomeArtistId] = useState<string | null>(null)
+  const [scopedHomeCards, setScopedHomeCards] = useState<CatalogCard[]>([])
   const featured = cards[0]
   const apiHeroEvents = eventHome
     ? [eventHome.featuredEvent, ...eventHome.upcomingEvents].filter((event): event is FanEvent => Boolean(event)).filter((event, index, events) => events.findIndex(item => item.id === event.id) === index)
@@ -2354,20 +2391,43 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
   const [heroInteractionVersion, setHeroInteractionVersion] = useState(0)
   const [artistFavorites, setArtistFavorites] = useState<Set<string>>(() => new Set(eventHome?.favoriteArtists.map(artist => artist.id) ?? []))
   const [newCardFavorites, setNewCardFavorites] = useState<Set<string>>(() => new Set())
-  const heroEvents = eventHome ? apiHeroEvents : featuredEvent ? [featuredEvent] : []
+  const favoriteArtists = (eventHome?.favoriteArtists ?? []).map(normalizeCatalogArtistImage)
+  const selectedHomeArtist = favoriteArtists.find(artist => artist.id === activeHomeArtistId) ?? null
+  const homeVisibleEvents = activeHomeArtistId
+    ? apiHeroEvents.filter(event => event.artistId === activeHomeArtistId)
+    : (eventHome ? apiHeroEvents : featuredEvent ? [featuredEvent] : [])
+  const homeVisibleCards = activeHomeArtistId
+    ? scopedHomeCards.map(toCatalogCard)
+    : (eventHome ? eventHome.newCards.map(toCatalogCard) : import.meta.env.DEV ? fallbackHomeCards : [])
+  const heroEvents = homeVisibleEvents
   const heroSlides: HomeHeroSlide[] = heroEvents.map(event => ({
     event,
     eyebrow: '팬 이벤트',
     titleLines: homeHeroTitleLines(event.title),
     image: resolveApiUrl(event.heroUrl) || dreamscapeHero,
   }))
-  const favoriteArtists = eventHome?.favoriteArtists ?? []
-  const newCards = eventHome ? eventHome.newCards.map(toCatalogCard) : import.meta.env.DEV ? fallbackHomeCards : []
-  const activeEvent = eventHome ? eventHome.upcomingEvents[0] ?? eventHome.featuredEvent : import.meta.env.DEV ? fallbackHomeEvent : null
+  const newCards = homeVisibleCards
+  const activeEvent = activeHomeArtistId ? homeVisibleEvents[0] ?? null : eventHome ? eventHome.upcomingEvents[0] ?? eventHome.featuredEvent : import.meta.env.DEV ? fallbackHomeEvent : null
   const completionRate = Math.min(100, Math.max(0, summary.completionRate))
   useEffect(() => {
     setArtistFavorites(new Set((eventHome?.favoriteArtists ?? []).map(artist => artist.id)))
   }, [eventHome])
+
+  useEffect(() => {
+    if (!activeHomeArtistId) {
+      setScopedHomeCards([])
+      return
+    }
+    let cancelled = false
+    void getCatalogCards({ artistId: activeHomeArtistId, sort: 'recommended' })
+      .then(result => {
+        if (!cancelled) setScopedHomeCards(result.data.items.slice(0, 3))
+      })
+      .catch(() => {
+        if (!cancelled) setScopedHomeCards([])
+      })
+    return () => { cancelled = true }
+  }, [activeHomeArtistId])
 
   useEffect(() => {
     if (heroSlides.length < 2) return
@@ -2451,7 +2511,7 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
         const artistImage = artist.imageUrl ? (resolveApiUrl(artist.imageUrl) || dreamscapeHero) : dreamscapeHero
         const isFavorite = artistFavorites.has(artist.id)
         return <article className="home-artist-card" key={artist.id}>
-          <button type="button" className="home-artist-primary" onClick={onDiscover} aria-label={`${artist.name} 아티스트 홈 보기`}>
+          <button type="button" className={`home-artist-primary${activeHomeArtistId === artist.id ? ' is-selected' : ''}`} onClick={() => { setActiveHomeArtistId(current => current === artist.id ? null : artist.id); setActiveHeroIndex(0) }} aria-label={`${artist.name} 아티스트 콘텐츠 보기`} aria-pressed={activeHomeArtistId === artist.id}>
             <img className="home-artist-backdrop" src={artistImage} alt="" />
             <span className="home-artist-copy">
               <small className="home-artist-badge">관심 아티스트</small>
@@ -2465,7 +2525,7 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
       })}</div>
     </section> : <section className="home-artist-section home-artist-empty" aria-labelledby="home-artist-title"><div className="section-heading"><h2 id="home-artist-title">관심 아티스트</h2><button type="button" onClick={onDiscover}>아티스트 찾기 <InlineIcon name="chevron" /></button></div><p>관심 아티스트를 선택하면 맞춤 카드와 이벤트를 보여드려요.</p></section>}
     <section className="home-new-cards" aria-labelledby="home-new-cards-title">
-      <div className="section-heading"><h2 id="home-new-cards-title">새로 공개된 카드</h2><button type="button" onClick={onDiscover}>전체 보기 <InlineIcon name="chevron" /></button></div>
+      <div className="section-heading"><h2 id="home-new-cards-title">{selectedHomeArtist ? `${selectedHomeArtist.name} 새 카드` : '새로 공개된 카드'}</h2><button type="button" onClick={onDiscover}>전체 보기 <InlineIcon name="chevron" /></button></div>
       <div className="home-new-card-row">{newCards.length > 0 ? newCards.slice(0, 3).map((card, index) => {
         const rarity = index === 0 ? 'UR' : 'SR'
         const isFavorite = newCardFavorites.has(card.id)
@@ -3160,12 +3220,15 @@ function CardCollectionRepository({ initialPackId, usePreviewData = false, onBac
   </main>
 }
 
-function Collection({ cards: collectionCards, collectionDataReady, summary, benefits, rewards, loading, onSelect, onRedeem, onDiscover, onRewards, onCards, onOpenWishlist, onClaim }: { cards: Card[], collectionDataReady: boolean, summary: CollectionSummary, benefits: CollectionBenefit[], rewards: RewardGrant[], loading: boolean, onSelect: (card: Card) => void, onRedeem: () => void, onDiscover: () => void, onRewards: () => void, onCards: () => void, onOpenWishlist: () => void, onClaim: (campaignId: string) => Promise<void> }) {
+function Collection({ cards: collectionCards, collectionDataReady, favoriteArtists = [], summary, benefits, rewards, loading, onSelect, onRedeem, onDiscover, onRewards, onCards, onOpenWishlist, onClaim }: { cards: Card[], collectionDataReady: boolean, favoriteArtists?: CatalogArtist[], summary: CollectionSummary, benefits: CollectionBenefit[], rewards: RewardGrant[], loading: boolean, onSelect: (card: Card) => void, onRedeem: () => void, onDiscover: () => void, onRewards: () => void, onCards: () => void, onOpenWishlist: () => void, onClaim: (campaignId: string) => Promise<void> }) {
   const [claimingId, setClaimingId] = useState<string | null>(null)
   const [claimMessage, setClaimMessage] = useState('')
+  const [activeArtistId, setActiveArtistId] = useState<string | null>(null)
   const sourceCards = collectionDataReady ? collectionCards : import.meta.env.DEV ? fallbackCollectionCards : []
+  const visibleCards = activeArtistId ? sourceCards.filter(card => card.artist === favoriteArtists.find(artist => artist.id === activeArtistId)?.name) : sourceCards
   const recentCards = sourceCards.slice(0, 4)
-  const duplicateCounts = recentCards.reduce<Record<string, number>>((counts, card) => {
+  const displayedRecentCards = activeArtistId ? visibleCards.slice(0, 4) : recentCards
+  const duplicateCounts = displayedRecentCards.reduce<Record<string, number>>((counts, card) => {
     counts[card.title] = (counts[card.title] ?? 0) + 1
     return counts
   }, {})
@@ -3191,6 +3254,7 @@ function Collection({ cards: collectionCards, collectionDataReady, summary, bene
         <div className="collection-progress-value"><strong>{summary.completionRate}%</strong><b>{summary.ownedCount} / {summary.totalSlots}</b></div>
         <div className="collection-progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={summary.completionRate} aria-label={`컬렉션 ${summary.completionRate}% 완료`}><span style={{ width: `${Math.min(100, Math.max(0, summary.completionRate))}%` }} /></div>
       </section>
+      {favoriteArtists.length > 0 && <div className="artist-scope-picker" aria-label="보관함 관심 아티스트 범위"><span>보관함 범위</span><div><button type="button" className={activeArtistId === null ? 'is-active' : ''} aria-pressed={activeArtistId === null} onClick={() => setActiveArtistId(null)}>전체</button>{favoriteArtists.map(artist => <button type="button" key={artist.id} className={activeArtistId === artist.id ? 'is-active' : ''} aria-pressed={activeArtistId === artist.id} onClick={() => setActiveArtistId(artist.id)}>{artist.name}</button>)}</div></div>}
       <button type="button" className="collection-wishlist-entry" onClick={onOpenWishlist}>
         <span className="collection-wishlist-entry-icon"><InlineIcon name="heart" /></span>
         <span><b>원하는 카드 등록</b><small>거래하고 싶은 카드를 미리 등록해두면 거래 제안이 쉬워져요.</small></span>
@@ -3208,9 +3272,9 @@ function Collection({ cards: collectionCards, collectionDataReady, summary, bene
       </button>
       <section className="collection-recent-section" aria-labelledby="collection-recent-title">
         <div className="section-heading"><h2 id="collection-recent-title">최근 수집 카드</h2><button type="button" onClick={onCards}>전체 보기 <InlineIcon name="chevron" /></button></div>
-        <div className="collection-recent-grid">{recentCards.map((card, index) => {
+        <div className="collection-recent-grid">{displayedRecentCards.map((card, index) => {
           const copies = duplicateCounts[card.title] ?? 1
-          const previousCopies = recentCards.slice(0, index).filter(item => item.title === card.title).length
+          const previousCopies = displayedRecentCards.slice(0, index).filter(item => item.title === card.title).length
           const rarity = card.rarity ?? (index === 0 ? 'UR' : index < 3 ? 'SR' : index === 3 ? 'R' : 'N')
           return <button type="button" className="collection-reference-card" key={card.userCardId ?? card.id} onClick={() => onSelect(card)} aria-label={`${card.title} ${card.member} 카드 상세 보기`}>
             <span className={`collection-card-rarity rarity-${rarity.toLowerCase()}`}>{rarity}</span>
@@ -3222,6 +3286,7 @@ function Collection({ cards: collectionCards, collectionDataReady, summary, bene
         })}</div>
       </section>
     </section>
+    {visibleCards.length === 0 && sourceCards.length > 0 && <div className="empty-collection"><div className="empty-collection-copy"><InlineIcon name="search" /><b>이 그룹의 카드가 없어요</b><small>다른 관심 그룹을 선택하거나 카드를 탐색해 보세요.</small></div><div className="empty-collection-actions"><button type="button" className="outline" onClick={() => setActiveArtistId(null)}>전체 카드 보기</button><button type="button" className="primary" onClick={onDiscover}>카드 탐색하기</button></div></div>}
     {sourceCards.length === 0 && <div className="empty-collection"><div className="empty-collection-copy"><InlineIcon name="plus" /><b>아직 카드가 없어요</b><small>카드를 등록하거나 탐색해서 컬렉션을 시작해 보세요.</small></div><div className="empty-collection-actions"><button type="button" className="primary" onClick={onRedeem}>카드 등록하기</button><button type="button" className="outline" onClick={onDiscover}>카드 탐색하기</button></div></div>}
     {benefits.length > 0 && <section className="benefit-section"><div className="section-heading"><h2>컬렉션 완성 특전</h2></div><div className="benefit-list">{benefits.map(benefit => <article className={`benefit-card ${benefit.status}`} key={`${benefit.campaignId ?? benefit.artistId ?? 'fanfolio'}-${benefit.seasonName}`}><div><span className="detail-badge">{benefit.claimed ? '수령 완료' : benefit.status === 'unlocked' ? '해금 완료' : '진행 중'}</span><h3>{benefit.benefit.title}</h3><p>{benefit.benefit.description}</p></div><div><strong>{benefit.ownedCount}/{benefit.requiredCount}</strong>{benefit.claimable && benefit.campaignId && <button className="outline" onClick={() => void claim(benefit)} disabled={claimingId === benefit.campaignId}>{claimingId === benefit.campaignId ? '수령 중...' : '특전 받기'}</button>}{benefit.claimed && benefit.downloadUrl && <a className="outline benefit-download" href={resolveApiUrl(benefit.downloadUrl)} download>특전 다운로드</a>}</div></article>)}</div>{claimMessage && <p className="form-message">{claimMessage}</p>}</section>}
   </>
@@ -3390,7 +3455,7 @@ function NotificationSettings({ onBack, onEnablePush }: { onBack: () => void; on
   </main>
 }
 
-function Discover({ onFindFans, onOpenFanProfile, onOpenPublicCollection, onOpenEvent, onOpenArtist, onOpenPackCatalog, onOpenPack, featuredArtist, featuredEvent, featuredEventLoading = false, onOpenCard, initialFans }: { onFindFans: (query?: string) => void; onOpenFanProfile: (userId: string) => void; onOpenPublicCollection: (userId: string) => void; onOpenEvent: (event: FanEvent | null) => void; onOpenArtist: (artistId: string) => void; onOpenPackCatalog: () => void; onOpenPack: (packId: string) => void; onOpenCard: (card: Card) => void; featuredArtist?: CatalogArtist | null; featuredEvent?: FanEvent | null; featuredEventLoading?: boolean; initialFans?: FanSummary[] }) {
+function Discover({ onFindFans, onOpenFanProfile, onOpenPublicCollection, onOpenEvent, onOpenArtist, onOpenPackCatalog, onOpenPack, featuredArtist, featuredEvent, featuredEventLoading = false, onOpenCard, initialFans, favoriteArtists = [] }: { onFindFans: (query?: string) => void; onOpenFanProfile: (userId: string) => void; onOpenPublicCollection: (userId: string) => void; onOpenEvent: (event: FanEvent | null) => void; onOpenArtist: (artistId: string) => void; onOpenPackCatalog: () => void; onOpenPack: (packId: string) => void; onOpenCard: (card: Card) => void; featuredArtist?: CatalogArtist | null; featuredEvent?: FanEvent | null; featuredEventLoading?: boolean; initialFans?: FanSummary[]; favoriteArtists?: CatalogArtist[] }) {
   const [activeCategory, setActiveCategory] = useState<'recommend' | 'artists' | 'packs' | 'cards' | 'community'>('recommend')
   const [searchQuery, setSearchQuery] = useState('')
   const [packs, setPacks] = useState<CardPack[]>([])
@@ -3400,24 +3465,37 @@ function Discover({ onFindFans, onOpenFanProfile, onOpenPublicCollection, onOpen
   const [fans, setFans] = useState<FanSummary[]>(initialFans ?? [])
   const [fansLoading, setFansLoading] = useState(!initialFans)
   const [pendingFollowFanId, setPendingFollowFanId] = useState<string | null>(null)
+  const [activeArtistId, setActiveArtistId] = useState<string | null>(null)
+  const [scopedEvents, setScopedEvents] = useState<FanEvent[]>([])
+  const [scopedEventsLoading, setScopedEventsLoading] = useState(false)
+  const favoriteArtistKey = favoriteArtists.map(artist => artist.id).join('|')
+  const scopedArtistKey = activeArtistId ?? favoriteArtistKey
   useEffect(() => {
     let cancelled = false
     setPacksLoading(true)
-    void getCardPacks()
-      .then(result => { if (!cancelled) setPacks(result.data.items) })
+    const selectedArtistIds = scopedArtistKey ? scopedArtistKey.split('|') : []
+    const requests = selectedArtistIds.length > 0
+      ? Promise.all(selectedArtistIds.map(artistId => getCardPacks(artistId)))
+      : Promise.all([getCardPacks()])
+    void requests
+      .then(results => { if (!cancelled) setPacks(Array.from(new Map(results.flatMap(result => result.data.items).map(pack => [pack.id, pack])).values())) })
       .catch(() => { if (!cancelled) setPacks([]) })
       .finally(() => { if (!cancelled) setPacksLoading(false) })
     return () => { cancelled = true }
-  }, [])
+  }, [scopedArtistKey])
   useEffect(() => {
     let cancelled = false
     setCardsLoading(true)
-    void getCatalogCards({ sort: 'recommended' })
-      .then(result => { if (!cancelled) setCards(result.data.items) })
+    const selectedArtistIds = scopedArtistKey ? scopedArtistKey.split('|') : []
+    const requests = selectedArtistIds.length > 0
+      ? Promise.all(selectedArtistIds.map(artistId => getCatalogCards({ artistId: artistId, sort: 'recommended' })))
+      : Promise.all([getCatalogCards({ sort: 'recommended' })])
+    void requests
+      .then(results => { if (!cancelled) setCards(Array.from(new Map(results.flatMap(result => result.data.items).map(card => [card.id, card])).values())) })
       .catch(() => { if (!cancelled) setCards([]) })
       .finally(() => { if (!cancelled) setCardsLoading(false) })
     return () => { cancelled = true }
-  }, [])
+  }, [scopedArtistKey])
   useEffect(() => {
     if (initialFans) { setFans(initialFans); setFansLoading(false); return }
     let cancelled = false
@@ -3427,8 +3505,25 @@ function Discover({ onFindFans, onOpenFanProfile, onOpenPublicCollection, onOpen
     }).catch(() => { if (!cancelled) setFans([]) }).finally(() => { if (!cancelled) setFansLoading(false) })
     return () => { cancelled = true }
   }, [initialFans])
+  useEffect(() => {
+    if (!activeArtistId) { setScopedEvents([]); setScopedEventsLoading(false); return }
+    let cancelled = false
+    setScopedEventsLoading(true)
+    void getFanEvents({ artistId: activeArtistId, status: 'all', pageSize: 12 })
+      .then(result => { if (!cancelled) setScopedEvents(result.data.items) })
+      .catch(() => { if (!cancelled) setScopedEvents([]) })
+      .finally(() => { if (!cancelled) setScopedEventsLoading(false) })
+    return () => { cancelled = true }
+  }, [activeArtistId])
   const featuredPack = packs[0]
-  const featuredFans = fans.slice(0, 2)
+  const selectedArtist = activeArtistId
+    ? favoriteArtists.find(artist => artist.id === activeArtistId) ?? null
+    : featuredArtist
+  const activeArtistName = selectedArtist?.name ?? '전체 아티스트'
+  const visibleFans = activeArtistId
+    ? fans.filter(fan => fan.favoriteArtists.some(artist => artist.id === activeArtistId) || fan.sharedFavoriteArtists.some(artist => artist.id === activeArtistId))
+    : fans
+  const featuredFans = visibleFans.slice(0, 2)
   const featuredFan = featuredFans[0]
   const featuredCollectionCards = featuredFan ? featuredFan.previewCards.slice(0, 3) : []
   const featuredCollectionArtist = featuredCollectionCards.find(card => card.artistName)?.artistName
@@ -3455,11 +3550,11 @@ function Discover({ onFindFans, onOpenFanProfile, onOpenPublicCollection, onOpen
     const query = searchQuery.trim()
     if (!query) return
     const normalizedQuery = query.toLocaleLowerCase('ko-KR')
-    const artistName = featuredArtist?.name.toLocaleLowerCase('ko-KR') ?? ''
+    const artistName = selectedArtist?.name.toLocaleLowerCase('ko-KR') ?? ''
     const matchedCard = cards.find(card => `${card.name} ${card.memberName ?? ''} ${card.artistName ?? ''}`.toLocaleLowerCase('ko-KR').includes(normalizedQuery))
     const matchedPack = packs.find(pack => `${pack.name} ${pack.seasonName ?? ''}`.toLocaleLowerCase('ko-KR').includes(normalizedQuery))
-    if (featuredArtist && (activeCategory === 'artists' || artistName.includes(normalizedQuery))) {
-      onOpenArtist(featuredArtist.id)
+    if (selectedArtist && (activeCategory === 'artists' || artistName.includes(normalizedQuery))) {
+      onOpenArtist(selectedArtist.id)
       return
     }
     if (matchedCard) {
@@ -3505,10 +3600,13 @@ function Discover({ onFindFans, onOpenFanProfile, onOpenPublicCollection, onOpen
   ] as const
   const show = (section: typeof activeCategory) => activeCategory === 'recommend' || activeCategory === section
   const featuredPackImage = resolveApiUrl(featuredPack?.imageUrl)
-  const featuredEventImage = resolveApiUrl(featuredEvent?.heroUrl)
+  const displayedFeaturedEvent = activeArtistId ? scopedEvents[0] ?? null : featuredEvent
+  const displayedFeaturedEventLoading = activeArtistId ? scopedEventsLoading : featuredEventLoading
+  const featuredEventImage = resolveApiUrl(displayedFeaturedEvent?.heroUrl)
 
   return <section className="discover-hub">
     <div className="discover-hub-intro"><p>좋아하는 아티스트와 새로운 팬 활동을 발견해보세요.</p></div>
+    {favoriteArtists.length > 0 && <section className="discover-favorite-scope" aria-label="관심 아티스트 범위"><span>관심 아티스트</span><div><button type="button" className={!activeArtistId ? 'is-active' : ''} aria-pressed={!activeArtistId} onClick={() => setActiveArtistId(null)}>전체</button>{favoriteArtists.map(artist => <span className="discover-favorite-scope-item" key={artist.id}><button type="button" className={activeArtistId === artist.id ? 'is-active' : ''} aria-pressed={activeArtistId === artist.id} onClick={() => setActiveArtistId(artist.id)}>{artist.name}</button><button type="button" aria-label={`${artist.name} 상세 보기`} onClick={() => onOpenArtist(artist.id)}><InlineIcon name="chevron" /></button></span>)}</div></section>}
     <form className="discover-global-search" role="search" onSubmit={submitDiscoverSearch}>
       <button type="submit" aria-label="탐색 검색"><InlineIcon name="search" /></button>
       <input
@@ -3564,10 +3662,10 @@ function Discover({ onFindFans, onOpenFanProfile, onOpenPublicCollection, onOpen
     </section>}
     {activeCategory === 'artists' && <section className="discover-featured-section">
       <div className="section-heading"><h2>추천 아티스트</h2></div>
-      {featuredArtist
-        ? <button type="button" className="discover-artist-entry" onClick={() => onOpenArtist(featuredArtist.id)}>
-          {resolveApiUrl(featuredArtist.imageUrl) ? <img src={resolveApiUrl(featuredArtist.imageUrl)} alt={featuredArtist.name} /> : <span className="discover-media-placeholder"><InlineIcon name="users" /></span>}
-          <span><small>OFFICIAL ARTIST</small><strong>{featuredArtist.name} <VerifiedIcon /></strong><em>일정, 뉴스, 카드와 이벤트를 한곳에서 확인해요.</em></span><i><InlineIcon name="chevron" /></i>
+      {selectedArtist
+        ? <button type="button" className="discover-artist-entry" onClick={() => onOpenArtist(selectedArtist.id)}>
+          {resolveApiUrl(selectedArtist.imageUrl) ? <img src={resolveApiUrl(selectedArtist.imageUrl)} alt={selectedArtist.name} /> : <span className="discover-media-placeholder"><InlineIcon name="users" /></span>}
+          <span><small>OFFICIAL ARTIST · {activeArtistName}</small><strong>{selectedArtist.name} <VerifiedIcon /></strong><em>일정, 뉴스, 카드와 이벤트를 한곳에서 확인해요.</em></span><i><InlineIcon name="chevron" /></i>
         </button>
         : <div className="discover-empty-entry"><InlineIcon name="users" /> 추천 아티스트가 아직 없어요.</div>}
     </section>}
@@ -3590,12 +3688,12 @@ function Discover({ onFindFans, onOpenFanProfile, onOpenPublicCollection, onOpen
           ? <div className="discover-card-list">{cards.slice(0, 4).map(card => <button type="button" key={card.id} className="discover-card-entry" onClick={() => onOpenCard(toCatalogCard(card))} aria-label={`${card.name} 카드 상세 보기`}><img src={resolveApiUrl(card.imageUrl)} alt={`${card.name} 카드`} /><span><strong>{card.name}</strong><small>{card.artistName ?? '공식 카드'}{card.memberName ? ` · ${card.memberName}` : ''}</small></span></button>)}</div>
           : <div className="discover-empty-entry"><InlineIcon name="card" /> 공개 카드가 아직 없어요.</div>}
     </section>}
-    {show('recommend') && (featuredEventLoading
+    {show('recommend') && (displayedFeaturedEventLoading
       ? <div className="discover-loading-card" role="status" aria-label="이벤트를 불러오는 중">이벤트를 불러오는 중이에요.</div>
-      : featuredEvent
-        ? <button type="button" className="discover-event-entry" onClick={() => onOpenEvent(featuredEvent)}>
-          {featuredEventImage ? <AuthenticatedImage src={featuredEvent?.heroUrl} fallback={dreamscapeHero} alt="" /> : <span className="discover-media-placeholder"><InlineIcon name="calendar" /></span>}
-          <span><small>진행 중인 이벤트</small><strong>{featuredEvent.title}</strong><em>{featuredEvent.summary}</em></span><b>{featuredEvent.status === 'active' ? 'NOW' : '더보기'}</b><i><InlineIcon name="chevron" /></i>
+      : displayedFeaturedEvent
+        ? <button type="button" className="discover-event-entry" onClick={() => onOpenEvent(displayedFeaturedEvent)}>
+          {featuredEventImage ? <AuthenticatedImage src={displayedFeaturedEvent.heroUrl} fallback={dreamscapeHero} alt="" /> : <span className="discover-media-placeholder"><InlineIcon name="calendar" /></span>}
+          <span><small>진행 중인 이벤트 · {activeArtistName}</small><strong>{displayedFeaturedEvent.title}</strong><em>{displayedFeaturedEvent.summary}</em></span><b>{displayedFeaturedEvent.status === 'active' ? 'NOW' : '더보기'}</b><i><InlineIcon name="chevron" /></i>
         </button>
         : <button type="button" className="discover-empty-entry" onClick={() => onOpenEvent(null)}><InlineIcon name="calendar" /> 진행 중인 이벤트가 없어요.</button>)}
   </section>

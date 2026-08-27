@@ -210,6 +210,7 @@ export function Settings({
     memberIds: user.favoriteMemberIds,
     profileImageUrl: user.profileImageUrl,
   }))
+  const [artistQuery, setArtistQuery] = useState('')
   const [artists, setArtists] = useState<CatalogArtist[]>([])
   const [membersByArtist, setMembersByArtist] = useState<Record<string, CatalogMember[]>>({})
   const [profileLoading, setProfileLoading] = useState(false)
@@ -277,6 +278,7 @@ export function Settings({
       memberIds: user.favoriteMemberIds,
       profileImageUrl: user.profileImageUrl,
     })
+    setArtistQuery('')
     setProfileMessage('')
     setProfileLoading(true)
     void apiFetch<{ ok: true; data: { items: CatalogArtist[] } }>('/catalog/artists')
@@ -391,6 +393,7 @@ export function Settings({
   const followerCount = user.followerCount ?? 0
   const points = user.points ?? 0
   const selectedArtists = artists.filter(artist => profileForm.artistIds.includes(artist.id))
+  const filteredArtists = artists.filter(artist => artist.name.toLowerCase().includes(artistQuery.trim().toLowerCase()))
 
   const panelTitle = {
     notifications: '알림 설정',
@@ -508,8 +511,9 @@ export function Settings({
               <label htmlFor="profile-edit-nickname">닉네임</label>
               <input id="profile-edit-nickname" value={profileForm.nickname} maxLength={40} onChange={event => setProfileForm(current => ({ ...current, nickname: event.target.value }))} />
               <label>좋아하는 아티스트</label>
+              <div className="profile-artist-search"><span aria-hidden="true">⌕</span><input value={artistQuery} onChange={event => setArtistQuery(event.target.value)} placeholder="아티스트 이름을 검색해 보세요" aria-label="아티스트 검색" disabled={profileLoading} /></div>
               <div className="profile-preference-grid" aria-label="좋아하는 아티스트 여러 개 선택">
-                {artists.map(artist => {
+                {filteredArtists.map(artist => {
                   const selected = profileForm.artistIds.includes(artist.id)
                   return <button type="button" key={artist.id} className={selected ? 'profile-preference-choice is-selected' : 'profile-preference-choice'} aria-pressed={selected} onClick={() => setProfileForm(current => ({ ...current, artistIds: selected ? current.artistIds.filter(id => id !== artist.id) : [...current.artistIds, artist.id], memberIds: selected ? current.memberIds.filter(memberId => !(membersByArtist[artist.id] ?? []).some(member => member.id === memberId)) : current.memberIds }))}><img src={resolveApiUrl(artist.imageUrl)} alt="" /><span>{artist.name}</span></button>
                 })}

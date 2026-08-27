@@ -2401,6 +2401,14 @@ async def ensure_demo_catalog(session: AsyncSession) -> None:
 
     pack = await session.get(CardPack, "demo_pack_dreamscape_nebula")
     if pack is None:
+        pack = await session.scalar(
+            select(CardPack).where(
+                CardPack.artist_id == "artist_nova3",
+                CardPack.name == "DREAMSCAPE Nebula Ver.",
+                CardPack.version == "v1.0",
+            )
+        )
+    if pack is None:
         pack = CardPack(
             id="demo_pack_dreamscape_nebula",
             artist_id="artist_nova3",
@@ -2443,6 +2451,101 @@ async def ensure_demo_catalog(session: AsyncSession) -> None:
     product.status = "published"
     product.starts_at = None
     product.ends_at = None
+
+    # Keep a second favorite artist useful in a fresh deployment.  These
+    # records are intentionally idempotent and use bundled assets so selecting
+    # Luminous in the fan app exercises the same real catalog paths as the
+    # primary demo artist.
+    luminous_card_specs = (
+        (
+            "card_demo_luminous_arin",
+            "Aurora Arin Ver.",
+            "member_luminous_arin",
+            "SR",
+            "/assets/card-yuna-lavender.jpg",
+        ),
+        (
+            "card_demo_luminous_ian",
+            "Aurora Ian Ver.",
+            "member_luminous_ian",
+            "R",
+            "/assets/card-minho-midnight.jpg",
+        ),
+        (
+            "card_demo_luminous_sena",
+            "Aurora Sena Ver.",
+            "member_luminous_sena",
+            "N",
+            "/assets/card-jay-rosegold.jpg",
+        ),
+    )
+    for card_id, name, member_id, rarity, image_url in luminous_card_specs:
+        card = await session.get(Card, card_id)
+        if card is None:
+            card = Card(id=card_id)
+            session.add(card)
+        card.name = name
+        card.status = "published"
+        card.release_policy = "partner_and_platform"
+        card.release_status = "published"
+        card.is_official = True
+        card.artist_id = "artist_luminous"
+        card.member_id = member_id
+        card.season_name = "싱글 1집 · AURORA"
+        card.rarity = rarity
+        card.image_url = image_url
+        card.tradable = True
+
+    luminous_pack = await session.get(CardPack, "demo_pack_luminous_aurora")
+    if luminous_pack is None:
+        luminous_pack = await session.scalar(
+            select(CardPack).where(
+                CardPack.artist_id == "artist_luminous",
+                CardPack.name == "LUMINOUS Aurora Ver.",
+                CardPack.version == "v1.0",
+            )
+        )
+    if luminous_pack is None:
+        luminous_pack = CardPack(
+            id="demo_pack_luminous_aurora", artist_id="artist_luminous", name="LUMINOUS Aurora Ver."
+        )
+        session.add(luminous_pack)
+    luminous_pack.artist_id = "artist_luminous"
+    luminous_pack.name = "LUMINOUS Aurora Ver."
+    luminous_pack.season_name = "싱글 1집 · AURORA"
+    luminous_pack.version = "v1.0"
+    luminous_pack.image_url = "/assets/card-back-template.png"
+    luminous_pack.description = "루미너스의 첫 싱글 AURORA 카드를 만나보세요."
+    luminous_pack.status = "published"
+    luminous_pack.published_at = luminous_pack.published_at or now()
+    for position, (card_id, _name, _member_id, _rarity, _image_url) in enumerate(
+        luminous_card_specs, start=1
+    ):
+        link_id = f"demo_pack_luminous_card_{position}"
+        link = await session.get(CardPackCard, link_id)
+        if link is None:
+            link = CardPackCard(id=link_id, pack_id=luminous_pack.id, card_id=card_id)
+            session.add(link)
+        link.pack_id = luminous_pack.id
+        link.card_id = card_id
+        link.position = position
+        link.probability = 33.3333 if position < 3 else 33.3334
+        link.enabled = True
+
+    luminous_product = await session.get(ShopProduct, "demo_shop_luminous_aurora")
+    if luminous_product is None:
+        luminous_product = ShopProduct(id="demo_shop_luminous_aurora")
+        session.add(luminous_product)
+    luminous_product.artist_id = "artist_luminous"
+    luminous_product.product_type = "card_pack"
+    luminous_product.card_pack_id = luminous_pack.id
+    luminous_product.name = "LUMINOUS Aurora Ver. 카드팩"
+    luminous_product.description = "루미너스 멤버 카드 3종 중 1장을 만날 수 있어요."
+    luminous_product.image_url = luminous_pack.image_url
+    luminous_product.price_points = 900
+    luminous_product.status = "published"
+    luminous_product.starts_at = None
+    luminous_product.ends_at = None
     await ensure_demo_season_pass(session)
     await session.commit()
 

@@ -667,7 +667,9 @@ async def home(user: FanUser, session: DbSession) -> dict:
             .outerjoin(Drop, Card.drop_id == Drop.id)
             .where(*catalog_filters)
             .order_by(Artist.name, Member.name, Card.name, Card.id)
-            .limit(3)
+            # Return enough of the user's favorite catalog for the fan app to
+            # scope editorial cards after switching between multiple artists.
+            .limit(12)
         )
     ).all()
     favorite_artists = []

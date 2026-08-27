@@ -19,8 +19,8 @@ test('discover hub exposes working category and destination controls', () => {
   assert.match(source, /event\.target as HTMLElement\)\.closest\('button, a, input, select, textarea'\)/)
   assert.match(source, /onOpenPublicCollection\(featuredFan\.id\)/)
   assert.match(discoverSource, /<h2>공개 컬렉션<\/h2><button type="button" onClick=\{\(\) => onFindFans\(\)\}/)
-  assert.match(source, /onOpenEvent\(featuredEvent\)/)
-  assert.match(source, /onOpenArtist\(featuredArtist\.id\)/)
+  assert.match(source, /onOpenEvent\(displayedFeaturedEvent\)/)
+  assert.match(source, /onOpenArtist\(selectedArtist\.id\)/)
   assert.match(source, /onClick=\{onOpenPackCatalog\}/)
   assert.match(source, /const openFeaturedPack = \(\) =>/)
   assert.match(source, /onClick=\{openFeaturedPack\}/)
@@ -58,6 +58,18 @@ test('authenticated discovery renders fan and collection metadata returned by th
   assert.doesNotMatch(discoverSource, /드림스케이프 공개 컬렉션/)
 })
 
+test('authenticated discovery scopes catalog content to all favorite artists', () => {
+  assert.match(discoverSource, /favoriteArtists\?: CatalogArtist\[\]/)
+  assert.match(discoverSource, /관심 아티스트 범위/)
+  assert.match(discoverSource, /activeArtistId/)
+  assert.match(discoverSource, /전체/)
+  assert.match(discoverSource, /selectedArtist/)
+  assert.match(discoverSource, /visibleFans/)
+  assert.match(discoverSource, /getFanEvents\(\{ artistId: activeArtistId/)
+  assert.match(discoverSource, /getCardPacks\(artistId\)/)
+  assert.match(discoverSource, /getCatalogCards\(\{ artistId: artistId, sort: 'recommended' \}\)/)
+})
+
 test('authenticated artist hub loads packs and events for the selected backend artist', () => {
   assert.match(artistHubSource, /getCardPacks\(artist\.id\)/)
   assert.match(artistHubSource, /getFanEvents\(\{ artistId: artist\.id, status: 'all'/)
@@ -68,4 +80,13 @@ test('authenticated artist hub loads packs and events for the selected backend a
   assert.doesNotMatch(liveArtistRoute, /usePreviewData/)
   assert.match(artistHubSource, /const visibleEvents = usePreviewData \? previewEvents : artistEvents/)
   assert.doesNotMatch(artistHubSource, /<h3>드림스케이프/)
+})
+
+test('home and shop keep multi-artist content scoped to the selected favorite artist', () => {
+  assert.match(source, /activeHomeArtistId/)
+  assert.match(source, /homeVisibleCards/)
+  assert.match(source, /homeVisibleEvents/)
+  assert.match(source, /favoriteArtists=\{catalogArtists\.filter\(/)
+  assert.match(source, /shopFavoriteArtists/)
+  assert.match(source, /getShopProducts\(\{ artistId: artist \?\? undefined \}\)/)
 })

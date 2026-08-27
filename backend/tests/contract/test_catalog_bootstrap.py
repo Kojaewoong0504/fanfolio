@@ -54,9 +54,9 @@ def test_demo_catalog_bootstrap_creates_onboarding_catalog(client) -> None:
     assert asyncio.run(read_catalog()) == (
         4,
         13,
-        4,
-        1,
-        1,
+        7,
+        2,
+        2,
         4,
         [
             ("member_jei", "세나", "/assets/demo/dreamscape/sena.png"),
@@ -112,3 +112,39 @@ def test_demo_catalog_bootstrap_creates_a_public_paid_season_pass(client) -> Non
     assert len(rewards) == 24
     assert rewards[0].metadata_["imagePreset"] == "ticket"
     assert rewards[1].metadata_["imagePreset"] == "vip"
+
+
+def test_demo_catalog_bootstrap_includes_a_second_artist_catalog(client) -> None:
+    assert client.post("/api/test/reset").status_code == 204
+
+    async def bootstrap() -> None:
+        async with SessionLocal() as session:
+            await ensure_demo_catalog(session)
+
+    asyncio.run(bootstrap())
+
+    async def read_luminous() -> tuple[list[str], list[str], list[str]]:
+        async with SessionLocal() as session:
+            cards = list(
+                await session.scalars(select(Card.id).where(Card.artist_id == "artist_luminous"))
+            )
+            packs = list(
+                await session.scalars(
+                    select(CardPack.id).where(CardPack.artist_id == "artist_luminous")
+                )
+            )
+            products = list(
+                await session.scalars(
+                    select(ShopProduct.id).where(ShopProduct.artist_id == "artist_luminous")
+                )
+            )
+            return cards, packs, products
+
+    cards, packs, products = asyncio.run(read_luminous())
+    assert cards == [
+        "card_demo_luminous_arin",
+        "card_demo_luminous_ian",
+        "card_demo_luminous_sena",
+    ]
+    assert packs == ["demo_pack_luminous_aurora"]
+    assert products == ["demo_shop_luminous_aurora"]
