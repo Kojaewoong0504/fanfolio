@@ -2266,7 +2266,12 @@ async def ensure_demo_season_pass(session: AsyncSession) -> None:
         free.artist_id = "artist_nova3"
         free.reward_type = "season_badge"
         free.name = item["freeName"]
-        free.metadata_ = {"seasonId": season.id, "track": "free", "tier": item["tier"]}
+        free.metadata_ = {
+            "seasonId": season.id,
+            "track": "free",
+            "tier": item["tier"],
+            "imagePreset": "ticket",
+        }
         free.status = "published"
 
         premium = await session.get(RewardCatalog, item["premiumId"])
@@ -2280,7 +2285,7 @@ async def ensure_demo_season_pass(session: AsyncSession) -> None:
             "seasonId": season.id,
             "track": "premium",
             "tier": item["tier"],
-            "imageUrl": "/assets/demo/dreamscape/yuna.png",
+            "imagePreset": "vip",
         }
         premium.status = "published"
 

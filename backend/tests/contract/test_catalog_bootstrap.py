@@ -110,3 +110,5 @@ def test_demo_catalog_bootstrap_creates_a_public_paid_season_pass(client) -> Non
     assert len(tiers) == 12
     assert all(tier.reward_id and tier.premium_reward_id for tier in tiers)
     assert len(rewards) == 24
+    assert rewards[0].metadata_["imagePreset"] == "ticket"
+    assert rewards[1].metadata_["imagePreset"] == "vip"
