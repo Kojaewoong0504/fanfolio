@@ -47,6 +47,8 @@ from app.models import (
     PassSeason,
     PassTier,
     PointBalance,
+    PointCharge,
+    PointChargePackage,
     PointLedger,
     PointTransaction,
     RedeemCode,
@@ -80,6 +82,8 @@ from app.schemas import (
     AdminCardReviewRequest,
     AdminCardUpdate,
     AdminNotificationReadRequest,
+    AdminPointChargePackageCreate,
+    AdminPointChargePackageUpdate,
     AdminUserRoleUpdate,
     ApprovalCreateRequest,
     ApprovalDecisionRequest,
@@ -112,6 +116,7 @@ from app.schemas import (
 from app.services import (
     active_review_request,
     create_review_request,
+    ensure_point_charge_packages,
     grant_points,
     notify_fans,
     notify_platform_reviewers,
@@ -1619,6 +1624,7 @@ def pass_tier_data(tier: PassTier) -> dict:
         "tier": tier.tier,
         "requiredXp": tier.required_xp,
         "rewardId": tier.reward_id,
+        "premiumRewardId": tier.premium_reward_id,
     }
 
 
@@ -1637,7 +1643,9 @@ async def pass_season_data(session: DbSession, season: PassSeason) -> dict:
         "organizationId": season.organization_id,
         "artistId": season.artist_id,
         "status": season.status,
-        "isPaid": False,
+        "isPaid": season.is_paid,
+        "premiumEnabled": season.premium_enabled,
+        "premiumPricePoints": season.premium_price_points,
         "startsAt": season.starts_at.isoformat() if season.starts_at else None,
         "endsAt": season.ends_at.isoformat() if season.ends_at else None,
         "tiers": [pass_tier_data(tier) for tier in tiers],
@@ -2615,10 +2623,19 @@ async def create_pass_season(
     payload: PassSeasonCreate, context: CurrentAdmin, session: DbSession
 ) -> dict:
     _require_engagement_write(context)
+    if payload.premium_enabled and (
+        payload.premium_price_points is None or payload.premium_price_points <= 0
+    ):
+        raise AppError(422, "PREMIUM_PRICE_REQUIRED", "프리미엄 패스 가격을 1P 이상 입력해 주세요.")
     organization_id, artist_id = await require_engagement_scope(
         session, context, payload.organization_id, payload.artist_id
     )
-    reward_ids = [tier.reward_id for tier in payload.tiers if tier.reward_id]
+    reward_ids = [
+        reward_id
+        for tier in payload.tiers
+        for reward_id in (tier.reward_id, tier.premium_reward_id)
+        if reward_id
+    ]
     await validate_reward_scope(session, reward_ids, organization_id, artist_id)
     season = PassSeason(
         id=f"pass_season_{uuid4().hex[:12]}",
@@ -2627,7 +2644,9 @@ async def create_pass_season(
         title=payload.title,
         description=payload.description,
         status="draft",
-        is_paid=False,
+        is_paid=payload.premium_enabled,
+        premium_enabled=payload.premium_enabled,
+        premium_price_points=payload.premium_price_points if payload.premium_enabled else None,
         starts_at=payload.starts_at,
         ends_at=payload.ends_at,
     )
@@ -2640,6 +2659,7 @@ async def create_pass_season(
                 tier=tier.tier,
                 required_xp=tier.required_xp,
                 reward_id=tier.reward_id,
+                premium_reward_id=tier.premium_reward_id,
             )
         )
     await record_audit(
@@ -2650,7 +2670,11 @@ async def create_pass_season(
         entity_id=season.id,
         organization_id=season.organization_id,
         artist_id=season.artist_id,
-        details={"isPaid": False, "tierCount": len(payload.tiers)},
+        details={
+            "isPaid": season.is_paid,
+            "premiumPricePoints": season.premium_price_points,
+            "tierCount": len(payload.tiers),
+        },
     )
     await session.commit()
     return {"ok": True, "data": await pass_season_data(session, season)}
@@ -2664,11 +2688,20 @@ async def update_pass_season(
     session: DbSession,
 ) -> dict:
     _require_engagement_write(context)
+    if payload.premium_enabled and (
+        payload.premium_price_points is None or payload.premium_price_points <= 0
+    ):
+        raise AppError(422, "PREMIUM_PRICE_REQUIRED", "프리미엄 패스 가격을 1P 이상 입력해 주세요.")
     season = await scoped_pass_season_or_404(season_id, context, session)
     organization_id, artist_id = await require_engagement_scope(
         session, context, payload.organization_id, payload.artist_id
     )
-    reward_ids = [tier.reward_id for tier in payload.tiers if tier.reward_id]
+    reward_ids = [
+        reward_id
+        for tier in payload.tiers
+        for reward_id in (tier.reward_id, tier.premium_reward_id)
+        if reward_id
+    ]
     await validate_reward_scope(session, reward_ids, organization_id, artist_id)
     season.organization_id = organization_id
     season.artist_id = artist_id
@@ -2676,7 +2709,9 @@ async def update_pass_season(
     season.description = payload.description
     season.starts_at = payload.starts_at
     season.ends_at = payload.ends_at
-    season.is_paid = False
+    season.is_paid = payload.premium_enabled
+    season.premium_enabled = payload.premium_enabled
+    season.premium_price_points = payload.premium_price_points if payload.premium_enabled else None
     await session.execute(delete(PassTier).where(PassTier.season_id == season.id))
     for tier in payload.tiers:
         session.add(
@@ -2686,6 +2721,7 @@ async def update_pass_season(
                 tier=tier.tier,
                 required_xp=tier.required_xp,
                 reward_id=tier.reward_id,
+                premium_reward_id=tier.premium_reward_id,
             )
         )
     await record_audit(
@@ -2696,7 +2732,11 @@ async def update_pass_season(
         entity_id=season.id,
         organization_id=season.organization_id,
         artist_id=season.artist_id,
-        details={"isPaid": False, "tierCount": len(payload.tiers)},
+        details={
+            "isPaid": season.is_paid,
+            "premiumPricePoints": season.premium_price_points,
+            "tierCount": len(payload.tiers),
+        },
     )
     await session.commit()
     return {"ok": True, "data": await pass_season_data(session, season)}
@@ -2731,7 +2771,6 @@ async def transition_pass_season_status(
             "현재 상태에서는 팬 패스 검수 상태를 전환할 수 없습니다.",
         )
     season.status = next_status
-    season.is_paid = False
     await record_audit(
         session,
         actor_user_id=context.user.id,
@@ -2740,7 +2779,11 @@ async def transition_pass_season_status(
         entity_id=season.id,
         organization_id=season.organization_id,
         artist_id=season.artist_id,
-        details={"previousStatus": required_status, "nextStatus": next_status, "isPaid": False},
+        details={
+            "previousStatus": required_status,
+            "nextStatus": next_status,
+            "isPaid": season.is_paid,
+        },
     )
     await session.commit()
     return {"ok": True, "data": await pass_season_data(session, season)}
@@ -2777,7 +2820,6 @@ async def approve_pass_season(season_id: str, context: CurrentAdmin, session: Db
             "검수 대기 중인 팬 패스만 공개 승인할 수 있습니다.",
         )
     season.status = "published"
-    season.is_paid = False
     await record_audit(
         session,
         actor_user_id=context.user.id,
@@ -2786,7 +2828,11 @@ async def approve_pass_season(season_id: str, context: CurrentAdmin, session: Db
         entity_id=season.id,
         organization_id=season.organization_id,
         artist_id=season.artist_id,
-        details={"previousStatus": "pending_review", "nextStatus": "published", "isPaid": False},
+        details={
+            "previousStatus": "pending_review",
+            "nextStatus": "published",
+            "isPaid": season.is_paid,
+        },
     )
     await session.commit()
     return {"ok": True, "data": await pass_season_data(session, season)}
@@ -3636,6 +3682,116 @@ def admin_shop_product_data(
         else None,
         "exposureSlot": product.exposure_slot,
         "fanSegment": product.fan_segment or {},
+    }
+
+
+def admin_point_charge_package_data(package: PointChargePackage) -> dict:
+    return {
+        "id": package.id,
+        "points": package.points,
+        "priceWon": package.price_won,
+        "label": package.label,
+        "status": package.status,
+        "sortOrder": package.sort_order,
+        "scheduledPublishAt": package.scheduled_publish_at.isoformat()
+        if package.scheduled_publish_at
+        else None,
+        "createdAt": package.created_at.isoformat(),
+        "updatedAt": package.updated_at.isoformat(),
+    }
+
+
+def admin_point_charge_data(charge: PointCharge, user: User | None = None) -> dict:
+    return {
+        "id": charge.id,
+        "userId": charge.user_id,
+        "userEmail": user.email if user else None,
+        "packageId": charge.package_id,
+        "paymentMethod": charge.payment_method,
+        "points": charge.points,
+        "priceWon": charge.price_won,
+        "status": charge.status,
+        "createdAt": charge.created_at.isoformat(),
+        "refundedAt": charge.refunded_at.isoformat() if charge.refunded_at else None,
+    }
+
+
+@router.get("/point-charge-packages")
+async def admin_point_charge_packages(context: CurrentAdmin, session: DbSession) -> dict:
+    context.require_action("engagement:points_adjust")
+    packages = await ensure_point_charge_packages(session)
+    await session.commit()
+    return {
+        "ok": True,
+        "data": {"items": [admin_point_charge_package_data(item) for item in packages]},
+    }
+
+
+@router.post("/point-charge-packages", status_code=status.HTTP_201_CREATED)
+async def create_admin_point_charge_package(
+    payload: AdminPointChargePackageCreate, context: CurrentAdmin, session: DbSession
+) -> dict:
+    context.require_action("engagement:points_adjust")
+    if await session.get(PointChargePackage, payload.id):
+        raise AppError(409, "POINT_PACKAGE_EXISTS", "같은 ID의 포인트 상품이 이미 있습니다.")
+    package = PointChargePackage(
+        id=payload.id,
+        points=payload.points,
+        price_won=payload.price_won,
+        label=payload.label,
+        sort_order=payload.sort_order,
+        scheduled_publish_at=payload.scheduled_publish_at,
+    )
+    session.add(package)
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="point_charge_package.created",
+        entity_type="point_charge_package",
+        entity_id=package.id,
+    )
+    await session.commit()
+    return {"ok": True, "data": admin_point_charge_package_data(package)}
+
+
+@router.patch("/point-charge-packages/{package_id}")
+async def update_admin_point_charge_package(
+    package_id: str,
+    payload: AdminPointChargePackageUpdate,
+    context: CurrentAdmin,
+    session: DbSession,
+) -> dict:
+    context.require_action("engagement:points_adjust")
+    package = await session.get(PointChargePackage, package_id)
+    if package is None:
+        raise AppError(404, "POINT_PACKAGE_NOT_FOUND", "포인트 상품을 찾을 수 없습니다.")
+    for field, value in payload.model_dump(exclude_unset=True, by_alias=False).items():
+        setattr(package, field, value)
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="point_charge_package.updated",
+        entity_type="point_charge_package",
+        entity_id=package.id,
+    )
+    await session.commit()
+    return {"ok": True, "data": admin_point_charge_package_data(package)}
+
+
+@router.get("/point-charges")
+async def admin_point_charges(context: CurrentAdmin, session: DbSession) -> dict:
+    context.require_action("engagement:points_adjust")
+    rows = list(
+        await session.execute(
+            select(PointCharge, User)
+            .join(User, PointCharge.user_id == User.id)
+            .order_by(PointCharge.created_at.desc())
+            .limit(200)
+        )
+    )
+    return {
+        "ok": True,
+        "data": {"items": [admin_point_charge_data(charge, user) for charge, user in rows]},
     }
 
 
@@ -4676,6 +4832,22 @@ async def get_user_360(user_id: str, admin: RootAdminUser, session: DbSession) -
         raise AppError(404, "USER_NOT_FOUND", "팬 계정을 찾을 수 없습니다.")
 
     balance = await session.scalar(select(PointBalance).where(PointBalance.user_id == user.id))
+    point_ledger = list(
+        await session.scalars(
+            select(PointLedger)
+            .where(PointLedger.user_id == user.id)
+            .order_by(PointLedger.created_at.desc(), PointLedger.id.desc())
+            .limit(20)
+        )
+    )
+    point_charges = list(
+        await session.scalars(
+            select(PointCharge)
+            .where(PointCharge.user_id == user.id)
+            .order_by(PointCharge.created_at.desc(), PointCharge.id.desc())
+            .limit(20)
+        )
+    )
     card_rows = list(
         (
             await session.execute(
@@ -4740,6 +4912,30 @@ async def get_user_360(user_id: str, admin: RootAdminUser, session: DbSession) -
                     ticket.status in {"open", "in_progress"} for ticket in tickets
                 ),
             },
+            "pointLedger": [
+                {
+                    "id": row.id,
+                    "type": row.transaction_type,
+                    "amount": row.amount,
+                    "balanceAfter": row.balance_after,
+                    "description": row.description,
+                    "createdAt": row.created_at.isoformat(),
+                }
+                for row in point_ledger
+            ],
+            "pointCharges": [
+                {
+                    "id": charge.id,
+                    "packageId": charge.package_id,
+                    "points": charge.points,
+                    "priceWon": charge.price_won,
+                    "paymentMethod": charge.payment_method,
+                    "status": charge.status,
+                    "createdAt": charge.created_at.isoformat(),
+                    "refundedAt": charge.refunded_at.isoformat() if charge.refunded_at else None,
+                }
+                for charge in point_charges
+            ],
             "cards": [
                 {
                     "id": user_card.id,

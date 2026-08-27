@@ -1329,6 +1329,66 @@ class PointTransaction(Base):
     )
 
 
+class PointCharge(Base):
+    """A user-facing point purchase with a provider-neutral payment snapshot."""
+
+    __tablename__ = "point_charges"
+    __table_args__ = (
+        UniqueConstraint("user_id", "idempotency_key", name="uq_point_charges_user_key"),
+        CheckConstraint(
+            "status IN ('completed', 'refunded', 'failed', 'cancelled')",
+            name="ck_point_charges_status",
+        ),
+        Index("ix_point_charges_user_created", "user_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    package_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    payment_method: Mapped[str] = mapped_column(String(40), nullable=False)
+    points: Mapped[int] = mapped_column(Integer, nullable=False)
+    price_won: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="completed")
+    idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    ledger_id: Mapped[str | None] = mapped_column(
+        ForeignKey("point_ledger.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    refunded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PointChargePackage(Base):
+    """Administrator-managed catalog entry for a point top-up package."""
+
+    __tablename__ = "point_charge_packages"
+    __table_args__ = (
+        CheckConstraint("points > 0", name="ck_point_charge_packages_points_positive"),
+        CheckConstraint("price_won > 0", name="ck_point_charge_packages_price_positive"),
+        CheckConstraint("status IN ('active', 'inactive')", name="ck_point_charge_packages_status"),
+        Index("ix_point_charge_packages_status_sort", "status", "sort_order"),
+    )
+
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    points: Mapped[int] = mapped_column(Integer, nullable=False)
+    price_won: Mapped[int] = mapped_column(Integer, nullable=False)
+    label: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    scheduled_publish_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
 class LevelPolicyVersion(Base):
     """Versioned fan-level policy so future threshold changes are explicit."""
 
@@ -1538,6 +1598,10 @@ class PassSeason(Base):
     is_paid: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=sa.false()
     )
+    premium_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=sa.false()
+    )
+    premium_price_points: Mapped[int | None] = mapped_column(Integer, nullable=True)
     starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -1550,6 +1614,9 @@ class PassTier(Base):
     tier: Mapped[int] = mapped_column(Integer, nullable=False)
     required_xp: Mapped[int] = mapped_column(Integer, nullable=False)
     reward_id: Mapped[str | None] = mapped_column(ForeignKey("reward_catalog.id"), nullable=True)
+    premium_reward_id: Mapped[str | None] = mapped_column(
+        ForeignKey("reward_catalog.id"), nullable=True
+    )
 
 
 class PassProgress(Base):
@@ -1561,10 +1628,39 @@ class PassProgress(Base):
     season_id: Mapped[str] = mapped_column(ForeignKey("pass_seasons.id"), nullable=False)
     current_xp: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     claimed_tier_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    premium_claimed_tier_ids: Mapped[list[str]] = mapped_column(
+        JSON, default=list, server_default=sa.text("'[]'"), nullable=False
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class PassEntitlement(Base):
+    """A user's purchased premium access for one season."""
+
+    __tablename__ = "pass_entitlements"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('active', 'refunded', 'expired')",
+            name="ck_pass_entitlements_status",
+        ),
+        UniqueConstraint("user_id", "season_id", name="uq_pass_entitlements_user_season"),
+        Index("ix_pass_entitlements_user_status", "user_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    season_id: Mapped[str] = mapped_column(ForeignKey("pass_seasons.id", ondelete="CASCADE"))
+    price_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    order_id: Mapped[str | None] = mapped_column(
+        ForeignKey("shop_orders.id", ondelete="SET NULL"), nullable=True
+    )
+    purchased_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
 

@@ -62,6 +62,8 @@ const state = {
   contentCalendarMessage: "",
   cardPacks: [],
   shopProducts: [],
+  pointChargePackages: [],
+  pointCharges: [],
   shopProductDraft: null,
   shopProductBlocks: [
     { key: "intro", type: "text", title: "상품 소개", body: "DREAMSCAPE의 새로운 비주얼과 이야기를 담은 카드팩입니다.", imageUrl: "", alt: "" },
@@ -340,6 +342,7 @@ function title() {
     "card-pack-composition": "카드 구성 편집",
     "shop-products": "상점 상품 관리",
     "shop-product-create": "상점 상품 등록",
+    "point-charge-packages": "포인트 상품·충전 관제",
     batches: "발급·인증번호",
     "issuance-create": "새 발급 배치 만들기",
     events: "이벤트",
@@ -367,6 +370,7 @@ function navItems() {
     { id: "artists", label: "아티스트", icon: "recent_actors" },
     { id: "cards", label: "카드", icon: "style" },
     ...(can("cards:read") ? [{ id: "shop-products", label: "상점 상품", icon: "storefront" }] : []),
+    ...(isRoot() && can("engagement:points_adjust") ? [{ id: "point-charge-packages", label: "포인트 충전", icon: "payments" }] : []),
     ...(can("events:read")
       ? [{ id: "events", label: "이벤트", icon: "campaign" }]
       : []),
@@ -471,6 +475,7 @@ function currentView() {
     "card-pack-composition": cardPackCompositionView,
     "shop-products": shopProductsView,
     "shop-product-create": shopProductCreateView,
+    "point-charge-packages": pointChargePackagesView,
     batches: batchesView,
     "issuance-create": issuanceCreationView,
     events: eventsView,
@@ -641,6 +646,9 @@ async function loadFanGrowth(renderAfter = false) {
   if (!canViewFanGrowth()) {
     state.engagement = { ...fanGrowthEmptyState };
     return;
+  }
+  if (isRoot() && !state.organizations.length) {
+    await loadOrganizations(false);
   }
   const [achievements, rewards, passSeasons, missions, levelPolicies, failedEvents] = await Promise.all([
     api("/admin/engagement/achievements"),
@@ -1117,7 +1125,7 @@ function rewardDrawer() {
     </section>
     <label class="field"><span>보상 이름</span><input name="name" value="${escapeHtml(reward.name || "")}" placeholder="예: NOVA 첫 수집가" required /></label>
     <label class="field"><span>보상 종류</span>${adminSelect({ id: "reward-type", name: "rewardType", value: reward.rewardType || "badge", label: "보상 종류", className: "form-select", options: rewardTypes })}</label>
-    <input name="organizationId" type="hidden" value="${escapeHtml(reward.organizationId || "")}" />
+    ${isRoot() ? `<label class="field"><span>조직</span><select name="organizationId">${organizationOptions(reward.organizationId || "")}</select><small>아티스트 범위 보상은 해당 조직과 함께 지정해야 합니다.</small></label>` : `<input name="organizationId" type="hidden" value="${escapeHtml(reward.organizationId || state.adminContext?.organizationId || "")}" />`}
     <label class="field"><span>아티스트</span><select name="artistId"><option value="">전체 아티스트</option>${artists.map((artist) => `<option value="${escapeHtml(artist.id)}" ${reward.artistId === artist.id ? "selected" : ""}>${escapeHtml(artist.name)}</option>`).join("")}</select></label>
     <label class="field"><span>표시 라벨</span><input name="label" value="${escapeHtml(reward.metadata?.label || "")}" placeholder="팬 프로필에 표시할 라벨" /></label>
     <label class="field"><span>보상 설명</span><textarea name="description" maxlength="500" placeholder="팬이 보상 카드를 눌렀을 때 표시할 설명">${escapeHtml(reward.metadata?.description || "")}</textarea></label>
@@ -1192,14 +1200,14 @@ function fanPassDrawer() {
   const tierCount = Math.max(3, Math.min(maxFanPassTiers, (season.tiers || []).length || 3));
   const presetOptions = fanPassPresets.map((preset) => `<option value="${preset.id}">${preset.label}</option>`).join("");
   const tiers = Array.from({ length: tierCount }, (_, index) => {
-    const tier = (season.tiers || [])[index] || { tier: index + 1, requiredXp: "", rewardId: "" };
-    return `<article class="pass-tier-row"><span class="pass-tier-handle">${icon("drag_indicator")}</span><div class="pass-tier-heading"><strong>Lv.${index + 1}</strong><span class="pass-tier-visibility">${icon("lock_open")} 공개</span></div><button class="icon-button pass-tier-menu" type="button" aria-label="Lv.${index + 1} 옵션">${icon("more_horiz")}</button><label class="field"><span>필요 경험치 (XP)</span><input name="tierXp" type="number" min="0" value="${tier.requiredXp ?? ""}" placeholder="${index * 100}" /></label><label class="field"><span>보상</span><select name="tierReward">${rewardOptions(tier.rewardId || "", passRewardFilter)}</select></label></article>`;
+    const tier = (season.tiers || [])[index] || { tier: index + 1, requiredXp: "", rewardId: "", premiumRewardId: "" };
+    return `<article class="pass-tier-row"><span class="pass-tier-handle">${icon("drag_indicator")}</span><div class="pass-tier-heading"><strong>Lv.${index + 1}</strong><span class="pass-tier-visibility">${icon("lock_open")} 공개</span></div><button class="icon-button pass-tier-menu" type="button" aria-label="Lv.${index + 1} 옵션">${icon("more_horiz")}</button><label class="field"><span>필요 경험치 (XP)</span><input name="tierXp" type="number" min="0" value="${tier.requiredXp ?? ""}" placeholder="${index * 100}" /></label><label class="field"><span>무료 보상</span><select name="tierReward">${rewardOptions(tier.rewardId || "", passRewardFilter)}</select></label><label class="field"><span>프리미엄 보상</span><select name="tierPremiumReward">${rewardOptions(tier.premiumRewardId || "", passRewardFilter)}</select></label></article>`;
   }).join("");
   const approvalAction = canApproveFanGrowth() && season.id && season.status === "pending_review"
     ? `<button class="primary fan-growth-transition" type="button" data-kind="pass" data-action="approve" data-id="${escapeHtml(season.id)}">패스 공개 승인</button>`
     : "";
   const published = season.status === "published";
-  return `${drawerHeader("", season.id ? "레벨 패스 편집" : "레벨 패스 등록", isGlobalPass ? "전체 팬에게 공통으로 제공되는 레벨과 보상을 설정합니다." : "아티스트별 시즌과 경험치 구간 보상을 설정합니다.")}<form class="drawer-body form fan-pass-editor-form" id="fan-pass-form" data-id="${escapeHtml(season.id || "")}"><section class="fan-pass-form-section"><h3>기본 정보</h3><label class="field"><span>패스 이름</span><input name="title" value="${escapeHtml(season.title || "")}" placeholder="예: 드림스케이프 레벨 패스" required /></label><label class="field"><span>설명</span><textarea name="description" maxlength="500" placeholder="팬에게 표시할 시즌 설명">${escapeHtml(season.description || "")}</textarea><small class="field-counter">${String(season.description || "").length} / 500</small></label>${isRoot() ? `<div class="form-grid"><label class="field"><span>조직</span><select name="organizationId">${organizationOptions(season.organizationId || "")}</select></label><label class="field"><span>아티스트</span><select name="artistId" ${isGlobalPass ? "" : "required"}><option value="">${isGlobalPass ? "전체 서비스 · 글로벌 팬 레벨" : "아티스트 선택"}</option>${scopedArtists().map((artist) => `<option value="${escapeHtml(artist.id)}" ${season.artistId === artist.id ? "selected" : ""}>${escapeHtml(artist.name)}</option>`).join("")}</select></label></div>` : `<input type="hidden" name="organizationId" value="${escapeHtml(season.organizationId || state.adminContext?.organizationId || "")}"/><label class="field"><span>아티스트</span><select name="artistId" required><option value="">담당 아티스트 선택</option>${scopedArtists().map((artist) => `<option value="${escapeHtml(artist.id)}" ${season.artistId === artist.id ? "selected" : ""}>${escapeHtml(artist.name)}</option>`).join("")}</select></label>`}<div class="form-grid"><label class="field"><span>시즌 시작</span><input name="startsAt" type="datetime-local" value="${toLocalInputDateTime(season.startsAt)}" /></label><label class="field"><span>시즌 종료</span><input name="endsAt" type="datetime-local" value="${toLocalInputDateTime(season.endsAt)}" /><small id="fan-pass-date-error" class="field-error" hidden>패스 종료 시각은 시작 시각 이후로 선택해 주세요.</small></label></div></section><section class="fan-pass-form-section"><div class="fan-pass-section-heading"><h3>티어 마일스톤</h3><button class="secondary" id="add-pass-tier" type="button">${icon("add")} 티어 추가</button></div>${isGlobalPass ? `<p class="hint fan-pass-scope-hint">전체 팬 레벨에는 전체 보상만 연결할 수 있습니다. 아티스트 전용 보상은 목록에서 제외됩니다.</p>` : ""}<div class="pass-tier-list">${tiers}</div></section><section class="fan-pass-preview-grid"><article><strong>팬앱 미리보기</strong><button class="secondary" type="button">미리보기 열기 ${icon("open_in_new")}</button><p><b>예상 표시:</b> Lv.1 ~ Lv.${tierCount}</p><small>팬앱에서 보이는 레벨 진행과 보상 구성을 확인할 수 있습니다.</small></article><article><strong>공개 상태</strong><span class="badge ${published ? "success-badge" : season.status === "pending_review" ? "warning-badge" : "draft"}">${escapeHtml(fanGrowthStatusLabel(season.status || "draft"))}</span><small>${published ? "현재 팬에게 공개 중입니다." : "저장 후 검수 요청할 수 있습니다."}</small></article></section><div id="fan-pass-form-error" class="form-error" role="alert" hidden></div><footer class="drawer-footer"><button class="secondary close-drawer" type="button">취소</button>${canManageFanGrowth() ? `<button class="primary" type="submit">저장</button>` : ""}${season.id && season.status === "draft" && canManageFanGrowth() ? `<button class="secondary fan-growth-transition" type="button" data-kind="pass" data-action="submit" data-id="${escapeHtml(season.id)}">검수 요청</button>` : ""}${approvalAction}</footer></form>`;
+  return `${drawerHeader("", season.id ? "레벨 패스 편집" : "레벨 패스 등록", isGlobalPass ? "전체 팬에게 공통으로 제공되는 레벨과 보상을 설정합니다." : "아티스트별 시즌과 경험치 구간 보상을 설정합니다.")}<form class="drawer-body form fan-pass-editor-form" id="fan-pass-form" data-id="${escapeHtml(season.id || "")}"><section class="fan-pass-form-section"><h3>기본 정보</h3><label class="field"><span>패스 이름</span><input name="title" value="${escapeHtml(season.title || "")}" placeholder="예: 드림스케이프 레벨 패스" required /></label><label class="field"><span>설명</span><textarea name="description" maxlength="500" placeholder="팬에게 표시할 시즌 설명">${escapeHtml(season.description || "")}</textarea><small class="field-counter">${String(season.description || "").length} / 500</small></label>${isRoot() ? `<div class="form-grid"><label class="field"><span>조직</span><select name="organizationId">${organizationOptions(season.organizationId || "")}</select></label><label class="field"><span>아티스트</span><select name="artistId" ${isGlobalPass ? "" : "required"}><option value="">${isGlobalPass ? "전체 서비스 · 글로벌 팬 레벨" : "아티스트 선택"}</option>${scopedArtists().map((artist) => `<option value="${escapeHtml(artist.id)}" ${season.artistId === artist.id ? "selected" : ""}>${escapeHtml(artist.name)}</option>`).join("")}</select></label></div>` : `<input type="hidden" name="organizationId" value="${escapeHtml(season.organizationId || state.adminContext?.organizationId || "")}"/><label class="field"><span>아티스트</span><select name="artistId" required><option value="">담당 아티스트 선택</option>${scopedArtists().map((artist) => `<option value="${escapeHtml(artist.id)}" ${season.artistId === artist.id ? "selected" : ""}>${escapeHtml(artist.name)}</option>`).join("")}</select></label>`}<div class="form-grid"><label class="field"><span>시즌 시작</span><input name="startsAt" type="datetime-local" value="${toLocalInputDateTime(season.startsAt)}" /></label><label class="field"><span>시즌 종료</span><input name="endsAt" type="datetime-local" value="${toLocalInputDateTime(season.endsAt)}" /><small id="fan-pass-date-error" class="field-error" hidden>패스 종료 시각은 시작 시각 이후로 선택해 주세요.</small></label></div><div class="form-grid"><label class="field toggle-field"><span>프리미엄 패스</span><input name="premiumEnabled" type="checkbox" ${season.premiumEnabled ? "checked" : ""} /><small>구매한 팬에게 오른쪽 프리미엄 보상 라인을 공개합니다.</small></label><label class="field"><span>프리미엄 가격 (P)</span><input name="premiumPricePoints" type="number" min="1" value="${season.premiumPricePoints ?? ""}" placeholder="1200" /></label></div></section><section class="fan-pass-form-section"><div class="fan-pass-section-heading"><h3>티어 마일스톤</h3><button class="secondary" id="add-pass-tier" type="button">${icon("add")} 티어 추가</button></div>${isGlobalPass ? `<p class="hint fan-pass-scope-hint">전체 팬 레벨에는 전체 보상만 연결할 수 있습니다. 아티스트 전용 보상은 목록에서 제외됩니다.</p>` : ""}<div class="pass-tier-list">${tiers}</div></section><section class="fan-pass-preview-grid"><article><strong>팬앱 미리보기</strong><button class="secondary" type="button">미리보기 열기 ${icon("open_in_new")}</button><p><b>예상 표시:</b> Lv.1 ~ Lv.${tierCount}</p><small>팬앱에서 보이는 레벨 진행과 보상 구성을 확인할 수 있습니다.</small></article><article><strong>공개 상태</strong><span class="badge ${published ? "success-badge" : season.status === "pending_review" ? "warning-badge" : "draft"}">${escapeHtml(fanGrowthStatusLabel(season.status || "draft"))}</span><small>${published ? "현재 팬에게 공개 중입니다." : "저장 후 검수 요청할 수 있습니다."}</small></article></section><div id="fan-pass-form-error" class="form-error" role="alert" hidden></div><footer class="drawer-footer"><button class="secondary close-drawer" type="button">취소</button>${canManageFanGrowth() ? `<button class="primary" type="submit">저장</button>` : ""}${season.id && season.status === "draft" && canManageFanGrowth() ? `<button class="secondary fan-growth-transition" type="button" data-kind="pass" data-action="submit" data-id="${escapeHtml(season.id)}">검수 요청</button>` : ""}${approvalAction}</footer></form>`;
 }
 
 function cardsView() {
@@ -1246,6 +1254,18 @@ function contentCalendarPanel() {
 
 function shopProductStatusLabel(status) {
   return ({ published: "공개됨", draft: "초안", archived: "보관됨" }[status] || status || "-");
+}
+
+function pointChargePackagesView() {
+  const packages = state.pointChargePackages || [];
+  const packageRows = packages.length
+    ? packages.map((item) => `<tr><td><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.id)}</small></td><td><input class="point-package-inline" name="points" type="number" min="1" value="${Number(item.points)}" aria-label="${escapeHtml(item.label)} 포인트" /></td><td><input class="point-package-inline" name="priceWon" type="number" min="1" value="${Number(item.priceWon)}" aria-label="${escapeHtml(item.label)} 가격" /></td><td><input class="point-package-inline point-package-label" name="label" value="${escapeHtml(item.label)}" aria-label="${escapeHtml(item.label)} 표시명" /><input class="point-package-inline point-package-schedule" name="scheduledPublishAt" type="datetime-local" value="${escapeHtml(toLocalInputDateTime(item.scheduledPublishAt))}" aria-label="${escapeHtml(item.label)} 예약 공개 시각" /><span class="badge ${item.status === "active" ? "success-badge" : "draft"}">${item.status === "active" ? "판매 중" : "중지"}</span></td><td><div class="point-package-actions"><button class="primary point-package-save" type="button" data-point-package-id="${escapeHtml(item.id)}">저장</button><button class="secondary point-package-toggle" type="button" data-point-package-id="${escapeHtml(item.id)}" data-point-package-status="${item.status === "active" ? "inactive" : "active"}">${item.status === "active" ? "판매 중지" : "판매 재개"}</button></div></td></tr>`).join("")
+    : `<tr><td colspan="5" class="empty">등록된 포인트 상품이 없습니다.</td></tr>`;
+  const charges = state.pointCharges || [];
+  const chargeRows = charges.length
+    ? charges.map((item) => `<tr><td><strong>${escapeHtml(item.userEmail || item.userId)}</strong><small>${escapeHtml(item.id)}</small></td><td>${Number(item.points).toLocaleString()}P</td><td>${Number(item.priceWon).toLocaleString()}원</td><td>${escapeHtml(item.paymentMethod)}</td><td><span class="badge ${item.status === "completed" ? "success-badge" : item.status === "refunded" ? "draft" : "danger-badge"}">${item.status === "completed" ? "완료" : item.status === "refunded" ? "환불" : escapeHtml(item.status)}</span></td><td>${formatDateTime(item.createdAt)}</td></tr>`).join("")
+    : `<tr><td colspan="6" class="empty">충전 내역이 없습니다.</td></tr>`;
+  return `<div class="card-operations-page"><div class="page-heading"><div><p class="eyebrow">POINT ECONOMY / CONTROL ROOM</p><h2>포인트 상품·충전 관제</h2><p>팬앱 충전 패키지의 가격·예약 공개·판매 상태를 관리하고 최근 충전·환불 내역을 확인합니다.</p></div></div><section class="panel"><div class="panel-heading"><div><h3>충전 상품</h3><span>예약 시각 전에는 팬앱에 노출되지 않으며 변경 사항은 다음 카탈로그 조회부터 반영됩니다.</span></div><button class="secondary" id="refresh-point-charge-packages" type="button">새로고침</button></div><form id="point-package-form" class="toolbar point-package-form"><input name="id" class="search" placeholder="ID (예: points_500)" pattern="[a-z0-9_]+" required /><input name="label" class="search" placeholder="표시명 (예: 500P)" required /><input name="points" class="search" type="number" min="1" placeholder="포인트" required /><input name="priceWon" class="search" type="number" min="1" placeholder="가격(원)" required /><input name="scheduledPublishAt" class="search" type="datetime-local" aria-label="예약 공개 시각" /><button class="primary" type="submit">상품 추가</button></form><div class="table-wrap"><table class="table responsive-table"><thead><tr><th>상품</th><th>포인트</th><th>가격</th><th>상태·예약</th><th>관리</th></tr></thead><tbody>${packageRows}</tbody></table></div></section><section class="panel"><div class="panel-heading"><div><h3>최근 충전·환불 내역</h3><span>결제 승인·원장 반영·환불 상태를 확인합니다.</span></div><button class="secondary" id="refresh-point-charges" type="button">새로고침</button></div><div class="table-wrap"><table class="table responsive-table"><thead><tr><th>팬</th><th>포인트</th><th>금액</th><th>결제수단</th><th>상태</th><th>시각</th></tr></thead><tbody>${chargeRows}</tbody></table></div></section></div>`;
 }
 
 function shopProductsView() {
@@ -2268,7 +2288,9 @@ function fan360Panel() {
   if (!fan) return "";
   const account = fan.account || {};
   const rows = (items, empty) => items?.length ? items.map((item) => `<li><strong>${escapeHtml(item.subject || item.productName || item.title || item.status || item.kind || "기록")}</strong><small>${escapeHtml(item.status || item.createdAt || item.updatedAt || "")}</small></li>`).join("") : `<li class="empty">${empty}</li>`;
-  return `<section class="panel fan-360-panel"><div class="panel-heading"><div><p class="eyebrow">FAN 360 VIEW</p><h2>${escapeHtml(fan.profile.nickname || fan.profile.email || fan.profile.id)}</h2><p>${escapeHtml(fan.profile.email || fan.profile.id)} · 비밀번호·민감 목적지는 표시하지 않습니다.</p></div><button class="secondary" type="button" data-close-fan360>닫기</button></div><div class="fan-360-summary"><span><small>포인트</small><strong>${Number(account.pointBalance || 0).toLocaleString()}P</strong></span><span><small>보유 카드</small><strong>${Number(account.cardCount || 0).toLocaleString()}장</strong></span><span><small>진행 문의</small><strong>${Number(account.openSupportTickets || 0).toLocaleString()}건</strong></span><span><small>온보딩</small><strong>${fan.profile.onboardingCompleted ? "완료" : "미완료"}</strong></span></div><div class="fan-360-columns"><section><h3>최근 주문</h3><ul>${rows(fan.orders, "주문 내역이 없습니다.")}</ul></section><section><h3>거래</h3><ul>${rows(fan.trades, "거래 내역이 없습니다.")}</ul></section><section><h3>문의·신고</h3><ul>${rows(fan.supportTickets, "문의 내역이 없습니다.")}</ul></section><section><h3>최근 알림</h3><ul>${rows(fan.recentNotifications, "알림 내역이 없습니다.")}</ul></section></div></section>`;
+  const pointRows = (fan.pointCharges || []).map((charge) => `<li><strong>${Number(charge.points).toLocaleString()}P 충전</strong><small>${Number(charge.priceWon).toLocaleString()}원 · ${escapeHtml(charge.status)} · ${formatDate(charge.createdAt)}</small></li>`).join("") || '<li class="empty">충전 내역이 없습니다.</li>';
+  const ledgerRows = (fan.pointLedger || []).map((entry) => `<li><strong>${entry.amount >= 0 ? "+" : ""}${Number(entry.amount).toLocaleString()}P</strong><small>${escapeHtml(entry.description || entry.type)} · 잔액 ${Number(entry.balanceAfter).toLocaleString()}P · ${formatDate(entry.createdAt)}</small></li>`).join("") || '<li class="empty">포인트 원장 내역이 없습니다.</li>';
+  return `<section class="panel fan-360-panel"><div class="panel-heading"><div><p class="eyebrow">FAN 360 VIEW</p><h2>${escapeHtml(fan.profile.nickname || fan.profile.email || fan.profile.id)}</h2><p>${escapeHtml(fan.profile.email || fan.profile.id)} · 비밀번호·민감 목적지는 표시하지 않습니다.</p></div><button class="secondary" type="button" data-close-fan360>닫기</button></div><div class="fan-360-summary"><span><small>포인트</small><strong>${Number(account.pointBalance || 0).toLocaleString()}P</strong></span><span><small>보유 카드</small><strong>${Number(account.cardCount || 0).toLocaleString()}장</strong></span><span><small>진행 문의</small><strong>${Number(account.openSupportTickets || 0).toLocaleString()}건</strong></span><span><small>온보딩</small><strong>${fan.profile.onboardingCompleted ? "완료" : "미완료"}</strong></span></div><div class="fan-360-columns"><section><h3>최근 주문</h3><ul>${rows(fan.orders, "주문 내역이 없습니다.")}</ul></section><section><h3>거래</h3><ul>${rows(fan.trades, "거래 내역이 없습니다.")}</ul></section><section><h3>포인트 충전</h3><ul>${pointRows}</ul></section><section><h3>포인트 원장</h3><ul>${ledgerRows}</ul></section><section><h3>문의·신고</h3><ul>${rows(fan.supportTickets, "문의 내역이 없습니다.")}</ul></section><section><h3>최근 알림</h3><ul>${rows(fan.recentNotifications, "알림 내역이 없습니다.")}</ul></section></div></section>`;
 }
 function adminAccountPanel() {
   const account = state.adminProvisionedAccount;
@@ -2552,6 +2574,69 @@ async function loadOptionalAdminRequest(path, fallback, label) {
   }
 }
 
+async function loadPointChargeOperations(renderAfter = false) {
+  if (!isRoot() || !can("engagement:points_adjust")) return;
+  const [packages, charges] = await Promise.all([
+    api("/admin/point-charge-packages"),
+    api("/admin/point-charges"),
+  ]);
+  state.pointChargePackages = packages.data.items || [];
+  state.pointCharges = charges.data.items || [];
+  if (renderAfter) layout();
+}
+
+async function createPointChargePackage(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const values = Object.fromEntries(new FormData(form).entries());
+  try {
+    await api("/admin/point-charge-packages", { method: "POST", body: JSON.stringify(values) });
+    form.reset();
+    await loadPointChargeOperations(false);
+    layout();
+    toast("포인트 상품을 추가했습니다.");
+  } catch (error) {
+    toast(error?.message || "포인트 상품을 추가하지 못했습니다.");
+  }
+}
+
+async function togglePointChargePackage(packageId, status) {
+  try {
+    await api(`/admin/point-charge-packages/${encodeURIComponent(packageId)}`, { method: "PATCH", body: JSON.stringify({ status }) });
+    await loadPointChargeOperations(false);
+    layout();
+    toast(status === "active" ? "포인트 상품 판매를 재개했습니다." : "포인트 상품 판매를 중지했습니다.");
+  } catch (error) {
+    toast(error?.message || "포인트 상품 상태를 변경하지 못했습니다.");
+  }
+}
+
+async function updatePointChargePackage(button) {
+  const row = button.closest("tr");
+  const packageId = button.dataset.pointPackageId;
+  const values = {
+    label: row?.querySelector('[name="label"]')?.value.trim(),
+    points: Number(row?.querySelector('[name="points"]')?.value),
+    priceWon: Number(row?.querySelector('[name="priceWon"]')?.value),
+    scheduledPublishAt: row?.querySelector('[name="scheduledPublishAt"]')?.value || null,
+  };
+  if (!packageId || !values.label || values.points <= 0 || values.priceWon <= 0) {
+    toast("상품명·포인트·가격을 올바르게 입력해 주세요.");
+    return;
+  }
+  try {
+    await api(`/admin/point-charge-packages/${encodeURIComponent(packageId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(values),
+    });
+    await loadPointChargeOperations(false);
+    layout();
+    toast("포인트 상품 정보를 저장했습니다.");
+  } catch (error) {
+    toast(error?.message || "포인트 상품 정보를 저장하지 못했습니다.");
+  }
+}
+
 function approvalKindLabel(kind) {
   return ({
     refund_order: "주문 환불",
@@ -2753,6 +2838,7 @@ async function loadData() {
     state.notifications = notifications.data.items || [];
     state.unreadNotificationCount = notifications.data.unreadCount || 0;
     state.statistics = statistics.data;
+    if (isRoot()) await loadPointChargeOperations(false);
     await loadOptionalFanGrowth();
 
     if (can("events:read")) await loadEvents(false);
@@ -4143,8 +4229,9 @@ function applyFanPassPreset(presetId) {
   const preset = fanPassPresets.find((item) => item.id === presetId);
   const form = document.querySelector("#fan-pass-form");
   if (!preset || !form) return;
-  const data = new FormData(form);
-  const currentRewards = data.getAll("tierReward");
+    const data = new FormData(form);
+    const currentRewards = data.getAll("tierReward");
+    const currentPremiumRewards = data.getAll("tierPremiumReward");
   state.drawerData = {
     season: {
       ...(state.drawerData?.season || {}),
@@ -4157,6 +4244,7 @@ function applyFanPassPreset(presetId) {
       tiers: preset.tiers.map((tier, index) => ({
         ...tier,
         rewardId: currentRewards[index] || "",
+        premiumRewardId: currentPremiumRewards[index] || "",
       })),
     },
   };
@@ -4264,8 +4352,9 @@ async function saveFanPass(event) {
   dateError.hidden = true;
   const tierXp = data.getAll("tierXp");
   const tierReward = data.getAll("tierReward");
+  const tierPremiumReward = data.getAll("tierPremiumReward");
   const tiers = tierXp
-    .map((xp, index) => ({ tier: index + 1, rawXp: String(xp).trim(), requiredXp: Number(xp), rewardId: tierReward[index] || null }))
+    .map((xp, index) => ({ tier: index + 1, rawXp: String(xp).trim(), requiredXp: Number(xp), rewardId: tierReward[index] || null, premiumRewardId: tierPremiumReward[index] || null }))
     .filter((tier) => tier.rawXp !== "" && Number.isFinite(tier.requiredXp) && tier.requiredXp >= 0)
     .map(({ rawXp, ...tier }) => tier)
     .slice(0, maxFanPassTiers);
@@ -4280,6 +4369,8 @@ async function saveFanPass(event) {
         artistId: data.get("artistId") || null,
         startsAt: startsAt ? new Date(startsAt).toISOString() : null,
         endsAt: endsAt ? new Date(endsAt).toISOString() : null,
+        premiumEnabled: form.elements.premiumEnabled?.checked === true,
+        premiumPricePoints: Number(data.get("premiumPricePoints") || 0) || null,
         tiers: tiers.length ? tiers : [{ tier: 1, requiredXp: 1, rewardId: null }],
       }),
     });
@@ -4405,6 +4496,15 @@ function bind() {
     select.addEventListener("change", () => void updateContentCalendarStatus(select.dataset.calendarStatus, select.value));
   });
   document.querySelector("#shop-product-form")?.addEventListener("submit", createShopProduct);
+  document.querySelector("#point-package-form")?.addEventListener("submit", createPointChargePackage);
+  document.querySelector("#refresh-point-charge-packages")?.addEventListener("click", () => void loadPointChargeOperations(true));
+  document.querySelector("#refresh-point-charges")?.addEventListener("click", () => void loadPointChargeOperations(true));
+  document.querySelectorAll(".point-package-toggle").forEach((button) => {
+    button.addEventListener("click", () => void togglePointChargePackage(button.dataset.pointPackageId, button.dataset.pointPackageStatus));
+  });
+  document.querySelectorAll(".point-package-save").forEach((button) => {
+    button.addEventListener("click", () => void updatePointChargePackage(button));
+  });
   bindShopProductEditor();
   document.querySelector("#open-shop-product-create")?.addEventListener("click", () => {
     state.view = "shop-product-create";
@@ -4702,6 +4802,7 @@ function bind() {
       tier: index + 1,
       requiredXp: xp,
       rewardId: data.getAll("tierReward")[index] || "",
+      premiumRewardId: data.getAll("tierPremiumReward")[index] || "",
     }));
     if (currentTiers.length >= maxFanPassTiers) {
       toast("티어는 최대 30개까지 등록할 수 있습니다.");
@@ -4716,7 +4817,9 @@ function bind() {
         artistId: data.get("artistId") || null,
         startsAt: data.get("startsAt") || null,
         endsAt: data.get("endsAt") || null,
-        tiers: [...currentTiers, { tier: currentTiers.length + 1, requiredXp: "", rewardId: "" }],
+        premiumEnabled: data.get("premiumEnabled") === "on",
+        premiumPricePoints: data.get("premiumPricePoints") || "",
+        tiers: [...currentTiers, { tier: currentTiers.length + 1, requiredXp: "", rewardId: "", premiumRewardId: "" }],
       },
     };
     layout();

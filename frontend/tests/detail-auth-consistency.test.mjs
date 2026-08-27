@@ -18,7 +18,7 @@ test('fan pass and card registration reuse the shared detail topbar geometry', a
   const redeem = await readFile(new URL('../src/components/QrRedeemModal.tsx', import.meta.url), 'utf8')
   const redeemCss = await readFile(new URL('../src/components/QrRedeemModal.css', import.meta.url), 'utf8')
   const fanPassCss = await readFile(new URL('../src/components/FanPassPage.css', import.meta.url), 'utf8')
-  assert.match(fanPass, /<DetailTopBar[^>]+title=\{isGlobal \? '전체 팬 레벨' : '무료 팬 패스'\}/)
+  assert.match(fanPass, /<DetailTopBar[^>]+title=\{isGlobal \? '전체 팬 레벨' : '시즌 패스'\}/)
   assert.match(redeem, /<DetailTopBar[\s\S]*redeem-flow-step-count/)
   assert.match(redeemCss, /\.redeem-flow-screen > \.detail-topbar/)
   assert.match(fanPassCss, /\.fan-pass-shell > \.detail-topbar/)

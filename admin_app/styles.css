@@ -7730,3 +7730,10 @@ code {
 .content-calendar-row small { color: #85899b; }
 .content-calendar-form { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--line, #e5e7ef); border-radius: 12px; background: #fafaff; }
 @media (max-width: 900px) { .content-calendar-layout { grid-template-columns: 1fr; } }
+/* Point economy control room */
+.point-package-form { display: grid; grid-template-columns: 1.1fr 1fr .8fr .8fr auto; gap: 10px; align-items: end; margin: 18px 0; }
+.point-package-form .search { min-width: 0; }
+.point-package-inline { width: 100%; min-width: 84px; min-height: 36px; padding: 7px 9px; border: 1px solid var(--line, #e5e7ef); border-radius: 8px; background: #fff; color: inherit; }
+.point-package-label { margin-bottom: 6px; }
+.point-package-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+@media (max-width: 900px) { .point-package-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } .point-package-form button { grid-column: 1 / -1; } }

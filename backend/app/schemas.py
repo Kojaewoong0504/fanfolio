@@ -834,6 +834,34 @@ class PointAdjustmentRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class PointChargeRequest(BaseModel):
+    package_id: str = Field(alias="packageId", min_length=1, max_length=80)
+    payment_method: Literal["sandbox_card", "sandbox_kakao", "sandbox_naver"] = Field(
+        alias="paymentMethod"
+    )
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class AdminPointChargePackageCreate(BaseModel):
+    id: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9_]+$")
+    points: int = Field(gt=0)
+    price_won: int = Field(alias="priceWon", gt=0)
+    label: str = Field(min_length=1, max_length=80)
+    sort_order: int = Field(default=0, alias="sortOrder", ge=0)
+    scheduled_publish_at: datetime | None = Field(default=None, alias="scheduledPublishAt")
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class AdminPointChargePackageUpdate(BaseModel):
+    points: int | None = Field(default=None, gt=0)
+    price_won: int | None = Field(default=None, alias="priceWon", gt=0)
+    label: str | None = Field(default=None, min_length=1, max_length=80)
+    status: Literal["active", "inactive"] | None = None
+    sort_order: int | None = Field(default=None, alias="sortOrder", ge=0)
+    scheduled_publish_at: datetime | None = Field(default=None, alias="scheduledPublishAt")
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class ApprovalCreateRequest(BaseModel):
     kind: Literal["points_adjustment", "shop_refund", "product_publish", "odds_change"]
     entity_type: str = Field(alias="entityType", min_length=1, max_length=60)
@@ -864,6 +892,7 @@ class PassTierCreate(BaseModel):
     tier: int = Field(ge=1)
     required_xp: int = Field(alias="requiredXp", ge=0)
     reward_id: str | None = Field(default=None, alias="rewardId")
+    premium_reward_id: str | None = Field(default=None, alias="premiumRewardId")
     model_config = ConfigDict(populate_by_name=True)
 
 
@@ -874,6 +903,8 @@ class PassSeasonCreate(BaseModel):
     artist_id: str | None = Field(default=None, alias="artistId")
     starts_at: datetime | None = Field(default=None, alias="startsAt")
     ends_at: datetime | None = Field(default=None, alias="endsAt")
+    premium_enabled: bool = Field(default=False, alias="premiumEnabled")
+    premium_price_points: int | None = Field(default=None, alias="premiumPricePoints", ge=1)
     tiers: list[PassTierCreate] = Field(min_length=1, max_length=50)
     model_config = ConfigDict(populate_by_name=True)
 

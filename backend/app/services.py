@@ -10,6 +10,7 @@ from uuid import uuid4
 from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.core.config import get_settings
 from app.db.session import SessionLocal
@@ -49,11 +50,15 @@ from app.models import (
     Notification,
     Organization,
     OrganizationArtist,
+    PassEntitlement,
     PassProgress,
     PassSeason,
     PassTier,
     PointBalance,
+    PointCharge,
+    PointChargePackage,
     PointLedger,
+    PointTransaction,
     ProfileEquipment,
     PushDevice,
     RedeemCode,
@@ -79,6 +84,47 @@ from app.storage import configured_asset_storage
 
 logger = logging.getLogger(__name__)
 PASS_CLAIM_GRACE_DAYS = 14
+POINT_CHARGE_PACKAGES = (
+    {"id": "points_500", "points": 500, "priceWon": 5000, "label": "500P"},
+    {"id": "points_1000", "points": 1000, "priceWon": 9500, "label": "1,000P"},
+    {"id": "points_3000", "points": 3000, "priceWon": 27000, "label": "3,000P"},
+)
+
+
+def _point_charge_package_data(package: PointChargePackage) -> dict:
+    return {
+        "id": package.id,
+        "points": package.points,
+        "priceWon": package.price_won,
+        "label": package.label,
+        "status": package.status,
+        "sortOrder": package.sort_order,
+    }
+
+
+async def ensure_point_charge_packages(session: AsyncSession) -> list[PointChargePackage]:
+    rows = list(
+        await session.scalars(
+            select(PointChargePackage).order_by(
+                PointChargePackage.sort_order, PointChargePackage.id
+            )
+        )
+    )
+    if rows:
+        return rows
+    rows = [
+        PointChargePackage(
+            id=item["id"],
+            points=item["points"],
+            price_won=item["priceWon"],
+            label=item["label"],
+            sort_order=index,
+        )
+        for index, item in enumerate(POINT_CHARGE_PACKAGES)
+    ]
+    session.add_all(rows)
+    await session.flush()
+    return rows
 
 
 def now() -> datetime:
@@ -451,6 +497,142 @@ async def grant_points(
     balance.balance += amount
     ledger.balance_after = balance.balance
     return ledger
+
+
+def point_charge_package(package_id: str) -> dict:
+    package = next((item for item in POINT_CHARGE_PACKAGES if item["id"] == package_id), None)
+    if package is None:
+        raise AppError(404, "POINT_PACKAGE_NOT_FOUND", "포인트 충전 상품을 찾을 수 없습니다.")
+    return package
+
+
+async def resolve_point_charge_package(session: AsyncSession, package_id: str) -> dict:
+    packages = await ensure_point_charge_packages(session)
+    package = next((item for item in packages if item.id == package_id), None)
+    if package is None:
+        raise AppError(404, "POINT_PACKAGE_NOT_FOUND", "포인트 충전 상품을 찾을 수 없습니다.")
+    if package.status != "active":
+        raise AppError(409, "POINT_PACKAGE_INACTIVE", "현재 판매하지 않는 포인트 상품입니다.")
+    scheduled_at = package.scheduled_publish_at
+    if scheduled_at is not None:
+        if scheduled_at.tzinfo is None:
+            scheduled_at = scheduled_at.replace(tzinfo=UTC)
+        if scheduled_at > now():
+            raise AppError(
+                409, "POINT_PACKAGE_NOT_PUBLISHED", "아직 공개되지 않은 포인트 상품입니다."
+            )
+    return _point_charge_package_data(package)
+
+
+async def create_point_charge(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    package_id: str,
+    payment_method: str,
+    idempotency_key: str,
+) -> PointCharge:
+    package = await resolve_point_charge_package(session, package_id)
+    existing = await session.scalar(
+        select(PointCharge).where(
+            PointCharge.user_id == user_id,
+            PointCharge.idempotency_key == idempotency_key,
+        )
+    )
+    if existing:
+        return existing
+    event = await record_engagement_event(
+        session,
+        user_id=user_id,
+        kind="points_charged",
+        source_type="point_charge",
+        source_id=f"{user_id}:{idempotency_key}",
+        payload={
+            "packageId": package_id,
+            "points": package["points"],
+            "paymentMethod": payment_method,
+        },
+    )
+    ledger = await grant_points(
+        session,
+        user_id=user_id,
+        source_event_id=event.id,
+        rule_key=f"point_charge:{package_id}",
+        amount=package["points"],
+        description=f"포인트 충전 {package['label']}",
+        metadata={"packageId": package_id, "paymentMethod": payment_method},
+    )
+    charge = PointCharge(
+        id=f"point_charge_{uuid4().hex[:12]}",
+        user_id=user_id,
+        package_id=package_id,
+        payment_method=payment_method,
+        points=package["points"],
+        price_won=package["priceWon"],
+        status="completed",
+        idempotency_key=idempotency_key,
+        ledger_id=ledger.id,
+    )
+    transaction = PointTransaction(
+        id=f"point_tx_{uuid4().hex[:12]}",
+        user_id=user_id,
+        operation="charge",
+        idempotency_key=idempotency_key,
+        amount=package["points"],
+        ledger_id=ledger.id,
+        status="completed",
+    )
+    session.add_all([charge, transaction])
+    await session.flush()
+    return charge
+
+
+async def refund_point_charge(
+    session: AsyncSession, *, user_id: str, charge_id: str
+) -> PointCharge:
+    charge = await session.scalar(
+        select(PointCharge)
+        .where(PointCharge.id == charge_id, PointCharge.user_id == user_id)
+        .with_for_update()
+    )
+    if charge is None:
+        raise AppError(404, "POINT_CHARGE_NOT_FOUND", "포인트 충전 내역을 찾을 수 없습니다.")
+    if charge.status == "refunded":
+        return charge
+    if charge.status != "completed" or not charge.ledger_id:
+        raise AppError(409, "POINT_CHARGE_NOT_REFUNDABLE", "환불할 수 없는 충전 상태입니다.")
+    event = await record_engagement_event(
+        session,
+        user_id=user_id,
+        kind="points_refunded",
+        source_type="point_charge_refund",
+        source_id=charge.id,
+        payload={"chargeId": charge.id, "points": charge.points},
+    )
+    balance = await _get_or_create_point_balance_for_update(session, user_id=user_id)
+    if balance.balance < charge.points:
+        raise AppError(
+            409, "POINT_CHARGE_REFUND_BALANCE", "이미 사용한 포인트가 있어 환불할 수 없습니다."
+        )
+    balance.balance -= charge.points
+    session.add(
+        PointLedger(
+            id=f"point_{uuid4().hex[:12]}",
+            user_id=user_id,
+            source_event_id=event.id,
+            rule_key=f"point_charge_refund:{charge.id}",
+            transaction_type="reverse",
+            amount=-charge.points,
+            balance_after=balance.balance,
+            description=f"포인트 충전 환불 {charge.points:,}P",
+            reversed_ledger_id=charge.ledger_id,
+            metadata_json={"chargeId": charge.id},
+        )
+    )
+    charge.status = "refunded"
+    charge.refunded_at = now()
+    await session.flush()
+    return charge
 
 
 async def spend_points(
@@ -1468,7 +1650,7 @@ async def update_pass_progress(session: AsyncSession, *, event: EngagementEvent)
         await session.scalars(
             select(PassSeason).where(
                 PassSeason.status == "published",
-                PassSeason.is_paid.is_(False),
+                or_(PassSeason.is_paid.is_(False), PassSeason.premium_enabled.is_(True)),
                 or_(PassSeason.starts_at.is_(None), PassSeason.starts_at <= now()),
                 or_(PassSeason.ends_at.is_(None), PassSeason.ends_at >= now()),
             )
@@ -1578,10 +1760,27 @@ def _season_open_for_claim(season: PassSeason, current_time: datetime) -> bool:
 
 
 def _pass_tier_data(
-    tier: PassTier, progress: PassProgress, reward: RewardCatalog | None = None
+    tier: PassTier,
+    progress: PassProgress,
+    free_reward: RewardCatalog | None = None,
+    premium_reward: RewardCatalog | None = None,
+    premium_purchased: bool = False,
 ) -> dict:
     claimed_tier_ids = set(progress.claimed_tier_ids or [])
     claimed = tier.id in claimed_tier_ids
+    premium_claimed_ids = set(progress.premium_claimed_tier_ids or [])
+    premium_claimed = tier.id in premium_claimed_ids
+
+    def reward_data(reward: RewardCatalog | None) -> dict | None:
+        if reward is None or reward.status != "published":
+            return None
+        return {
+            "id": reward.id,
+            "type": reward.reward_type,
+            "name": reward.name,
+            "metadata": reward.metadata_,
+        }
+
     data = {
         "id": tier.id,
         "tier": tier.tier,
@@ -1590,15 +1789,19 @@ def _pass_tier_data(
         "claimed": claimed,
         "claimable": not claimed and progress.current_xp >= tier.required_xp,
     }
-    if reward is not None and reward.status == "published":
-        data["reward"] = {
-            "id": reward.id,
-            "type": reward.reward_type,
-            "name": reward.name,
-            "metadata": reward.metadata_,
-        }
-    else:
-        data["reward"] = None
+    data["reward"] = reward_data(free_reward)
+    if premium_reward is not None or tier.premium_reward_id:
+        data.update(
+            {
+                "premiumRewardId": tier.premium_reward_id,
+                "freeReward": reward_data(free_reward),
+                "premiumReward": reward_data(premium_reward),
+                "premiumClaimed": premium_claimed,
+                "premiumClaimable": premium_purchased
+                and not premium_claimed
+                and progress.current_xp >= tier.required_xp,
+            }
+        )
     return data
 
 
@@ -1615,7 +1818,7 @@ async def fan_pass_data(
             select(PassSeason)
             .where(
                 PassSeason.status == "published",
-                PassSeason.is_paid.is_(False),
+                or_(PassSeason.is_paid.is_(False), PassSeason.premium_enabled.is_(True)),
                 or_(
                     PassSeason.artist_id.is_(None)
                     if global_scope
@@ -1634,14 +1837,24 @@ async def fan_pass_data(
         progress = await refresh_pass_progress(
             session, user_id=user_id, season=season, artist_id=artist_id
         )
+        FreeReward = aliased(RewardCatalog)
+        PremiumReward = aliased(RewardCatalog)
         tier_rows = (
             await session.execute(
-                select(PassTier, RewardCatalog)
-                .outerjoin(RewardCatalog, RewardCatalog.id == PassTier.reward_id)
+                select(PassTier, FreeReward, PremiumReward)
+                .outerjoin(FreeReward, FreeReward.id == PassTier.reward_id)
+                .outerjoin(PremiumReward, PremiumReward.id == PassTier.premium_reward_id)
                 .where(PassTier.season_id == season.id)
                 .order_by(PassTier.tier, PassTier.id)
             )
         ).all()
+        entitlement = await session.scalar(
+            select(PassEntitlement).where(
+                PassEntitlement.user_id == user_id,
+                PassEntitlement.season_id == season.id,
+                PassEntitlement.status == "active",
+            )
+        )
         items.append(
             {
                 "id": season.id,
@@ -1649,21 +1862,108 @@ async def fan_pass_data(
                 "organizationId": season.organization_id,
                 "artistId": season.artist_id,
                 "status": season.status,
-                "isPaid": False,
+                "isPaid": season.is_paid,
+                "premiumEnabled": season.premium_enabled,
+                "premiumPricePoints": season.premium_price_points,
+                "isPurchased": entitlement is not None,
                 "startsAt": _datetime_data(season.starts_at),
                 "endsAt": _datetime_data(season.ends_at),
                 "progress": {
                     "currentXp": progress.current_xp,
                     "claimedTierIds": list(progress.claimed_tier_ids or []),
                 },
-                "tiers": [_pass_tier_data(tier, progress, reward) for tier, reward in tier_rows],
+                "tiers": [
+                    _pass_tier_data(
+                        tier, progress, free_reward, premium_reward, entitlement is not None
+                    )
+                    for tier, free_reward, premium_reward in tier_rows
+                ],
             }
         )
     await session.commit()
     return {"seasons": items}
 
 
-async def claim_pass_tier(session: AsyncSession, *, user_id: str, tier_id: str) -> dict:
+async def purchase_pass_season(session: AsyncSession, *, user_id: str, season_id: str) -> dict:
+    season = await session.scalar(
+        select(PassSeason).where(PassSeason.id == season_id).with_for_update()
+    )
+    if season is None or season.status != "published" or not season.premium_enabled:
+        raise AppError(404, "PASS_SEASON_NOT_FOUND", "구매할 수 있는 시즌 패스를 찾을 수 없습니다.")
+    if not _season_active_for_pass_view(season, now()):
+        raise AppError(409, "PASS_SEASON_SALE_CLOSED", "현재 판매 중인 시즌 패스가 아닙니다.")
+    existing = await session.scalar(
+        select(PassEntitlement)
+        .where(
+            PassEntitlement.user_id == user_id,
+            PassEntitlement.season_id == season.id,
+        )
+        .with_for_update()
+    )
+    if existing is not None and existing.status == "active":
+        return {
+            "seasonId": season.id,
+            "entitlementId": existing.id,
+            "pricePoints": existing.price_points,
+            "replayed": True,
+        }
+    price = season.premium_price_points
+    if price is None or price <= 0:
+        raise AppError(409, "PASS_PRICE_NOT_CONFIGURED", "시즌 패스 가격이 설정되지 않았습니다.")
+    event = await record_engagement_event(
+        session,
+        user_id=user_id,
+        kind="pass_purchased",
+        source_type="pass_season",
+        source_id=season.id,
+        payload={"seasonId": season.id, "points": price},
+    )
+    event.status = "processed"
+    event.processed_at = now()
+    ledger = await spend_points(
+        session,
+        user_id=user_id,
+        source_event_id=event.id,
+        rule_key=f"pass_purchase:{season.id}",
+        amount=price,
+        description=f"{season.title} 프리미엄 패스 구매",
+        metadata={"seasonId": season.id},
+    )
+    if existing is None:
+        existing = PassEntitlement(
+            id=f"pass_entitlement_{uuid4().hex[:12]}",
+            user_id=user_id,
+            season_id=season.id,
+            price_points=price,
+            status="active",
+        )
+        session.add(existing)
+    else:
+        existing.price_points = price
+        existing.status = "active"
+    await session.flush()
+    await record_audit(
+        session,
+        actor_user_id=user_id,
+        action="pass.purchased",
+        entity_type="pass_season",
+        entity_id=season.id,
+        organization_id=season.organization_id,
+        artist_id=season.artist_id,
+        details={"pricePoints": price, "ledgerId": ledger.id},
+    )
+    await session.commit()
+    return {
+        "seasonId": season.id,
+        "entitlementId": existing.id,
+        "pricePoints": price,
+        "replayed": False,
+    }
+
+
+async def claim_pass_tier(
+    session: AsyncSession, *, user_id: str, tier_id: str, track: str = "free"
+) -> dict:
     row = (
         await session.execute(
             select(PassTier, PassSeason)
@@ -1674,14 +1974,33 @@ async def claim_pass_tier(session: AsyncSession, *, user_id: str, tier_id: str) 
     if row is None:
         raise AppError(404, "PASS_TIER_NOT_FOUND", "팬 패스 티어를 찾을 수 없습니다.")
     tier, season = row
-    if season.status != "published" or season.is_paid:
+    if season.status != "published" or (track == "premium" and not season.premium_enabled):
         raise AppError(404, "PASS_TIER_NOT_FOUND", "팬 패스 티어를 찾을 수 없습니다.")
+    if track not in {"free", "premium"}:
+        raise AppError(422, "PASS_TRACK_INVALID", "팬 패스 보상 트랙을 확인해 주세요.")
     if not _season_open_for_claim(season, now()):
         raise AppError(409, "PASS_SEASON_CLAIM_CLOSED", "팬 패스 수령 기간이 지났습니다.")
 
     progress = await refresh_pass_progress(session, user_id=user_id, season=season)
     claimed_tier_ids = list(progress.claimed_tier_ids or [])
-    if tier.id in claimed_tier_ids:
+    premium_claimed_tier_ids = list(progress.premium_claimed_tier_ids or [])
+    claimed_ids = premium_claimed_tier_ids if track == "premium" else claimed_tier_ids
+    reward_id = tier.premium_reward_id if track == "premium" else tier.reward_id
+    if (
+        track == "premium"
+        and await session.scalar(
+            select(PassEntitlement.id).where(
+                PassEntitlement.user_id == user_id,
+                PassEntitlement.season_id == season.id,
+                PassEntitlement.status == "active",
+            )
+        )
+        is None
+    ):
+        raise AppError(
+            409, "PASS_PREMIUM_NOT_PURCHASED", "프리미엄 패스를 구매한 뒤 받을 수 있습니다."
+        )
+    if tier.id in claimed_ids:
         raise AppError(409, "PASS_TIER_ALREADY_CLAIMED", "이미 수령한 팬 패스 티어입니다.")
     if progress.current_xp < tier.required_xp:
         raise AppError(409, "PASS_TIER_LOCKED", "필요한 XP를 달성한 뒤 수령할 수 있습니다.")
@@ -1692,21 +2011,21 @@ async def claim_pass_tier(session: AsyncSession, *, user_id: str, tier_id: str) 
         kind="pass_tier_claimed",
         source_type="pass_tier",
         source_id=tier.id,
-        payload={"seasonId": season.id, "requiredXp": tier.required_xp},
+        payload={"seasonId": season.id, "requiredXp": tier.required_xp, "track": track},
     )
     event.status = "processed"
     event.processed_at = now()
 
     reward_grant_data = None
-    if tier.reward_id:
+    if reward_id:
         grant = await grant_reward(
             session,
             user_id=user_id,
-            reward_id=tier.reward_id,
+            reward_id=reward_id,
             source_event_id=event.id,
-            rule_key=f"pass_tier:{tier.id}",
+            rule_key=f"pass_tier:{tier.id}:{track}",
         )
-        reward = await session.get(RewardCatalog, tier.reward_id)
+        reward = await session.get(RewardCatalog, reward_id)
         if reward is not None:
             grant.claimed_at = now()
             session.add(
@@ -1723,8 +2042,11 @@ async def claim_pass_tier(session: AsyncSession, *, user_id: str, tier_id: str) 
             )
             reward_grant_data = _reward_grant_data(grant, reward)
 
-    claimed_tier_ids.append(tier.id)
-    progress.claimed_tier_ids = claimed_tier_ids
+    claimed_ids.append(tier.id)
+    if track == "premium":
+        progress.premium_claimed_tier_ids = premium_claimed_tier_ids
+    else:
+        progress.claimed_tier_ids = claimed_tier_ids
     progress.updated_at = now()
     claimed_at = now()
     await record_audit(
@@ -1735,12 +2057,13 @@ async def claim_pass_tier(session: AsyncSession, *, user_id: str, tier_id: str) 
         entity_id=tier.id,
         organization_id=season.organization_id,
         artist_id=season.artist_id,
-        details={"seasonId": season.id, "requiredXp": tier.required_xp},
+        details={"seasonId": season.id, "requiredXp": tier.required_xp, "track": track},
     )
     await session.commit()
     return {
         "seasonId": season.id,
         "tierId": tier.id,
+        "track": track,
         "claimedAt": _datetime_data(claimed_at),
         "rewardGrant": reward_grant_data,
     }
@@ -2148,12 +2471,12 @@ async def ensure_fan_community_demo(session: AsyncSession, *, password: str) -> 
     pack_id = "local_demo_pack_dreamscape"
     pack = await session.get(CardPack, pack_id)
     if pack is None:
-        pack = CardPack(id=pack_id, artist_id="artist_nova3", name="DREAMSCAPE Nebula Ver.")
+        pack = CardPack(id=pack_id, artist_id="artist_nova3", name="DREAMSCAPE Community Demo")
         session.add(pack)
     pack.artist_id = "artist_nova3"
-    pack.name = "DREAMSCAPE Nebula Ver."
+    pack.name = "DREAMSCAPE Community Demo"
     pack.season_name = "정규 1집 · DREAMSCAPE"
-    pack.version = "v1.0"
+    pack.version = "v1.0-demo"
     pack.image_url = "/assets/demo/dreamscape/card-pack.png"
     pack.description = "드림스케이프 정규 1집의 공개 카드를 확인하고 수집해보세요."
     pack.status = "published"
@@ -2431,6 +2754,7 @@ async def ensure_data_identity(session: AsyncSession) -> None:
 async def reset_database(session: AsyncSession) -> None:
     for model in (
         BackgroundRemovalJob,
+        PassEntitlement,
         ProfileEquipment,
         PassProgress,
         PassTier,
@@ -2550,6 +2874,14 @@ async def seed_core(session: AsyncSession) -> dict:
     )
     session.add_all(
         [
+            Organization(
+                id="org_scenario_partner",
+                name="스타웨이브 엔터테인먼트",
+                slug="starwave-entertainment",
+                status="active",
+                contact_name="운영 담당자",
+                contact_email="ops@starwave.example.com",
+            ),
             Artist(
                 id="artist_nova3",
                 name="드림스케이프",
@@ -2609,6 +2941,12 @@ async def seed_core(session: AsyncSession) -> dict:
             Drop(id="drop_live", name="NOVA-3 Comeback Live Drop", status="live"),
             Drop(id="drop_ended", status="ended"),
         ]
+    )
+    session.add(
+        OrganizationArtist(
+            organization_id="org_scenario_partner",
+            artist_id="artist_nova3",
+        )
     )
     session.add(
         ArtistProfile(user_id="artist", artist_id="artist_nova3", verification_status="verified")
