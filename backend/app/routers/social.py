@@ -617,6 +617,19 @@ async def public_collection(
             )
         )
     )
+    favorite_artist_rows = list(
+        await session.scalars(select(Artist).where(Artist.id.in_(target.favorite_artist_ids or [])))
+    )
+    favorite_artists_by_id = {artist.id: artist for artist in favorite_artist_rows}
+    favorite_artists = [
+        {
+            "id": artist_id,
+            "name": favorite_artists_by_id[artist_id].name,
+            "imageUrl": favorite_artists_by_id[artist_id].image_url,
+        }
+        for artist_id in target.favorite_artist_ids or []
+        if artist_id in favorite_artists_by_id
+    ]
     return {
         "ok": True,
         "data": {
@@ -631,6 +644,7 @@ async def public_collection(
                 "followerCount": follower_count,
                 "followingCount": following_count,
             },
+            "favoriteArtists": favorite_artists,
             "cards": cards,
             "wantedCards": wanted_cards,
         },

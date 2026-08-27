@@ -9,8 +9,8 @@ type SettingsInfoScreen = 'language' | 'support' | 'terms' | 'privacy' | null
 
 type ProfileForm = {
   nickname: string
-  artistId: string
-  memberId: string
+  artistIds: string[]
+  memberIds: string[]
   profileImageUrl: string | null
 }
 
@@ -206,12 +206,12 @@ export function Settings({
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [profileForm, setProfileForm] = useState<ProfileForm>(() => ({
     nickname: user.nickname ?? '',
-    artistId: user.favoriteArtistIds[0] ?? '',
-    memberId: user.favoriteMemberIds[0] ?? '',
+    artistIds: user.favoriteArtistIds,
+    memberIds: user.favoriteMemberIds,
     profileImageUrl: user.profileImageUrl,
   }))
   const [artists, setArtists] = useState<CatalogArtist[]>([])
-  const [members, setMembers] = useState<CatalogMember[]>([])
+  const [membersByArtist, setMembersByArtist] = useState<Record<string, CatalogMember[]>>({})
   const [profileLoading, setProfileLoading] = useState(false)
   const [profileSaving, setProfileSaving] = useState(false)
   const [profileMessage, setProfileMessage] = useState('')
@@ -273,8 +273,8 @@ export function Settings({
     if (!profileOpen) return
     setProfileForm({
       nickname: user.nickname ?? '',
-      artistId: user.favoriteArtistIds[0] ?? '',
-      memberId: user.favoriteMemberIds[0] ?? '',
+      artistIds: user.favoriteArtistIds,
+      memberIds: user.favoriteMemberIds,
       profileImageUrl: user.profileImageUrl,
     })
     setProfileMessage('')
@@ -286,20 +286,20 @@ export function Settings({
   }, [profileOpen, user.favoriteArtistIds, user.favoriteMemberIds, user.nickname, user.profileImageUrl])
 
   useEffect(() => {
-    if (!profileOpen || !profileForm.artistId) {
-      setMembers([])
+    if (!profileOpen || profileForm.artistIds.length === 0) {
+      setMembersByArtist({})
       return
     }
-    void apiFetch<{ ok: true; data: { items: CatalogMember[] } }>(`/catalog/members?artistId=${encodeURIComponent(profileForm.artistId)}`)
-      .then(result => {
-        setMembers(result.data.items)
-        setProfileForm(current => ({
-          ...current,
-          memberId: result.data.items.some(item => item.id === current.memberId) ? current.memberId : (result.data.items[0]?.id ?? ''),
-        }))
-      })
+    void Promise.all(profileForm.artistIds.map(async artistId => {
+      const result = await apiFetch<{ ok: true; data: { items: CatalogMember[] } }>(`/catalog/members?artistId=${encodeURIComponent(artistId)}`)
+      return [artistId, result.data.items] as const
+    })).then(entries => {
+      setMembersByArtist(Object.fromEntries(entries))
+      const validMemberIds = new Set(entries.flatMap(([, items]) => items.map(item => item.id)))
+      setProfileForm(current => ({ ...current, memberIds: current.memberIds.filter(id => validMemberIds.has(id)) }))
+    })
       .catch(() => setProfileMessage('멤버 목록을 불러오지 못했어요.'))
-  }, [profileForm.artistId, profileOpen])
+  }, [profileForm.artistIds, profileOpen])
 
   const openProfileEditor = () => setProfileOpen(true)
   const closeProfileEditor = () => {
@@ -360,8 +360,8 @@ export function Settings({
       setProfileMessage('닉네임을 입력해 주세요.')
       return
     }
-    if (!profileForm.artistId || !profileForm.memberId) {
-      setProfileMessage('아티스트와 멤버를 선택해 주세요.')
+    if (profileForm.artistIds.length === 0) {
+      setProfileMessage('관심 아티스트를 한 팀 이상 선택해 주세요.')
       return
     }
     setProfileSaving(true)
@@ -371,8 +371,8 @@ export function Settings({
         method: 'PATCH',
         body: JSON.stringify({
           nickname: profileForm.nickname.trim(),
-          favoriteArtistIds: [profileForm.artistId],
-          favoriteMemberIds: [profileForm.memberId],
+          favoriteArtistIds: profileForm.artistIds,
+          favoriteMemberIds: profileForm.memberIds,
           profileImageUrl: profileForm.profileImageUrl,
         }),
       })
@@ -390,8 +390,7 @@ export function Settings({
   const followingCount = user.followingCount ?? user.favoriteArtistIds.length + user.favoriteMemberIds.length
   const followerCount = user.followerCount ?? 0
   const points = user.points ?? 0
-  const selectedArtist = artists.find(artist => artist.id === profileForm.artistId)
-  const selectedMember = members.find(member => member.id === profileForm.memberId)
+  const selectedArtists = artists.filter(artist => profileForm.artistIds.includes(artist.id))
 
   const panelTitle = {
     notifications: '알림 설정',
@@ -508,25 +507,16 @@ export function Settings({
               <h2 id="profile-decorate-form-title" className="sr-only">프로필 정보</h2>
               <label htmlFor="profile-edit-nickname">닉네임</label>
               <input id="profile-edit-nickname" value={profileForm.nickname} maxLength={40} onChange={event => setProfileForm(current => ({ ...current, nickname: event.target.value }))} />
-              <label htmlFor="profile-edit-artist">좋아하는 아티스트</label>
-              <div className="profile-select-card">
-                {selectedArtist ? <img src={resolveApiUrl(selectedArtist.imageUrl)} alt="" /> : <span className="profile-select-avatar">♪</span>}
-                <span className="profile-select-copy"><small>선택한 아티스트</small><strong>{selectedArtist?.name ?? '아티스트를 선택해 주세요'}</strong></span>
-                <Chevron />
-                <select id="profile-edit-artist" value={profileForm.artistId} disabled={profileLoading} onChange={event => setProfileForm(current => ({ ...current, artistId: event.target.value, memberId: '' }))} aria-label="좋아하는 아티스트">
-                  <option value="">아티스트를 선택해 주세요</option>
-                  {artists.map(artist => <option key={artist.id} value={artist.id}>{artist.name}</option>)}
-                </select>
+              <label>좋아하는 아티스트</label>
+              <div className="profile-preference-grid" aria-label="좋아하는 아티스트 여러 개 선택">
+                {artists.map(artist => {
+                  const selected = profileForm.artistIds.includes(artist.id)
+                  return <button type="button" key={artist.id} className={selected ? 'profile-preference-choice is-selected' : 'profile-preference-choice'} aria-pressed={selected} onClick={() => setProfileForm(current => ({ ...current, artistIds: selected ? current.artistIds.filter(id => id !== artist.id) : [...current.artistIds, artist.id], memberIds: selected ? current.memberIds.filter(memberId => !(membersByArtist[artist.id] ?? []).some(member => member.id === memberId)) : current.memberIds }))}><img src={resolveApiUrl(artist.imageUrl)} alt="" /><span>{artist.name}</span></button>
+                })}
               </div>
-              <label htmlFor="profile-edit-member">좋아하는 멤버</label>
-              <div className="profile-select-card">
-                <span className="profile-select-avatar member">{selectedMember?.name.slice(0, 1) ?? '♪'}</span>
-                <span className="profile-select-copy"><small>선택한 멤버</small><strong>{selectedMember?.name ?? '멤버를 선택해 주세요'}</strong></span>
-                <Chevron />
-                <select id="profile-edit-member" value={profileForm.memberId} disabled={profileLoading || members.length === 0} onChange={event => setProfileForm(current => ({ ...current, memberId: event.target.value }))} aria-label="좋아하는 멤버">
-                  <option value="">멤버를 선택해 주세요</option>
-                  {members.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}
-                </select>
+              <label>좋아하는 멤버 <small className="profile-preference-hint">선택사항</small></label>
+              <div className="profile-member-groups" aria-label="좋아하는 멤버 여러 개 선택">
+                {selectedArtists.map(artist => <section key={artist.id}><strong>{artist.name}</strong><div className="profile-member-options">{(membersByArtist[artist.id] ?? []).map(member => <label key={member.id} className={profileForm.memberIds.includes(member.id) ? 'is-selected' : ''}><input type="checkbox" checked={profileForm.memberIds.includes(member.id)} onChange={() => setProfileForm(current => ({ ...current, memberIds: current.memberIds.includes(member.id) ? current.memberIds.filter(id => id !== member.id) : [...current.memberIds, member.id] }))} />{member.name}</label>)}</div></section>)}
               </div>
               {profileMessage && <p className="profile-edit-message" role="alert">{profileMessage}</p>}
             </section>

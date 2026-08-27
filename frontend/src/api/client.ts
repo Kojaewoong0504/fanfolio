@@ -405,6 +405,7 @@ export type FanEventComment = {
 export type FanHomeResponse = {
   featuredEvent: FanEvent | null
   upcomingEvents: FanEvent[]
+  favoriteArtists: Array<{ id: string; name: string; imageUrl: string | null }>
   favoriteArtist: { id: string; name: string; imageUrl: string | null } | null
   newCards: CatalogCard[]
 }
@@ -419,6 +420,8 @@ export type NotificationItem = {
   isRead: boolean
   readAt: string | null
   createdAt: string
+  artistId?: string | null
+  artistName?: string | null
 }
 
 export function getFanHome(): Promise<{ ok: true; data: FanHomeResponse }> {
@@ -1013,6 +1016,7 @@ export type PublicCollection = {
   visibility: 'public'
   isFollowing: boolean
   summary: { ownedCount: number; followerCount: number; followingCount: number }
+  favoriteArtists?: CatalogArtist[]
   cards: Array<CollectionCard & { expiresAt?: string | null; tradable: boolean }>
   wantedCards?: PublicWantedCard[]
 }

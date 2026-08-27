@@ -567,7 +567,7 @@ function ShopPreview({ appMode = false, onOpenAlerts, onOpenProfile }: { appMode
           <button type="button" className={artist === 'lunarize' ? 'selected' : ''} aria-pressed={artist === 'lunarize'} onClick={() => setArtist('lunarize')}><img src={cardYunaImage} alt="" /><b>루나라이즈</b></button>
           <button type="button" className={artist === 'astra' ? 'selected' : ''} aria-pressed={artist === 'astra'} onClick={() => setArtist('astra')}><img src={cardMinhoImage} alt="" /><b>아스트라</b></button>
           <button type="button" className={artist === 'eclipse' ? 'selected' : ''} aria-pressed={artist === 'eclipse'} onClick={() => setArtist('eclipse')}><img src={cardJayImage} alt="" /><b>이클립스</b></button>
-          <button type="button" onClick={() => setNotice('관심 아티스트 설정으로 이동해요.')}><span className="shop-artist-add"><InlineIcon name="plus" /></span><b>아티스트 추가</b></button>
+          <button type="button" onClick={() => onOpenProfile?.()}><span className="shop-artist-add"><InlineIcon name="plus" /></span><b>아티스트 추가</b></button>
         </div>
       </section>
 
@@ -719,6 +719,8 @@ type OnboardingDraft = {
   step?: number
   group?: string
   member?: string
+  groups?: string[]
+  members?: string[]
   nickname?: string
   artistQuery?: string
 }
@@ -1872,10 +1874,12 @@ function Login({ onLogin }: { onLogin: () => void | Promise<void> }) {
 
 function Onboarding({ userId, profileImageUrl, onComplete, onBack }: { userId: string, profileImageUrl: string | null, onComplete: () => void, onBack: () => Promise<void> }) {
   const initialDraft = readOnboardingDraft(userId)
-  const [draftRestored] = useState(Boolean(initialDraft.step && (initialDraft.step > 1 || initialDraft.group || initialDraft.member || initialDraft.nickname || initialDraft.artistQuery)))
+  const initialGroups = initialDraft.groups ?? (initialDraft.group ? [initialDraft.group] : [])
+  const initialMembers = initialDraft.members ?? (initialDraft.member ? [initialDraft.member] : [])
+  const [draftRestored] = useState(Boolean(initialDraft.step && (initialDraft.step > 1 || initialGroups.length > 0 || initialMembers.length > 0 || initialDraft.nickname || initialDraft.artistQuery)))
   const [step, setStep] = useState(initialDraft.step && initialDraft.step >= 1 && initialDraft.step <= 3 ? initialDraft.step : 1)
-  const [group, setGroup] = useState(initialDraft.group ?? '')
-  const [member, setMember] = useState(initialDraft.member ?? '')
+  const [groups, setGroups] = useState<string[]>(initialGroups)
+  const [memberIds, setMemberIds] = useState<string[]>(initialMembers)
   const [nickname, setNickname] = useState(initialDraft.nickname ?? '')
   const [selectedProfileImage, setSelectedProfileImage] = useState(profileImageUrl)
   const profileImageInputRef = useRef<HTMLInputElement>(null)
@@ -1883,7 +1887,7 @@ function Onboarding({ userId, profileImageUrl, onComplete, onBack }: { userId: s
   const [backBusy, setBackBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [artists, setArtists] = useState<CatalogArtist[]>([])
-  const [members, setMembers] = useState<CatalogMember[]>([])
+  const [membersByArtist, setMembersByArtist] = useState<Record<string, CatalogMember[]>>({})
   const [artistQuery, setArtistQuery] = useState(initialDraft.artistQuery ?? '')
   const [artistLoading, setArtistLoading] = useState(true)
   const [artistError, setArtistError] = useState(false)
@@ -1901,12 +1905,12 @@ function Onboarding({ userId, profileImageUrl, onComplete, onBack }: { userId: s
 
   useEffect(() => {
     try {
-      window.sessionStorage.setItem(onboardingDraftKey(userId), JSON.stringify({ step, group, member, nickname, artistQuery }))
+      window.sessionStorage.setItem(onboardingDraftKey(userId), JSON.stringify({ step, groups, members: memberIds, nickname, artistQuery }))
     } catch {
       // Session storage is optional; onboarding remains usable when storage
       // is blocked by a browser privacy policy.
     }
-  }, [artistQuery, group, member, nickname, step, userId])
+  }, [artistQuery, groups, memberIds, nickname, step, userId])
 
   useEffect(() => {
     setArtistLoading(true)
@@ -1914,7 +1918,10 @@ function Onboarding({ userId, profileImageUrl, onComplete, onBack }: { userId: s
     void apiFetch<{ ok: true, data: { items: CatalogArtist[] } }>('/catalog/artists')
       .then(result => {
         setArtists(result.data.items)
-        setGroup(current => result.data.items.some(item => item.id === current) ? current : (result.data.items[0]?.id ?? ''))
+        setGroups(current => {
+          const valid = current.filter(id => result.data.items.some(item => item.id === id))
+          return valid.length > 0 ? valid : result.data.items[0]?.id ? [result.data.items[0].id] : []
+        })
         setMessage('')
       })
       .catch(() => {
@@ -1925,15 +1932,20 @@ function Onboarding({ userId, profileImageUrl, onComplete, onBack }: { userId: s
   }, [artistAttempt])
 
   useEffect(() => {
-    if (!group) { setMembers([]); setMember(''); return }
+    if (groups.length === 0) { setMembersByArtist({}); setMemberIds([]); return }
     let cancelled = false
     setMemberLoading(true)
     setMemberError(false)
-    void apiFetch<{ ok: true, data: { items: CatalogMember[] } }>(`/catalog/members?artistId=${encodeURIComponent(group)}`)
-      .then(result => {
+    void Promise.all(groups.map(async artistId => {
+      const result = await apiFetch<{ ok: true, data: { items: CatalogMember[] } }>(`/catalog/members?artistId=${encodeURIComponent(artistId)}`)
+      return [artistId, result.data.items] as const
+    }))
+      .then(entries => {
         if (cancelled) return
-        setMembers(result.data.items)
-        setMember(current => result.data.items.some(item => item.id === current) ? current : (result.data.items[0]?.id ?? ''))
+        const next = Object.fromEntries(entries)
+        setMembersByArtist(next)
+        const validMemberIds = new Set(entries.flatMap(([, items]) => items.map(item => item.id)))
+        setMemberIds(current => current.filter(id => validMemberIds.has(id)))
         setMessage('')
       })
       .catch(() => {
@@ -1943,15 +1955,14 @@ function Onboarding({ userId, profileImageUrl, onComplete, onBack }: { userId: s
       })
       .finally(() => { if (!cancelled) setMemberLoading(false) })
     return () => { cancelled = true }
-  }, [group, memberAttempt])
+  }, [groups, memberAttempt])
 
   const save = async () => {
-    if (group && !member) { setMessage('멤버를 선택해 주세요.'); return }
     if (!nickname.trim()) { setMessage('닉네임을 입력해 주세요.'); return }
     setBusy(true)
     setMessage('')
     try {
-      await apiFetch('/me/profile', { method: 'PATCH', body: JSON.stringify({ nickname: nickname.trim(), favoriteArtistIds: group ? [group] : [], favoriteMemberIds: member ? [member] : [], profileImageUrl: selectedProfileImage }) })
+      await apiFetch('/me/profile', { method: 'PATCH', body: JSON.stringify({ nickname: nickname.trim(), favoriteArtistIds: groups, favoriteMemberIds: memberIds, profileImageUrl: selectedProfileImage }) })
       try { window.sessionStorage.removeItem(onboardingDraftKey(userId)) } catch { /* optional draft cleanup */ }
       onComplete()
     } catch (error) {
@@ -1969,13 +1980,13 @@ function Onboarding({ userId, profileImageUrl, onComplete, onBack }: { userId: s
   }
   const next = () => {
     setMessage('')
-    if (step === 1 && (!group || artistLoading)) { setMessage('좋아하는 아티스트를 선택해 주세요.'); return }
-    if (step === 2 && (!member || memberLoading)) { setMessage('좋아하는 멤버를 선택해 주세요.'); return }
+    if (step === 1 && (groups.length === 0 || artistLoading)) { setMessage('좋아하는 아티스트를 한 팀 이상 선택해 주세요.'); return }
+    if (step === 2 && memberLoading) { setMessage('멤버 목록을 불러오는 중이에요.'); return }
     setStep(current => Math.min(3, current + 1))
   }
   const skipArtist = () => {
-    setGroup('')
-    setMember('')
+    setGroups([])
+    setMemberIds([])
     setMessage('')
     setStep(3)
   }
@@ -2002,8 +2013,13 @@ function Onboarding({ userId, profileImageUrl, onComplete, onBack }: { userId: s
     reader.readAsDataURL(file)
   }
   const filteredArtists = artists.filter(artist => artist.name.toLowerCase().includes(artistQuery.trim().toLowerCase()))
-  const selectedArtist = artists.find(artist => artist.id === group)
-  const selectedMember = members.find(item => item.id === member)
+  const selectedArtists = artists.filter(artist => groups.includes(artist.id))
+  const toggleGroup = (artistId: string) => {
+    setGroups(current => current.includes(artistId) ? current.filter(id => id !== artistId) : [...current, artistId])
+  }
+  const toggleMember = (memberId: string) => {
+    setMemberIds(current => current.includes(memberId) ? current.filter(id => id !== memberId) : [...current, memberId])
+  }
   return <main className="onboarding-screen">
     <div className="onboarding-top"><button type="button" className="back-button" onClick={() => void goBack()} disabled={backBusy || busy} aria-label={step > 1 ? '이전 단계로 돌아가기' : '로그인으로 돌아가기'}>{backBusy ? '…' : <InlineIcon name="back" />}</button><b>최초 설정</b><small>{step} / 3</small></div>
     <div className="onboarding-progress-segments" role="progressbar" aria-label="최초 설정 진행률" aria-valuemin={1} aria-valuemax={3} aria-valuenow={step}>{Array.from({ length: 3 }, (_, index) => <span key={index} className={index < step ? 'is-complete' : ''} aria-current={index + 1 === step ? 'step' : undefined} />)}</div>
@@ -2012,22 +2028,22 @@ function Onboarding({ userId, profileImageUrl, onComplete, onBack }: { userId: s
       <header className="onboarding-step-copy"><span>STEP 1</span><h1>좋아하는 아티스트를<br />선택해 주세요</h1><p>선택한 아티스트를 중심으로 새로운 카드와 이벤트를 추천해 드릴게요.</p></header>
       <div className="artist-search-wrap"><InlineIcon name="search" /><input id="artist-search" value={artistQuery} onChange={e => setArtistQuery(e.target.value)} placeholder="아티스트 이름을 검색해 보세요" aria-label="아티스트 검색" disabled={artistLoading} /></div>
       {artistLoading && <div className="catalog-loading" role="status">아티스트를 불러오는 중이에요…</div>}
-      {!artistLoading && <div className="artist-grid">{filteredArtists.map(artist => <button type="button" aria-pressed={group === artist.id} className={group === artist.id ? 'artist-choice selected' : 'artist-choice'} key={artist.id} onClick={() => setGroup(artist.id)}><span className="choice-visual"><img src={demoCardImage(resolveApiUrl(artist.imageUrl), `artist:${artist.id}`)} alt="" onError={event => keepCardVisual(event, `artist:${artist.id}`)} />{group === artist.id && <span className="choice-check" aria-hidden="true"><InlineIcon name="check" /></span>}</span><span className="choice-copy"><b>{artist.name}</b><small>공식 아티스트</small></span></button>)}</div>}
+      {!artistLoading && <div className="artist-grid">{filteredArtists.map(artist => <button type="button" aria-pressed={groups.includes(artist.id)} className={groups.includes(artist.id) ? 'artist-choice selected' : 'artist-choice'} key={artist.id} onClick={() => toggleGroup(artist.id)}><span className="choice-visual"><img src={demoCardImage(resolveApiUrl(artist.imageUrl), `artist:${artist.id}`)} alt="" onError={event => keepCardVisual(event, `artist:${artist.id}`)} />{groups.includes(artist.id) && <span className="choice-check" aria-hidden="true"><InlineIcon name="check" /></span>}</span><span className="choice-copy"><b>{artist.name}</b><small>공식 아티스트</small></span></button>)}</div>}
       {artistError && <div className="inline-retry" role="alert"><span>아티스트 목록을 불러오지 못했어요.</span><button type="button" onClick={() => setArtistAttempt(value => value + 1)}>다시 시도</button></div>}
       {!artistLoading && filteredArtists.length === 0 && !artistError && <p className="muted empty-search">검색 결과가 없어요. 다른 이름으로 찾아보세요.</p>}
-      <div className="onboarding-action"><button type="button" className="primary" onClick={next} disabled={artistLoading || !group}>다음: 멤버 선택 <InlineIcon name="chevron" /></button><button type="button" className="onboarding-skip" onClick={skipArtist}>관심 아티스트 없이 시작하기</button></div>
+      {groups.length > 0 && <p className="form-message" role="status">관심 아티스트 {groups.length}개를 선택했어요. 멤버 선택은 건너뛸 수 있어요.</p>}
+      <div className="onboarding-action"><button type="button" className="primary" onClick={next} disabled={artistLoading || groups.length === 0}>다음: 멤버 선택 <InlineIcon name="chevron" /></button><button type="button" className="onboarding-skip" onClick={skipArtist}>관심 아티스트 없이 시작하기</button></div>
     </section>}
     {step === 2 && <section className="onboarding-step onboarding-member-step">
-      <header className="onboarding-step-copy"><span>STEP 2</span><h1>{selectedArtist?.name ?? '아티스트'}의<br />최애 멤버를 선택해 주세요</h1><p>가장 좋아하는 멤버의 카드와 새로운 소식을 먼저 만나보세요.</p></header>
-      {selectedArtist && <div className="selected-artist-summary"><img src={demoCardImage(resolveApiUrl(selectedArtist.imageUrl), `artist:${selectedArtist.id}`)} alt="" onError={event => keepCardVisual(event, `artist:${selectedArtist.id}`)} /><div><small>선택한 아티스트</small><b>{selectedArtist.name}</b></div><span><InlineIcon name="check" /> 선택 완료</span></div>}
+      <header className="onboarding-step-copy"><span>STEP 2</span><h1>좋아하는 멤버를<br />선택해 주세요</h1><p>선택하지 않아도 그룹 전체의 카드와 소식을 받을 수 있어요.</p></header>
       {memberLoading && <div className="catalog-loading" role="status">멤버를 불러오는 중이에요…</div>}
-      {!memberLoading && <div className="member-grid">{members.map(item => <button type="button" aria-pressed={member === item.id} className={member === item.id ? 'member-card selected' : 'member-card'} key={item.id} onClick={() => setMember(item.id)}><span className="choice-visual"><img src={demoMemberImage(item.id)} alt="" onError={event => keepCardVisual(event, `member:${item.id}`)} />{member === item.id && <span className="choice-check" aria-hidden="true"><InlineIcon name="check" /></span>}</span><span className="choice-copy"><b>{item.name}</b><small>{selectedArtist?.name ?? '아티스트'} 멤버</small></span></button>)}</div>}
+      {!memberLoading && <div className="onboarding-member-groups">{selectedArtists.map(artist => <section key={artist.id} aria-labelledby={`onboarding-members-${artist.id}`}><h2 id={`onboarding-members-${artist.id}`}>{artist.name}</h2><div className="member-grid">{(membersByArtist[artist.id] ?? []).map(item => <button type="button" aria-pressed={memberIds.includes(item.id)} className={memberIds.includes(item.id) ? 'member-card selected' : 'member-card'} key={item.id} onClick={() => toggleMember(item.id)}><span className="choice-visual"><img src={demoMemberImage(item.id)} alt="" onError={event => keepCardVisual(event, `member:${item.id}`)} />{memberIds.includes(item.id) && <span className="choice-check" aria-hidden="true"><InlineIcon name="check" /></span>}</span><span className="choice-copy"><b>{item.name}</b><small>{artist.name} 멤버</small></span></button>)}</div></section>)}</div>}
       {memberError && <div className="inline-retry" role="alert"><span>멤버 목록을 불러오지 못했어요.</span><button type="button" onClick={() => setMemberAttempt(value => value + 1)}>다시 시도</button></div>}
-      <div className="onboarding-action"><button type="button" className="primary" onClick={next} disabled={memberLoading || !member}>다음: 닉네임 설정 <InlineIcon name="chevron" /></button></div>
+      <div className="onboarding-action"><button type="button" className="primary" onClick={next} disabled={memberLoading}>다음: 닉네임 설정 <InlineIcon name="chevron" /></button><button type="button" className="onboarding-skip" onClick={() => { setMemberIds([]); next() }}>멤버 선택 건너뛰기</button></div>
     </section>}
     {step === 3 && <section className="onboarding-step onboarding-profile-step">
       <header className="onboarding-step-copy"><span>STEP 3</span><h1>팬폴리오에서 사용할<br />닉네임을 정해 주세요</h1><p>나만의 팬 컬렉션에 표시될 프로필을 완성해 주세요.</p></header>
-      <div className="nickname-preview" aria-live="polite"><div className="profile-photo"><ProfileAvatar imageUrl={resolveApiUrl(selectedProfileImage)} fallback={nickname || '팬'} alt="내 프로필 이미지" /><button type="button" className="profile-photo-edit" aria-label="프로필 이미지 변경" onClick={() => profileImageInputRef.current?.click()}><InlineIcon name="camera" /></button><input ref={profileImageInputRef} className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" aria-label="프로필 이미지 파일" onChange={handleProfileImageChange} /></div><div><span>컬렉션 프로필</span><b>{nickname.trim() || '나의 팬 닉네임'}</b><small>{selectedArtist?.name ? `${selectedArtist.name} · ${selectedMember?.name ?? '선택한 멤버'}` : '전체 아티스트 팬으로 시작'}</small></div></div>
+      <div className="nickname-preview" aria-live="polite"><div className="profile-photo"><ProfileAvatar imageUrl={resolveApiUrl(selectedProfileImage)} fallback={nickname || '팬'} alt="내 프로필 이미지" /><button type="button" className="profile-photo-edit" aria-label="프로필 이미지 변경" onClick={() => profileImageInputRef.current?.click()}><InlineIcon name="camera" /></button><input ref={profileImageInputRef} className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" aria-label="프로필 이미지 파일" onChange={handleProfileImageChange} /></div><div><span>컬렉션 프로필</span><b>{nickname.trim() || '나의 팬 닉네임'}</b><small>{selectedArtists.length > 0 ? `${selectedArtists.map(artist => artist.name).join(', ')} · 멤버 ${memberIds.length}명` : '전체 아티스트 팬으로 시작'}</small></div></div>
       <div className="nickname-field-card"><div className="nickname-field-heading"><div><label className="field-label" htmlFor="onboarding-nickname">닉네임</label><p>컬렉션에서 사용할 이름을 정해 주세요.</p></div><span className="nickname-field-icon" aria-hidden="true"><InlineIcon name="users" /></span></div><div className="nickname-input-wrap"><input id="onboarding-nickname" className="nickname-input" value={nickname} onChange={e => setNickname(e.target.value)} placeholder="예: 유나의 작은 우주" maxLength={40} aria-describedby="nickname-help" /><small>{nickname.length}/40</small></div><p id="nickname-help" className="field-help">나중에 마이 페이지에서 언제든 바꿀 수 있어요.</p></div>
       <div className="onboarding-action"><button type="button" className="primary" onClick={() => void save()} disabled={!nickname.trim() || busy || backBusy}>{busy ? '저장 중...' : <>나만의 컬렉션 시작하기 <InlineIcon name="chevron" /></>}</button></div>
     </section>}
@@ -2336,7 +2352,7 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
   const featuredEvent = eventHome ? eventHome.featuredEvent : import.meta.env.DEV ? fallbackHomeEvent : null
   const [activeHeroIndex, setActiveHeroIndex] = useState(0)
   const [heroInteractionVersion, setHeroInteractionVersion] = useState(0)
-  const [artistFavorite, setArtistFavorite] = useState(false)
+  const [artistFavorites, setArtistFavorites] = useState<Set<string>>(() => new Set(eventHome?.favoriteArtists.map(artist => artist.id) ?? []))
   const [newCardFavorites, setNewCardFavorites] = useState<Set<string>>(() => new Set())
   const heroEvents = eventHome ? apiHeroEvents : featuredEvent ? [featuredEvent] : []
   const heroSlides: HomeHeroSlide[] = heroEvents.map(event => ({
@@ -2345,11 +2361,13 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
     titleLines: homeHeroTitleLines(event.title),
     image: resolveApiUrl(event.heroUrl) || dreamscapeHero,
   }))
-  const artist = eventHome?.favoriteArtist ?? null
+  const favoriteArtists = eventHome?.favoriteArtists ?? []
   const newCards = eventHome ? eventHome.newCards.map(toCatalogCard) : import.meta.env.DEV ? fallbackHomeCards : []
   const activeEvent = eventHome ? eventHome.upcomingEvents[0] ?? eventHome.featuredEvent : import.meta.env.DEV ? fallbackHomeEvent : null
   const completionRate = Math.min(100, Math.max(0, summary.completionRate))
-  const artistImage = artist?.imageUrl ? (resolveApiUrl(artist.imageUrl) || dreamscapeHero) : dreamscapeHero
+  useEffect(() => {
+    setArtistFavorites(new Set((eventHome?.favoriteArtists ?? []).map(artist => artist.id)))
+  }, [eventHome])
 
   useEffect(() => {
     if (heroSlides.length < 2) return
@@ -2427,26 +2445,24 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
         />)}
       </div></> : <div className="home-event-empty"><b>새로운 이벤트를 준비하고 있어요</b><span>공개된 이벤트가 있으면 이곳에서 바로 확인할 수 있어요.</span><button type="button" className="outline" onClick={onEvents}>이벤트 둘러보기</button></div>}
     </section>
-    {artist ? <section className="home-artist-section" aria-labelledby="home-artist-title">
+    {favoriteArtists.length > 0 ? <section className="home-artist-section" aria-labelledby="home-artist-title">
       <div className="section-heading"><h2 id="home-artist-title">관심 아티스트</h2><button type="button" onClick={onDiscover}>전체 보기 <InlineIcon name="chevron" /></button></div>
-      <article className="home-artist-card">
-        <button type="button" className="home-artist-primary" onClick={onDiscover} aria-label={`${artist.name} 아티스트 홈 보기`}>
-          <img className="home-artist-backdrop" src={artistImage} alt="" />
-          <span className="home-artist-copy">
-            <small className="home-artist-badge">추천 아티스트</small>
-            <b>{artist.name} <span className="home-artist-verified" aria-label="공식 인증"><VerifiedIcon /></span></b>
-            <em>4명의 멤버</em>
-            <span className="home-artist-members">{dreamscapeDemoMembers.map((member, index) => <img key={`${member.id}-${index}`} src={member.image} alt="" />)}</span>
-          </span>
-        </button>
-        <FavoriteControl
-          className="home-artist-favorite"
-          active={artistFavorite}
-          ariaLabel={artistFavorite ? `${artist.name} 관심 해제` : `${artist.name} 관심 등록`}
-          interactive
-          onClick={() => setArtistFavorite(favorite => !favorite)}
-        />
-      </article>
+      <div className="home-artist-rail" aria-label="관심 아티스트 목록">{favoriteArtists.map(artist => {
+        const artistImage = artist.imageUrl ? (resolveApiUrl(artist.imageUrl) || dreamscapeHero) : dreamscapeHero
+        const isFavorite = artistFavorites.has(artist.id)
+        return <article className="home-artist-card" key={artist.id}>
+          <button type="button" className="home-artist-primary" onClick={onDiscover} aria-label={`${artist.name} 아티스트 홈 보기`}>
+            <img className="home-artist-backdrop" src={artistImage} alt="" />
+            <span className="home-artist-copy">
+              <small className="home-artist-badge">관심 아티스트</small>
+              <b>{artist.name} <span className="home-artist-verified" aria-label="공식 인증"><VerifiedIcon /></span></b>
+              <em>공식 아티스트 공간</em>
+              <span className="home-artist-members">{dreamscapeDemoMembers.slice(0, 4).map((member, index) => <img key={`${member.id}-${index}`} src={member.image} alt="" />)}</span>
+            </span>
+          </button>
+          <FavoriteControl className="home-artist-favorite" active={isFavorite} ariaLabel={isFavorite ? `${artist.name} 관심 해제` : `${artist.name} 관심 등록`} interactive onClick={() => setArtistFavorites(current => { const next = new Set(current); if (next.has(artist.id)) next.delete(artist.id); else next.add(artist.id); return next })} />
+        </article>
+      })}</div>
     </section> : <section className="home-artist-section home-artist-empty" aria-labelledby="home-artist-title"><div className="section-heading"><h2 id="home-artist-title">관심 아티스트</h2><button type="button" onClick={onDiscover}>아티스트 찾기 <InlineIcon name="chevron" /></button></div><p>관심 아티스트를 선택하면 맞춤 카드와 이벤트를 보여드려요.</p></section>}
     <section className="home-new-cards" aria-labelledby="home-new-cards-title">
       <div className="section-heading"><h2 id="home-new-cards-title">새로 공개된 카드</h2><button type="button" onClick={onDiscover}>전체 보기 <InlineIcon name="chevron" /></button></div>
@@ -3754,7 +3770,7 @@ function Alerts({ items, error, actionError, onDismissActionError, onRetry, onRe
       {actionError && <div className="inline-retry notification-action-error" role="alert"><span>{actionError}</span><button type="button" onClick={onDismissActionError}>닫기</button></div>}
       {error ? <div className="notification-error-panel" role="alert"><span className="notification-error-icon" aria-hidden="true"><NavIcon name="alerts" /></span><div><b>알림을 불러오지 못했어요</b><p>{error}</p></div><button type="button" onClick={onRetry}>다시 시도</button></div> : <>
         <div className="alerts-reference-tabs" role="tablist" aria-label="알림 필터">{categories.map(item => <button key={item.value} role="tab" aria-selected={category === item.value} className={category === item.value ? 'active' : ''} onClick={() => setCategory(item.value)}><span>{item.label}</span>{unreadFor(item.value) > 0 && <b>{unreadFor(item.value)}</b>}</button>)}</div>
-        {groups.length > 0 ? <>{groups.map(group => <section className="notification-day" key={group.label}><h2>{group.label}</h2><div className="alert-list">{group.items.map(item => { const destination = notificationDestination(item.kind); return <button className={item.isRead ? 'alert-card read' : 'alert-card'} key={item.id} aria-label={`${item.title} 알림${destination ? ' 열기' : ''}`} onClick={() => openNotification(item)}><span className={`alert-leading-icon ${item.kind}`} aria-hidden="true"><InlineIcon name={iconName(item.kind)} /></span><span className="notification-copy"><strong>{item.title}</strong><small>{notificationTimeLabel(item.createdAt).replace(' 전', '')}</small></span>{!item.isRead && <span className="unread-dot" aria-label="읽지 않음" />}</button> })}</div></section>)}<div className="empty-slot notification-empty" role="status"><span className="notification-empty-illustration"><NavIcon name="alerts" /><InlineIcon name="sparkles" /></span><b>새로운 알림이 없어요</b><small>중요한 소식이 여기에 표시돼요.</small></div></> : <div className="empty-slot notification-empty" role="status"><span className="notification-empty-illustration"><NavIcon name="alerts" /><InlineIcon name="sparkles" /></span><b>새로운 알림이 없어요</b><small>중요한 소식이 여기에 표시돼요.</small></div>}
+        {groups.length > 0 ? <>{groups.map(group => <section className="notification-day" key={group.label}><h2>{group.label}</h2><div className="alert-list">{group.items.map(item => { const destination = notificationDestination(item.kind); return <button className={item.isRead ? 'alert-card read' : 'alert-card'} key={item.id} aria-label={`${item.title} 알림${item.artistName ? ` · ${item.artistName}` : ''}${destination ? ' 열기' : ''}`} onClick={() => openNotification(item)}><span className={`alert-leading-icon ${item.kind}`} aria-hidden="true"><InlineIcon name={iconName(item.kind)} /></span><span className="notification-copy"><strong>{item.title}</strong>{item.artistName && <em className="notification-artist">{item.artistName}</em>}<small>{notificationTimeLabel(item.createdAt).replace(' 전', '')}</small></span>{!item.isRead && <span className="unread-dot" aria-label="읽지 않음" />}</button> })}</div></section>)}<div className="empty-slot notification-empty" role="status"><span className="notification-empty-illustration"><NavIcon name="alerts" /><InlineIcon name="sparkles" /></span><b>새로운 알림이 없어요</b><small>중요한 소식이 여기에 표시돼요.</small></div></> : <div className="empty-slot notification-empty" role="status"><span className="notification-empty-illustration"><NavIcon name="alerts" /><InlineIcon name="sparkles" /></span><b>새로운 알림이 없어요</b><small>중요한 소식이 여기에 표시돼요.</small></div>}
         <button type="button" className="alerts-mark-all" onClick={() => void onReadAll()} disabled={unreadCount === 0}>모두 읽음</button>
       </>}
     </section>

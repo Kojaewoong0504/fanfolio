@@ -517,6 +517,8 @@ class EventListResponse(BaseModel):
 class HomeResponse(BaseModel):
     featured_event: FanEventItem | None = Field(default=None, alias="featuredEvent")
     upcoming_events: list[FanEventItem] = Field(default_factory=list, alias="upcomingEvents")
+    favorite_artists: list[dict] = Field(default_factory=list, alias="favoriteArtists")
+    # Kept as a deprecated compatibility field for older clients.
     favorite_artist: dict | None = Field(default=None, alias="favoriteArtist")
     new_cards: list[dict] = Field(default_factory=list, alias="newCards")
     model_config = ConfigDict(populate_by_name=True)
@@ -946,6 +948,8 @@ class NotificationItem(BaseModel):
     entity_type: str | None = Field(default=None, alias="entityType")
     entity_id: str | None = Field(default=None, alias="entityId")
     event_key: str | None = Field(default=None, alias="eventKey")
+    artist_id: str | None = Field(default=None, alias="artistId")
+    artist_name: str | None = Field(default=None, alias="artistName")
     model_config = ConfigDict(populate_by_name=True)
 
 
