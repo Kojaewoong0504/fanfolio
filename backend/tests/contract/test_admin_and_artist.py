@@ -700,6 +700,7 @@ def test_artist_studio_loads_templates_and_catalog_from_api(
         "member_yuna",
         "member_minho",
         "member_jei",
+        "member_rina",
     }
 
 

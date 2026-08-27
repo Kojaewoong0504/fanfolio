@@ -435,7 +435,7 @@ def test_local_demo_seed_drives_real_auth_search_collection_and_trade_apis(
     assert collector["matchingWishlistCount"] == 0
 
     card_search = assert_success(
-        fan.get("/api/fans", headers=fan_headers, params={"query": "Minjae"})
+        fan.get("/api/fans", headers=fan_headers, params={"query": "별빛수집가"})
     )
     assert [item["id"] for item in card_search["items"]] == ["local_demo_collector"]
 

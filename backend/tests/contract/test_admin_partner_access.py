@@ -382,17 +382,21 @@ def test_root_can_manage_partner_organization_and_member(
     assert organization["status"] == "active"
     assert member["accessLevel"] == "manager"
     assert member["assignedArtists"] == [
-        {"id": "artist_nova3", "name": "드림스케이프", "imageUrl": "/src/assets/hero.png"}
+        {
+            "id": "artist_nova3",
+            "name": "드림스케이프",
+            "imageUrl": "/assets/demo/dreamscape/group.png",
+        }
     ]
     assert len(member["temporaryPassword"]) >= 16
 
     listed = assert_success(actors["admin"].get("/api/admin/organizations"))
-    assert listed["meta"]["pagination"]["total"] == 1
-    assert listed["items"][0]["id"] == organization["id"]
+    assert listed["meta"]["pagination"]["total"] == 2
+    assert organization["id"] in {item["id"] for item in listed["items"]}
     listed_by_slug = assert_success(
         actors["admin"].get("/api/admin/organizations", params={"query": "starwave"})
     )
-    assert listed_by_slug["items"][0]["id"] == organization["id"]
+    assert organization["id"] in {item["id"] for item in listed_by_slug["items"]}
 
     detail = assert_success(actors["admin"].get(f"/api/admin/organizations/{organization['id']}"))
     assert detail["memberCount"] == 1

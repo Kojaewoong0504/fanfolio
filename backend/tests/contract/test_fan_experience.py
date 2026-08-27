@@ -218,7 +218,7 @@ def test_card_detail_is_available_only_to_its_owner(
 
     detail = assert_success(fan.get(f"/api/me/cards/{redeemed['userCardId']}"))
     assert detail["card"]["isOfficial"] is True
-    assert detail["card"]["imageUrl"] == "/src/assets/hero.png"
+    assert detail["card"]["imageUrl"] == "/assets/demo/dreamscape/yuna.png"
     assert detail["card"]["artistName"] == "드림스케이프"
     assert detail["card"]["memberName"] == "유나"
     assert detail["card"]["seasonName"] == "2026 SPRING"
@@ -613,7 +613,7 @@ def test_catalog_returns_only_published_cards_to_fans(actors: dict[str, TestClie
 
     assert all(card["status"] == "published" for card in catalog["items"])
     assert all(card["isOfficial"] is True for card in catalog["items"])
-    assert catalog["items"][0]["imageUrl"] == "/src/assets/hero.png"
+    assert catalog["items"][0]["imageUrl"] == "/assets/demo/dreamscape/yuna.png"
 
 
 def test_catalog_hides_new_studio_cards_until_their_linked_drop_is_live(
@@ -693,7 +693,7 @@ def test_collection_returns_live_summary_and_card_metadata(
         "userCardId": redeemed["userCardId"],
         "cardId": "card_published",
         "name": "컴백 기념 사인 카드",
-        "imageUrl": "/src/assets/hero.png",
+        "imageUrl": "/assets/demo/dreamscape/yuna.png",
         "isOfficial": True,
         "artistId": "artist_nova3",
         "artistName": "드림스케이프",
@@ -812,7 +812,7 @@ def test_catalog_exposes_onboarding_artists_and_members(
         {
             "id": "artist_nova3",
             "name": "드림스케이프",
-            "imageUrl": "/src/assets/hero.png",
+            "imageUrl": "/assets/demo/dreamscape/group.png",
         },
         {
             "id": "artist_luminous",
@@ -837,6 +837,7 @@ def test_catalog_exposes_onboarding_artists_and_members(
     assert {member["id"] for member in members["items"]} == {
         "member_jei",
         "member_minho",
+        "member_rina",
         "member_yuna",
     }
 

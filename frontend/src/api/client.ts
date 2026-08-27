@@ -554,6 +554,10 @@ export type PassTier = {
   claimed: boolean
   claimable: boolean
   reward: { id: string; type: RewardType; name: string; metadata: Record<string, unknown> } | null
+  premiumRewardId?: string | null
+  premiumReward?: { id: string; type: RewardType; name: string; metadata: Record<string, unknown> } | null
+  premiumClaimed?: boolean
+  premiumClaimable?: boolean
 }
 
 export type PassSeason = {
@@ -563,6 +567,9 @@ export type PassSeason = {
   artistId: string | null
   status: string
   isPaid: boolean
+  premiumEnabled?: boolean
+  premiumPricePoints?: number | null
+  isPurchased?: boolean
   startsAt: string | null
   endsAt: string | null
   progress: { currentXp: number; claimedTierIds: string[] }
@@ -625,6 +632,18 @@ export type PointExchange = {
 
 export type FanPoints = { balance: number; items: PointLedgerItem[] }
 
+export type PointChargePackage = { id: string; points: number; priceWon: number; label: string }
+export type PointChargeRecord = {
+  id: string
+  packageId: string
+  paymentMethod: 'sandbox_card' | 'sandbox_kakao' | 'sandbox_naver'
+  points: number
+  priceWon: number
+  status: 'completed' | 'refunded' | 'failed' | 'cancelled'
+  createdAt: string
+  refundedAt: string | null
+}
+
 export function getFanMissions(status?: 'active' | 'completed' | 'ended'): Promise<{ ok: true; data: { items: FanMission[] } }> {
   const query = status ? `?status=${status}` : ''
   return apiFetch<{ ok: true; data: { items: FanMission[] } }>(`/me/missions${query}`)
@@ -636,6 +655,24 @@ export function claimFanMission(missionId: string): Promise<{ ok: true; data: { 
 
 export function getFanPoints(): Promise<{ ok: true; data: FanPoints }> {
   return apiFetch<{ ok: true; data: FanPoints }>('/me/points')
+}
+
+export function getPointChargePackages(): Promise<{ ok: true; data: { items: PointChargePackage[] } }> {
+  return apiFetch<{ ok: true; data: { items: PointChargePackage[] } }>('/catalog/point-charges')
+}
+
+export function getPointCharges(): Promise<{ ok: true; data: { items: PointChargeRecord[] } }> {
+  return apiFetch<{ ok: true; data: { items: PointChargeRecord[] } }>('/me/point-charges')
+}
+
+export function createPointCharge(packageId: string, paymentMethod: PointChargeRecord['paymentMethod'], idempotencyKey: string): Promise<{ ok: true; data: PointChargeRecord & { chargeId: string; balance: number; replayed?: boolean } }> {
+  return apiFetch<{ ok: true; data: PointChargeRecord & { chargeId: string; balance: number; replayed?: boolean } }>('/me/point-charges', {
+    method: 'POST', headers: { 'Idempotency-Key': idempotencyKey }, body: JSON.stringify({ packageId, paymentMethod }),
+  })
+}
+
+export function refundPointCharge(chargeId: string): Promise<{ ok: true; data: PointChargeRecord & { chargeId: string; balance: number } }> {
+  return apiFetch<{ ok: true; data: PointChargeRecord & { chargeId: string; balance: number } }>(`/me/point-charges/${encodeURIComponent(chargeId)}/refund`, { method: 'POST' })
 }
 
 export function getPointExchanges(): Promise<{ ok: true; data: { items: PointExchange[] } }> {
@@ -846,8 +883,14 @@ export function getFanPass(artistId?: string | null): Promise<{ ok: true, data: 
   return apiFetch<{ ok: true, data: FanPass }>(`/me/pass${growthScopeQuery(artistId)}`)
 }
 
-export function claimPassTier(tierId: string): Promise<{ ok: true, data: PassTierClaim }> {
-  return apiFetch<{ ok: true, data: PassTierClaim }>(`/me/pass-tiers/${encodeURIComponent(tierId)}/claim`, { method: 'POST' })
+export function claimPassTier(tierId: string): Promise<{ ok: true, data: PassTierClaim }>
+export function claimPassTier(tierId: string, track: 'free' | 'premium'): Promise<{ ok: true, data: PassTierClaim }>
+export function claimPassTier(tierId: string, track: 'free' | 'premium' = 'free'): Promise<{ ok: true, data: PassTierClaim }> {
+  return apiFetch<{ ok: true, data: PassTierClaim }>(`/me/pass-tiers/${encodeURIComponent(tierId)}/claim?track=${track}`, { method: 'POST' })
+}
+
+export function purchasePassSeason(seasonId: string): Promise<{ ok: true, data: { seasonId: string; entitlementId: string; pricePoints: number; replayed: boolean } }> {
+  return apiFetch<{ ok: true, data: { seasonId: string; entitlementId: string; pricePoints: number; replayed: boolean } }>(`/me/pass-seasons/${encodeURIComponent(seasonId)}/purchase`, { method: 'POST' })
 }
 
 export type RedemptionSource = 'qr' | 'manual'

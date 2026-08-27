@@ -3,7 +3,7 @@ import './App.css'
 import './reference.css'
 import './fan-community-reference.css'
 import { getUserCardHistory, type UserCardHistoryItem } from './api/client'
-import { ApiError, apiFetch, applyToFanEvent, claimPassTier, claimReward, clearAccessToken, combineCards, confirmFanPasswordReset, connectNotificationStream, createCollectionGoal, createShopOrder, deleteCollectionGoal, followFan, getCardCombination, getCatalogCards, getCardPacks, getCardPackOdds, getCollectionGoals, getFanEvent, getFanEventComments, getFanEvents, getFanHome, getMyEventApplications, getFanPass, getFanPoints, getNotificationPreferences, getProgression, getShopProduct, getShopProducts, getShopOrders, getWishlist, oauthStartUrl, openCardPack, postFanEventComment, previewCardCombination, reconcilePassRewards, refundShopOrder, removeWishlistCard, registerPushDevice, requestFanPasswordReset, resolveApiUrl, saveWishlistCard, searchFans, setAccessToken, unfollowFan, unregisterPushDevice, updateNotificationPreferences, updateProfileEquipment, type CardCombinationPreview, type CardCombinationRecipe, type CardCombinationResult, type CardDesignConfig, type CardPack, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionGoal, type CollectionSummary, type CurrentUser, type EventPagination, type FanEvent, type FanEventApplication, type FanEventComment, type FanEventStatus, type FanHomeResponse, type FanMission, type FanProgression, type FanSummary, type NotificationItem, type ProfileEquipment, type PublicCollection as PublicCollectionData, type RewardGrant, type ShopOrder, type ShopProduct, type UserCardDetail } from './api/client'
+import { ApiError, apiFetch, applyToFanEvent, claimPassTier, claimReward, clearAccessToken, combineCards, confirmFanPasswordReset, connectNotificationStream, createCollectionGoal, createPointCharge, createShopOrder, deleteCollectionGoal, followFan, getCardCombination, getCatalogCards, getCardPacks, getCardPackOdds, getCollectionGoals, getFanEvent, getFanEventComments, getFanEvents, getFanHome, getMyEventApplications, getFanPass, getFanPoints, getNotificationPreferences, getPointChargePackages, getPointCharges, getProgression, getShopProduct, getShopProducts, getShopOrders, getWishlist, oauthStartUrl, openCardPack, postFanEventComment, previewCardCombination, reconcilePassRewards, refundPointCharge, refundShopOrder, removeWishlistCard, registerPushDevice, requestFanPasswordReset, resolveApiUrl, saveWishlistCard, searchFans, setAccessToken, unfollowFan, unregisterPushDevice, updateNotificationPreferences, updateProfileEquipment, purchasePassSeason, type CardCombinationPreview, type CardCombinationRecipe, type CardCombinationResult, type CardDesignConfig, type CardPack, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionGoal, type CollectionSummary, type CurrentUser, type EventPagination, type FanEvent, type FanEventApplication, type FanEventComment, type FanEventStatus, type FanHomeResponse, type FanMission, type FanProgression, type FanSummary, type NotificationItem, type PointChargePackage, type PointChargeRecord, type ProfileEquipment, type PublicCollection as PublicCollectionData, type RewardGrant, type ShopOrder, type ShopProduct, type UserCardDetail } from './api/client'
 import { enableWebPush } from './pushNotifications'
 import { QrRedeemModal, RedeemIcon } from './components/QrRedeemModal'
 import { CardDetail } from './components/CardDetail'
@@ -216,6 +216,49 @@ const shopHistoryRecords: ShopHistoryRecord[] = [
   { id: 'summer-pack', type: 'purchase', month: '2026년 8월', title: '2026 SUMMER 한정 카드팩', date: '2026.08.08 09:31', status: '구매 완료', points: '-900P', image: dreamscapeCardPack, imageClassName: 'summer' },
   { id: 'starlight-pack', type: 'purchase', month: '2026년 7월', title: 'DREAMSCAPE Starlight Ver. 카드팩', date: '2026.07.28 16:05', status: '구매 취소', points: '+1,200P', image: dreamscapeCardPack, cancelled: true, imageClassName: 'starlight' },
 ]
+
+function PointChargePage({ appMode = false }: { appMode?: boolean }) {
+  const [packages, setPackages] = useState<PointChargePackage[]>([])
+  const [charges, setCharges] = useState<PointChargeRecord[]>([])
+  const [balance, setBalance] = useState<number | null>(null)
+  const [selectedPackage, setSelectedPackage] = useState<string>('points_1000')
+  const [paymentMethod, setPaymentMethod] = useState<PointChargeRecord['paymentMethod']>('sandbox_card')
+  const [loading, setLoading] = useState(appMode)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState<{ points: number; balance: number } | null>(null)
+  const chargeIdempotencyKey = useRef<string | null>(null)
+  const refresh = useCallback(async () => {
+    if (!appMode) return
+    const [catalog, points, history] = await Promise.all([getPointChargePackages(), getFanPoints(), getPointCharges()])
+    setPackages(catalog.data.items); setBalance(points.data.balance); setCharges(history.data.items); setSelectedPackage(current => catalog.data.items.some(item => item.id === current) ? current : catalog.data.items[0]?.id ?? '')
+  }, [appMode])
+  useEffect(() => { if (!appMode) { setPackages([{ id: 'points_500', points: 500, priceWon: 5000, label: '500P' }, { id: 'points_1000', points: 1000, priceWon: 9500, label: '1,000P' }, { id: 'points_3000', points: 3000, priceWon: 27000, label: '3,000P' }]); setLoading(false); return } let active = true; void refresh().catch(() => { if (active) setError('포인트 충전 정보를 불러오지 못했어요.') }).finally(() => { if (active) setLoading(false) }); return () => { active = false } }, [appMode, refresh])
+  const selected = packages.find(item => item.id === selectedPackage) ?? packages[0]
+  const charge = async () => {
+    if (!selected || !appMode) return
+    setSubmitting(true); setError(''); setSuccess(null)
+    try {
+      const key = chargeIdempotencyKey.current ?? `point-charge-${crypto.randomUUID()}`
+      chargeIdempotencyKey.current = key
+      const result = await createPointCharge(selected.id, paymentMethod, key)
+      chargeIdempotencyKey.current = null
+      setSuccess({ points: result.data.points, balance: result.data.balance }); await refresh()
+    } catch (requestError) { setError(requestError instanceof ApiError ? requestError.message : '포인트 충전에 실패했어요.') } finally { setSubmitting(false) }
+  }
+  const refund = async (chargeId: string) => { setError(''); setSuccess(null); try { await refundPointCharge(chargeId); await refresh() } catch (requestError) { setError(requestError instanceof ApiError ? requestError.message : '환불 처리에 실패했어요.') } }
+  return <main className="app-shell point-charge-shell detail-screen-shell">
+    <DetailTopBar title="포인트 충전" onBack={() => navigateAppPath(appMode ? '/shop' : '/?preview=shop')} backLabel="상점으로 돌아가기" />
+    <section className="point-charge-content detail-screen-content">
+      <section className="point-charge-balance"><span>현재 보유 포인트</span><strong>{appMode ? (balance ?? 0).toLocaleString() : '3,250'}<small>P</small></strong><p>카드팩과 상점 상품을 포인트로 구매할 수 있어요.</p></section>
+      <section aria-labelledby="point-package-title"><div className="point-charge-heading"><div><span className="eyebrow">TEST PAYMENT</span><h2 id="point-package-title">충전 패키지 선택</h2></div><span className="point-charge-badge">안전한 샌드박스</span></div><div className="point-charge-packages">{packages.map(item => <button type="button" key={item.id} className={`point-charge-package${selected?.id === item.id ? ' selected' : ''}`} aria-pressed={selected?.id === item.id} onClick={() => { setSelectedPackage(item.id); chargeIdempotencyKey.current = null }}><strong>{item.label}</strong><span>{item.priceWon.toLocaleString()}원</span>{item.id === 'points_1000' && <em>가장 인기</em>}</button>)}</div></section>
+      <section aria-labelledby="point-method-title"><h2 id="point-method-title">결제 수단</h2><div className="point-charge-methods">{([{ id: 'sandbox_card', label: '카드', icon: '카드' }, { id: 'sandbox_kakao', label: '카카오페이', icon: '카' }, { id: 'sandbox_naver', label: '네이버페이', icon: 'N' }] as const).map(item => <button type="button" key={item.id} className={paymentMethod === item.id ? 'selected' : ''} aria-pressed={paymentMethod === item.id} onClick={() => { setPaymentMethod(item.id); chargeIdempotencyKey.current = null }}><b>{item.icon}</b><span>{item.label}</span></button>)}</div><p className="point-charge-hint">현재는 로컬 테스트 결제로 처리되며 실제 결제 금액이 청구되지 않습니다.</p></section>
+      {error && <p className="shop-notice" role="alert">{error}</p>}{success && <p className="point-charge-success" role="status"><b>{success.points.toLocaleString()}P 충전 완료</b><span>현재 잔액 {success.balance.toLocaleString()}P</span></p>}
+      <button type="button" className="shop-checkout-primary point-charge-submit" disabled={!selected || submitting || !appMode} onClick={() => void charge()}>{submitting ? '충전 처리 중…' : `${selected?.points.toLocaleString() ?? 0}P 충전하기`}</button>
+      <section className="point-charge-history" aria-labelledby="point-history-title"><div className="point-charge-heading"><h2 id="point-history-title">충전 내역</h2><span>{charges.length}건</span></div>{loading && <p className="shop-notice" role="status">내역을 불러오고 있어요.</p>}{!loading && charges.length === 0 && <p className="point-charge-empty">아직 충전 내역이 없어요.</p>}{charges.map(item => <article key={item.id}><div><b>{item.points.toLocaleString()}P 충전</b><time>{item.createdAt.replace('T', ' ').slice(0, 16)}</time></div><strong className={item.status === 'refunded' ? 'refunded' : ''}>{item.status === 'refunded' ? '환불 완료' : `+${item.points.toLocaleString()}P`}</strong>{appMode && item.status === 'completed' && <button type="button" onClick={() => void refund(item.id)}>환불</button>}</article>)}</section>
+    </section>
+  </main>
+}
 
 function ShopHistoryPreview({ appMode = false }: { appMode?: boolean }) {
   const [filter, setFilter] = useState<ShopHistoryFilter>('all')
@@ -433,7 +476,7 @@ function ShopCheckoutPreview({ appMode = false }: { appMode?: boolean }) {
       <section className="shop-checkout-product" aria-labelledby="checkout-product-title"><img src={displayProductImage} alt={`${displayProductName} 상품 이미지`} /><div><span>{displayProductArtist}</span><h2 id="checkout-product-title">{displayProductName}</h2><p>{displayProductDescription}</p></div><strong>{price.toLocaleString()}P</strong></section>
       <section className="shop-checkout-section" aria-labelledby="checkout-method-title"><div className="shop-checkout-heading"><div><h2 id="checkout-method-title">결제 수단</h2><p>원하는 결제 방법을 선택해 주세요.</p></div></div><div className="shop-checkout-methods">{methods.map(item => <button type="button" key={item.id} className={`shop-checkout-method${paymentMethod === item.id ? ' selected' : ''}`} aria-pressed={paymentMethod === item.id} onClick={() => setPaymentMethod(item.id)}><span className={`shop-checkout-method-icon ${item.id}`}>{item.icon === 'card' ? <InlineIcon name="card" /> : item.icon}</span><span><b>{item.label}</b><small>{item.description}</small></span>{paymentMethod === item.id && <span className="shop-checkout-method-check"><InlineIcon name="check" /></span>}</button>)}</div></section>
       <label className="shop-checkout-toggle"><span><b>포인트 우선 사용</b><small>보유 포인트를 먼저 사용해요.</small></span><input type="checkbox" checked={usePointsFirst} onChange={event => setUsePointsFirst(event.target.checked)} /><i aria-hidden="true" /></label>
-      {appMode && currentBalance < price && !loading && <p className="shop-notice" role="alert">포인트가 부족해요. 상점에서 포인트를 충전해 주세요.</p>}
+      {appMode && currentBalance < price && !loading && <div className="shop-insufficient" role="alert"><p>포인트가 부족해요. 충전 후 상품을 구매할 수 있어요.</p><button type="button" onClick={() => navigateAppPath('/shop/points')}>포인트 충전하기 <InlineIcon name="chevron" /></button></div>}
       <section className="shop-checkout-summary" aria-label="결제 금액"><div><span>상품 금액</span><strong>{price.toLocaleString()}P</strong></div><div><span>포인트 사용</span><strong>-{pointUsed.toLocaleString()}P</strong></div><div className="total"><span>최종 결제</span><strong>{cashDue === 0 ? '0원' : `${cashDue.toLocaleString()}원`}</strong></div></section>
     </section>
     <footer className="shop-checkout-footer"><button type="button" className="shop-checkout-secondary" onClick={() => navigateAppPath(appMode ? '/shop' : '/?preview=shop')}>이전</button><button type="button" className="shop-checkout-primary" disabled={!canSubmit || submitting} onClick={() => void submitOrder()}>{submitting ? '구매 처리 중…' : '구매하기'}</button></footer>
@@ -531,7 +574,7 @@ function ShopPreview({ appMode = false, onOpenAlerts, onOpenProfile }: { appMode
       <section className="shop-points-card" aria-label={`보유 포인트 ${appMode ? (pointsBalance ?? 0).toLocaleString() : '3,250'} 포인트`}>
         <div><span>보유 포인트</span><strong>{appMode && pointsLoading ? '…' : (appMode ? (pointsBalance ?? 0).toLocaleString() : '3,250')}<small>P</small></strong></div>
         <span className="shop-points-art" aria-hidden="true"><img src={fanLevelStar} alt="" /></span>
-        <button type="button" onClick={() => setNotice('포인트 충전 내역을 준비하고 있어요.')}>충전 내역 <InlineIcon name="chevron" /></button>
+        <button type="button" onClick={() => navigateAppPath(appMode ? '/shop/points' : '/?preview=shop-points')}>포인트 충전 <InlineIcon name="chevron" /></button>
       </section>
 
       <button type="button" className="shop-history-link" onClick={() => navigateAppPath(appMode ? '/shop/history' : '/?preview=shop-history')}><span><InlineIcon name="list" /></span><b>구매 · 교환 내역</b><InlineIcon name="chevron" /></button>
@@ -1370,12 +1413,18 @@ function App() {
     return result.data
   }
 
-  const claimGrowthPassTier = async (tierId: string) => {
-    const result = await claimPassTier(tierId)
+  const claimGrowthPassTier = async (tierId: string, track: 'free' | 'premium' = 'free') => {
+    const result = await claimPassTier(tierId, track)
     const rewardGrant = result.data.rewardGrant
     if (rewardGrant && !rewardGrant.claimedAt) await claimReward(rewardGrant.id)
     await refreshGrowth()
     window.dispatchEvent(new Event('fanfolio:refresh-notifications'))
+    return result.data
+  }
+
+  const purchaseGrowthPass = async (seasonId: string) => {
+    const result = await purchasePassSeason(seasonId)
+    await refreshGrowth()
     return result.data
   }
 
@@ -1395,6 +1444,7 @@ function App() {
     if (preview === 'shop') return <ShopPreview />
     if (preview === 'shop-checkout') return <ShopCheckoutPreview />
     if (preview === 'shop-history') return <ShopHistoryPreview />
+    if (preview === 'shop-points') return <PointChargePage />
     if (preview === 'fan-missions') return <FanMissionPage onBack={() => window.location.assign('/?preview=fan-growth')} initialMissions={fanMissionPreviewItems} />
     if (preview === 'discover-hub') return <main className="app-shell discover-shell"><div className="app-header"><div className="app-header-copy"><span className="eyebrow">FANFOLIO</span><h1>탐색</h1></div><div className="header-actions"><button className="header-alert-button" aria-label="알림"><NavIcon name="alerts" /></button><button className="header-profile-button" aria-label="프로필 및 설정"><ProfileAvatar imageUrl={null} fallback="배" alt="프로필 이미지" /></button></div></div><section className="screen"><Discover onFindFans={() => window.location.assign('/?preview=fan-social')} onOpenFanProfile={() => window.location.assign('/?preview=fan-profile')} onOpenPublicCollection={() => window.location.assign('/?preview=public-collection')} onOpenEvent={() => window.location.assign('/?preview=discover-event')} onOpenArtist={() => window.location.assign('/?preview=discover-artist')} onOpenPackCatalog={() => window.location.assign('/?preview=card-collection')} onOpenPack={() => window.location.assign('/?preview=discover-pack')} onOpenCard={() => window.location.assign('/?preview=card-collection')} featuredArtist={{ id: 'artist_nova3', name: '드림스케이프', imageUrl: dreamscapeHero }} featuredEvent={fallbackHomeEvent} initialFans={fanCommunityPreviewFans} /></section><BottomNavigation active="discover" onNavigate={() => {}} /></main>
     if (preview === 'discover-artist') return <ArtistHubDetail artist={{ id: 'artist_nova3', name: '드림스케이프', imageUrl: dreamscapeHero }} usePreviewData onBack={() => window.location.assign('/?preview=discover-hub')} onOpenEvents={() => window.location.assign('/?preview=discover-event')} onOpenEvent={() => window.location.assign('/?preview=discover-event')} onOpenCollection={() => window.location.assign('/?preview=collection-inventory-entry')} onOpenCard={() => {}} />
@@ -1419,6 +1469,7 @@ function App() {
   const shopProductId = pathname.match(/^\/shop\/products\/([^/]+)$/)?.[1]
   if (shopProductId) return <ShopProductDetail productId={decodeURIComponent(shopProductId)} />
   if (pathname === '/shop/checkout') return <ShopCheckoutPreview appMode />
+  if (pathname === '/shop/points') return <PointChargePage appMode />
   if (pathname === '/shop/history') return <ShopHistoryPreview appMode />
   if (tab === 'shop') return <ShopPreview appMode onOpenAlerts={openAlerts} onOpenProfile={() => navigateTab('settings')} />
 
@@ -1497,7 +1548,7 @@ function App() {
   }
 
   if (showFanPassPage) {
-    return <FanPassPage progression={passScope === 'global' ? globalFanProgression : fanProgression} loading={growthLoading} error={growthError} onRetry={refreshGrowth} onBack={closeFanPassPage} onClaimPassTier={claimGrowthPassTier} onNavigate={navigateTab} initialTierId={passTargetTierId} isGlobal={passScope === 'global'} />
+    return <FanPassPage progression={passScope === 'global' ? globalFanProgression : fanProgression} loading={growthLoading} error={growthError} onRetry={refreshGrowth} onBack={closeFanPassPage} onClaimPassTier={claimGrowthPassTier} onPurchasePass={purchaseGrowthPass} onNavigate={navigateTab} initialTierId={passTargetTierId} isGlobal={passScope === 'global'} />
   }
 
   if (showMissionPage) {

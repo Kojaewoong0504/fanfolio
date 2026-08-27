@@ -764,6 +764,124 @@ def test_pass_tier_claim_allows_fourteen_day_post_season_grace(
     )
 
 
+def test_paid_season_exposes_two_lanes_and_unlocks_premium_after_purchase(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    async def seed_paid_season() -> None:
+        async with SessionLocal() as session:
+            free = RewardCatalog(
+                id="reward_paid_free",
+                artist_id="artist_nova3",
+                reward_type="badge",
+                name="Free season badge",
+                status="published",
+            )
+            premium = RewardCatalog(
+                id="reward_paid_premium",
+                artist_id="artist_nova3",
+                reward_type="profile_frame",
+                name="Premium season frame",
+                status="published",
+            )
+            season = PassSeason(
+                id="pass_paid_contract",
+                artist_id="artist_nova3",
+                title="Paid Contract Season",
+                status="published",
+                is_paid=True,
+                premium_enabled=True,
+                premium_price_points=1200,
+                starts_at=now() - timedelta(days=1),
+                ends_at=now() + timedelta(days=7),
+            )
+            tier = PassTier(
+                id="pass_paid_contract_tier",
+                season_id=season.id,
+                tier=1,
+                required_xp=0,
+                reward_id=free.id,
+                premium_reward_id=premium.id,
+            )
+            session.add_all([free, premium, season, tier])
+            await session.commit()
+
+    asyncio.run(seed_paid_season())
+    before = assert_success(actors["fan"].get("/api/me/pass"))
+    season = next(item for item in before["seasons"] if item["id"] == "pass_paid_contract")
+    assert season["isPaid"] is True
+    assert season["premiumEnabled"] is True
+    assert season["isPurchased"] is False
+    assert season["tiers"][0]["freeReward"]["name"] == "Free season badge"
+    assert season["tiers"][0]["premiumReward"]["name"] == "Premium season frame"
+    assert season["tiers"][0]["premiumClaimable"] is False
+
+    assert_error(
+        actors["fan"].post("/api/me/pass-seasons/pass_paid_contract/purchase"),
+        409,
+        "INSUFFICIENT_POINTS",
+    )
+
+    async def fund_fan() -> None:
+        async with SessionLocal() as session:
+            session.add(PointBalance(user_id="fan", balance=1500))
+            await session.commit()
+
+    asyncio.run(fund_fan())
+    purchased = assert_success(
+        actors["fan"].post("/api/me/pass-seasons/pass_paid_contract/purchase")
+    )
+    assert purchased["pricePoints"] == 1200
+    after_purchase = assert_success(actors["fan"].get("/api/me/pass"))
+    purchased_season = next(
+        item for item in after_purchase["seasons"] if item["id"] == "pass_paid_contract"
+    )
+    assert purchased_season["isPurchased"] is True
+    assert purchased_season["tiers"][0]["premiumClaimable"] is True
+    claimed = assert_success(
+        actors["fan"].post("/api/me/pass-tiers/pass_paid_contract_tier/claim?track=premium")
+    )
+    assert claimed["track"] == "premium"
+
+
+def test_point_charge_packages_credit_balance_idempotently_and_refund_to_ledger(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    starting_balance = assert_success(actors["fan"].get("/api/me/points"))["balance"]
+    packages = assert_success(actors["fan"].get("/api/catalog/point-charges"))
+    package = next(item for item in packages["items"] if item["id"] == "points_1000")
+    assert package["points"] == 1000
+
+    first = assert_success(
+        actors["fan"].post(
+            "/api/me/point-charges",
+            json={"packageId": package["id"], "paymentMethod": "sandbox_card"},
+            headers={"Idempotency-Key": "point-charge-contract-1"},
+        ),
+        201,
+    )
+    replay = assert_success(
+        actors["fan"].post(
+            "/api/me/point-charges",
+            json={"packageId": package["id"], "paymentMethod": "sandbox_card"},
+            headers={"Idempotency-Key": "point-charge-contract-1"},
+        ),
+        201,
+    )
+    assert first["chargeId"] == replay["chargeId"]
+    assert replay["replayed"] is True
+    assert assert_success(actors["fan"].get("/api/me/points"))["balance"] == starting_balance + 1000
+
+    refunded = assert_success(
+        actors["fan"].post(f"/api/me/point-charges/{first['chargeId']}/refund"),
+        201,
+    )
+    assert refunded["status"] == "refunded"
+    assert assert_success(actors["fan"].get("/api/me/points"))["balance"] == starting_balance
+
+    charges = assert_success(actors["fan"].get("/api/me/point-charges"))
+    assert charges["items"][0]["status"] == "refunded"
+
+
 def test_redeeming_a_live_card_processes_xp_achievement_reward_and_notification(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:

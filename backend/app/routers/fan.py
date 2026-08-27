@@ -40,6 +40,7 @@ from app.models import (
     MissionProgress,
     Notification,
     PointBalance,
+    PointCharge,
     PointLedger,
     PointTransaction,
     PushDevice,
@@ -64,6 +65,7 @@ from app.schemas import (
     AccountDeletionRequest,
     CollectionGoalCreate,
     NotificationPreferencesUpdate,
+    PointChargeRequest,
     PointExchangeRequest,
     ProfileEquipmentUpdate,
     ProfileUpdate,
@@ -78,6 +80,8 @@ from app.schemas import (
 from app.services import (
     claim_pass_tier,
     claim_reward_grant,
+    create_point_charge,
+    ensure_point_charge_packages,
     fan_pass_data,
     fan_progression_data,
     grant_reward,
@@ -86,11 +90,13 @@ from app.services import (
     notify_admin_once,
     notify_user_once,
     preview_redeem,
+    purchase_pass_season,
     reconcile_claimed_global_pass_reward_grants,
     record_analytics_event,
     record_audit,
     record_engagement_event,
     redeem,
+    refund_point_charge,
     reverse_points,
     spend_points,
     update_profile_equipment,
@@ -1535,6 +1541,107 @@ async def points(user: FanUser, session: DbSession) -> dict:
     }
 
 
+@router.get("/catalog/point-charges")
+async def point_charge_catalog(session: DbSession) -> dict:
+    packages = await ensure_point_charge_packages(session)
+    await session.commit()
+    current_time = datetime.now(UTC)
+    visible_packages = []
+    for item in packages:
+        scheduled_at = item.scheduled_publish_at
+        if scheduled_at is not None and scheduled_at.tzinfo is None:
+            scheduled_at = scheduled_at.replace(tzinfo=UTC)
+        if item.status != "active" or (scheduled_at is not None and scheduled_at > current_time):
+            continue
+        visible_packages.append(
+            {
+                "id": item.id,
+                "points": item.points,
+                "priceWon": item.price_won,
+                "label": item.label,
+            }
+        )
+    return {"ok": True, "data": {"items": visible_packages}}
+
+
+def _point_charge_data(charge: PointCharge) -> dict:
+    return {
+        "id": charge.id,
+        "packageId": charge.package_id,
+        "paymentMethod": charge.payment_method,
+        "points": charge.points,
+        "priceWon": charge.price_won,
+        "status": charge.status,
+        "createdAt": charge.created_at.isoformat() if charge.created_at else None,
+        "refundedAt": charge.refunded_at.isoformat() if charge.refunded_at else None,
+    }
+
+
+@router.get("/me/point-charges")
+async def point_charges(user: FanUser, session: DbSession) -> dict:
+    rows = list(
+        await session.scalars(
+            select(PointCharge)
+            .where(PointCharge.user_id == user.id)
+            .order_by(PointCharge.created_at.desc(), PointCharge.id.desc())
+            .limit(100)
+        )
+    )
+    return {"ok": True, "data": {"items": [_point_charge_data(row) for row in rows]}}
+
+
+@router.post("/me/point-charges", status_code=status.HTTP_201_CREATED)
+async def create_fan_point_charge(
+    payload: PointChargeRequest,
+    user: FanUser,
+    session: DbSession,
+    idempotency_key: str = Header(..., alias="Idempotency-Key"),
+) -> dict:
+    key = idempotency_key.strip()
+    if not key:
+        raise AppError(422, "IDEMPOTENCY_KEY_REQUIRED", "충전 요청 식별자가 필요합니다.")
+    existing = await session.scalar(
+        select(PointCharge).where(
+            PointCharge.user_id == user.id, PointCharge.idempotency_key == key
+        )
+    )
+    charge = await create_point_charge(
+        session,
+        user_id=user.id,
+        package_id=payload.package_id,
+        payment_method=payload.payment_method,
+        idempotency_key=key,
+    )
+    await session.commit()
+    balance = int(
+        await session.scalar(select(PointBalance.balance).where(PointBalance.user_id == user.id))
+        or 0
+    )
+    return {
+        "ok": True,
+        "data": {
+            **_point_charge_data(charge),
+            "chargeId": charge.id,
+            "balance": balance,
+            "replayed": existing is not None,
+        },
+    }
+
+
+@router.post("/me/point-charges/{charge_id}/refund", status_code=status.HTTP_201_CREATED)
+async def refund_fan_point_charge(charge_id: str, user: FanUser, session: DbSession) -> dict:
+    charge = await refund_point_charge(session, user_id=user.id, charge_id=charge_id)
+    await session.commit()
+    balance = int(
+        await session.scalar(select(PointBalance.balance).where(PointBalance.user_id == user.id))
+        or 0
+    )
+    return {
+        "ok": True,
+        "data": {**_point_charge_data(charge), "chargeId": charge.id, "balance": balance},
+    }
+
+
 @router.get("/me/points/history")
 async def point_history(user: FanUser, session: DbSession) -> dict:
     return await points(user, session)
@@ -1731,8 +1838,21 @@ async def fan_pass(
 
 
 @router.post("/me/pass-tiers/{tier_id}/claim")
-async def claim_fan_pass_tier(tier_id: str, user: FanUser, session: DbSession) -> dict:
-    return {"ok": True, "data": await claim_pass_tier(session, user_id=user.id, tier_id=tier_id)}
+async def claim_fan_pass_tier(
+    tier_id: str, user: FanUser, session: DbSession, track: str = "free"
+) -> dict:
+    return {
+        "ok": True,
+        "data": await claim_pass_tier(session, user_id=user.id, tier_id=tier_id, track=track),
+    }
+
+
+@router.post("/me/pass-seasons/{season_id}/purchase")
+async def purchase_fan_pass_season(season_id: str, user: FanUser, session: DbSession) -> dict:
+    return {
+        "ok": True,
+        "data": await purchase_pass_season(session, user_id=user.id, season_id=season_id),
+    }
 
 
 @router.post("/me/rewards/{grant_id}/claim")
@@ -2563,7 +2683,7 @@ async def catalog(
         else_=0,
     )
     if sort == "name":
-        ordering = (Artist.name, Member.name, Card.name, Card.id)
+        ordering = (Card.name, Card.id)
     elif sort == "rarity":
         ordering = (desc(rarity_score), Artist.name, Card.name, Card.id)
     else:

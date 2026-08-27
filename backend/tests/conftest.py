@@ -82,39 +82,52 @@ def seeded_roles(app: FastAPI, actors: dict[str, TestClient]) -> dict[str, TestC
 
     async def add_partner_users() -> None:
         async with SessionLocal() as session:
-            session.add(
-                Organization(
-                    id="org_scenario_partner",
-                    name="시나리오 파트너사",
-                    slug="scenario-partner",
-                    status="active",
+            if await session.get(Organization, "org_scenario_partner") is None:
+                session.add(
+                    Organization(
+                        id="org_scenario_partner",
+                        name="시나리오 파트너사",
+                        slug="scenario-partner",
+                        status="active",
+                    )
                 )
-            )
-            session.add(
-                OrganizationArtist(organization_id="org_scenario_partner", artist_id="artist_nova3")
-            )
+            if (
+                await session.get(OrganizationArtist, ("org_scenario_partner", "artist_nova3"))
+                is None
+            ):
+                session.add(
+                    OrganizationArtist(
+                        organization_id="org_scenario_partner", artist_id="artist_nova3"
+                    )
+                )
             for user_id, access_level in (
                 ("scenario_partner_manager", "manager"),
                 ("scenario_partner_editor", "editor"),
             ):
-                session.add(
-                    User(
-                        id=user_id,
-                        email=f"{user_id}@example.test",
-                        role=Role.ADMIN,
+                if await session.get(User, user_id) is None:
+                    session.add(
+                        User(
+                            id=user_id,
+                            email=f"{user_id}@example.test",
+                            role=Role.ADMIN,
+                        )
                     )
-                )
-                session.add(Session(token=f"test-session-{user_id}", user_id=user_id))
-                session.add(
-                    AdminMembership(
-                        user_id=user_id,
-                        organization_id="org_scenario_partner",
-                        access_level=access_level,
-                        status="active",
-                        display_name=user_id,
+                if await session.get(Session, f"test-session-{user_id}") is None:
+                    session.add(Session(token=f"test-session-{user_id}", user_id=user_id))
+                if await session.get(AdminMembership, user_id) is None:
+                    session.add(
+                        AdminMembership(
+                            user_id=user_id,
+                            organization_id="org_scenario_partner",
+                            access_level=access_level,
+                            status="active",
+                            display_name=user_id,
+                        )
                     )
-                )
-                session.add(AdminArtistAssignment(admin_user_id=user_id, artist_id="artist_nova3"))
+                if await session.get(AdminArtistAssignment, (user_id, "artist_nova3")) is None:
+                    session.add(
+                        AdminArtistAssignment(admin_user_id=user_id, artist_id="artist_nova3")
+                    )
             await session.commit()
 
     asyncio.run(add_partner_users())

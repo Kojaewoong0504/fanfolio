@@ -232,6 +232,12 @@ test('fan pass opens as a dedicated page with a vertical season journey', () => 
   assert.doesNotMatch(fanGrowthSource, /onClick=\{\(\) => setActiveSheet\('pass'\)\}/)
 })
 
+test('fan pass purchase failures are announced to the fan instead of disappearing silently', () => {
+  assert.match(fanPassSource, /purchaseError/)
+  assert.match(fanPassSource, /role="alert"/)
+  assert.match(fanPassSource, /구매하지 못했어요|포인트가 부족/)
+})
+
 test('fan pass bottom navigation delegates to the app tab router', () => {
   assert.match(fanPassSource, /onNavigate: \(tab: 'discover' \| 'collection' \| 'home' \| 'growth' \| 'shop'\) => void/)
   assert.match(fanPassSource, /onClick=\{\(\) => onNavigate\('discover'\)\}/)
@@ -240,6 +246,15 @@ test('fan pass bottom navigation delegates to the app tab router', () => {
   assert.match(fanPassSource, /onClick=\{\(\) => onNavigate\('shop'\)\}/)
   assert.match(appSource, /onNavigate=\{navigateTab\}/)
   assert.match(appSource, /const navigateTab = \(nextTab: Tab\) => \{[\s\S]*?setShowFanPassPage\(false\)/)
+})
+
+test('season pass keeps the reward flow compact and the premium purchase cue visible', () => {
+  assert.doesNotMatch(fanPassSource, /season-pass-tier-detail/)
+  assert.doesNotMatch(fanPassSource, /expandedTierId/)
+  assert.match(fanPassSource, /season-pass-purchase-cue/)
+  assert.match(fanPassCssSource, /\.season-pass-purchase-cue\s*\{[^}]*position:sticky/)
+  assert.match(fanPassCssSource, /\.season-pass-lane\s*\{[^}]*grid-template-columns:48px/)
+  assert.match(appCssSource, /\.detail-screen-content\s*\{[^}]*padding:[^;]*calc\(var\(--bottom-nav-height\)/)
 })
 
 test('global fan pass uses shared canvas spacing and intentional empty state', () => {

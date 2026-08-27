@@ -46,6 +46,8 @@ def test_root_admin_can_open_privacy_scoped_fan_360_view(
         "cards",
         "orders",
         "trades",
+        "pointLedger",
+        "pointCharges",
         "supportTickets",
         "recentNotifications",
     }
