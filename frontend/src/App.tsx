@@ -521,7 +521,7 @@ function ShopProductDetail({ productId }: { productId: string }) {
 
 function ShopPreview({ appMode = false, onOpenAlerts, onOpenProfile, favoriteArtists = [] }: { appMode?: boolean; onOpenAlerts?: () => void; onOpenProfile?: () => void; favoriteArtists?: CatalogArtist[] }) {
   const [category, setCategory] = useState<ShopCategory>('recommended')
-  const [artist, setArtist] = useState<string | null>(null)
+  const [artist, setArtist] = useState<string | null>(() => readActiveArtistId())
   const [notice, setNotice] = useState('')
   const [products, setProducts] = useState<ShopProduct[]>([])
   const [productsLoading, setProductsLoading] = useState(appMode)
@@ -581,7 +581,13 @@ function ShopPreview({ appMode = false, onOpenAlerts, onOpenProfile, favoriteArt
   ]
   const shopFavoriteArtists = favoriteArtists.length > 0 ? favoriteArtists : previewArtists
   const selectedArtistId = artist
-  const visibleProducts = appMode || selectedArtistId === null ? products : products.filter(product => product.artistId === selectedArtistId)
+  useEffect(() => {
+    if (artist && favoriteArtists.length > 0 && !favoriteArtists.some(item => item.id === artist)) {
+      setArtist(null)
+      writeActiveArtistId(null)
+    }
+  }, [artist, favoriteArtists])
+  const visibleProducts = selectedArtistId === null ? products : products.filter(product => product.artistId === selectedArtistId)
   const livePacks = visibleProducts.filter(product => product.productType === 'card_pack')
   const livePointItems = visibleProducts.filter(product => product.productType === 'point_item')
   const liveLimitedItems = visibleProducts.filter(product => product.productType === 'limited_item')
@@ -600,8 +606,8 @@ function ShopPreview({ appMode = false, onOpenAlerts, onOpenProfile, favoriteArt
       <section className="shop-artist-section" aria-labelledby="shop-artist-title">
         <h2 id="shop-artist-title">관심 아티스트</h2>
         <div className="shop-artist-list">
-          <button type="button" className={artist === null ? 'selected' : ''} aria-label="전체 아티스트 상품 보기" aria-pressed={artist === null} onClick={() => setArtist(null)}><span className="shop-artist-all"><InlineIcon name="card" /></span><b>전체</b></button>
-          {shopFavoriteArtists.map(item => <button type="button" className={artist === item.id ? 'selected' : ''} aria-pressed={artist === item.id} key={item.id} onClick={() => setArtist(item.id)}>{item.imageUrl ? <img src={resolveApiUrl(item.imageUrl)} alt="" /> : <span className="shop-artist-all"><InlineIcon name="users" /></span>}<b>{item.name}</b></button>)}
+          <button type="button" className={artist === null ? 'selected' : ''} aria-label="전체 아티스트 상품 보기" aria-pressed={artist === null} onClick={() => { writeActiveArtistId(null); setArtist(null) }}><span className="shop-artist-all"><InlineIcon name="card" /></span><b>전체</b></button>
+          {shopFavoriteArtists.map(item => <button type="button" className={artist === item.id ? 'selected' : ''} aria-pressed={artist === item.id} key={item.id} onClick={() => { writeActiveArtistId(item.id); setArtist(item.id) }}>{item.imageUrl ? <img src={resolveApiUrl(item.imageUrl)} alt="" /> : <span className="shop-artist-all"><InlineIcon name="users" /></span>}<b>{item.name}</b></button>)}
           <button type="button" onClick={() => onOpenProfile?.()}><span className="shop-artist-add"><InlineIcon name="plus" /></span><b>아티스트 추가</b></button>
         </div>
       </section>
@@ -764,6 +770,25 @@ function onboardingDraftKey(userId: string): string {
   return `fanfolio.onboarding-draft:${userId}`
 }
 
+const activeArtistStorageKey = 'fanfolio.active-artist-id'
+
+function readActiveArtistId(): string | null {
+  try {
+    return window.localStorage.getItem(activeArtistStorageKey)
+  } catch {
+    return null
+  }
+}
+
+function writeActiveArtistId(artistId: string | null): void {
+  try {
+    if (artistId) window.localStorage.setItem(activeArtistStorageKey, artistId)
+    else window.localStorage.removeItem(activeArtistStorageKey)
+  } catch {
+    // Persisting the context is an enhancement; the current screen remains usable if storage is unavailable.
+  }
+}
+
 function readOnboardingDraft(userId: string): OnboardingDraft {
   try {
     const raw = window.sessionStorage.getItem(onboardingDraftKey(userId))
@@ -792,7 +817,7 @@ function App() {
   const [sessionChecking, setSessionChecking] = useState(true)
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
   const [catalogArtists, setCatalogArtists] = useState<CatalogArtist[]>([])
-  const [growthArtistId, setGrowthArtistId] = useState<string | null>(null)
+  const [growthArtistId, setGrowthArtistId] = useState<string | null>(() => readActiveArtistId())
   const [collectionCards, setCollectionCards] = useState<Card[]>([])
   const [collectionDataReady, setCollectionDataReady] = useState(false)
   // The MVP contract defines a nine-card collection. Keep the loading
@@ -878,6 +903,10 @@ function App() {
     const favoriteArtistIds = currentUser?.favoriteArtistIds ?? []
     setGrowthArtistId(current => current && favoriteArtistIds.includes(current) ? current : favoriteArtistIds[0] ?? null)
   }, [currentUser?.favoriteArtistIds])
+
+  useEffect(() => {
+    writeActiveArtistId(growthArtistId)
+  }, [growthArtistId])
 
   useEffect(() => {
     if (!signedIn) return
@@ -2380,7 +2409,7 @@ function HomeRecommendations({ cards, onSelect, onDiscover }: { cards: Card[], o
 }
 
 function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome, onSelect, onDiscover, onCollection, onRedeem, onEvents, onEvent }: HomeProps) {
-  const [activeHomeArtistId, setActiveHomeArtistId] = useState<string | null>(null)
+  const [activeHomeArtistId, setActiveHomeArtistId] = useState<string | null>(() => readActiveArtistId())
   const [scopedHomeCards, setScopedHomeCards] = useState<CatalogCard[]>([])
   const featured = cards[0]
   const apiHeroEvents = eventHome
@@ -2412,6 +2441,11 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
   useEffect(() => {
     setArtistFavorites(new Set((eventHome?.favoriteArtists ?? []).map(artist => artist.id)))
   }, [eventHome])
+
+  useEffect(() => {
+    const favoriteIds = new Set((eventHome?.favoriteArtists ?? []).map(artist => artist.id))
+    if (activeHomeArtistId && !favoriteIds.has(activeHomeArtistId)) setActiveHomeArtistId(null)
+  }, [activeHomeArtistId, eventHome])
 
   useEffect(() => {
     if (!activeHomeArtistId) {
@@ -2511,7 +2545,7 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
         const artistImage = artist.imageUrl ? (resolveApiUrl(artist.imageUrl) || dreamscapeHero) : dreamscapeHero
         const isFavorite = artistFavorites.has(artist.id)
         return <article className="home-artist-card" key={artist.id}>
-          <button type="button" className={`home-artist-primary${activeHomeArtistId === artist.id ? ' is-selected' : ''}`} onClick={() => { setActiveHomeArtistId(current => current === artist.id ? null : artist.id); setActiveHeroIndex(0) }} aria-label={`${artist.name} 아티스트 콘텐츠 보기`} aria-pressed={activeHomeArtistId === artist.id}>
+          <button type="button" className={`home-artist-primary${activeHomeArtistId === artist.id ? ' is-selected' : ''}`} onClick={() => { const next = activeHomeArtistId === artist.id ? null : artist.id; writeActiveArtistId(next); setActiveHomeArtistId(next); setActiveHeroIndex(0) }} aria-label={`${artist.name} 아티스트 콘텐츠 보기`} aria-pressed={activeHomeArtistId === artist.id}>
             <img className="home-artist-backdrop" src={artistImage} alt="" />
             <span className="home-artist-copy">
               <small className="home-artist-badge">관심 아티스트</small>
@@ -3223,9 +3257,15 @@ function CardCollectionRepository({ initialPackId, usePreviewData = false, onBac
 function Collection({ cards: collectionCards, collectionDataReady, favoriteArtists = [], summary, benefits, rewards, loading, onSelect, onRedeem, onDiscover, onRewards, onCards, onOpenWishlist, onClaim }: { cards: Card[], collectionDataReady: boolean, favoriteArtists?: CatalogArtist[], summary: CollectionSummary, benefits: CollectionBenefit[], rewards: RewardGrant[], loading: boolean, onSelect: (card: Card) => void, onRedeem: () => void, onDiscover: () => void, onRewards: () => void, onCards: () => void, onOpenWishlist: () => void, onClaim: (campaignId: string) => Promise<void> }) {
   const [claimingId, setClaimingId] = useState<string | null>(null)
   const [claimMessage, setClaimMessage] = useState('')
-  const [activeArtistId, setActiveArtistId] = useState<string | null>(null)
+  const [activeArtistId, setActiveArtistId] = useState<string | null>(() => readActiveArtistId())
   const sourceCards = collectionDataReady ? collectionCards : import.meta.env.DEV ? fallbackCollectionCards : []
   const visibleCards = activeArtistId ? sourceCards.filter(card => card.artist === favoriteArtists.find(artist => artist.id === activeArtistId)?.name) : sourceCards
+  useEffect(() => {
+    if (activeArtistId && !favoriteArtists.some(artist => artist.id === activeArtistId)) {
+      setActiveArtistId(null)
+      writeActiveArtistId(null)
+    }
+  }, [activeArtistId, favoriteArtists])
   const recentCards = sourceCards.slice(0, 4)
   const displayedRecentCards = activeArtistId ? visibleCards.slice(0, 4) : recentCards
   const duplicateCounts = displayedRecentCards.reduce<Record<string, number>>((counts, card) => {
@@ -3254,7 +3294,7 @@ function Collection({ cards: collectionCards, collectionDataReady, favoriteArtis
         <div className="collection-progress-value"><strong>{summary.completionRate}%</strong><b>{summary.ownedCount} / {summary.totalSlots}</b></div>
         <div className="collection-progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={summary.completionRate} aria-label={`컬렉션 ${summary.completionRate}% 완료`}><span style={{ width: `${Math.min(100, Math.max(0, summary.completionRate))}%` }} /></div>
       </section>
-      {favoriteArtists.length > 0 && <div className="artist-scope-picker" aria-label="보관함 관심 아티스트 범위"><span>보관함 범위</span><div><button type="button" className={activeArtistId === null ? 'is-active' : ''} aria-pressed={activeArtistId === null} onClick={() => setActiveArtistId(null)}>전체</button>{favoriteArtists.map(artist => <button type="button" key={artist.id} className={activeArtistId === artist.id ? 'is-active' : ''} aria-pressed={activeArtistId === artist.id} onClick={() => setActiveArtistId(artist.id)}>{artist.name}</button>)}</div></div>}
+      {favoriteArtists.length > 0 && <div className="artist-scope-picker" aria-label="보관함 관심 아티스트 범위"><span>보관함 범위</span><div><button type="button" className={activeArtistId === null ? 'is-active' : ''} aria-pressed={activeArtistId === null} onClick={() => { writeActiveArtistId(null); setActiveArtistId(null) }}>전체</button>{favoriteArtists.map(artist => <button type="button" key={artist.id} className={activeArtistId === artist.id ? 'is-active' : ''} aria-pressed={activeArtistId === artist.id} onClick={() => { writeActiveArtistId(artist.id); setActiveArtistId(artist.id) }}>{artist.name}</button>)}</div></div>}
       <button type="button" className="collection-wishlist-entry" onClick={onOpenWishlist}>
         <span className="collection-wishlist-entry-icon"><InlineIcon name="heart" /></span>
         <span><b>원하는 카드 등록</b><small>거래하고 싶은 카드를 미리 등록해두면 거래 제안이 쉬워져요.</small></span>
@@ -3286,7 +3326,7 @@ function Collection({ cards: collectionCards, collectionDataReady, favoriteArtis
         })}</div>
       </section>
     </section>
-    {visibleCards.length === 0 && sourceCards.length > 0 && <div className="empty-collection"><div className="empty-collection-copy"><InlineIcon name="search" /><b>이 그룹의 카드가 없어요</b><small>다른 관심 그룹을 선택하거나 카드를 탐색해 보세요.</small></div><div className="empty-collection-actions"><button type="button" className="outline" onClick={() => setActiveArtistId(null)}>전체 카드 보기</button><button type="button" className="primary" onClick={onDiscover}>카드 탐색하기</button></div></div>}
+    {visibleCards.length === 0 && sourceCards.length > 0 && <div className="empty-collection"><div className="empty-collection-copy"><InlineIcon name="search" /><b>이 그룹의 카드가 없어요</b><small>다른 관심 그룹을 선택하거나 카드를 탐색해 보세요.</small></div><div className="empty-collection-actions"><button type="button" className="outline" onClick={() => { writeActiveArtistId(null); setActiveArtistId(null) }}>전체 카드 보기</button><button type="button" className="primary" onClick={onDiscover}>카드 탐색하기</button></div></div>}
     {sourceCards.length === 0 && <div className="empty-collection"><div className="empty-collection-copy"><InlineIcon name="plus" /><b>아직 카드가 없어요</b><small>카드를 등록하거나 탐색해서 컬렉션을 시작해 보세요.</small></div><div className="empty-collection-actions"><button type="button" className="primary" onClick={onRedeem}>카드 등록하기</button><button type="button" className="outline" onClick={onDiscover}>카드 탐색하기</button></div></div>}
     {benefits.length > 0 && <section className="benefit-section"><div className="section-heading"><h2>컬렉션 완성 특전</h2></div><div className="benefit-list">{benefits.map(benefit => <article className={`benefit-card ${benefit.status}`} key={`${benefit.campaignId ?? benefit.artistId ?? 'fanfolio'}-${benefit.seasonName}`}><div><span className="detail-badge">{benefit.claimed ? '수령 완료' : benefit.status === 'unlocked' ? '해금 완료' : '진행 중'}</span><h3>{benefit.benefit.title}</h3><p>{benefit.benefit.description}</p></div><div><strong>{benefit.ownedCount}/{benefit.requiredCount}</strong>{benefit.claimable && benefit.campaignId && <button className="outline" onClick={() => void claim(benefit)} disabled={claimingId === benefit.campaignId}>{claimingId === benefit.campaignId ? '수령 중...' : '특전 받기'}</button>}{benefit.claimed && benefit.downloadUrl && <a className="outline benefit-download" href={resolveApiUrl(benefit.downloadUrl)} download>특전 다운로드</a>}</div></article>)}</div>{claimMessage && <p className="form-message">{claimMessage}</p>}</section>}
   </>
@@ -3465,11 +3505,17 @@ function Discover({ onFindFans, onOpenFanProfile, onOpenPublicCollection, onOpen
   const [fans, setFans] = useState<FanSummary[]>(initialFans ?? [])
   const [fansLoading, setFansLoading] = useState(!initialFans)
   const [pendingFollowFanId, setPendingFollowFanId] = useState<string | null>(null)
-  const [activeArtistId, setActiveArtistId] = useState<string | null>(null)
+  const [activeArtistId, setActiveArtistId] = useState<string | null>(() => readActiveArtistId())
   const [scopedEvents, setScopedEvents] = useState<FanEvent[]>([])
   const [scopedEventsLoading, setScopedEventsLoading] = useState(false)
   const favoriteArtistKey = favoriteArtists.map(artist => artist.id).join('|')
   const scopedArtistKey = activeArtistId ?? favoriteArtistKey
+  useEffect(() => {
+    if (activeArtistId && !favoriteArtists.some(artist => artist.id === activeArtistId)) {
+      setActiveArtistId(null)
+      writeActiveArtistId(null)
+    }
+  }, [activeArtistId, favoriteArtists])
   useEffect(() => {
     let cancelled = false
     setPacksLoading(true)
@@ -3606,7 +3652,7 @@ function Discover({ onFindFans, onOpenFanProfile, onOpenPublicCollection, onOpen
 
   return <section className="discover-hub">
     <div className="discover-hub-intro"><p>좋아하는 아티스트와 새로운 팬 활동을 발견해보세요.</p></div>
-    {favoriteArtists.length > 0 && <section className="discover-favorite-scope" aria-label="관심 아티스트 범위"><span>관심 아티스트</span><div><button type="button" className={!activeArtistId ? 'is-active' : ''} aria-pressed={!activeArtistId} onClick={() => setActiveArtistId(null)}>전체</button>{favoriteArtists.map(artist => <span className="discover-favorite-scope-item" key={artist.id}><button type="button" className={activeArtistId === artist.id ? 'is-active' : ''} aria-pressed={activeArtistId === artist.id} onClick={() => setActiveArtistId(artist.id)}>{artist.name}</button><button type="button" aria-label={`${artist.name} 상세 보기`} onClick={() => onOpenArtist(artist.id)}><InlineIcon name="chevron" /></button></span>)}</div></section>}
+    {favoriteArtists.length > 0 && <section className="discover-favorite-scope" aria-label="관심 아티스트 범위"><span>관심 아티스트</span><div><button type="button" className={!activeArtistId ? 'is-active' : ''} aria-pressed={!activeArtistId} onClick={() => { writeActiveArtistId(null); setActiveArtistId(null) }}>전체</button>{favoriteArtists.map(artist => <span className="discover-favorite-scope-item" key={artist.id}><button type="button" className={activeArtistId === artist.id ? 'is-active' : ''} aria-pressed={activeArtistId === artist.id} onClick={() => { writeActiveArtistId(artist.id); setActiveArtistId(artist.id) }}>{artist.name}</button><button type="button" aria-label={`${artist.name} 상세 보기`} onClick={() => onOpenArtist(artist.id)}><InlineIcon name="chevron" /></button></span>)}</div></section>}
     <form className="discover-global-search" role="search" onSubmit={submitDiscoverSearch}>
       <button type="submit" aria-label="탐색 검색"><InlineIcon name="search" /></button>
       <input
@@ -3820,10 +3866,11 @@ function notificationDestination(kind: string): NotificationDestination | null {
 }
 
 function Alerts({ items, error, actionError, onDismissActionError, onRetry, onRead, onReadAll, onBack, onNavigate }: { items: NotificationItem[], error: string, actionError: string, onDismissActionError: () => void, onRetry: () => void, onRead: (id: string) => Promise<void>, onReadAll: () => Promise<void>, onBack: () => void, onNavigate: (destination: NotificationDestination) => void }) {
-  const [category, setCategory] = useState<'all' | 'activity'>('all')
+  const [category, setCategory] = useState<'all' | 'activity' | 'unread'>('all')
   const categories = [
     { value: 'all', label: '전체', matches: () => true },
     { value: 'activity', label: '활동', matches: (item: NotificationItem) => item.kind !== 'system' },
+    { value: 'unread', label: '읽지 않음', matches: (item: NotificationItem) => !item.isRead },
   ] as const
   const selectedCategory = categories.find(item => item.value === category) ?? categories[0]
   const filteredItems = items.filter(selectedCategory.matches)
@@ -3868,7 +3915,7 @@ function Alerts({ items, error, actionError, onDismissActionError, onRetry, onRe
       {actionError && <div className="inline-retry notification-action-error" role="alert"><span>{actionError}</span><button type="button" onClick={onDismissActionError}>닫기</button></div>}
       {error ? <div className="notification-error-panel" role="alert"><span className="notification-error-icon" aria-hidden="true"><NavIcon name="alerts" /></span><div><b>알림을 불러오지 못했어요</b><p>{error}</p></div><button type="button" onClick={onRetry}>다시 시도</button></div> : <>
         <div className="alerts-reference-tabs" role="tablist" aria-label="알림 필터">{categories.map(item => <button key={item.value} role="tab" aria-selected={category === item.value} className={category === item.value ? 'active' : ''} onClick={() => setCategory(item.value)}><span>{item.label}</span>{unreadFor(item.value) > 0 && <b>{unreadFor(item.value)}</b>}</button>)}</div>
-        {groups.length > 0 ? <>{groups.map(group => <section className="notification-day" key={group.label}><h2>{group.label}</h2><div className="alert-list">{group.items.map(item => { const destination = notificationDestination(item.kind); return <button className={item.isRead ? 'alert-card read' : 'alert-card'} key={item.id} aria-label={`${item.title} 알림${item.artistName ? ` · ${item.artistName}` : ''}${destination ? ' 열기' : ''}`} onClick={() => openNotification(item)}><span className={`alert-leading-icon ${item.kind}`} aria-hidden="true"><InlineIcon name={iconName(item.kind)} /></span><span className="notification-copy"><strong>{item.title}</strong>{item.artistName && <em className="notification-artist">{item.artistName}</em>}<small>{notificationTimeLabel(item.createdAt).replace(' 전', '')}</small></span>{!item.isRead && <span className="unread-dot" aria-label="읽지 않음" />}</button> })}</div></section>)}<div className="empty-slot notification-empty" role="status"><span className="notification-empty-illustration"><NavIcon name="alerts" /><InlineIcon name="sparkles" /></span><b>새로운 알림이 없어요</b><small>중요한 소식이 여기에 표시돼요.</small></div></> : <div className="empty-slot notification-empty" role="status"><span className="notification-empty-illustration"><NavIcon name="alerts" /><InlineIcon name="sparkles" /></span><b>새로운 알림이 없어요</b><small>중요한 소식이 여기에 표시돼요.</small></div>}
+        {groups.length > 0 ? <>{groups.map(group => <section className="notification-day" key={group.label}><h2>{group.label}</h2><div className="alert-list">{group.items.map(item => { const destination = notificationDestination(item.kind); return <button className={item.isRead ? 'alert-card read' : 'alert-card'} key={item.id} aria-label={`${item.title} 알림${item.artistName ? ` · ${item.artistName}` : ''}${destination ? ' 열기' : ''}`} onClick={() => openNotification(item)}><span className={`alert-leading-icon ${item.kind}`} aria-hidden="true"><InlineIcon name={iconName(item.kind)} /></span><span className="notification-copy"><strong>{item.title}</strong>{item.artistName && <em className="notification-artist">{item.artistName}</em>}{item.body && <span className="notification-body">{item.body}</span>}<small>{notificationTimeLabel(item.createdAt).replace(' 전', '')}</small></span>{!item.isRead && <span className="unread-dot" aria-label="읽지 않음" />}</button> })}</div></section>)}<div className="empty-slot notification-empty" role="status"><span className="notification-empty-illustration"><NavIcon name="alerts" /><InlineIcon name="sparkles" /></span><b>새로운 알림이 없어요</b><small>중요한 소식이 여기에 표시돼요.</small></div></> : <div className="empty-slot notification-empty" role="status"><span className="notification-empty-illustration"><NavIcon name="alerts" /><InlineIcon name="sparkles" /></span><b>새로운 알림이 없어요</b><small>중요한 소식이 여기에 표시돼요.</small></div>}
         <button type="button" className="alerts-mark-all" onClick={() => void onReadAll()} disabled={unreadCount === 0}>모두 읽음</button>
       </>}
     </section>

@@ -90,3 +90,12 @@ test('home and shop keep multi-artist content scoped to the selected favorite ar
   assert.match(source, /shopFavoriteArtists/)
   assert.match(source, /getShopProducts\(\{ artistId: artist \?\? undefined \}\)/)
 })
+
+test('multi-artist scope persists across fan app surfaces', () => {
+  assert.match(source, /const activeArtistStorageKey = 'fanfolio\.active-artist-id'/)
+  assert.match(source, /function readActiveArtistId\(\)/)
+  assert.match(source, /function writeActiveArtistId\(artistId: string \| null\)/)
+  assert.match(source, /useState<string \| null>\(\(\) => readActiveArtistId\(\)\)/)
+  assert.match(source, /writeActiveArtistId\(artist\.id\)/)
+  assert.match(source, /writeActiveArtistId\(null\)/)
+})
