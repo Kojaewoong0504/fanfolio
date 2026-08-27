@@ -15,14 +15,14 @@ test('artist and member steps render full visual choice cards', () => {
   assert.match(appSource, /className="onboarding-step-copy"/)
   assert.match(appSource, /className="choice-visual"/)
   assert.match(appSource, /className="choice-check"/)
-  assert.match(appSource, /aria-pressed=\{group === artist\.id\}/)
-  assert.match(appSource, /aria-pressed=\{member === item\.id\}/)
+  assert.match(appSource, /aria-pressed=\{groups\.includes\(artist\.id\)\}/)
+  assert.match(appSource, /aria-pressed=\{memberIds\.includes\(item\.id\)\}/)
   assert.match(cssSource, /\.artist-grid\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/)
   assert.match(cssSource, /\.member-grid\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/)
 })
 
 test('member and nickname steps include the missing reference details', () => {
-  assert.match(appSource, /className="selected-artist-summary"/)
+  assert.match(appSource, /className="onboarding-member-groups"/)
   assert.match(appSource, /선택한 아티스트/)
   assert.match(appSource, /className="profile-photo-edit"/)
   assert.match(appSource, /aria-label="프로필 이미지 변경"/)
@@ -35,8 +35,9 @@ test('onboarding actions use a dedicated bottom action rail', () => {
   assert.match(cssSource, /@media\(max-width:360px\)\{[^}]*\.onboarding-screen/s)
 })
 
-test('onboarding can start without choosing an artist and enters global growth scope', () => {
+test('onboarding requires an artist and keeps the global scope as a separate growth option', () => {
   assert.match(appSource, /관심 아티스트 없이 시작하기/)
-  assert.match(appSource, /favoriteArtistIds: group \? \[group\] : \[\]/)
-  assert.match(appSource, /favoriteMemberIds: member \? \[member\] : \[\]/)
+  assert.match(appSource, /disabled=\{artistLoading \|\| groups\.length === 0\}/)
+  assert.match(appSource, /favoriteArtistIds: groups/)
+  assert.match(appSource, /favoriteMemberIds: memberIds/)
 })

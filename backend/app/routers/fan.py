@@ -39,6 +39,8 @@ from app.models import (
     MissionDefinition,
     MissionProgress,
     Notification,
+    PassSeason,
+    PassTier,
     PointBalance,
     PointCharge,
     PointLedger,
@@ -2857,6 +2859,99 @@ async def create_report(payload: ReportCreate, user: FanUser, session: DbSession
     return {"ok": True, "data": await _support_ticket_data(session, ticket)}
 
 
+async def _notification_artist_ids(
+    session: DbSession, notifications: list[Notification]
+) -> dict[str, str]:
+    """Resolve the artist scope for notification cards without changing old rows."""
+    ids_by_type: dict[str, set[str]] = {}
+    for notification in notifications:
+        if notification.entity_type and notification.entity_id:
+            ids_by_type.setdefault(notification.entity_type, set()).add(notification.entity_id)
+
+    result: dict[str, str] = {}
+    if ids_by_type.get("event"):
+        rows = await session.execute(
+            select(Event.id, Event.artist_id).where(Event.id.in_(ids_by_type["event"]))
+        )
+        event_scopes = {event_id: artist_id for event_id, artist_id in rows if artist_id}
+        result.update(
+            {
+                n.id: event_scopes[n.entity_id]
+                for n in notifications
+                if n.entity_type == "event" and n.entity_id in event_scopes
+            }
+        )
+    if ids_by_type.get("pass_season"):
+        rows = await session.execute(
+            select(PassSeason.id, PassSeason.artist_id).where(
+                PassSeason.id.in_(ids_by_type["pass_season"])
+            )
+        )
+        season_scopes = {season_id: artist_id for season_id, artist_id in rows if artist_id}
+        result.update(
+            {
+                n.id: season_scopes[n.entity_id]
+                for n in notifications
+                if n.entity_type == "pass_season" and n.entity_id in season_scopes
+            }
+        )
+    if ids_by_type.get("pass_tier"):
+        rows = await session.execute(
+            select(PassTier.id, PassSeason.artist_id)
+            .join(PassSeason, PassSeason.id == PassTier.season_id)
+            .where(PassTier.id.in_(ids_by_type["pass_tier"]))
+        )
+        tier_scopes = {tier_id: artist_id for tier_id, artist_id in rows if artist_id}
+        result.update(
+            {
+                n.id: tier_scopes[n.entity_id]
+                for n in notifications
+                if n.entity_type == "pass_tier" and n.entity_id in tier_scopes
+            }
+        )
+    if ids_by_type.get("reward_grant"):
+        rows = await session.execute(
+            select(RewardGrant.id, RewardCatalog.artist_id)
+            .join(RewardCatalog, RewardCatalog.id == RewardGrant.reward_id)
+            .where(RewardGrant.id.in_(ids_by_type["reward_grant"]))
+        )
+        grant_scopes = {grant_id: artist_id for grant_id, artist_id in rows if artist_id}
+        result.update(
+            {
+                n.id: grant_scopes[n.entity_id]
+                for n in notifications
+                if n.entity_type == "reward_grant" and n.entity_id in grant_scopes
+            }
+        )
+    if ids_by_type.get("card"):
+        rows = await session.execute(
+            select(Card.id, Card.artist_id).where(Card.id.in_(ids_by_type["card"]))
+        )
+        card_scopes = {card_id: artist_id for card_id, artist_id in rows if artist_id}
+        result.update(
+            {
+                n.id: card_scopes[n.entity_id]
+                for n in notifications
+                if n.entity_type == "card" and n.entity_id in card_scopes
+            }
+        )
+    if ids_by_type.get("drop"):
+        rows = await session.execute(
+            select(Drop.id, Drop.artist_id).where(Drop.id.in_(ids_by_type["drop"]))
+        )
+        drop_scopes = {drop_id: artist_id for drop_id, artist_id in rows if artist_id}
+        result.update(
+            {
+                n.id: drop_scopes[n.entity_id]
+                for n in notifications
+                if n.entity_type == "drop" and n.entity_id in drop_scopes
+            }
+        )
+    return {
+        notification_id: artist_id for notification_id, artist_id in result.items() if artist_id
+    }
+
+
 @router.get("/notifications")
 async def notifications(user: FanUser, session: DbSession) -> dict:
     items = (
@@ -2869,6 +2964,13 @@ async def notifications(user: FanUser, session: DbSession) -> dict:
             .order_by(Notification.created_at.desc(), Notification.id.desc())
         )
     ).all()
+    artist_ids = await _notification_artist_ids(session, items)
+    artist_rows = (
+        await session.scalars(select(Artist).where(Artist.id.in_(set(artist_ids.values()))))
+        if artist_ids
+        else []
+    )
+    artists_by_id = {artist.id: artist for artist in artist_rows}
     return {
         "ok": True,
         "data": {
@@ -2881,6 +2983,10 @@ async def notifications(user: FanUser, session: DbSession) -> dict:
                     "entityType": n.entity_type,
                     "entityId": n.entity_id,
                     "eventKey": n.event_key,
+                    "artistId": artist_ids.get(n.id),
+                    "artistName": artists_by_id[artist_ids[n.id]].name
+                    if n.id in artist_ids and artist_ids[n.id] in artists_by_id
+                    else None,
                     "isRead": n.is_read,
                     "readAt": n.read_at.isoformat() if n.read_at else None,
                     "createdAt": n.created_at.isoformat(),
@@ -2906,6 +3012,13 @@ async def notification_stream(user: FanUser, session: DbSession) -> StreamingRes
                     .order_by(Notification.created_at, Notification.id)
                 )
             ).all()
+            artist_ids = await _notification_artist_ids(session, items)
+            artist_rows = (
+                await session.scalars(select(Artist).where(Artist.id.in_(set(artist_ids.values()))))
+                if artist_ids
+                else []
+            )
+            artists_by_id = {artist.id: artist for artist in artist_rows}
             payloads = [
                 {
                     "id": item.id,
@@ -2915,6 +3028,10 @@ async def notification_stream(user: FanUser, session: DbSession) -> StreamingRes
                     "entityType": item.entity_type,
                     "entityId": item.entity_id,
                     "eventKey": item.event_key,
+                    "artistId": artist_ids.get(item.id),
+                    "artistName": artists_by_id[artist_ids[item.id]].name
+                    if item.id in artist_ids and artist_ids[item.id] in artists_by_id
+                    else None,
                     "isRead": item.is_read,
                     "readAt": item.read_at.isoformat() if item.read_at else None,
                     "createdAt": item.created_at.isoformat(),

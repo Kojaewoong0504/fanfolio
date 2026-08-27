@@ -258,6 +258,16 @@ def test_private_collection_is_hidden_and_unfollow_is_idempotent(
 def test_fan_search_follow_connections_and_public_collection_summary(
     app: FastAPI, actors: dict[str, TestClient]
 ) -> None:
+    assert_success(
+        actors["otherFan"].patch(
+            "/api/me/profile",
+            json={
+                "nickname": "여러 그룹 컬렉터",
+                "favoriteArtistIds": ["artist_luminous", "artist_nova3"],
+                "favoriteMemberIds": [],
+            },
+        )
+    )
     assert_success(actors["fan"].post("/api/me/follows/otherFan"), 201)
 
     search = assert_success(actors["fan"].get("/api/fans", params={"query": "other"}))
@@ -279,6 +289,10 @@ def test_fan_search_follow_connections_and_public_collection_summary(
     assert public["summary"]["followingCount"] == 0
     assert "wantedCards" in public
     assert isinstance(public["wantedCards"], list)
+    assert [artist["id"] for artist in public["favoriteArtists"]] == [
+        "artist_luminous",
+        "artist_nova3",
+    ]
 
 
 def test_trade_inbox_detail_reject_cancel_and_expire_notifications(

@@ -670,15 +670,21 @@ async def home(user: FanUser, session: DbSession) -> dict:
             .limit(3)
         )
     ).all()
-    artist = None
+    favorite_artists = []
     if user.favorite_artist_ids:
-        artist_row = await session.get(Artist, user.favorite_artist_ids[0])
-        if artist_row:
-            artist = {
-                "id": artist_row.id,
-                "name": artist_row.name,
-                "imageUrl": artist_row.image_url,
+        favorite_artist_rows = (
+            await session.scalars(select(Artist).where(Artist.id.in_(user.favorite_artist_ids)))
+        ).all()
+        artists_by_id = {row.id: row for row in favorite_artist_rows}
+        favorite_artists = [
+            {
+                "id": artist_id,
+                "name": artists_by_id[artist_id].name,
+                "imageUrl": artists_by_id[artist_id].image_url,
             }
+            for artist_id in user.favorite_artist_ids
+            if artist_id in artists_by_id
+        ]
     return {
         "ok": True,
         "data": {
@@ -688,7 +694,8 @@ async def home(user: FanUser, session: DbSession) -> dict:
             "upcomingEvents": [
                 await _fan_data(item, session, user_id=user.id, now=now) for item in upcoming
             ],
-            "favoriteArtist": artist,
+            "favoriteArtists": favorite_artists,
+            "favoriteArtist": None,
             "newCards": [
                 _home_card_data(card, artist_row, member)
                 for card, artist_row, member in new_card_rows

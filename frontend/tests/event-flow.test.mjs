@@ -106,7 +106,7 @@ test('profile image selection is part of the onboarding profile contract', () =>
   assert.match(app, /type="file"/)
   assert.match(app, /accept="image\/(png|jpeg|webp)/)
   assert.match(app, /profileImageUrl/)
-  assert.match(app, /favoriteMemberIds: member \? \[member\] : \[\]/)
+  assert.match(app, /favoriteMemberIds: memberIds/)
 })
 
 test('empty event feeds do not render a mock event or a fake promo card', () => {

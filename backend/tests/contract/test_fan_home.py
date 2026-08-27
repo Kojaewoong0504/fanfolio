@@ -17,7 +17,7 @@ def test_home_returns_published_catalog_cards_for_new_cards(
     assert card["imageUrl"]
 
 
-def test_home_shows_cards_from_followed_artist_only(
+def test_home_shows_cards_from_all_favorite_artists(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:
     fan = actors["fan"]
@@ -27,7 +27,7 @@ def test_home_shows_cards_from_followed_artist_only(
             "/api/me/profile",
             json={
                 "nickname": "루미너스 팬",
-                "favoriteArtistIds": ["artist_luminous"],
+                "favoriteArtistIds": ["artist_luminous", "artist_nova3"],
                 "favoriteMemberIds": ["member_luminous_arin"],
             },
         )
@@ -49,4 +49,31 @@ def test_home_shows_cards_from_followed_artist_only(
 
     home = assert_success(fan.get("/api/home"))
     assert home["newCards"]
-    assert {item["artistId"] for item in home["newCards"]} == {"artist_luminous"}
+    assert {item["artistId"] for item in home["newCards"]} >= {
+        "artist_luminous",
+        "artist_nova3",
+    }
+
+
+def test_home_returns_all_favorite_artists(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    fan = actors["fan"]
+    assert_success(
+        fan.patch(
+            "/api/me/profile",
+            json={
+                "nickname": "여러 그룹 팬",
+                "favoriteArtistIds": ["artist_luminous", "artist_nova3"],
+                "favoriteMemberIds": ["member_luminous_arin"],
+            },
+        )
+    )
+
+    home = assert_success(fan.get("/api/home"))
+
+    assert {artist["id"] for artist in home["favoriteArtists"]} == {
+        "artist_luminous",
+        "artist_nova3",
+    }
+    assert home["favoriteArtist"] is None

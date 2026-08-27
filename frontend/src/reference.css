@@ -1319,6 +1319,7 @@ button.card-collection-slot { cursor:pointer; }
   display: grid;
   gap: 8px;
 }
+.profile-preference-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:14px}.profile-preference-choice{display:flex;align-items:center;gap:8px;padding:8px;border:1px solid #e5e1f5;border-radius:12px;background:#fff;color:var(--fan-ink);font-size:12px;font-weight:700;text-align:left}.profile-preference-choice.is-selected{border-color:#5e49d8;background:#f1efff;color:#5141d2}.profile-preference-choice img{width:32px;height:32px;object-fit:cover;border-radius:9px}.profile-preference-hint{color:#8c8da0;font-size:10px;font-weight:500}.profile-member-groups{display:grid;gap:12px}.profile-member-groups section{display:grid;gap:7px}.profile-member-groups section>strong{font-size:12px;color:var(--fan-ink)}.profile-member-options{display:flex;flex-wrap:wrap;gap:6px}.profile-member-options label{display:inline-flex;align-items:center;gap:5px;padding:6px 9px;border:1px solid #e5e1f5;border-radius:999px;color:#6e7084;font-size:11px}.profile-member-options label.is-selected{border-color:#5e49d8;background:#f1efff;color:#5141d2}.profile-member-options input{accent-color:#5e49d8}.fan-profile-favorite-list{display:flex;gap:8px;overflow-x:auto}.fan-profile-favorite-list button{display:flex;align-items:center;gap:6px;min-width:max-content;padding:7px 10px;border:1px solid #e5e1f5;border-radius:999px;background:#fff;color:var(--fan-ink);font-size:11px;font-weight:700}.fan-profile-favorite-list img{width:24px;height:24px;object-fit:cover;border-radius:50%}.fan-profile-favorite-list .inline-icon{width:13px;height:13px;color:#777a8f}
 
 .profile-decorate-form > label {
   margin-top: 10px;
@@ -3778,3 +3779,4 @@ main.discover-artist-shell.detail-screen-shell {
   padding: 0!important;
 }
 .public-collection-content { display:grid; align-content:start; }
+ .notification-artist{display:block;color:#6954e8;font-size:11px;font-style:normal;font-weight:700}
