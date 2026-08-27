@@ -3780,3 +3780,41 @@ main.discover-artist-shell.detail-screen-shell {
 }
 .public-collection-content { display:grid; align-content:start; }
  .notification-artist{display:block;color:#6954e8;font-size:11px;font-style:normal;font-weight:700}
+ .profile-artist-search,
+ .discover-favorite-scope,
+ .artist-scope-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+ }
+
+ .profile-artist-search {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line, #e2def8);
+  border-radius: 14px;
+  background: #fff;
+ }
+
+ .profile-artist-search span { color: #6652ee; font-size: 22px; line-height: 1; }
+ .profile-artist-search input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; }
+
+ .discover-favorite-scope,
+ .artist-scope-picker {
+  align-items: flex-start;
+  flex-direction: column;
+  margin: 14px 0 18px;
+ }
+
+ .discover-favorite-scope > span,
+ .artist-scope-picker > span { color: #6d668b; font-size: 12px; font-weight: 700; }
+ .discover-favorite-scope > div,
+ .artist-scope-picker > div { display: flex; width: 100%; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
+ .discover-favorite-scope button,
+ .artist-scope-picker button { flex: 0 0 auto; border: 1px solid #dfdaf8; border-radius: 999px; padding: 8px 12px; background: #fff; color: #423a68; font-size: 12px; font-weight: 700; }
+ .discover-favorite-scope button { display: inline-flex; align-items: center; gap: 4px; }
+ .discover-favorite-scope-item { display: inline-flex; align-items: center; gap: 0; flex: 0 0 auto; }
+ .discover-favorite-scope-item > button:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+ .discover-favorite-scope-item > button:last-child { border-left: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; padding-inline: 8px; }
+ .discover-favorite-scope button.is-active { border-color: #5a45ee; background: #5a45ee; color: #fff; }
+ .artist-scope-picker button.is-active { border-color: #5a45ee; background: #5a45ee; color: #fff; }

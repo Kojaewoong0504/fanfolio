@@ -55,7 +55,9 @@ test('shop history button opens a dedicated preview route', () => {
 test('shop is available in the authenticated app routes, not only preview mode', () => {
   assert.match(appSource, /pathname === '\/shop\/checkout'.*ShopCheckoutPreview appMode/s)
   assert.match(appSource, /pathname === '\/shop\/history'.*ShopHistoryPreview appMode/s)
-  assert.match(appSource, /if \(tab === 'shop'\) return <ShopPreview appMode onOpenAlerts=\{openAlerts\} onOpenProfile=\{\(\) => navigateTab\('settings'\)\} \/>/)
+  assert.match(appSource, /if \(tab === 'shop'\) return <ShopPreview appMode/)
+  assert.match(appSource, /if \(tab === 'shop'\)[\s\S]*onOpenAlerts=\{openAlerts\}/)
+  assert.match(appSource, /if \(tab === 'shop'\)[\s\S]*onOpenProfile=\{\(\) => navigateTab\('settings'\)\}/)
   assert.match(appSource, /pathname === '\/shop' \|\| pathname\.startsWith\('\/shop\/'\)/)
   assert.match(appSource, /shop: '\/shop'/)
   assert.match(appSource, /<NavItem active=\{active === 'shop'\} label="상점" icon="shop"/)
@@ -65,11 +67,13 @@ test('authenticated shop header keeps profile and notification actions connected
   const shopSource = appSource.slice(appSource.indexOf('function ShopPreview('), appSource.indexOf('function readCardRoutePreview('))
   assert.match(shopSource, /onOpenAlerts\?\./)
   assert.match(shopSource, /onOpenProfile\?\./)
-  assert.match(appSource, /<ShopPreview appMode onOpenAlerts=\{openAlerts\} onOpenProfile=\{\(\) => navigateTab\('settings'\)\} \/>/)
+  assert.match(appSource, /<ShopPreview appMode/)
+  assert.match(appSource, /<ShopPreview appMode[\s\S]*onOpenAlerts=\{openAlerts\}/)
+  assert.match(appSource, /<ShopPreview appMode[\s\S]*onOpenProfile=\{\(\) => navigateTab\('settings'\)\}/)
 })
 
 test('authenticated shop reads catalog data and opens a real product detail', () => {
-  assert.match(appSource, /getShopProducts\(\)/)
+  assert.match(appSource, /getShopProducts\(\{ artistId: artist \?\? undefined \}\)/)
   assert.match(appSource, /getShopProduct\(productId\)/)
   assert.match(appSource, /createShopOrder\(product\.id\)/)
   assert.match(appSource, /function ShopProductDetail\(/)
@@ -79,7 +83,7 @@ test('authenticated shop reads catalog data and opens a real product detail', ()
 
 test('authenticated shop reuses the preview shell and keeps live navigation', () => {
   assert.doesNotMatch(appSource, /if \(appMode\) return <ShopApiPage \/>/)
-  assert.match(appSource, /useEffect\(\(\) => \{[\s\S]*getShopProducts\(\)/)
+  assert.match(appSource, /useEffect\(\(\) => \{[\s\S]*getShopProducts\(\{ artistId: artist \?\? undefined \}\)/)
   assert.match(appSource, /className="shop-points-card"/)
   assert.match(appSource, /className="shop-category-tabs"/)
   assert.match(appSource, /className="bottom-nav" aria-label="주요 메뉴"/)

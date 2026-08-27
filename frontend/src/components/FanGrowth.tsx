@@ -271,7 +271,7 @@ export function FanGrowth({ progression, globalProgression = null, artistScopes 
     const visibleMilestoneIndex = Math.round(milestoneScroll.ratio * (milestoneLevels.length - 1))
     return <section className="fan-growth full fan-growth-reference" aria-label="팬 레벨">
       {artistScopes.length <= 1 && <div className="fan-growth-artist-heading"><strong>{scopeName}</strong></div>}
-      {onArtistChange && (artistScopes.length > 1 || isGlobalScope) && <div className="fan-growth-scope" aria-label="팬 레벨 범위 선택">
+      {onArtistChange && artistScopes.length > 1 && <div className="fan-growth-scope" aria-label="팬 레벨 범위 선택">
         <div className="fan-growth-scope-heading">
           <span className={`fan-growth-scope-avatar ${isGlobalScope ? 'fan-growth-scope-avatar-global' : ''}`} aria-hidden="true">{isGlobalScope ? '전체' : selectedArtist?.name?.slice(0, 1) ?? '팬'}</span>
           <span className="fan-growth-scope-eyebrow">성장 기준</span>
@@ -280,7 +280,6 @@ export function FanGrowth({ progression, globalProgression = null, artistScopes 
         </div>
         <div className="fan-growth-scope-tabs" role="tablist" aria-label="팬 레벨 범위">
           {artistScopes.map(artist => <button type="button" role="tab" aria-selected={artist.id === selectedArtistId} className={artist.id === selectedArtistId ? 'is-active' : ''} key={artist.id} onClick={() => onArtistChange(artist.id)}>{artist.name}</button>)}
-          <button type="button" role="tab" aria-selected={isGlobalScope} className={isGlobalScope ? 'is-active' : ''} onClick={() => onArtistChange(null)}>전체 팬</button>
         </div>
       </div>}
       <article className="fan-growth-hero">

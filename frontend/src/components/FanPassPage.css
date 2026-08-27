@@ -1,4 +1,6 @@
 .fan-pass-shell {
+  overflow-x: hidden;
+  overflow-y: visible;
   min-height: 100vh;
   width: min(100%, 430px);
   margin: 0 auto;
@@ -9,7 +11,12 @@
 
 /* Shared detail layout owns the canvas and content gutters. */
 .fan-pass-shell > .detail-topbar { width: 100%; }
-.fan-pass-content { display: grid; align-content: start; }
+.fan-pass-content { display: grid; align-content: start; min-height: 0; padding-bottom: 28px; }
+.fan-pass-season-selector { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0 0 10px; padding:0 2px; color:#697491; font-size:11px; font-weight:700; }
+.fan-pass-season-selector select { min-width:0; max-width:68%; padding:8px 28px 8px 10px; border:1px solid #ded9ff; border-radius:10px; background:#fff; color:#24214a; font:inherit; }
+.fan-pass-status-note { display:grid; gap:3px; margin:0 0 12px; padding:11px 13px; border:1px solid #e2ddff; border-radius:13px; background:#f8f6ff; color:#4d43a7; font-size:11px; }
+.fan-pass-status-note span { color:#737b95; line-height:1.4; }
+.fan-pass-status-note.is-ended { border-color:#e4e5ed; background:#f7f7fa; color:#596176; }
 
 .fan-pass-header { display: flex; align-items: center; justify-content: space-between; min-height: 44px; margin-bottom: 18px; }
 .fan-pass-header h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -.04em; }
@@ -74,7 +81,7 @@
 
 .fan-pass-lane-headings { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:22px; padding:0 8px; color:#5844ed; font-size:12px; font-weight:800; text-align:center; }
 .fan-pass-lane-headings span:last-child { color:#ad7410; }
-.season-pass-journey.has-premium-lane { padding-left:0; padding-right:0; }
+.season-pass-journey.has-premium-lane { padding-left:0; padding-right:0; min-height:0; }
 .season-pass-journey.has-premium-lane .season-pass-journey-line { top:0; bottom:0; left:50%; width:4px; transform:translateX(-50%); z-index:2; pointer-events:none; }
 .season-pass-journey.has-premium-lane .season-pass-tier-card { padding:0; border:0; background:transparent; box-shadow:none; }
 .season-pass-journey.has-premium-lane .season-pass-node { top:50%; left:50%; transform:translate(-50%,-50%); z-index:3; }

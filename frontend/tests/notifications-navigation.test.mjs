@@ -20,6 +20,15 @@ test('notification screen uses compact utility sizing', () => {
   assert.match(cssSource, /\.notification-empty-illustration\{width:92px;height:92px/)
 })
 
+test('notification screen exposes an unread-only filter', () => {
+  assert.match(appSource, /읽지 않음/)
+  assert.match(appSource, /!item\.isRead/)
+})
+
+test('notification screen preserves server-provided body copy', () => {
+  assert.match(appSource, /item\.body && <span className="notification-body">\{item\.body\}<\/span>/)
+})
+
 test('reward, combination, and trade notifications open a useful fan destination', () => {
   assert.match(appSource, /kind === 'reward_claimed'\) return 'rewardInventory'/)
   assert.match(appSource, /kind === 'card_combined' \|\| kind === 'trade_accepted'\) return 'collection'/)

@@ -12,21 +12,26 @@ function artworkForTier(tier: PassTier, premium = false): string { const reward 
 export function FanPassPage({ progression, loading, error, onRetry, onBack, onClaimPassTier, onPurchasePass, onNavigate, isGlobal = false }: FanPassPageProps) {
   const [purchaseBusy, setPurchaseBusy] = useState(false)
   const [purchaseError, setPurchaseError] = useState('')
-  const season = progression?.pass.seasons[0] ?? null
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string | null>(null)
+  const seasons = progression?.pass.seasons ?? []
+  const season = seasons.find(item => item.id === selectedSeasonId) ?? seasons[0] ?? null
   const tiers = season?.tiers ?? []
   const currentXp = season?.progress.currentXp ?? 0
   const maxXp = tiers.length > 0 ? Math.max(...tiers.map(tier => tier.requiredXp), 1) : 300
   const progress = Math.min(100, Math.round(currentXp / maxXp * 100))
   const premium = !isGlobal && Boolean(season?.premiumEnabled)
+  const seasonStatusLabel = season?.status === 'published' ? '진행 중' : season?.status === 'ended' ? '종료된 시즌' : season?.status === 'scheduled' ? '공개 예정' : '준비 중'
   if (loading && !progression) return <main className="app-shell fan-pass-shell"><div className="fan-pass-loading">팬 패스를 불러오는 중이에요</div></main>
   if (error && !progression) return <main className="app-shell fan-pass-shell"><div className="fan-pass-error" role="alert"><b>팬 패스를 불러오지 못했어요</b><p>{error}</p><button type="button" onClick={onRetry}>다시 시도</button></div></main>
   const purchase = async () => { if (!season || !onPurchasePass) return; setPurchaseError(''); setPurchaseBusy(true); try { await onPurchasePass(season.id) } catch { setPurchaseError('패스를 구매하지 못했어요. 포인트 잔액을 확인해 주세요.') } finally { setPurchaseBusy(false) } }
   return <main className="app-shell fan-pass-shell detail-screen-shell">
     <DetailTopBar title={isGlobal ? '전체 팬 레벨' : '시즌 패스'} onBack={onBack} backLabel="팬 레벨로 돌아가기" />
     <div className="fan-pass-content detail-screen-content">
+      {seasons.length > 1 && <label className="fan-pass-season-selector"><span>시즌 선택</span><select value={season?.id ?? ''} onChange={event => setSelectedSeasonId(event.target.value || null)} aria-label="시즌 선택">{seasons.map(item => <option key={item.id} value={item.id}>{item.title} · {item.status === 'published' ? '진행 중' : item.status === 'ended' ? '종료' : item.status}</option>)}</select></label>}
       <section className="fan-pass-summary" aria-labelledby="fan-pass-title"><div className="fan-pass-summary-copy"><span className="fan-pass-eyebrow">{isGlobal ? '전체 팬 레벨' : (season?.title ?? '시즌 패스')}</span><h2 id="fan-pass-title">{isGlobal ? <>모든 팬 활동으로 <strong>레벨업</strong></> : <>시즌 패스로 <strong>보상 해금</strong></>}</h2><div className="fan-pass-xp"><strong>{currentXp.toLocaleString()}</strong><span> / {maxXp.toLocaleString()} XP</span></div><div className="fan-pass-progress" aria-label={`${progress}% 진행`}><i style={{ width: `${progress}%` }} /></div><p>{isGlobal ? '모든 아티스트 활동으로 XP를 모아 보상을 받아보세요.' : `시즌 종료까지 ${season?.endsAt ? formatRemainingDays(season.endsAt) : '기간 제한 없음'} · 무료 보상은 누구나 받을 수 있어요.`}</p></div></section>
+      {!isGlobal && season && season.status !== 'published' && <div className={`fan-pass-status-note is-${season.status}`} role="status"><b>{seasonStatusLabel}</b><span>{season.status === 'ended' ? '시즌 기록과 보상은 보관함에서 계속 확인할 수 있어요.' : '시즌이 공개되면 XP를 모으고 보상을 받을 수 있어요.'}</span></div>}
       {premium && <div className="fan-pass-lane-headings"><span>무료 보상</span><span>프리미엄 보상</span></div>}
-      {premium && !season?.isPurchased && <section className="season-pass-purchase-cue" aria-label="프리미엄 패스 구매"><div><b>프리미엄 보상 잠금</b><small>패스를 구매하면 현재 XP까지 보상을 바로 받을 수 있어요.</small>{purchaseError && <small role="alert">{purchaseError}</small>}</div><button type="button" onClick={() => void purchase()} disabled={purchaseBusy}>{purchaseBusy ? '구매 중...' : `패스 구매 · ${(season?.premiumPricePoints ?? 0).toLocaleString()} P`}</button></section>}
+      {premium && !season?.isPurchased && <section className="season-pass-purchase-cue" aria-label="프리미엄 패스 구매"><div><b>프리미엄 보상 잠금</b><small>{season?.status === 'published' ? '패스를 구매하면 현재 XP까지 보상을 바로 받을 수 있어요.' : '시즌이 공개된 후 프리미엄 패스를 구매할 수 있어요.'}</small>{purchaseError && <small role="alert">{purchaseError}</small>}</div><button type="button" onClick={() => void purchase()} disabled={purchaseBusy || season?.status !== 'published'}>{purchaseBusy ? '구매 중...' : season?.status === 'published' ? `패스 구매 · ${(season?.premiumPricePoints ?? 0).toLocaleString()} P` : '공개 예정'}</button></section>}
       <section className={`season-pass-journey${premium ? ' has-premium-lane' : ''}`} aria-label="시즌 패스 보상 여정"><div className="season-pass-journey-line" aria-hidden="true"><i style={{ height: `${Math.max(10, progress)}%` }} /></div>{tiers.length > 0 ? tiers.map(tier => <SeasonTierCard key={tier.id} tier={tier} premium={premium} purchased={Boolean(season?.isPurchased)} onClaim={onClaimPassTier} />) : <div className="fan-pass-empty-section"><span className="fan-pass-empty-icon" aria-hidden="true"><InlineIcon name="calendar" /></span><div><b>시즌 패스 보상 여정</b><p>현재 공개된 시즌 패스가 없어요.</p><small>새 시즌이 공개되면 이곳에서 보상 여정을 확인할 수 있어요.</small></div></div>}</section>
       <section className="fan-pass-more" aria-label="팬 패스 안내"><span><InlineIcon name="sparkles" /></span><div><b>{premium ? '무료 보상은 누구나 받을 수 있어요' : '더 많은 XP를 모아보세요!'}</b><small>팬 활동을 통해 XP를 획득하고 다음 보상을 해금하세요.</small></div><InlineIcon name="chevron" /></section>
     </div>
