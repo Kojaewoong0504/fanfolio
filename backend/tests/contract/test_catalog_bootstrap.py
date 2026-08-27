@@ -3,7 +3,17 @@ import asyncio
 from sqlalchemy import select
 
 from app.db.session import SessionLocal
-from app.models import Artist, Card, CardPack, CardPackCard, Member, ShopProduct
+from app.models import (
+    Artist,
+    Card,
+    CardPack,
+    CardPackCard,
+    Member,
+    PassSeason,
+    PassTier,
+    RewardCatalog,
+    ShopProduct,
+)
 from app.services import ensure_demo_catalog
 
 
@@ -63,3 +73,40 @@ def test_bundled_demo_assets_are_served_by_api(client) -> None:
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("image/png")
     assert len(response.content) > 100_000
+
+
+def test_demo_catalog_bootstrap_creates_a_public_paid_season_pass(client) -> None:
+    assert client.post("/api/test/reset").status_code == 204
+
+    async def bootstrap() -> None:
+        async with SessionLocal() as session:
+            await ensure_demo_catalog(session)
+
+    asyncio.run(bootstrap())
+
+    async def read_pass() -> tuple[PassSeason, list[PassTier], list[RewardCatalog]]:
+        async with SessionLocal() as session:
+            season = await session.get(PassSeason, "demo_pass_dreamscape_s01")
+            tiers = list(
+                await session.scalars(
+                    select(PassTier)
+                    .where(PassTier.season_id == "demo_pass_dreamscape_s01")
+                    .order_by(PassTier.tier)
+                )
+            )
+            rewards = list(
+                await session.scalars(
+                    select(RewardCatalog).where(RewardCatalog.id.like("demo_pass_s01_%"))
+                )
+            )
+            assert season is not None
+            return season, tiers, rewards
+
+    season, tiers, rewards = asyncio.run(read_pass())
+    assert season.status == "published"
+    assert season.is_paid is True
+    assert season.premium_enabled is True
+    assert season.premium_price_points == 1200
+    assert len(tiers) == 12
+    assert all(tier.reward_id and tier.premium_reward_id for tier in tiers)
+    assert len(rewards) == 24

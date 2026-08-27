@@ -90,6 +90,18 @@ POINT_CHARGE_PACKAGES = (
     {"id": "points_3000", "points": 3000, "priceWon": 27000, "label": "3,000P"},
 )
 
+DEMO_PASS_TIERS = tuple(
+    {
+        "tier": tier,
+        "requiredXp": tier * 100,
+        "freeId": f"demo_pass_s01_free_{tier:02d}",
+        "premiumId": f"demo_pass_s01_premium_{tier:02d}",
+        "freeName": f"DREAMSCAPE 시즌 배지 {tier}단계",
+        "premiumName": f"DREAMSCAPE 프리미엄 포토카드 {tier}단계",
+    }
+    for tier in range(1, 13)
+)
+
 
 def _point_charge_package_data(package: PointChargePackage) -> dict:
     return {
@@ -2229,6 +2241,61 @@ async def revoke_card_growth(
     )
 
 
+async def ensure_demo_season_pass(session: AsyncSession) -> None:
+    """Keep one public, paid season pass available for the hosted demo catalog."""
+    season = await session.get(PassSeason, "demo_pass_dreamscape_s01")
+    if season is None:
+        season = PassSeason(id="demo_pass_dreamscape_s01")
+        session.add(season)
+    season.artist_id = "artist_nova3"
+    season.title = "DREAMSCAPE Season 01 Pass"
+    season.description = "드림스케이프의 시즌 활동으로 무료·프리미엄 보상을 해금해보세요."
+    season.status = "published"
+    season.is_paid = True
+    season.premium_enabled = True
+    season.premium_price_points = 1200
+    season.starts_at = None
+    season.ends_at = None
+    await session.flush()
+
+    for item in DEMO_PASS_TIERS:
+        free = await session.get(RewardCatalog, item["freeId"])
+        if free is None:
+            free = RewardCatalog(id=item["freeId"])
+            session.add(free)
+        free.artist_id = "artist_nova3"
+        free.reward_type = "season_badge"
+        free.name = item["freeName"]
+        free.metadata_ = {"seasonId": season.id, "track": "free", "tier": item["tier"]}
+        free.status = "published"
+
+        premium = await session.get(RewardCatalog, item["premiumId"])
+        if premium is None:
+            premium = RewardCatalog(id=item["premiumId"])
+            session.add(premium)
+        premium.artist_id = "artist_nova3"
+        premium.reward_type = "photocard"
+        premium.name = item["premiumName"]
+        premium.metadata_ = {
+            "seasonId": season.id,
+            "track": "premium",
+            "tier": item["tier"],
+            "imageUrl": "/assets/demo/dreamscape/yuna.png",
+        }
+        premium.status = "published"
+
+        tier = await session.get(PassTier, f"demo_pass_s01_tier_{item['tier']:02d}")
+        if tier is None:
+            tier = PassTier(id=f"demo_pass_s01_tier_{item['tier']:02d}")
+            session.add(tier)
+        tier.season_id = season.id
+        tier.tier = item["tier"]
+        tier.required_xp = item["requiredXp"]
+        tier.reward_id = free.id
+        tier.premium_reward_id = premium.id
+    await session.flush()
+
+
 async def ensure_demo_catalog(session: AsyncSession) -> None:
     """Create the small public catalog needed for a fresh MVP deployment.
 
@@ -2371,6 +2438,7 @@ async def ensure_demo_catalog(session: AsyncSession) -> None:
     product.status = "published"
     product.starts_at = None
     product.ends_at = None
+    await ensure_demo_season_pass(session)
     await session.commit()
 
 
