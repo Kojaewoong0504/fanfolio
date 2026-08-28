@@ -385,6 +385,68 @@ def test_ineligible_card_collected_event_does_not_progress_mission() -> None:
     asyncio.run(scenario())
 
 
+def test_card_pack_collection_grants_xp_without_a_drop() -> None:
+    async def scenario() -> None:
+        engine, session_factory = await create_growth_test_session()
+        async with session_factory() as session:
+            await seed_growth_catalog(session)
+            pack = models.CardPack(
+                id="pack_without_drop",
+                artist_id="artist_nova3",
+                name="Pack without drop",
+                version="v1",
+                status="published",
+            )
+            card = await session.get(models.Card, "card_1")
+            assert card is not None
+            card.drop_id = None
+            session.add(pack)
+            session.add(
+                models.CardPackCard(
+                    id="pack_without_drop_card",
+                    pack_id=pack.id,
+                    card_id=card.id,
+                    position=1,
+                    probability=100,
+                    enabled=True,
+                )
+            )
+            user_card = models.UserCard(
+                id="uc_pack_without_drop",
+                user_id="fan",
+                card_id=card.id,
+                drop_id=None,
+                serial_number=1,
+                acquisition_source="card_pack",
+                acquired_at=services.now(),
+            )
+            session.add(user_card)
+            await session.flush()
+            event_row = await services.record_engagement_event(
+                session,
+                user_id="fan",
+                kind="card_collected",
+                source_type="user_card",
+                source_id=user_card.id,
+                payload={"cardId": card.id, "packId": pack.id, "source": "card_pack"},
+            )
+            await session.commit()
+
+            original_session_local = services.SessionLocal
+            services.SessionLocal = session_factory
+            try:
+                await services.process_engagement_event(event_row.id)
+            finally:
+                services.SessionLocal = original_session_local
+
+            xp_rows = list(await session.scalars(select(models.XpLedger)))
+            assert [row.amount for row in xp_rows] == [30]
+
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
 def test_grant_xp_uses_active_level_threshold_policy_when_available() -> None:
     async def scenario() -> None:
         engine, session_factory = await create_growth_test_session()

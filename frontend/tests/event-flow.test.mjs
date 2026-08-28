@@ -53,6 +53,12 @@ test('event detail keeps external CTA target explicit', () => {
   assert.match(detail, /event-detail-hero/)
 })
 
+test('event detail exposes a report path for unsafe or incorrect event content', () => {
+  assert.match(detail, /신고하기/)
+  assert.match(detail, /reportFan/)
+  assert.match(client, /targetType: 'user' \| 'trade' \| 'card' \| 'event'/)
+})
+
 test('event detail renders server-managed description, related cards, and notices', () => {
   assert.match(client, /noticeItems/)
   assert.match(client, /relatedCards/)
@@ -100,6 +106,13 @@ test('notification settings use the persisted backend preference contract', () =
   assert.match(app, /getNotificationPreferences\(/)
   assert.match(app, /updateNotificationPreferences\(/)
   assert.match(app, /이메일 알림/)
+})
+
+test('notification settings can unregister the persisted web push device', () => {
+  assert.match(app, /onDisablePush={disablePushNotifications}/)
+  assert.match(app, /const disablePushNotifications = async \(\) => \{[\s\S]*unregisterPushDevice\(pushToken\)[\s\S]*fanfolio\.push-token/)
+  assert.match(app, /pushEnabled \? disablePush\(\) : enablePush\(\)/)
+  assert.match(app, /푸시 알림 끄기/)
 })
 
 test('profile image selection is part of the onboarding profile contract', () => {

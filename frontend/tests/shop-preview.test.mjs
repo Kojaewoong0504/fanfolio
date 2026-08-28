@@ -4,6 +4,7 @@ import test from 'node:test'
 
 const appSource = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
 const appCssSource = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
+const referenceCssSource = await readFile(new URL('../src/reference.css', import.meta.url), 'utf8')
 
 test('development preview exposes the selected shop design', () => {
   assert.match(appSource, /preview === 'shop'/)
@@ -153,4 +154,26 @@ test('checkout layout preserves the compact shop design system', () => {
   assert.match(appCssSource, /\.shop-checkout-method\{/)
   assert.match(appCssSource, /\.shop-checkout-summary\{/)
   assert.match(appCssSource, /\.shop-checkout-footer[,{]/)
+})
+
+test('fixed sheets and checkout actions stay centered inside the app shell on desktop', () => {
+  assert.match(referenceCssSource, /\.card-pack-opening-backdrop\s*\{[^}]*justify-items:center/)
+  assert.match(appCssSource, /\.shop-checkout-footer,\.shop-checkout-complete-footer\{[^}]*right:auto;left:50%;width:min\(100%,430px\);margin:0;transform:translateX\(-50%\)/)
+})
+
+test('live pack artwork falls back when a remote asset is unavailable', () => {
+  const packSheetSource = appSource.slice(appSource.indexOf('{packSheetOpen && selectedRemotePack'), appSource.indexOf('{combinationSheetOpen && combinationRecipe'))
+  assert.match(packSheetSource, /selectedRemotePack\.imageUrl\) \|\| dreamscapeCardPack[\s\S]*onError=\{event => \{[\s\S]*fallbackApplied[\s\S]*event\.currentTarget\.src = dreamscapeCardPack/)
+})
+
+test('shop catalog pack artwork falls back when live product assets are unavailable', () => {
+  const shopSource = appSource.slice(appSource.indexOf('function ShopPreview('))
+  assert.match(shopSource, /livePacks\[0\]\.imageUrl\) \|\| dreamscapeCardPack[^>]*onError=\{event => \{[\s\S]*event\.currentTarget\.src = dreamscapeCardPack/)
+  assert.match(shopSource, /product\.imageUrl\) \|\| dreamscapeCardPack[^>]*onError=\{event => \{[\s\S]*event\.currentTarget\.src = dreamscapeCardPack/)
+})
+
+test('checkout artwork falls back and the insufficient-points CTA keeps its icon bounded', () => {
+  const checkoutSource = appSource.slice(appSource.indexOf('function ShopCheckoutPreview('), appSource.indexOf('function ShopProductDetail('))
+  assert.match(checkoutSource, /shop-checkout-product[\s\S]*displayProductImage[\s\S]*onError=\{event => \{[\s\S]*fallbackApplied[\s\S]*event\.currentTarget\.src = dreamscapeCardPack/)
+  assert.match(appCssSource, /\.shop-insufficient button \.inline-icon \{ width: 16px; height: 16px; flex: 0 0 auto; \}/)
 })

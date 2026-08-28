@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 const settingsSource = await readFile(new URL('../src/components/Settings.tsx', import.meta.url), 'utf8')
+const clientSource = await readFile(new URL('../src/api/client.ts', import.meta.url), 'utf8')
 const referenceCss = await readFile(new URL('../src/reference.css', import.meta.url), 'utf8')
 
 test('my page mirrors the approved profile summary and six-item menu', () => {
@@ -53,4 +54,21 @@ test('profile editor supports searching the artist catalog without losing multi-
   assert.match(settingsSource, /const \[artistQuery, setArtistQuery\] = useState\(''\)/)
   assert.match(settingsSource, /aria-label="아티스트 검색"/)
   assert.match(settingsSource, /artists\.filter\(artist => artist\.name\.toLowerCase\(\)\.includes\(artistQuery\.trim\(\)\.toLowerCase\(\)\)\)/)
+})
+
+test('privacy settings expose the persisted consent history contract', () => {
+  assert.match(clientSource, /export type ConsentRecord =/)
+  assert.match(clientSource, /export function getConsentHistory\(\)/)
+  assert.match(clientSource, /export function recordConsent\(/)
+  assert.match(clientSource, /\/me\/privacy\/consents/)
+  assert.match(settingsSource, /동의 이력/)
+  assert.match(settingsSource, /개인정보 동의 기록/)
+})
+
+test('settings does not retain a misleading placeholder panel fallback', () => {
+  assert.doesNotMatch(settingsSource, /type MyPanel\s*=/)
+  assert.doesNotMatch(settingsSource, /useState<MyPanel>/)
+  assert.doesNotMatch(settingsSource, /해당 메뉴의 상세 내용은 준비 중입니다\./)
+  assert.match(settingsSource, /onNotificationSettings: \(\) => void/)
+  assert.match(settingsSource, /onClick=\{onNotificationSettings\}/)
 })

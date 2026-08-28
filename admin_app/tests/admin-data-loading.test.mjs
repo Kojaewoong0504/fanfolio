@@ -27,7 +27,8 @@ test('fan growth request failures cannot hide core administrator data', () => {
 test('root workspace request failures cannot hide core administrator data', () => {
   assert.match(source, /async function loadOptionalAdminRequest\(/)
   assert.match(source, /loadOptionalAdminRequest\("\/admin\/drops"/)
-  assert.match(source, /loadOptionalAdminRequest\("\/admin\/redeem-code-batches"/)
+  assert.match(source, /async function loadAllRedeemCodeBatches\(/)
+  assert.match(source, /loadAllRedeemCodeBatches\(\)/)
   assert.match(source, /loadOptionalAdminRequest\(`\/admin\/users\?/)
 })
 
@@ -55,4 +56,16 @@ test('safe GET requests retry transient network failures during session restorat
   assert.match(source, /async function fetchWithRetry\(/)
   assert.match(source, /network failure/i)
   assert.match(source, /method === "GET"/)
+})
+
+test('card registration uses the shared admin select controls for catalog metadata', () => {
+  const start = source.indexOf('function cardCreateDrawer()')
+  const end = source.indexOf('function rewardOptions', start)
+  const drawer = source.slice(start, end)
+  assert.match(drawer, /admin-card-artist/)
+  assert.match(drawer, /admin-card-member/)
+  assert.match(drawer, /admin-card-rarity/)
+  assert.doesNotMatch(drawer, /<select name="artistId"/)
+  assert.doesNotMatch(drawer, /<select name="memberId"/)
+  assert.doesNotMatch(drawer, /<select name="rarity"/)
 })

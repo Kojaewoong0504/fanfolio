@@ -2,7 +2,7 @@
 
 ## Source of truth
 - Status: Active
-- Last refreshed: 2026-08-06
+- Last refreshed: 2026-08-28
 - Primary product surfaces: 팬 앱, 관리자 운영 화면, 아티스트 스튜디오
 - Evidence reviewed: `README.md`, `FANFOLIO_FRONTEND_API_SPEC_v0_2.md`, `prototype-assets/05-admin-screens.png`, `prototype-assets/07-artist-studio-screens.png`, `frontend/src/App.tsx`, `admin_app/`
 
@@ -35,7 +35,7 @@
 ## Visual language
 - Color: 보라색 primary `#5b45e6`, 파란색 action, 흰색 surface, 옅은 라벤더 보조 배경
 - Typography: Noto Sans KR, 숫자와 코드에는 Manrope
-- Spacing/layout rhythm: 8px 단위, 데스크톱 sidebar + 넓은 작업 영역
+- Spacing/layout rhythm: 관리자 화면은 4px 기반 토큰(`4 / 8 / 12 / 16 / 20 / 24 / 32px`)을 사용한다. 패널 형제 간 간격은 스택과 그리드를 분리하고, 분할 작업 화면은 상단선을 공유한다.
 - Shape/radius/elevation: 9~14px radius, 얕은 border와 soft shadow
 - Motion: 저장·제출·작업 요청은 짧은 toast와 상태 배지로 피드백한다. 카드 공개는 최초 진입 시 한 번만 짧게 강조하고, 이후에는 사용자가 직접 앞뒤 전환·기울기 효과를 조작한다.
 - Imagery/iconography: 카드 이미지는 세로형, 아이콘은 텍스트 기호 또는 단순 선형 아이콘
@@ -44,7 +44,7 @@
 - Existing components to reuse: 팬 앱의 카드/버튼 스타일, 관리자 화면의 sidebar·metric·table·toast, 공개·보관함 상세가 함께 사용하는 `InteractiveCollectibleCard`
 - New/changed components: StudioShell, Stepper, CardCanvas, HandwritingPad, ReviewChecklist, InteractiveCollectibleCard
 - Variants and states: draft, pending_review, published, queued, processing, completed, failed
-- Token/component ownership: 현재는 각 앱의 CSS 변수로 관리하고, 공통 디자인 토큰은 앱이 안정된 뒤 추출한다.
+- Token/component ownership: 관리자 웹은 `admin_app/styles.css`의 `:root` 토큰을 기준으로 페이지·컨트롤·밀도 규칙을 관리한다. 페이지별 값은 기존 토큰으로 설명할 수 없을 때만 추가한다.
 
 ## Accessibility
 - Target standard: WCAG 2.1 AA를 목표로 한다.
@@ -74,7 +74,7 @@
 
 ## Implementation constraints
 - Framework/styling system: 기존 팬 앱은 React/Vite, 현재 관리자·스튜디오는 독립 정적 앱으로 시작한다.
-- Design-token constraints: 관리자 화면의 보라색·radius·sidebar 패턴을 재사용한다.
+- Design-token constraints: 관리자 화면의 보라색·radius·sidebar 패턴을 재사용한다. 페이지 제목은 20px, 본문은 13px, 메타는 11px, 표준 입력 컨트롤은 최소 40px를 기본값으로 한다.
 - Performance constraints: 이미지 원본은 브라우저에서 미리보기만 하고 업로드는 presigned URL 계약으로 분리한다.
 - Compatibility constraints: 최신 Chrome/Safari/Edge, 모바일 pointer events
 - Test/screenshot expectations: JS 구문 검사, 브라우저 smoke test, 기존 백엔드·팬 앱 회귀 검증

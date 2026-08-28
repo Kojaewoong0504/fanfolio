@@ -15,3 +15,9 @@ test('public catalog cards keep their season and rarity metadata in the detail v
   assert.match(detailSource, /detail\?\.card\.seasonName \?\? card\.seasonName \?\? '드림스케이프 2026 SPRING'/)
   assert.match(detailSource, /detail\?\.card\.rarity \?\? card\.rarity/)
 })
+
+test('card detail exposes a report path for unsafe or incorrect card content', () => {
+  assert.match(detailSource, /reportFan/)
+  assert.match(detailSource, /targetType: 'card'/)
+  assert.match(detailSource, /신고하기/)
+})

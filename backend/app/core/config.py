@@ -1,8 +1,16 @@
 import os
 import re
 from functools import lru_cache
+from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def default_database_url() -> str:
+    """Keep the development SQLite file stable regardless of process cwd."""
+    database_path = Path(__file__).resolve().parents[2] / "fanfolio.db"
+    return f"sqlite+aiosqlite:///{database_path}"
 
 
 class Settings(BaseSettings):
@@ -10,7 +18,7 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     app_env: str = "development"
-    database_url: str = "sqlite+aiosqlite:///./fanfolio.db"
+    database_url: str = Field(default_factory=default_database_url)
     # Supabase's transaction pooler requires asyncpg's prepared-statement
     # cache to be disabled. Keep this configurable for direct Postgres too.
     database_statement_cache_size: int = 100
@@ -160,6 +168,8 @@ class Settings(BaseSettings):
     @property
     def database_connect_args(self) -> dict[str, int]:
         """Return asyncpg-only connection options without exposing credentials."""
+        if self.database_backend == "sqlite+aiosqlite":
+            return {"timeout": 30}
         if self.database_backend != "postgresql+asyncpg":
             return {}
         return {"statement_cache_size": self.database_statement_cache_size}

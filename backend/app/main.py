@@ -31,6 +31,7 @@ from app.services import (
     ensure_data_identity,
     ensure_demo_card_asset,
     ensure_demo_catalog,
+    repair_demo_catalog_asset_urls,
 )
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,7 @@ async def lifespan(_: FastAPI):
     async with SessionLocal() as session:
         await ensure_data_identity(session)
         await ensure_admin_bootstrap(session)
+        await repair_demo_catalog_asset_urls(session)
     yield
     await engine.dispose()
 

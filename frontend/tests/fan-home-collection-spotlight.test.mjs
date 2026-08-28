@@ -173,6 +173,13 @@ test('home surfaces the editorial artist, new cards, and upcoming drop sections'
   assert.match(appSource, /activeEvent\.id\.startsWith\('demo-'\) \? onEvents\(\) : onEvent\(activeEvent\)/)
 })
 
+test('home exposes an explicit all-artists scope when multiple favorites are saved', () => {
+  assert.match(appSource, /aria-label="홈 관심 아티스트 범위"/)
+  assert.match(appSource, /홈 콘텐츠 범위/)
+  assert.match(appSource, /aria-label="전체 관심 아티스트 콘텐츠 보기"/)
+  assert.match(appSource, /favoriteArtists\.map\(artist => <button type="button" key=\{artist\.id\}/)
+})
+
 test('home markup follows the approved full-bleed editorial reference', () => {
   assert.match(appSource, /좋아하는 아티스트의<br \/><em>새로운 순간<\/em>/)
   assert.match(appSource, /className="home-event-spotlight-copy"/)

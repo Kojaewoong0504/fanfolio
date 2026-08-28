@@ -68,6 +68,7 @@ from app.models import (
     RewardGrant,
     Role,
     Session,
+    ShopOrder,
     ShopProduct,
     TradeItem,
     TradeLock,
@@ -89,6 +90,15 @@ POINT_CHARGE_PACKAGES = (
     {"id": "points_1000", "points": 1000, "priceWon": 9500, "label": "1,000P"},
     {"id": "points_3000", "points": 3000, "priceWon": 27000, "label": "3,000P"},
 )
+
+DEMO_CATALOG_ASSET_URLS = {
+    "artist_nova3": "/assets/demo/dreamscape/group.png",
+    "artist_luminous": "/assets/card-yuna-lavender.jpg",
+    "artist_velora": "/assets/card-minho-midnight.jpg",
+    "artist_stellon": "/assets/card-jay-rosegold.jpg",
+    "local_demo_fan": "/assets/demo/dreamscape/yuna.png",
+    "local_demo_collector": "/assets/card-yuna-lavender.jpg",
+}
 
 DEMO_PASS_TIERS = tuple(
     {
@@ -746,6 +756,33 @@ async def card_collected_source_is_eligible(session: AsyncSession, event: Engage
         return True
     if event.source_type != "user_card":
         return False
+
+    # Cards granted by a published card pack are valid growth activity even
+    # when the card is not tied to a live redemption drop. Redemption cards
+    # continue through the stricter live-drop checks below.
+    pack_id = event.payload.get("packId")
+    if event.payload.get("source") == "card_pack" and pack_id:
+        conditions = [
+            UserCard.user_id == event.user_id,
+            UserCard.id == event.source_id,
+            Card.status == "published",
+            Card.is_official.is_(True),
+            Card.release_status == "published",
+            CardPackCard.pack_id == pack_id,
+            CardPackCard.card_id == UserCard.card_id,
+            CardPackCard.enabled.is_(True),
+        ]
+        card_id = event.payload.get("cardId")
+        if card_id:
+            conditions.append(UserCard.card_id == card_id)
+        return bool(
+            await session.scalar(
+                select(UserCard.id)
+                .join(Card, Card.id == UserCard.card_id)
+                .join(CardPackCard, CardPackCard.card_id == UserCard.card_id)
+                .where(*conditions)
+            )
+        )
 
     conditions = [
         *eligible_source_card_conditions(user_id=event.user_id),
@@ -1932,6 +1969,28 @@ async def purchase_pass_season(session: AsyncSession, *, user_id: str, season_id
     )
     event.status = "processed"
     event.processed_at = now()
+    product_id = f"pass_product_{season.id}"
+    product = await session.scalar(
+        select(ShopProduct).where(ShopProduct.id == product_id).with_for_update()
+    )
+    if product is None:
+        product = ShopProduct(
+            id=product_id,
+            artist_id=season.artist_id,
+            product_type="limited_item",
+            name=season.title,
+            description=season.description,
+            price_points=price,
+            status="published",
+            fulfillment={},
+            exposure_slot="pass",
+        )
+        session.add(product)
+        await session.flush()
+    else:
+        product.name = season.title
+        product.description = season.description
+        product.price_points = price
     ledger = await spend_points(
         session,
         user_id=user_id,
@@ -1941,6 +2000,20 @@ async def purchase_pass_season(session: AsyncSession, *, user_id: str, season_id
         description=f"{season.title} 프리미엄 패스 구매",
         metadata={"seasonId": season.id},
     )
+    order = ShopOrder(
+        id=f"shop_order_{uuid4().hex[:12]}",
+        user_id=user_id,
+        product_id=product.id,
+        product_name=season.title,
+        price_points=price,
+        payment_method="points",
+        status="completed",
+        idempotency_key=f"pass:{season.id}",
+        point_ledger_id=ledger.id,
+        point_event_id=event.id,
+    )
+    session.add(order)
+    await session.flush()
     if existing is None:
         existing = PassEntitlement(
             id=f"pass_entitlement_{uuid4().hex[:12]}",
@@ -1953,6 +2026,7 @@ async def purchase_pass_season(session: AsyncSession, *, user_id: str, season_id
     else:
         existing.price_points = price
         existing.status = "active"
+    existing.order_id = order.id
     await session.flush()
     await record_audit(
         session,
@@ -2310,9 +2384,9 @@ async def ensure_demo_catalog(session: AsyncSession) -> None:
     """
     artist_rows = (
         ("artist_nova3", "드림스케이프", "/assets/demo/dreamscape/group.png"),
-        ("artist_luminous", "루미너스", "/src/assets/fan-week-lavender-meet.png"),
-        ("artist_velora", "벨로라", "/src/assets/fan-week-night-stage.png"),
-        ("artist_stellon", "스텔라온", "/src/assets/login/dreamscape-group.png"),
+        ("artist_luminous", "루미너스", "/assets/card-yuna-lavender.jpg"),
+        ("artist_velora", "벨로라", "/assets/card-minho-midnight.jpg"),
+        ("artist_stellon", "스텔라온", "/assets/card-jay-rosegold.jpg"),
     )
     for artist_id, name, image_url in artist_rows:
         artist = await session.get(Artist, artist_id)
@@ -2550,6 +2624,32 @@ async def ensure_demo_catalog(session: AsyncSession) -> None:
     await session.commit()
 
 
+async def repair_demo_catalog_asset_urls(session: AsyncSession) -> int:
+    """Repair only known demo records that still reference source-only URLs.
+
+    Older local and hosted demo databases may have been bootstrapped before
+    bundled API assets replaced frontend source imports.  This repair is
+    deliberately allow-listed and updates existing records only; it never
+    creates catalog content or rewrites partner-owned data.
+    """
+    repaired = 0
+    for record_id, image_url in DEMO_CATALOG_ASSET_URLS.items():
+        if record_id.startswith("artist_"):
+            record = await session.get(Artist, record_id)
+            if record is not None and record.image_url != image_url:
+                record.image_url = image_url
+                repaired += 1
+        else:
+            record = await session.get(User, record_id)
+            if record is not None and record.profile_image_url != image_url:
+                record.profile_image_url = image_url
+                repaired += 1
+    if repaired:
+        await session.commit()
+        logger.info("Repaired demo catalog asset URLs: records=%s", repaired)
+    return repaired
+
+
 async def ensure_fan_community_demo(session: AsyncSession, *, password: str) -> dict[str, object]:
     """Create isolated local accounts and inventory for the real social flow.
 
@@ -2569,14 +2669,14 @@ async def ensure_fan_community_demo(session: AsyncSession, *, password: str) -> 
             "id": "local_demo_fan",
             "email": "demo.fan@example.com",
             "nickname": "팬포리오",
-            "profile_image_url": "/src/assets/profile-avatar-generated.png",
+            "profile_image_url": "/assets/demo/dreamscape/yuna.png",
             "favorite_member_ids": ["member_yuna"],
         },
         {
             "id": "local_demo_collector",
             "email": "demo.collector@example.com",
             "nickname": "별빛수집가",
-            "profile_image_url": "/src/assets/card-yuna-lavender.jpg",
+            "profile_image_url": "/assets/card-yuna-lavender.jpg",
             "favorite_member_ids": ["member_minho", "member_jei"],
         },
     )
@@ -3066,17 +3166,17 @@ async def seed_core(session: AsyncSession) -> dict:
             Artist(
                 id="artist_luminous",
                 name="루미너스",
-                image_url="/src/assets/fan-week-lavender-meet.png",
+                image_url="/assets/card-yuna-lavender.jpg",
             ),
             Artist(
                 id="artist_velora",
                 name="벨로라",
-                image_url="/src/assets/fan-week-night-stage.png",
+                image_url="/assets/card-minho-midnight.jpg",
             ),
             Artist(
                 id="artist_stellon",
                 name="스텔라온",
-                image_url="/src/assets/login/dreamscape-group.png",
+                image_url="/assets/card-jay-rosegold.jpg",
             ),
             Member(id="member_yuna", artist_id="artist_nova3", name="유나"),
             Member(id="member_minho", artist_id="artist_nova3", name="하린"),

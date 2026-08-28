@@ -421,6 +421,38 @@ def test_admin_code_batch_creates_codes_and_downloads_csv(
     assert all(row.startswith("NOVA-CSV-") for row in rows[1:])
 
 
+def test_admin_code_batches_support_scoped_pagination(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    for index in range(2):
+        assert_success(
+            actors["admin"].post(
+                "/api/admin/redeem-code-batches",
+                json={
+                    "dropId": seeded["ids"]["liveDropId"],
+                    "cardId": seeded["ids"]["publishedCardId"],
+                    "quantity": 1,
+                    "maxUsesPerCode": 1,
+                    "expiresAt": "2026-12-31T23:59:59Z",
+                    "prefix": f"PAGE-{index}",
+                },
+            ),
+            201,
+        )
+
+    first_page = assert_success(
+        actors["admin"].get("/api/admin/redeem-code-batches?page=1&pageSize=1")
+    )
+    assert len(first_page["items"]) == 1
+    assert first_page["meta"]["pagination"] == {"page": 1, "pageSize": 1, "total": 2}
+
+    second_page = assert_success(
+        actors["admin"].get("/api/admin/redeem-code-batches?page=2&pageSize=1")
+    )
+    assert len(second_page["items"]) == 1
+    assert second_page["items"][0]["id"] != first_page["items"][0]["id"]
+
+
 def test_admin_code_batch_requires_live_drop_and_published_card(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:

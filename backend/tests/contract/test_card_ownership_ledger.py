@@ -55,7 +55,7 @@ def test_same_pack_open_idempotency_key_returns_one_owned_card(
             f"/api/me/card-packs/{created['id']}/open",
             headers=headers,
         ),
-        201,
+        200,
     )
 
     assert second["userCardId"] == first["userCardId"]

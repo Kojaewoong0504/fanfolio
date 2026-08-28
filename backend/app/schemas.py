@@ -193,6 +193,8 @@ class SupportTicketActionRequest(BaseModel):
         "release_trade",
         "refund_order",
         "grant_points",
+        "hide_collection",
+        "restore_collection",
         "resolve",
     ]
     reference_id: str | None = Field(default=None, alias="referenceId", max_length=160)
@@ -202,7 +204,7 @@ class SupportTicketActionRequest(BaseModel):
 
 
 class ReportCreate(BaseModel):
-    target_type: Literal["user", "trade", "card"] = Field(alias="targetType")
+    target_type: Literal["user", "trade", "card", "event"] = Field(alias="targetType")
     target_id: str = Field(alias="targetId", min_length=1, max_length=160)
     reason: str = Field(min_length=2, max_length=120)
     body: str = Field(min_length=2, max_length=4000)
@@ -216,6 +218,15 @@ class ArtistProfileUpdate(BaseModel):
 
 class NotificationPreferencesUpdate(BaseModel):
     email_enabled: bool = Field(alias="emailEnabled")
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ConsentRecordCreate(BaseModel):
+    policy_key: Literal["terms", "privacy", "marketing"] = Field(alias="policyKey")
+    policy_version: str = Field(alias="policyVersion", min_length=1, max_length=64)
+    granted: bool
+    source: Literal["signup", "settings", "onboarding"] = "settings"
+
     model_config = ConfigDict(populate_by_name=True)
 
 

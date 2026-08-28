@@ -17,6 +17,8 @@ function loadHelper(source, name) {
 
 test('card detail API contract exposes special media and design configuration', () => {
   assert.match(apiSource, /designConfig\?: CardDesignConfig \| null/)
+  assert.match(apiSource, /probabilityVersion\?: string \| null/)
+  assert.match(apiSource, /acquisitionProbability\?: number \| null/)
   assert.match(apiSource, /effectIntensity\?: number/)
   assert.match(apiSource, /voiceAudioUrl: string \| null/)
   assert.match(apiSource, /hasVideo: boolean/)
@@ -53,6 +55,13 @@ test('standalone card detail labels card-pack acquisitions distinctly', () => {
   assert.match(detailSource, /detail\?\.acquisitionSource === 'combination'/)
   assert.match(detailSource, /detail\?\.acquisitionSource === 'trade'/)
   assert.match(detailSource, /'카드팩'/)
+})
+
+test('card detail presents pack probability provenance when supplied', () => {
+  assert.match(detailSource, /획득 확률 버전/)
+  assert.match(detailSource, /획득 확률/)
+  assert.match(detailSource, /detail\.probabilityVersion/)
+  assert.match(detailSource, /detail\.acquisitionProbability/)
 })
 
 test('collection cards preserve signature and issue-limit metadata for detail fallbacks', () => {
@@ -119,6 +128,12 @@ test('collectible cards react to intentional pointer movement while preserving s
   assert.match(cssSource, /rotateX\(var\(--tilt-x\)/)
   assert.match(cssSource, /touch-action:pan-y/)
   assert.match(cssSource, /prefers-reduced-motion:reduce[\s\S]*transform:none/)
+})
+
+test('card detail enables horizontal swipe to switch between card faces', () => {
+  assert.match(detailSource, /swipeToFlip\s*\/>/)
+  assert.match(collectibleSource, /Math\.abs\(deltaX\) >= 42/)
+  assert.match(collectibleSource, /Math\.abs\(deltaX\) > Math\.abs\(deltaY\)/)
 })
 
 test('handwriting special remains an accessible image benefit', () => {

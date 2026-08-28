@@ -33,11 +33,15 @@ test('statistics preview supports root and partner scopes with working controls'
   assert.match(view, /data-statistics-scope="root"/)
   assert.match(view, /data-statistics-scope="partner"/)
   assert.match(view, /data-statistics-period/)
-  assert.match(view, /data-statistics-filter/)
+  assert.match(view, /dataStatisticsFilter:/)
   assert.match(view, /data-statistics-compare/)
   assert.match(render, /statisticsPreviewState\.scope/)
   assert.match(render, /statisticsPreviewState\.period/)
-  assert.match(render, /statisticsPreviewState\[select\.dataset\.statisticsFilter\]/)
+  assert.match(render, /statisticsPreviewState\[control\.dataset\.statisticsFilter\]/)
+  assert.match(render, /admin-select\.open/)
+  assert.doesNotMatch(render, /admin-select\.is-open/)
+  assert.match(render, /ArrowDown|ArrowUp/)
+  assert.match(render, /aria-expanded/)
 })
 
 test('root dashboard contains operational outcomes and integrity monitoring', () => {

@@ -66,6 +66,31 @@ class User(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class ConsentRecord(Base):
+    """Append-only record of a user's policy and optional marketing choices."""
+
+    __tablename__ = "consent_records"
+    __table_args__ = (
+        CheckConstraint(
+            "policy_key IN ('terms', 'privacy', 'marketing')",
+            name="ck_consent_records_policy_key",
+        ),
+        Index("ix_consent_records_user_created", "user_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    policy_key: Mapped[str] = mapped_column(String(32), nullable=False)
+    policy_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    granted: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    source: Mapped[str] = mapped_column(String(32), nullable=False, default="settings")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
 class Follow(Base):
     """One fan following another fan's public activity."""
 
@@ -118,6 +143,8 @@ class SupportTicket(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     category: Mapped[str] = mapped_column(String(20), nullable=False)
     subject: Mapped[str] = mapped_column(String(160), nullable=False)
+    target_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    target_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="open")
     assigned_admin_id: Mapped[str | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -594,7 +621,11 @@ class ShopProduct(Base):
     )
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    artist_id: Mapped[str] = mapped_column(ForeignKey("artists.id", ondelete="RESTRICT"))
+    # A product may be scoped to an artist or to the global storefront. Global
+    # products are used for cross-artist season passes and point packages.
+    artist_id: Mapped[str | None] = mapped_column(
+        ForeignKey("artists.id", ondelete="RESTRICT"), nullable=True
+    )
     product_type: Mapped[str] = mapped_column(String(32), nullable=False, default="card_pack")
     card_pack_id: Mapped[str | None] = mapped_column(
         ForeignKey("card_packs.id", ondelete="RESTRICT"), nullable=True

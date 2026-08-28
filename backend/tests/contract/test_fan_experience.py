@@ -817,17 +817,17 @@ def test_catalog_exposes_onboarding_artists_and_members(
         {
             "id": "artist_luminous",
             "name": "루미너스",
-            "imageUrl": "/src/assets/fan-week-lavender-meet.png",
+            "imageUrl": "/assets/card-yuna-lavender.jpg",
         },
         {
             "id": "artist_velora",
             "name": "벨로라",
-            "imageUrl": "/src/assets/fan-week-night-stage.png",
+            "imageUrl": "/assets/card-minho-midnight.jpg",
         },
         {
             "id": "artist_stellon",
             "name": "스텔라온",
-            "imageUrl": "/src/assets/login/dreamscape-group.png",
+            "imageUrl": "/assets/card-jay-rosegold.jpg",
         },
     ]
 

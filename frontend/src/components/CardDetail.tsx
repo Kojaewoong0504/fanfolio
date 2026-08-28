@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type SyntheticEvent } from 'react'
-import { apiFetch, getUserCardHistory, resolveApiUrl, type UserCardDetail, type UserCardHistoryItem } from '../api/client'
+import { useEffect, useRef, useState, type FormEvent, type SyntheticEvent } from 'react'
+import { apiFetch, getUserCardHistory, reportFan, resolveApiUrl, type UserCardDetail, type UserCardHistoryItem } from '../api/client'
 import type { Card } from '../types'
 import { normalizeCardEffects } from '../utils/cardEffects'
 import { InteractiveCollectibleCard } from './InteractiveCollectibleCard'
@@ -63,6 +63,11 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
   const [mediaRetryKey, setMediaRetryKey] = useState(0)
   const [detailError, setDetailError] = useState(false)
   const [detailAttempt, setDetailAttempt] = useState(0)
+  const [reportOpen, setReportOpen] = useState(false)
+  const [reportReason, setReportReason] = useState('부적절하거나 잘못된 카드 정보')
+  const [reportBody, setReportBody] = useState('')
+  const [reportMessage, setReportMessage] = useState('')
+  const [reportPending, setReportPending] = useState(false)
   const cardIdentity = card.userCardId ?? card.id
   const isOwned = Boolean(card.userCardId)
   const hasRemoteDetail = Boolean(card.userCardId && !card.userCardId.startsWith('user-card-'))
@@ -121,6 +126,22 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
   const voiceMedia = useAuthenticatedMedia(voiceAudioPath, mediaRetryKey)
   const videoMedia = useAuthenticatedMedia(videoPath, mediaRetryKey)
   const onRetryMedia = () => { setMediaError(false); setMediaRetryKey(value => value + 1) }
+  const submitReport = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const body = reportBody.trim()
+    if (body.length < 2) return
+    setReportPending(true)
+    setReportMessage('')
+    try {
+      await reportFan({ targetType: 'card', targetId: card.id, reason: reportReason, body })
+      setReportMessage('신고가 접수되었어요. 운영팀이 확인할게요.')
+      setReportBody('')
+    } catch {
+      setReportMessage('신고를 접수하지 못했어요. 잠시 후 다시 시도해 주세요.')
+    } finally {
+      setReportPending(false)
+    }
+  }
   const voiceAudioUrl = voiceMedia.url
   const videoUrl = videoMedia.url
   const hasSpecialMedia = Boolean(voiceAudioPath || videoPath)
@@ -142,10 +163,11 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
       <div className="detail-topbar">
         <button className="detail-back-button" onClick={onClose} aria-label="카드 상세 닫기"><InlineIcon name="back" /></button>
         <h1>카드 상세</h1>
-        <button className={isSaved ? 'favorite-button saved' : 'favorite-button'} aria-label={isSaved ? '관심 카드에서 제거' : '관심 카드로 저장'} aria-pressed={isSaved} onClick={onToggleSaved}>
+        <div className="card-detail-toolbar-actions"><button className={isSaved ? 'favorite-button saved' : 'favorite-button'} aria-label={isSaved ? '관심 카드에서 제거' : '관심 카드로 저장'} aria-pressed={isSaved} onClick={onToggleSaved}>
           <InlineIcon name="heart" /><span className="sr-only">{isSaved ? '저장됨' : '관심 카드'}</span>
-        </button>
+        </button><button className={`card-detail-report-trigger${reportOpen ? ' active' : ''}`} type="button" aria-expanded={reportOpen} aria-label="카드 신고" onClick={() => { setReportOpen(open => !open); setReportMessage('') }}><InlineIcon name="shield" /></button></div>
       </div>
+      {reportOpen && <section className="card-detail-report-panel" aria-labelledby="card-report-title"><div className="section-heading"><div><h2 id="card-report-title">카드 신고</h2><p>잘못되었거나 불쾌한 카드 정보를 운영팀에 알려주세요.</p></div></div><form onSubmit={submitReport}><label>신고 사유<select value={reportReason} onChange={event => setReportReason(event.target.value)}><option>부적절하거나 잘못된 카드 정보</option><option>사칭 또는 도용</option><option>스팸 또는 광고</option><option>기타 운영 문제</option></select></label><label>상황 설명<textarea value={reportBody} onChange={event => setReportBody(event.target.value)} minLength={2} maxLength={4000} placeholder="상황을 설명해 주세요." required /></label><button type="submit" disabled={reportPending || reportBody.trim().length < 2}>{reportPending ? '접수 중…' : '신고하기'}</button></form>{reportMessage && <p role="status">{reportMessage}</p>}</section>}
       {detailLoading && <p className="detail-loading" role="status" aria-live="polite">카드 상세 정보를 확인하는 중이에요…</p>}
       <InteractiveCollectibleCard
         imageUrl={imageFor(resolveApiUrl(imageUrl), imageSeed)}
@@ -163,6 +185,7 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
         handwritingImageUrl={handwritingMedia.url}
         onImageError={imageError}
         enableDeviceMotion
+        swipeToFlip
       />
       <p className="detail-kicker">{detail?.card.seasonName ?? card.seasonName ?? '드림스케이프 2026 SPRING'}</p>
       <h2 id="card-detail-title" className="detail-title">{detail?.card.memberName ?? card.member} · {detail?.card.name ?? card.title}</h2>
@@ -178,6 +201,8 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
           <div className="detail-meta-secondary"><dt>카드 유형</dt><dd>{cardTypeLabel(detail.card.cardType)}</dd></div>
           <div className="detail-meta-secondary"><dt>발행 수량</dt><dd>{detail.card.issueLimit ? `${detail.card.issueLimit.toLocaleString()}장` : '제한 없음'}</dd></div>
           <div className="detail-meta-secondary"><dt>획득 경로</dt><dd>{acquisitionSourceLabel}</dd></div>
+          {detail.probabilityVersion && <div className="detail-meta-secondary"><dt>획득 확률 버전</dt><dd>{detail.probabilityVersion}</dd></div>}
+          {detail.acquisitionProbability != null && <div className="detail-meta-secondary"><dt>획득 확률</dt><dd>{detail.acquisitionProbability}%</dd></div>}
         </>}
       </dl>
       {history.length > 0 && <section className="card-collection-detail-history" aria-label="카드 획득 기록">
