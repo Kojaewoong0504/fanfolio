@@ -198,6 +198,16 @@ test('read-only cards never become restorable or persistable editor drafts', asy
   assert.match(fanPreviewBody, /else clearDraft\(\)/)
 })
 
+test('read-only cards cannot re-enter the design stage from progress navigation', async () => {
+  const source = await readFile(appUrl, 'utf8')
+  const progress = source.match(/function editorProgress\(\) \{([\s\S]*?)\n\}/)?.[1] || ''
+  const clickHandler = source.match(/app\.addEventListener\('click',[\s\S]*?\n\}\)/)?.[0] || ''
+
+  assert.match(progress, /cardEditorStage\(currentCard\) !== 'design'/)
+  assert.match(clickHandler, /target === 'design'[\s\S]*?cardEditorStage\(currentCard\) !== 'design'/)
+  assert.match(clickHandler, /공개된 카드는 디자인을 다시 수정할 수 없습니다\./)
+})
+
 test('collaboration comment mutations ignore duplicate submissions while busy', async () => {
   const source = await readFile(appUrl, 'utf8')
   const createBody = source.match(/async function createCollaborationComment\(form\) \{([\s\S]*?)\n\}/)?.[1] || ''

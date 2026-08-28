@@ -917,7 +917,9 @@ function editorProgress() {
     ['review', '4', '검수 요청'],
   ]
   const current = stages.findIndex(([value]) => value === state.stage)
-  return `<nav class="editor-progress" aria-label="카드 제작 단계">${stages.map(([value, number, label], index) => `<button type="button" data-editor-stage="${value}" class="${index === current ? 'active' : index < current ? 'complete' : ''}"><span>${index < current ? icon('check') : number}</span><strong>${label}</strong></button>${index < stages.length - 1 ? '<i></i>' : ''}`).join('')}</nav>`
+  const currentCard = state.cards.find((card) => card.id === state.cardId)
+  const designLocked = Boolean(currentCard && cardEditorStage(currentCard) !== 'design')
+  return `<nav class="editor-progress" aria-label="카드 제작 단계">${stages.map(([value, number, label], index) => `<button type="button" data-editor-stage="${value}" class="${index === current ? 'active' : index < current ? 'complete' : ''}" ${value === 'design' && designLocked ? 'disabled aria-disabled="true"' : ''}><span>${index < current ? icon('check') : number}</span><strong>${label}</strong></button>${index < stages.length - 1 ? '<i></i>' : ''}`).join('')}</nav>`
 }
 
 function designStage() {
@@ -2265,6 +2267,11 @@ app.addEventListener('click', async (event) => {
   const stage = event.target.closest('[data-editor-stage]')
   if (stage) {
     const target = stage.dataset.editorStage
+    const currentCard = state.cards.find((card) => card.id === state.cardId)
+    if (target === 'design' && currentCard && cardEditorStage(currentCard) !== 'design') {
+      notify('공개된 카드는 디자인을 다시 수정할 수 없습니다.', 'error')
+      return
+    }
     if (target === 'preview' && !state.cardId) {
       const saved = await saveDraft({ quiet: true })
       if (!saved) {
