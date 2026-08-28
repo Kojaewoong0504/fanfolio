@@ -31,6 +31,12 @@ test('production card pack screens use the admin card-pack API', () => {
   assert.match(source, /카드팩의 아티스트와 포함 카드의 아티스트를 같게 선택해 주세요/)
 })
 
+test('card review status tabs count the complete catalog, not only the visible page', () => {
+  const tabs = extractFunction('reviewStatusTabs')
+  assert.match(tabs, /state\.cardCatalog\?\.length \? state\.cardCatalog : state\.cards/)
+  assert.match(tabs, /reviewCards\.filter\(\(card\) => cardMatchesStatus\(card, tab\.value\)\)/)
+})
+
 test('production issuance screen remains connected to batch creation and exports', () => {
   assert.match(source, /function batchesView\(/)
   assert.match(source, /api\("\/admin\/redeem-code-batches"/)

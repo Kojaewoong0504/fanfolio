@@ -85,3 +85,9 @@ test('statistics preview styling is responsive and namespaced', () => {
   assert.match(css, /@media \(max-width: 1180px\)[\s\S]*\.statistics-dashboard-grid/)
   assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.statistics-kpi-grid/)
 })
+
+test('desktop statistics KPI summary is compact enough for one-row scanning', () => {
+  assert.match(css, /\.statistics-kpi-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(6,/)
+  assert.match(css, /\.statistics-kpi-card\s*\{[\s\S]*min-height:\s*104px/)
+  assert.match(css, /\.statistics-kpi-card\s*\{[\s\S]*padding:\s*14px/)
+})

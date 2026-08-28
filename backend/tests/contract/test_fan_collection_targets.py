@@ -47,6 +47,22 @@ def test_fan_collection_goal_reports_progress_and_notifies_once(
 ) -> None:
     fan = actors["fan"]
     pack_id = _published_pack(actors["admin"], seeded)
+    mission = assert_success(
+        actors["admin"].post(
+            "/api/admin/engagement/missions",
+            json={
+                "title": "컬렉션 완성 미션",
+                "eventKind": "collection_goal_completed",
+                "targetValue": 1,
+                "recurrence": "once",
+                "conditionPayload": {"packId": pack_id},
+                "rewardPayload": {"xp": 11},
+            },
+        ),
+        201,
+    )
+    assert_success(actors["admin"].post(f"/api/admin/engagement/missions/{mission['id']}/submit"))
+    assert_success(actors["admin"].post(f"/api/admin/engagement/missions/{mission['id']}/approve"))
 
     created = assert_success(fan.post("/api/me/collection-goals", json={"packId": pack_id}), 201)
     assert created["packId"] == pack_id
@@ -62,6 +78,9 @@ def test_fan_collection_goal_reports_progress_and_notifies_once(
     assert refreshed["ownedCount"] == 1
     assert refreshed["completionRate"] == 100
     assert refreshed["completedAt"] is not None
+    missions = assert_success(fan.get("/api/me/missions"))["items"]
+    completed_mission = next(item for item in missions if item["id"] == mission["id"])
+    assert completed_mission["completed"] is True
 
     notifications = assert_success(fan.get("/api/notifications"))["items"]
     goal_notifications = [

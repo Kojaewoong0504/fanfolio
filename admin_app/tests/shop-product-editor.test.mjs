@@ -20,6 +20,8 @@ test('shop product editor keeps admin shell and exposes a live preview panel', (
   assert.match(source, /구성품 안내/)
   assert.match(source, /구매 안내/)
   assert.match(view, /블록 추가/)
+  assert.match(source, /shop-product-back/)
+  assert.match(source, /상품 목록/)
 })
 
 test('shop product editor supports editing preview fields and content blocks', () => {

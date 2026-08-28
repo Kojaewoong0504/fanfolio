@@ -16,7 +16,7 @@
 | 분석 | 통과 | 권한 범위 통계, 기간 비교, 운영 지표 |
 | 협업·댓글 | 보완 완료 | 스튜디오 카드별 코멘트 작성·멘션·해결 상태·검수 버전 연결과 관리자 카드 검수 화면 조회를 추가 |
 | 콘텐츠 캘린더 | 보완 완료 | 카드·이벤트·상품 일정 생성·조회·상태 변경과 동일 콘텐츠 겹침 차단; 관리자 카드 운영 화면에 통합 |
-| 백업·복원 | 운영 훈련 필요 | 문서화된 운영 구성을 실제 백업 복원 환경에서 실행한 증거는 없음 |
+| 백업·복원 | 로컬 PostgreSQL 리허설 통과 | 2026-08-28 격리 PostgreSQL에서 custom dump 생성 → 별도 복원 DB 복원 → 84개 public table과 Alembic version 확인; 운영 백업 자체 복원은 별도 게이트 |
 
 ## 확인하지 않은 범위
 
@@ -36,7 +36,7 @@
 | 검증 | 결과 | 증거 및 잔여 차단 |
 | --- | --- | --- |
 | 실제 운영 인프라 | 차단 유지 | `scripts/integration-smoke.sh`가 Docker/Podman Compose 부재로 시작하지 못함. `scripts/production-preflight.sh`는 운영용 `DATA_PROTECTION_KEY` 미설정으로 fail-closed. |
-| 백업·복원 | 로컬 리허설 통과 | SQLite backup API로 `backend/fanfolio.db`를 별도 임시 DB에 복원하고 무결성·사용자·관리자 수를 확인한 뒤 임시 산출물을 제거함. 실제 PostgreSQL 백업 복원은 미실행. |
+| 백업·복원 | PostgreSQL 리허설 통과 | 2026-08-28 격리 Compose PostgreSQL에서 최신 스키마를 custom dump로 백업하고 `fanfolio_restore_2`에 복원했다. 복원 후 public table 84개와 Alembic version `0073_support_report_targets`를 확인했다. |
 | 거래 동시성 | 통과 | `test_concurrent_trade_acceptance_has_one_winner` 포함 거래 계약 테스트 10 passed; 동시 수락 결과가 200/409로 한 명만 승리하는 잠금 계약 확인. |
 | 관리자·팬앱·스튜디오 브라우저 | 통과 | 최신 백엔드에서 관리자 로그인 후 카드 운영·공개 일정 패널 확인, 팬앱 인증 홈 확인, 관리자에서 스튜디오 임시 비밀번호 재발급 후 스튜디오 최초 비밀번호 설정 및 홈 진입 확인. |
 | 회귀·출시 게이트 | 코드 게이트 통과 / 인프라 게이트 보류 | 관리자 149 passed, 빌더 54 passed, 팬앱 233 passed, 백엔드 473 passed·2 skipped, 프론트엔드 production build 및 `git diff --check` 통과. 격리 `scripts/e2e-smoke.sh`는 8004 백엔드 헬스체크 실패로 중단됨. |
@@ -58,6 +58,15 @@
 - 스튜디오 회귀: 54 passed.
 - 호스팅 프리플라이트: Render·팬앱·관리자·스튜디오 및 API 프록시 8개 확인 모두 HTTP 200.
 - 위 결과는 로컬 코드와 HTTP 도달성 증거다. 실제 운영 관리자 인증을 거친 mutation, Supabase/Redis/Resend/R2/Firebase 자격증명 동작, PostgreSQL 백업 복원은 여전히 미검증이다.
+
+## 2026-08-28 P0~P1 재검증 결과
+
+- P0 통합 스모크 통과: 격리 PostgreSQL 마이그레이션, 동일 redeem code 동시 요청의 201/409 경쟁 결과, 서로 다른 코드 동시 발급, Redis rate limit, Mailpit SMTP, Celery Worker/Beat를 확인했다.
+- P0 PostgreSQL 백업·복원 리허설 통과: custom dump를 별도 DB에 복원하고 84개 public table 및 Alembic version을 확인했다.
+- P1 로컬 계약·회귀 통과: 관리자 236개, 팬앱 261개, 스튜디오 54개, 백엔드 contract 340개, P0/P1 핵심 계약 20개, 운영 스크립트 3개 통과.
+- 관리자 세션 복구는 실제 브라우저 탭에서 `app.js` v84를 로드해 확인했다. API가 응답하지 않는 조건에서도 제한시간·재시도 후 관리자 셸이 무한 로딩에 갇히지 않고 화면으로 복귀한다.
+- 통합 스모크가 기존 8000 포트 프로세스에 잘못 연결되지 않도록 `API_HOST_PORT` 설정을 추가했다. 검증은 API 18000, PostgreSQL 15432, SMTP 11025, Mailpit 18025, Redis 16379 격리 포트에서 수행했다.
+- 남은 외부 게이트: 호스팅 관리자 자격증명 기반 mutation, Firebase 실자격증명/OS 푸시, R2·Resend 실자격증명, 운영 PostgreSQL 백업 복원 증적, 실기기 카메라 권한·터치 제스처. 현재 환경의 자격증명·실기기 부재로 성공 처리하지 않는다.
 
 ### 운영 인증 smoke 게이트 보완
 

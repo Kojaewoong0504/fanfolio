@@ -15,6 +15,12 @@ test('admin can issue a one-time replacement password for an existing account', 
   assert.match(source, /data-artist-reset/)
 })
 
+test('artist account issuance exposes a browser-copy action for the one-time password', () => {
+  assert.match(source, /id="artist-temporary-password"/)
+  assert.match(source, /id="copy-artist-temporary-password"/)
+  assert.match(source, /artist-temporary-password[\s\S]*navigator\.clipboard\.writeText/)
+})
+
 test('artist account issuance refreshes the account list independently of the full dashboard load', () => {
   assert.match(source, /async function loadArtistAccounts\(\)/)
   assert.match(source, /await loadArtistAccounts\(\)/)

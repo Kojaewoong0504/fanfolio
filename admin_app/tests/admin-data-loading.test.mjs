@@ -58,6 +58,14 @@ test('safe GET requests retry transient network failures during session restorat
   assert.match(source, /method === "GET"/)
 })
 
+test('admin API requests have bounded timeouts so session restoration cannot hang forever', () => {
+  assert.match(source, /AbortController/)
+  assert.match(source, /timeoutMs = Number\.isFinite\(options\.timeoutMs\)/)
+  assert.match(source, /controller\.abort\(\)/)
+  assert.match(source, /timedOut && error\?\.name === "AbortError"/)
+  assert.match(source, /timeoutMs: 10000/)
+})
+
 test('card registration uses the shared admin select controls for catalog metadata', () => {
   const start = source.indexOf('function cardCreateDrawer()')
   const end = source.indexOf('function rewardOptions', start)

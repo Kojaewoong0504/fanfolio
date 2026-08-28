@@ -29,6 +29,36 @@ test('event editor and lifecycle actions call backend contracts', () => {
   assert.match(source, /eventTypeLabel/)
 })
 
+test('event registration control exposes a navigation fallback before dynamic controls', () => {
+  const bindStart = source.indexOf('function bind()')
+  const eventBinding = source.indexOf('id="open-event-drawer"', source.indexOf('function eventsView'))
+  const dynamicControlBinding = source.indexOf('document.querySelectorAll("[data-view]:not([data-open-drawer])")', bindStart)
+  assert.ok(eventBinding > source.indexOf('function eventsView'))
+  assert.ok(eventBinding < dynamicControlBinding)
+})
+
+  test('event registration uses the shared view action contract', () => {
+    assert.match(source, /id="open-event-drawer"[^>]*href="\?view=events&drawer=event"/)
+    assert.match(source, /const eventEditorOpen = .*state\.drawer === "event"/)
+    assert.match(source, /if \(name === "event"\) state\.view = "events"/)
+    assert.match(source, /id="open-event-drawer"[^>]*href="\?view=events&drawer=event"/)
+    assert.match(source, /initialUrlParams\.get\("drawer"\) === "event"/)
+  })
+
+  test('event registration keeps a native navigation fallback for browser activation', () => {
+    assert.match(source, /id="open-event-drawer"[^>]*href="\?view=events&drawer=event"/)
+    assert.doesNotMatch(source, /querySelector\("#open-event-drawer"\)\?\.addEventListener/)
+  })
+
+  test('event registration is a native link action for browser activation', () => {
+    assert.match(source, /id="open-event-drawer"[^>]*href="\?view=events&drawer=event"[^>]*aria-haspopup="dialog"/)
+  })
+
+  test('event deep links do not trap later navigation in the event workspace', () => {
+    assert.doesNotMatch(source, /if \(initialDrawer === "event"\) \{[\s\S]*state\.view = "events"/)
+    assert.match(source, /const eventEditorOpen = state\.eventEditorOpen \|\| state\.drawer === "event"/)
+  })
+
 test('event workspace remains responsive', () => {
   assert.match(css, /\.event-workspace\s*\{[\s\S]*grid-template-columns/)
   assert.match(css, /@media \(max-width: 920px\)[\s\S]*\.event-workspace\s*\{\s*grid-template-columns: 1fr/)
@@ -44,6 +74,9 @@ test('event workspace remains responsive', () => {
   assert.match(css, /#desktop-nav-toggle|\.nav-toggle[\s\S]*z-index: 40/)
   assert.match(css, /\.admin-shell\.nav-collapsed \.nav-brand-mark[\s\S]*flex: 0 0 32px/)
   assert.match(css, /\.admin-shell\.nav-collapsed \.nav-toggle[\s\S]*flex: 0 0 24px/)
+  assert.match(css, /\.admin-shell\.nav-collapsed \.nav-section-toggle[\s\S]*display:\s*none/)
+  assert.match(css, /\.admin-shell\.nav-collapsed \.nav-item > span:last-child[\s\S]*display:\s*none/)
+  assert.match(css, /\.admin-shell\.nav-collapsed \.nav-item[\s\S]*white-space:\s*nowrap/)
 })
 
 test('event editor uploads a banner asset and offers managed connection choices', () => {
@@ -95,4 +128,9 @@ test('local admin sessions use the active browser host for refresh cookies', () 
 test('event media previews share the authenticated loader in detail and editor views', () => {
   assert.match(source, /querySelectorAll\("\[data-event-hero\]"\)/)
   assert.match(source, /event-upload-thumbnail/)
+})
+
+test('event banner upload keeps the save action recoverable after an upload failure', () => {
+  assert.match(source, /finally[\s\S]*disabled = false/)
+  assert.match(source, /배너 업로드 실패 원인|이벤트 배너 업로드에 실패했습니다\./)
 })

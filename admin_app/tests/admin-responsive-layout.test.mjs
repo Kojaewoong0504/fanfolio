@@ -25,7 +25,7 @@ function extractFunction(name) {
 }
 
 function reviewRowHarness() {
-  const sandbox = {}
+  const sandbox = { state: { cardActionMenuId: 'card-6' } }
   vm.createContext(sandbox)
   vm.runInContext(
     [
@@ -45,9 +45,26 @@ test('page root clips accidental horizontal overflow and layout children can shr
 
 test('admin shell keeps the full navigation reachable while dense dashboards stay compact', () => {
   assert.match(css, /\.app-nav nav\s*\{[^}]*overflow-y:\s*auto/s)
+  assert.match(css, /\.app-nav nav\s*\{[^}]*scrollbar-width:\s*none/s)
+  assert.match(css, /\.app-nav nav::-webkit-scrollbar\s*\{[^}]*display:\s*none/s)
+  assert.match(css, /\.admin-shell\s*\{[^}]*overflow-x:\s*clip/s)
   assert.match(css, /\.fan-pass-summary\s*\{[^}]*grid-template-columns:\s*repeat\(4/s)
   assert.match(css, /\.operational-metrics-grid\s*\{[^}]*grid-template-columns:\s*repeat\(6/s)
   assert.match(css, /\.artist-overview-grid\s*\{[^}]*grid-template-columns:\s*repeat\(4/s)
+})
+
+test('admin dashboard keeps operational panels in a balanced two-column rhythm', () => {
+  assert.match(css, /\.dashboard-grid\s*>\s*\.action-panel\s*\{[^}]*grid-column:\s*1/s)
+  assert.match(css, /\.dashboard-grid\s*>\s*\.card-pack-summary\s*\{[^}]*grid-column:\s*2/s)
+  assert.match(css, /\.dashboard-grid\s*>\s*\.operational-metrics-panel\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/s)
+})
+
+test('large admin collections expose bounded list and interaction contracts', () => {
+  assert.match(source, /tablePagination\("issuancePage"/)
+  assert.match(source, /data-card-action="delete"/)
+  assert.match(source, /function deleteDraftCard\(/)
+  assert.match(source, /class="content-calendar-list"/)
+  assert.match(css, /\.content-calendar-list \.empty/)
 })
 
 test('desktop partner layout uses 208px navigation and 280px directory columns', () => {
@@ -313,11 +330,11 @@ test('card review rows open details from the whole row without double-triggering
   assert.match(source, /event\.preventDefault\(\)/)
   assert.match(source, /event\.target\.closest\('button, a, input, select, textarea, label, \[role="button"\]'\)/)
   assert.match(source, /event\.stopPropagation\(\)/)
-  assert.match(source, /class="icon-button review-card"/, 'keeps the existing more button in the management cell')
+  assert.match(source, /data-card-action-menu/, 'keeps the more-actions menu in the management cell')
 })
 
 test('card review row activation helper handles row keyboard mouse and nested controls', () => {
-  const { activateReviewRow, activateReviewButton } = reviewRowHarness()
+  const { activateReviewRow, activateReviewButton, state } = reviewRowHarness()
   const calls = []
   const opener = (id) => calls.push(id)
   const row = { dataset: { reviewRowId: 'card-1' } }
@@ -336,6 +353,7 @@ test('card review row activation helper handles row keyboard mouse and nested co
   activateReviewButton({ stopPropagation: () => { stopped += 1 } }, 'card-6', opener)
   assert.deepEqual(calls, ['card-1', 'card-2', 'card-3', 'card-6'])
   assert.equal(stopped, 1)
+  assert.equal(state.cardActionMenuId, null)
 })
 
 test('commercial review workspace keeps a dense master-detail layout at laptop widths', () => {

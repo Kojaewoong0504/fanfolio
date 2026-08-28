@@ -24,6 +24,23 @@ test('notification bell loads scoped release notifications with unread count', (
   assert.match(source, /unreadNotificationCount/)
 })
 
+test('notification items resolve operational destinations and mark themselves read', () => {
+  assert.match(source, /notificationDestination\(/)
+  assert.match(source, /data-notification-view=/)
+  assert.match(source, /data-notification-ticket=/)
+  assert.match(source, /data-notification-delivery=/)
+  assert.match(source, /openNotification\(notificationId, cardId, view, ticketId, deliveryId\)/)
+})
+
+test('point charging operations use a structured package form and compact table', () => {
+  assert.match(source, /point-charge-catalog-panel/)
+  assert.match(source, /point-package-create-grid/)
+  assert.match(source, /point-package-table/)
+  assert.match(css, /\.point-charge-catalog-panel/)
+  assert.match(css, /\.point-package-create-grid/)
+  assert.match(css, /\.point-package-table/)
+})
+
 test('approved cards are linked to drops instead of directly published', () => {
   assert.match(source, /\/admin\/drops\/\$\{[^}]+}\/cards/)
   assert.match(source, /drop-link-drawer/)
@@ -72,4 +89,83 @@ test('review image fallback keeps readable copy and controls at compact desktop 
   assert.match(css, /\.review-image-uploads\s*\{[\s\S]{0,240}flex-direction:\s*column/)
   assert.match(css, /\.review-image-upload\s*\{[\s\S]{0,300}white-space:\s*nowrap/)
   assert.doesNotMatch(css, /\.review-detail-panel \.review-effect-card,[\s\S]{0,180}width:\s*min\(100%,\s*120px\)/)
+})
+
+test('card packs and shop products expose row-level detail entry points', () => {
+  assert.match(source, /data-card-pack-row-id=/)
+  assert.match(source, /data-shop-product-row-id=/)
+  assert.match(source, /async function loadShopProductDetail\(/)
+  assert.match(source, /\/admin\/shop\/products\/\$\{encodeURIComponent\(productId\)\}/)
+  assert.match(source, /method: "PATCH"/)
+  assert.match(css, /\.card-pack-select-row, \.shop-product-select-row/)
+})
+
+test('card row actions render as a viewport popover instead of expanding table rows', () => {
+  assert.match(source, /function positionOpenCardActionMenu\(/)
+  assert.match(source, /getBoundingClientRect\(\)/)
+  assert.match(source, /function activateReviewButton[\s\S]*state\.cardActionMenuId = null/)
+  assert.match(css, /\.row-action-menu-popover\s*\{[^}]*position:\s*fixed/s)
+  assert.match(css, /\.card-table \.row-actions\s*\{[^}]*width:\s*48px/s)
+  assert.ok(
+    css.lastIndexOf('.card-table .row-action-menu-popover') > css.lastIndexOf('.row-action-menu-popover { position: absolute'),
+    'the production fixed popover rule must finish the cascade after legacy preview styles',
+  )
+})
+
+test('card review actions protect published cards and expose draft deletion only', () => {
+  assert.match(source, /releaseStatus\(card\) === "draft" && can\("cards:write"\)/)
+  assert.match(source, /class="row-action-menu-item danger-button delete-draft-card"/)
+  assert.match(source, /초안 삭제/)
+})
+
+test('card pack composition provides a selectable visual preview rail', () => {
+  assert.match(source, /selectedCompositionCardId/)
+  assert.match(source, /data-composition-card-id=/)
+  assert.match(source, /composition-card-preview/)
+  assert.match(source, /data-composition-preview-rarity/)
+  assert.match(source, /data-composition-preview-probability/)
+})
+
+test('production card pack composition keeps readable columns and a compact validation rail', () => {
+  assert.match(source, /composition-card-cell/)
+  assert.match(source, /composition-status-panel/)
+  assert.match(css, /\.card-operations-page \.composition-table th:first-child,[\s\S]*width:\s*42%/)
+  assert.match(css, /\.card-operations-page \.composition-table\s*\{[^}]*display:\s*table;/s)
+  assert.match(css, /\.card-operations-page \.composition-table td:first-child\s*\{[^}]*border-right:/s)
+  assert.match(css, /\.card-operations-page \.odds-editor-panel\s*\{[^}]*align-self:\s*start/s)
+  assert.match(css, /\.composition-status-panel\s*\{[^}]*grid-template-columns:\s*repeat\(2,/s)
+})
+
+test('shop and point catalogs use explicit summary, status, and action cells', () => {
+  assert.match(source, /shop-product-summary/)
+  assert.match(source, /shopProductTypeLabel\(/)
+  assert.match(source, /shop-product-manage/)
+  assert.match(source, /point-package-product-field/)
+  assert.match(source, /point-package-state/)
+  assert.match(source, /point-package-schedule-field/)
+  assert.match(css, /\.shop-product-summary/)
+  assert.match(css, /\.point-package-state/)
+})
+
+test('card management action cells keep table row separators aligned', () => {
+  assert.match(css, /\.card-table td\.row-actions\s*\{[^}]*display:\s*table-cell[^}]*vertical-align:\s*middle/s)
+})
+
+test('card pack composition identifies cards with thumbnail previews', () => {
+  assert.match(source, /composition-card-thumbnail/)
+  assert.match(source, /state\.cardThumbnailUrls\[card\.cardId\]/)
+  assert.match(css, /\.composition-card-thumbnail img/)
+})
+
+test('issuance filters render one control border instead of nested borders', () => {
+  assert.match(css, /\.production-issuance-page \.card-ops-toolbar > \.admin-select\.filter-select\s*\{[^}]*border:\s*0/s)
+  assert.match(css, /\.production-issuance-page \.card-ops-toolbar > \.admin-select\.filter-select \.admin-select-trigger\s*\{[^}]*width:\s*100%/s)
+})
+
+test('datetime picker uses the Korean Fanfolio Flatpickr theme', () => {
+  assert.match(source, /fanfolioDateTimeLocale/)
+  assert.match(source, /time_24hr:\s*true/)
+  assert.match(source, /altFormat:\s*"Y년 m월 d일 H:i"/)
+  assert.match(source, /fanfolio-calendar/)
+  assert.match(css, /\.flatpickr-calendar\.fanfolio-calendar/)
 })

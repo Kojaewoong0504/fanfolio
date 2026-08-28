@@ -57,6 +57,24 @@ test("reported fan cases expose a reversible collection moderation action", () =
   assert.match(source, /needsReference && !reference/);
 });
 
+test("collection moderation is only offered for report tickets targeting a fan", () => {
+  assert.match(source, /const canHideCollection = ticket && ticket\.category === "report" && ticket\.targetType === "user" && Boolean\(ticket\.targetId\)/);
+  assert.doesNotMatch(source, /replace\(\s*['"]data-support-action="refund_order"['"]/);
+});
+
+test("operation feedback is cleared when navigating between admin views", () => {
+  assert.match(source, /state\.operationFeedback = null;[\s\S]*state\.view = button\.dataset\.view/);
+});
+
+test("toast feedback is cleared when navigating to a different admin view", () => {
+  assert.match(source, /function clearToast\(\)/);
+  assert.match(source, /clearToast\(\);[\s\S]*state\.view = button\.dataset\.view/);
+});
+
+test("view navigation closes an open drawer before rendering the next workspace", () => {
+  assert.match(source, /state\.drawer = null;[\s\S]*state\.drawerData = null;[\s\S]*state\.eventEditorOpen = false;[\s\S]*state\.view = button\.dataset\.view/);
+});
+
 test("point adjustment support action exposes a required amount field", () => {
   assert.match(source, /data-support-action-amount/);
   assert.match(source, /포인트 조정 금액/);
@@ -80,6 +98,16 @@ test("support detail exposes a chronological activity timeline", () => {
   assert.match(source, /support-activity-item/);
   assert.match(styles, /\.support-activity-timeline/);
   assert.match(styles, /\.operation-feedback/);
+});
+
+test("support activity history explains operations and exposes drill-down details", () => {
+  assert.match(source, /supportActivityDescriptor/);
+  assert.match(source, /data-support-activity-detail/);
+  assert.match(source, /상세 보기/);
+  assert.match(source, /원문 ID/);
+  assert.match(source, /data-support-activity-copy/);
+  assert.match(styles, /\.support-activity-detail-panel/);
+  assert.match(styles, /\.support-activity-target/);
 });
 
 test("fan 360 view exposes collection and risk context for support work", () => {
@@ -117,6 +145,17 @@ test("support detail uses the shared custom select for assignment and status mut
   assert.match(source, /support-status-select/);
   assert.match(source, /updateSupportTicketAssignee\(control\.dataset\.supportTicket/);
   assert.match(source, /updateSupportTicketStatus\(control\.dataset\.supportTicket/);
+  assert.match(source, /event\.stopPropagation\(\)/);
+});
+
+test("approval queue exposes request detail and an auditable decision reason", () => {
+  assert.match(source, /selectedApprovalId/);
+  assert.match(source, /data-approval-detail=/);
+  assert.match(source, /approval-detail-panel/);
+  assert.match(source, /data-approval-reason=/);
+  assert.match(source, /승인 사유|결정 사유/);
+  assert.match(source, /data-approval-detail-action/);
+  assert.match(styles, /\.approval-detail-panel/);
 });
 
 test("support and delivery queues provide a recoverable filtered-empty state", () => {
@@ -131,6 +170,20 @@ test("support detail controls have the shared visual treatment", () => {
   assert.match(styles, /\[data-support-action-reference\]/);
   assert.match(styles, /\[data-support-action-amount\]/);
   assert.match(styles, /\.support-reply-form textarea[^{]*\{[^}]*min-height: 96px/);
+});
+
+test("support queue uses compact Korean labels and bounded pagination", () => {
+  assert.match(source, /function supportStatusLabel\(/);
+  assert.match(source, /function supportCategoryLabel\(/);
+  assert.match(source, /supportPageSize\s*=\s*10/);
+  assert.match(source, /data-support-page/);
+  assert.match(source, /supportPagination/);
+  assert.match(styles, /\.support-ticket-list[\s\S]*max-height/);
+  assert.match(styles, /\.support-ticket-row[\s\S]*min-height:\s*76px/);
+});
+
+test("navigation sections remain collapsible even when their current workflow is active", () => {
+  assert.doesNotMatch(source, /Boolean\(state\.navSectionsCollapsed\[group\]\) && !currentGroup/);
 });
 
 test("recent operational drawers use the shared control styling for operational selectors", () => {
@@ -151,6 +204,12 @@ test("multi-value campaign and achievement controls preserve readable selection 
   assert.match(source, /admin-multi-select-value/);
   assert.match(source, /campaign-card-picker/);
   assert.match(styles, /\.admin-multi-select-check/);
+});
+
+test("fan pass tier editor keeps repeated reward fields readable in the sidecar", () => {
+  assert.match(styles, /\.fan-pass-editor-form \.pass-tier-row\s*\{[^}]*grid-template-columns:\s*24px minmax\(0, 1fr\) 28px/);
+  assert.match(styles, /\.fan-pass-editor-form \.pass-tier-row > \.field:nth-of-type\(3\)\s*\{\s*grid-row:\s*4/);
+  assert.match(styles, /\.fan-pass-editor-form \.pass-tier-row \.admin-select,[\s\S]*\.fan-pass-editor-form \.pass-tier-row input\s*\{[^}]*min-width:\s*0/);
 });
 
 test("production statistics filters use the shared admin selector controls", () => {

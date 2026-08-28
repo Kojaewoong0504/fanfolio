@@ -4469,6 +4469,42 @@ async def update_admin_card(
     return {"ok": True, "data": admin_card_data(card)}
 
 
+@router.delete("/cards/{card_id}")
+async def delete_admin_card(
+    card_id: str,
+    context: CurrentAdmin,
+    session: DbSession,
+) -> dict:
+    card = await session.get(Card, card_id)
+    if not card:
+        raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
+    context.require_organization(card.organization_id)
+    context.require_artist(card.artist_id)
+    context.require_write()
+    if card.status != "draft" or card.release_status != "draft":
+        raise AppError(409, "INVALID_CARD_STATUS", "초안 상태의 카드만 삭제할 수 있습니다.")
+    linked = await session.scalar(
+        select(CardPackCard.id).where(CardPackCard.card_id == card.id).limit(1)
+    )
+    if linked:
+        raise AppError(
+            409, "CARD_IN_USE", "카드팩 구성에 연결된 카드는 먼저 구성에서 제거해 주세요."
+        )
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="card.deleted",
+        entity_type="card",
+        entity_id=card.id,
+        organization_id=context.membership.organization_id,
+        artist_id=card.artist_id,
+        details={"status": "draft"},
+    )
+    await session.delete(card)
+    await session.commit()
+    return {"ok": True, "data": {"id": card_id, "deleted": True}}
+
+
 @router.get("/cards/{card_id}/preview/image")
 async def card_preview_image(card_id: str, context: CurrentAdmin, session: DbSession) -> Response:
     card = await session.get(Card, card_id)

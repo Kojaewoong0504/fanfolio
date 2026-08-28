@@ -27,7 +27,9 @@ POSTGRES_HOST_PORT="${POSTGRES_HOST_PORT:-5432}"
 SMTP_HOST_PORT="${SMTP_HOST_PORT:-1025}"
 MAILPIT_HOST_PORT="${MAILPIT_HOST_PORT:-8025}"
 REDIS_HOST_PORT="${REDIS_HOST_PORT:-6379}"
+API_HOST_PORT="${API_HOST_PORT:-8000}"
 export POSTGRES_HOST_PORT SMTP_HOST_PORT MAILPIT_HOST_PORT REDIS_HOST_PORT
+API_BASE_URL="http://127.0.0.1:${API_HOST_PORT}"
 
 cleanup() {
   set +e
@@ -176,10 +178,10 @@ done
 echo "[3/5] starting API against PostgreSQL and Mailpit"
 (
   cd "$BACKEND_DIR"
-  exec .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+  exec .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port "$API_HOST_PORT"
 ) >"$LOG_DIR/api.log" 2>&1 &
 API_PID=$!
-wait_for_url http://localhost:8000/api/health/ready
+wait_for_url "$API_BASE_URL/api/health/ready"
 
 echo "[3b/5] starting and checking a Celery worker"
 (
@@ -319,7 +321,7 @@ same_code_dir="$(mktemp -d "${TMPDIR:-/tmp}/fanfolio-redeem.XXXXXX")"
 same_code_pids=()
 for token in "$REDEEM_SESSION_A" "$REDEEM_SESSION_B"; do
   curl -sS -o "$same_code_dir/$token.json" -w '%{http_code}' -X POST \
-    http://localhost:8000/api/redemptions \
+    "$API_BASE_URL/api/redemptions" \
     -H 'Content-Type: application/json' \
     -H 'X-Fanfolio-Client: fan' \
     -H "X-Fanfolio-Session: $token" \
@@ -340,14 +342,14 @@ same_code_statuses="$(cat "$same_code_dir"/*.status | sort | tr '\n' ' ')"
 
 different_code_dir="$(mktemp -d "${TMPDIR:-/tmp}/fanfolio-redeem.XXXXXX")"
 curl -sS -o "$different_code_dir/a.json" -w '%{http_code}' -X POST \
-  http://localhost:8000/api/redemptions \
+  "$API_BASE_URL/api/redemptions" \
   -H 'Content-Type: application/json' -H 'X-Fanfolio-Client: fan' \
   -H "X-Fanfolio-Session: $REDEEM_SESSION_A" \
   -d "{\"code\":\"$REDEEM_CODE_A\",\"source\":\"qr\"}" \
   >"$different_code_dir/a.status" &
 pid_a=$!
 curl -sS -o "$different_code_dir/b.json" -w '%{http_code}' -X POST \
-  http://localhost:8000/api/redemptions \
+  "$API_BASE_URL/api/redemptions" \
   -H 'Content-Type: application/json' -H 'X-Fanfolio-Client: fan' \
   -H "X-Fanfolio-Session: $REDEEM_SESSION_B" \
   -d "{\"code\":\"$REDEEM_CODE_B\",\"source\":\"qr\"}" \
@@ -430,7 +432,7 @@ echo "[4b/5] verifying API rate limiting uses Redis"
 rate_limit_email="integration-rate-limit-$(date +%s)@example.com"
 for _ in {1..5}; do
   status_code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
-    http://localhost:8000/api/auth/magic-link/request \
+    "$API_BASE_URL/api/auth/magic-link/request" \
     -H 'Content-Type: application/json' \
     -d "{\"email\":\"$rate_limit_email\",\"purpose\":\"login\"}")"
   [[ "$status_code" == "202" ]] || {
@@ -439,7 +441,7 @@ for _ in {1..5}; do
   }
 done
 status_code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
-  http://localhost:8000/api/auth/magic-link/request \
+  "$API_BASE_URL/api/auth/magic-link/request" \
   -H 'Content-Type: application/json' \
   -d "{\"email\":\"$rate_limit_email\",\"purpose\":\"login\"}")"
 [[ "$status_code" == "429" ]] || {
@@ -448,7 +450,7 @@ status_code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
 }
 
 echo "[5/5] verifying SMTP delivery through Mailpit"
-curl -fsS -X POST http://localhost:8000/api/auth/magic-link/request \
+curl -fsS -X POST "$API_BASE_URL/api/auth/magic-link/request" \
   -H 'Content-Type: application/json' \
   -d '{"email":"integration@example.com","purpose":"login"}' >/dev/null
 

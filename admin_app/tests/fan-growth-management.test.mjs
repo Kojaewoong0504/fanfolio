@@ -144,6 +144,12 @@ test('season level pass workspace matches the approved sidecar management design
   assert.match(css, /fan-pass-table tbody tr\.selected/)
 })
 
+test('season level pass drawer anchors its footer inside the drawer', () => {
+  assert.match(css, /\.fan-pass-drawer\s*\{[^}]*position:\s*relative/)
+  assert.match(css, /\.fan-pass-editor-form\s*\{[^}]*position:\s*relative/)
+  assert.match(css, /\.fan-pass-editor-form\s*>\s*\.drawer-footer\s*\{[^}]*position:\s*absolute/)
+})
+
 test('fan growth management styles stay responsive without horizontal overflow', () => {
   assertMatches(css, /fan-growth-grid/, 'renders a dedicated responsive fan growth grid')
   assertMatches(css, /achievement-builder/, 'styles the achievement builder drawer')
@@ -158,4 +164,24 @@ test('fan pass editor offers reusable 15 and 30 level season presets', () => {
   assert.match(source, /season-30/)
   assert.match(source, /applyFanPassPreset/)
   assert.match(source, /fan-pass-preset/)
+})
+
+test('fan pass date controls keep the submitted datetime value visible and pass save reports the API reason', () => {
+  assert.match(source, /altInput:\s*false/)
+  assert.match(source, /errorBox\.textContent = error\?\.message \|\| "레벨 패스 저장에 실패했습니다\./)
+  assert.match(source, /finally[\s\S]*disabled = false/)
+})
+
+test('root fan pass save rejects an artist scope without an organization', () => {
+  assert.match(source, /if \(isRoot\(\) && \(\(organizationId && !artistId\) \|\| \(!organizationId && artistId\)\)\)/)
+  assert.match(source, /조직과 아티스트 범위를 함께 선택/)
+})
+
+test('mission editor exposes collection completion as a processable engagement event', () => {
+  assert.match(source, /collection_goal_completed/)
+  assert.match(source, /컬렉션 완성/)
+})
+
+test('reward editor explains that points and card packs are mission or shop benefits', () => {
+  assert.match(source, /포인트·카드팩은 미션 보상 또는 상점 상품에서 운영합니다/)
 })

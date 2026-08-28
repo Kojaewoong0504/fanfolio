@@ -1010,7 +1010,12 @@ async def remove_wishlist(card_id: str, user: FanUser, session: DbSession) -> di
     return {"ok": True, "data": {"cardId": card_id, "saved": False}}
 
 
-async def _collection_goal_data(goal: CollectionGoal, user: FanUser, session: DbSession) -> dict:
+async def _collection_goal_data(
+    goal: CollectionGoal,
+    user: FanUser,
+    session: DbSession,
+    background_tasks: BackgroundTasks | None = None,
+) -> dict:
     pack = await session.get(CardPack, goal.pack_id)
     if pack is None:
         raise AppError(404, "CARD_PACK_NOT_FOUND", "카드팩을 찾을 수 없습니다.")
@@ -1037,6 +1042,21 @@ async def _collection_goal_data(goal: CollectionGoal, user: FanUser, session: Db
     completion_rate = min(100, round(owned_count / target_count * 100)) if target_count else 0
     if completion_rate == 100 and goal.completed_at is None:
         goal.completed_at = datetime.now(UTC)
+        completion_event = await record_engagement_event(
+            session,
+            user_id=user.id,
+            kind="collection_goal_completed",
+            source_type="collection_goal",
+            source_id=goal.id,
+            payload={
+                "collectionGoalId": goal.id,
+                "packId": pack.id,
+                "artistId": pack.artist_id,
+                "organizationId": pack.organization_id,
+            },
+        )
+        if background_tasks is not None:
+            enqueue_engagement_event(completion_event.id, background_tasks)
         await notify_user_once(
             session,
             user_id=user.id,
@@ -1061,7 +1081,9 @@ async def _collection_goal_data(goal: CollectionGoal, user: FanUser, session: Db
 
 
 @router.get("/me/collection-goals")
-async def collection_goals(user: FanUser, session: DbSession) -> dict:
+async def collection_goals(
+    user: FanUser, session: DbSession, background_tasks: BackgroundTasks
+) -> dict:
     goals = (
         await session.scalars(
             select(CollectionGoal)
@@ -1069,7 +1091,7 @@ async def collection_goals(user: FanUser, session: DbSession) -> dict:
             .order_by(CollectionGoal.created_at.desc(), CollectionGoal.id.desc())
         )
     ).all()
-    items = [await _collection_goal_data(goal, user, session) for goal in goals]
+    items = [await _collection_goal_data(goal, user, session, background_tasks) for goal in goals]
     # Completion is derived during this read and may enqueue a notification
     # after SQLAlchemy autoflushes the new rows. Persist both explicitly.
     await session.commit()
@@ -1078,7 +1100,10 @@ async def collection_goals(user: FanUser, session: DbSession) -> dict:
 
 @router.post("/me/collection-goals", status_code=status.HTTP_201_CREATED)
 async def create_collection_goal(
-    payload: CollectionGoalCreate, user: FanUser, session: DbSession
+    payload: CollectionGoalCreate,
+    user: FanUser,
+    session: DbSession,
+    background_tasks: BackgroundTasks,
 ) -> dict:
     pack = await session.scalar(
         select(CardPack).where(CardPack.id == payload.pack_id, CardPack.status == "published")
@@ -1115,7 +1140,7 @@ async def create_collection_goal(
         goal.target_count = target_count
         goal.completed_at = None
     await session.flush()
-    data = await _collection_goal_data(goal, user, session)
+    data = await _collection_goal_data(goal, user, session, background_tasks)
     await session.commit()
     return {"ok": True, "data": data}
 
