@@ -66,6 +66,10 @@ test("operation feedback is cleared when navigating between admin views", () => 
   assert.match(source, /state\.operationFeedback = null;[\s\S]*state\.view = button\.dataset\.view/);
 });
 
+test("sidecar operation feedback spans the workspace instead of occupying a grid column", () => {
+  assert.match(styles, /\.workspace-sidecar-body\s*>\s*\.operation-feedback\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/);
+});
+
 test("toast feedback is cleared when navigating to a different admin view", () => {
   assert.match(source, /function clearToast\(\)/);
   assert.match(source, /clearToast\(\);[\s\S]*state\.view = button\.dataset\.view/);
@@ -210,6 +214,7 @@ test("fan pass tier editor keeps repeated reward fields readable in the sidecar"
   assert.match(styles, /\.fan-pass-editor-form \.pass-tier-row\s*\{[^}]*grid-template-columns:\s*24px minmax\(0, 1fr\) 28px/);
   assert.match(styles, /\.fan-pass-editor-form \.pass-tier-row > \.field:nth-of-type\(3\)\s*\{\s*grid-row:\s*4/);
   assert.match(styles, /\.fan-pass-editor-form \.pass-tier-row \.admin-select,[\s\S]*\.fan-pass-editor-form \.pass-tier-row input\s*\{[^}]*min-width:\s*0/);
+  assert.match(styles, /\.fan-pass-editor-form \.pass-tier-row > \.field\s*\{[^}]*display:\s*grid/);
 });
 
 test("production statistics filters use the shared admin selector controls", () => {

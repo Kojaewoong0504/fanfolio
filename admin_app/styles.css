@@ -6402,6 +6402,7 @@ button.top-avatar {
 /* Seasonal artist level pass workspace */
 .workspace-sidecar-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(440px, 500px); grid-template-rows: auto minmax(0, 1fr); min-height: calc(100vh - 78px); align-items: stretch; }
 .workspace-sidecar-body > .notice { grid-column: 1 / -1; align-self: start; margin: 12px 24px 0; }
+.workspace-sidecar-body > .operation-feedback { grid-column: 1 / -1; align-self: start; margin: 12px 24px 0; }
 .workspace-sidecar-body > .page-content { min-width: 0; overflow: auto; }
 .workspace-sidecar-body > .workspace-sidecar { position: relative; z-index: 20; display: flex; flex-direction: column; width: auto; height: calc(100vh - 78px); min-width: 0; overflow: hidden; background: #fff; border-left: 1px solid var(--line); box-shadow: -14px 0 36px #14152a12; animation: event-sidecar-in 180ms ease-out; }
 .fan-pass-workspace-body > .page-content { padding: 26px 24px 48px; }
@@ -6478,6 +6479,7 @@ button.top-avatar {
 .pass-tier-visibility .material-symbols-rounded { font-size: 12px; }
 .pass-tier-menu { grid-column: 3; grid-row: 1; width: 28px; height: 28px; }
 .fan-pass-editor-form .pass-tier-row > .field { min-width: 0; grid-column: 2 / 4; }
+.fan-pass-editor-form .pass-tier-row > .field { display: grid; gap: 6px; }
 .fan-pass-editor-form .pass-tier-row > .field:nth-of-type(1) { grid-row: 2; }
 .fan-pass-editor-form .pass-tier-row > .field:nth-of-type(2) { grid-row: 3; }
 .fan-pass-editor-form .pass-tier-row > .field:nth-of-type(3) { grid-row: 4; }
