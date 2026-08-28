@@ -147,6 +147,55 @@ test('review progress stays visible from partner review through fan release', as
   assert.match(css, /\.release-status-banner/)
 })
 
+test('review submission ignores a second click while the first request is active', async () => {
+  const source = await readFile(appUrl, 'utf8')
+  const submitReviewBody = source.match(/async function submitReview\(\) \{([\s\S]*?)\n\}/)?.[1] || ''
+
+  assert.match(submitReviewBody, /^\s*if \(state\.busy\) return\s*\n/)
+})
+
+test('artist logout cancels pending autosave work before clearing the session', async () => {
+  const source = await readFile(appUrl, 'utf8')
+  const logoutBody = source.match(/async function logoutArtist\(\) \{([\s\S]*?)\n\}/)?.[1] || ''
+
+  assert.match(logoutBody, /^\s*cancelAutosave\(\)\s*\n/)
+})
+
+test('artist drafts are scoped to the authenticated artist', async () => {
+  const source = await readFile(appUrl, 'utf8')
+
+  assert.match(source, /function draftStorageKey\(userId = state\.profile\?\.id\) \{[\s\S]*?return `\$\{DRAFT_KEY\}:\$\{userId\}`/)
+  assert.match(source, /function persistDraft\(\) \{[\s\S]*?const key = draftStorageKey\(\)[\s\S]*?if \(!key\) return/)
+  assert.doesNotMatch(source, /const savedDraft = readDraft\(\)/)
+  assert.match(source, /restoreDraftForUser\(state\.profile\.id, state\.cards\)/)
+  assert.match(source, /normalizeCatalogSelection\(state\.form, state\.catalog\)/)
+})
+
+test('card save validates required fields before calling the API', async () => {
+  const source = await readFile(appUrl, 'utf8')
+  const saveDraftBody = source.match(/async function saveDraft\(\{[\s\S]*?\n\}/)?.[0] || ''
+
+  assert.match(saveDraftBody, /cardDraftErrors\(\{ form: state\.form, editor: state\.editor \}\)/)
+  assert.match(saveDraftBody, /throw new Error\(draftErrors\.join\(' '\)\)/)
+})
+
+test('bootstrap surfaces a data-load failure after a restored session', async () => {
+  const source = await readFile(appUrl, 'utf8')
+  const bootstrapBody = source.match(/async function bootstrap\(\) \{([\s\S]*?)\n\}/)?.[1] || ''
+
+  assert.match(bootstrapBody, /let restoredSession = false/)
+  assert.match(bootstrapBody, /restoredSession = true/)
+  assert.match(bootstrapBody, /if \(restoredSession\) \{[\s\S]*state\.loginError = /)
+})
+
+test('profile save rejects a whitespace-only display name before the API call', async () => {
+  const source = await readFile(appUrl, 'utf8')
+  const profileBody = source.match(/async function saveProfile\(formElement\) \{([\s\S]*?)\n\}/)?.[1] || ''
+
+  assert.match(profileBody, /const nickname = form\.get\('nickname'\)\?\.toString\(\)\.trim\(\)/)
+  assert.match(profileBody, /if \(!nickname\) \{[\s\S]*notify\('표시 이름을 입력해주세요\.'/)
+})
+
 test('layer color changes update the selected layer without replacing the open color input', async () => {
   const source = await readFile(appUrl, 'utf8')
 

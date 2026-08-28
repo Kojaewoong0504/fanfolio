@@ -1,7 +1,10 @@
 import {
   buildCardPayload,
+  cardDraftErrors,
+  cardEditorStage,
   navigationState,
   normalizeCardEffects,
+  normalizeCatalogSelection,
   normalizeCreativeLayer,
   responsiveStudioMode,
   reviewReadiness,
@@ -222,16 +225,22 @@ function initialEditor() {
   }
 }
 
-function readDraft() {
+function draftStorageKey(userId = state.profile?.id) {
+  if (!userId) return ''
+  return `${DRAFT_KEY}:${userId}`
+}
+
+function readDraft(userId) {
+  const key = draftStorageKey(userId)
+  if (!key) return null
   try {
-    const parsed = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null')
+    const parsed = JSON.parse(localStorage.getItem(key) || 'null')
     return parsed && typeof parsed === 'object' ? parsed : null
   } catch {
     return null
   }
 }
 
-const savedDraft = readDraft()
 const savedSidebarPreference = localStorage.getItem(SIDEBAR_KEY)
 const initialViewportMode = responsiveStudioMode(window.innerWidth)
 const state = {
@@ -245,12 +254,12 @@ const state = {
   catalog: { items: [], artists: [], members: [], backTemplates: [] },
   insights: null,
   profile: null,
-  cardId: savedDraft?.cardId || null,
-  effectVersionId: savedDraft?.effectVersionId || null,
-  editingCardId: savedDraft?.editingCardId || null,
-  selectedRecipe: savedDraft?.selectedRecipe || 'voice',
-  form: { ...initialForm(), ...(savedDraft?.form || {}) },
-  editor: { ...initialEditor(), ...(savedDraft?.editor || {}) },
+  cardId: null,
+  effectVersionId: null,
+  editingCardId: null,
+  selectedRecipe: 'voice',
+  form: initialForm(),
+  editor: initialEditor(),
   viewportMode: initialViewportMode,
   sidebarCollapsed:
     savedSidebarPreference === null
@@ -295,6 +304,8 @@ function normalizedMediaType(type, kind) {
 }
 
 function persistDraft() {
+  const key = draftStorageKey()
+  if (!key) return
   const editor = Object.fromEntries(
     Object.entries(state.editor).filter(
       ([key, value]) =>
@@ -308,7 +319,7 @@ function persistDraft() {
   }))
   try {
     localStorage.setItem(
-      DRAFT_KEY,
+      key,
       JSON.stringify({
         cardId: state.cardId,
         editingCardId: state.editingCardId,
@@ -323,7 +334,23 @@ function persistDraft() {
 }
 
 function clearDraft() {
+  const key = draftStorageKey()
+  if (key) localStorage.removeItem(key)
   localStorage.removeItem(DRAFT_KEY)
+}
+
+function restoreDraftForUser(userId, cards = []) {
+  const draft = readDraft(userId)
+  localStorage.removeItem(DRAFT_KEY)
+  if (!draft) return
+  const cardExists = draft.cardId && cards.some((card) => card.id === draft.cardId)
+  state.cardId = cardExists ? draft.cardId : null
+  state.editingCardId = cardExists ? draft.editingCardId || draft.cardId : null
+  state.effectVersionId = draft.effectVersionId || null
+  state.selectedRecipe = draft.selectedRecipe || 'voice'
+  state.form = { ...initialForm(), ...(draft.form || {}) }
+  state.editor = { ...initialEditor(), ...(draft.editor || {}) }
+  state.saveStatus = 'saved'
 }
 
 async function refreshAccessToken() {
@@ -1109,6 +1136,11 @@ function markDirty() {
   }
 }
 
+function cancelAutosave() {
+  window.clearTimeout(autosaveTimer)
+  autosaveTimer = null
+}
+
 function setRecipe(recipeId) {
   const form = initialForm()
   const editor = initialEditor()
@@ -1214,6 +1246,7 @@ async function changePassword(formElement) {
 }
 
 async function logoutArtist() {
+  cancelAutosave()
   try {
     await api('/auth/logout', { method: 'POST' })
   } catch {
@@ -1243,15 +1276,11 @@ async function loadStudioData() {
   state.catalog = catalog.data
   state.profile = profile.data
   state.insights = insights.data
+  restoreDraftForUser(state.profile.id, state.cards)
   state.authenticated = true
-  if (!state.form.artistId && state.catalog.artists?.[0]) {
-    state.form.artistId = state.catalog.artists[0].id
-  }
-  if (!state.form.memberId && state.form.artistId) {
-    state.form.memberId = state.catalog.members.find(
-      (member) => member.artistId === state.form.artistId,
-    )?.id || null
-  }
+  const selection = normalizeCatalogSelection(state.form, state.catalog)
+  state.form.artistId = selection.artistId
+  state.form.memberId = selection.memberId
 }
 
 async function loadInsights() {
@@ -1355,6 +1384,8 @@ async function saveDraft({ quiet = false, nextStage = null } = {}) {
   state.saveStatus = 'saving'
   if (!quiet) render()
   try {
+    const draftErrors = cardDraftErrors({ form: state.form, editor: state.editor })
+    if (draftErrors.length) throw new Error(draftErrors.join(' '))
     await ensureAsset('image')
     if (state.editor.voiceEnabled && state.editor.voiceSrc) await ensureAsset('voice')
     if (state.editor.videoEnabled && state.editor.videoSrc) await ensureAsset('video')
@@ -1452,7 +1483,7 @@ async function openCard(cardId) {
   state.cardId = card.id
   state.editingCardId = card.id
   state.reviewNote = card.reviewNote || ''
-  state.stage = 'design'
+  state.stage = cardEditorStage(card)
   state.view = 'editor'
   state.saveStatus = 'saved'
   render()
@@ -1993,6 +2024,7 @@ async function pollBackgroundRemoval(jobId) {
 }
 
 async function submitReview() {
+  if (state.busy) return
   state.reviewError = ''
   const card = await saveDraft({ quiet: true })
   if (!card) {
@@ -2082,11 +2114,16 @@ async function resolveCollaborationComment(commentId) {
 
 async function saveProfile(formElement) {
   const form = new FormData(formElement)
+  const nickname = form.get('nickname')?.toString().trim()
+  if (!nickname) {
+    notify('표시 이름을 입력해주세요.', 'error')
+    return
+  }
   try {
     const result = await api('/artist/profile', {
       method: 'PATCH',
       body: JSON.stringify({
-        nickname: form.get('nickname')?.toString().trim(),
+        nickname,
         emailEnabled: form.get('emailEnabled') === 'on',
       }),
     })
@@ -2587,12 +2624,17 @@ window.addEventListener('resize', () => {
 
 async function bootstrap() {
   render()
+  let restoredSession = false
   try {
     await refreshAccessToken()
+    restoredSession = true
     await loadStudioData()
   } catch {
     ACCESS_TOKEN = ''
     state.authenticated = false
+    if (restoredSession) {
+      state.loginError = '스튜디오 데이터를 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.'
+    }
   } finally {
     state.loading = false
     render()
