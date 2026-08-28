@@ -250,7 +250,14 @@ button:disabled {
   display: grid;
   gap: 4px;
   margin-top: 24px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
+
+.app-nav nav::-webkit-scrollbar { width: 5px; }
+.app-nav nav::-webkit-scrollbar-thumb { background: #3b4270; border-radius: 999px; }
 
 .nav-item {
   display: flex;
@@ -1257,15 +1264,16 @@ button.top-avatar {
 
 .operational-metrics-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  padding: 14px 16px 10px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px 14px 8px;
 }
 
 .operational-metrics-grid span {
   display: grid;
   gap: 3px;
-  padding: 10px 12px;
+  min-width: 0;
+  padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--surface-soft);
@@ -1277,8 +1285,10 @@ button.top-avatar {
   font-size: 11px;
 }
 
+.operational-metrics-grid small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .operational-metrics-grid strong {
-  font: 800 20px/1.1 Manrope, sans-serif;
+  font: 800 18px/1.1 Manrope, sans-serif;
 }
 
 .operational-rarity {
@@ -7308,6 +7318,35 @@ code {
 .fan-growth-admin-grid > .panel {
   align-self: stretch;
   margin-top: 0;
+}
+
+/* Final admin density pass: keep every workflow reachable without making the
+   content feel oversized at desktop widths. */
+.app-nav nav { flex: 1 1 auto; }
+.fan-pass-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.fan-pass-summary .summary-card { min-height: 92px; padding: 14px; border-radius: 12px; }
+.fan-pass-summary .summary-card > span { width: 44px; height: 44px; }
+.fan-pass-summary .summary-card > span .material-symbols-rounded { font-size: 23px; }
+.fan-pass-summary .summary-card strong { font-size: 20px; }
+.artist-overview-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.artist-overview-card { grid-template-columns: 40px minmax(0, 1fr) auto; min-height: 64px; padding: 10px; gap: 9px; }
+.artist-overview-card .artist-avatar.large { width: 40px; height: 40px; border-radius: 10px; }
+.operational-metrics-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.review-workbench > .panel { align-self: stretch; }
+.preview-table-footer .page-number { min-width: 28px; height: 28px; color: var(--muted); background: transparent; border-radius: 7px; font-size: 11px; font-weight: 700; }
+.preview-table-footer .page-number.active { color: #fff; background: var(--purple); }
+
+@media (max-width: 1100px) {
+  .operational-metrics-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .artist-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 900px) {
+  .fan-pass-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .fan-pass-summary, .artist-overview-grid { grid-template-columns: minmax(0, 1fr); }
 }
 .card-pack-detail-panel { position: sticky; top: 20px; }
 .card-pack-table .table-link { border: 0; background: transparent; color: inherit; cursor: pointer; padding: 0; text-align: left; }

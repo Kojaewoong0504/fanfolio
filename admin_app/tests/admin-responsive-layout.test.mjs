@@ -43,6 +43,13 @@ test('page root clips accidental horizontal overflow and layout children can shr
   assert.match(css, /min-width:\s*0/)
 })
 
+test('admin shell keeps the full navigation reachable while dense dashboards stay compact', () => {
+  assert.match(css, /\.app-nav nav\s*\{[^}]*overflow-y:\s*auto/s)
+  assert.match(css, /\.fan-pass-summary\s*\{[^}]*grid-template-columns:\s*repeat\(4/s)
+  assert.match(css, /\.operational-metrics-grid\s*\{[^}]*grid-template-columns:\s*repeat\(6/s)
+  assert.match(css, /\.artist-overview-grid\s*\{[^}]*grid-template-columns:\s*repeat\(4/s)
+})
+
 test('desktop partner layout uses 208px navigation and 280px directory columns', () => {
   assert.match(css, /208px\s+280px\s+minmax\(0,\s*1fr\)/)
 })
@@ -144,6 +151,13 @@ test('large admin catalogs expose real pagination state instead of decorative pa
   assert.doesNotMatch(source, /\["\.review-list-panel \.card-table", "cardPage"\]/)
   assert.doesNotMatch(source, /\["\.production-issuance-page \.table", "issuancePage"\]/)
   assert.match(source, /\["\.fan-pass-table", "fanPassPage"\]/)
+  assert.match(source, /pageSize:\s*"10"/)
+  assert.match(source, /cardPagination\?\.pageSize \?\? 10|pageSize: 10/)
+})
+
+test('admin activity labels explain delivery and support events in Korean', () => {
+  assert.match(source, /"notification_delivery\.retried":\s*"알림 전달을 재시도했습니다"/)
+  assert.match(source, /"support_ticket\.status_changed":\s*"고객센터 문의 상태가 변경되었습니다"/)
 })
 
 test('paged card lists keep a complete catalog for dependent operating forms', () => {

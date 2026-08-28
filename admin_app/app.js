@@ -139,7 +139,7 @@ const state = {
   cardArtist: "all",
   status: "all",
   cardPage: 1,
-  cardPagination: { page: 1, pageSize: 20, total: 0 },
+  cardPagination: { page: 1, pageSize: 10, total: 0 },
   userQuery: "",
   userRole: "all",
   userPage: 1,
@@ -597,6 +597,18 @@ function tablePagination(stateKey, page, total, pageSize = adminTablePageSize) {
   return `<footer class="preview-table-footer admin-table-pagination"><strong>${start}-${end} / ${total}</strong><nav class="pagination-control" aria-label="목록 페이지 이동"><button class="icon-button" type="button" data-pagination-state="${escapeHtml(stateKey)}" data-pagination-page="${safePage - 1}" aria-label="이전 페이지" ${safePage <= 1 ? "disabled" : ""}>‹</button>${pageButtons}<button class="icon-button" type="button" data-pagination-state="${escapeHtml(stateKey)}" data-pagination-page="${safePage + 1}" aria-label="다음 페이지" ${safePage >= totalPages ? "disabled" : ""}>›</button></nav></footer>`;
 }
 
+function previewTablePagination(stateKey, page, total, pageSize = 5) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const safePage = Math.min(Math.max(Number(page) || 1, 1), totalPages);
+  const start = total ? (safePage - 1) * pageSize + 1 : 0;
+  const end = Math.min(safePage * pageSize, total);
+  if (totalPages === 1) return `<footer class="preview-table-footer"><strong>${start}-${end} / ${total}</strong></footer>`;
+  const pages = Array.from({ length: totalPages }, (_, index) => index + 1)
+    .map((number) => `<button class="page-number ${number === safePage ? "active" : ""}" type="button" data-preview-issue-page="${number}" aria-label="${number}페이지" aria-current="${number === safePage ? "page" : "false"}">${number}</button>`)
+    .join("");
+  return `<footer class="preview-table-footer admin-table-pagination"><strong>${start}-${end} / ${total}</strong><nav class="pagination-control" aria-label="발급 배치 페이지 이동"><button class="icon-button" type="button" data-preview-issue-page="${safePage - 1}" aria-label="이전 페이지" ${safePage <= 1 ? "disabled" : ""}>‹</button>${pages}<button class="icon-button" type="button" data-preview-issue-page="${safePage + 1}" aria-label="다음 페이지" ${safePage >= totalPages ? "disabled" : ""}>›</button></nav></footer>`;
+}
+
 function applyClientTablePagination() {
   const tables = [
     [".fan-pass-table", "fanPassPage"],
@@ -739,6 +751,16 @@ function operationsOverviewView(overview) {
 function activityLabel(action) {
   return (
     {
+      "notification_delivery.retried": "알림 전달을 재시도했습니다",
+      "notification_delivery.delivered": "알림 전달이 완료되었습니다",
+      "notification_delivery.failed": "알림 전달에 실패했습니다",
+      "notification_delivery.dead_lettered": "알림 전달이 보류되었습니다",
+      "support_ticket.status_changed": "고객센터 문의 상태가 변경되었습니다",
+      "support_ticket.replied": "고객센터 문의에 답변했습니다",
+      "support_ticket.action_recorded": "고객센터 처리 이력이 기록되었습니다",
+      "artist_account.password_reset": "아티스트 계정 임시 비밀번호를 발급했습니다",
+      "pass.purchased": "팬 패스를 구매했습니다",
+      "card_pack.opened": "카드팩을 개봉했습니다",
       "card.published": "카드가 공개되었습니다",
       "card.created": "카드가 등록되었습니다",
       "card.reviewed": "카드 검수가 처리되었습니다",
@@ -1415,7 +1437,7 @@ function cardsView() {
   const visible = state.cards || [];
   const emptyDetail = `<section class="panel review-detail-panel empty-detail">${icon("rate_review")}<strong>검수할 카드를 선택하세요</strong><small>대기열이나 카드 목록에서 항목을 열면 제출 스냅샷과 승인·반려 컨트롤이 표시됩니다.</small></section>`;
   const reviewDetail = reviewPanel() || emptyDetail;
-  return `<div class="commercial-review-workspace"><div class="review-commandbar"><div><nav class="review-breadcrumb" aria-label="카드 > 검수"><span>카드</span><span aria-hidden="true">&gt;</span><strong>검수</strong></nav><h2>${isRoot() ? "전체 카드 운영" : "담당 카드 운영"}</h2><p>${isRoot() ? "아티스트 카드의 검수와 공개 상태를 관리합니다." : "배정된 아티스트의 카드 초안을 만들고 검수를 요청합니다."}</p></div><div class="review-command-actions"><button class="secondary" id="export-cards-csv" type="button">${icon("download")} CSV 내보내기</button>${can("cards:write") ? `<button class="primary review-register-cta" id="open-card-drawer" type="button">${icon("add_card")} 카드 등록</button>` : ""}</div></div>${reviewStatusTabs()}<div class="review-workbench"><section class="panel review-list-panel"><div class="review-list-heading"><div><p class="eyebrow">RELEASE REVIEW</p><h3>검수 대기열</h3></div><span>${state.cardPagination?.total ?? visible.length}개 항목</span></div><div class="toolbar compact-toolbar"><label class="search-field grow">${icon("search")}<input id="card-search" placeholder="카드명, 아티스트 검색" value="${escapeHtml(state.query)}" /></label>${adminSelect({ id: "card-artist-filter", value: state.cardArtist, label: "아티스트 필터", className: "filter-select card-artist-filter", options: artistOptions })}${adminSelect({ id: "card-status", value: state.status, label: "카드 상태 필터", className: "filter-select card-status-filter", options: statusOptions })}</div><div class="table-wrap"><table class="table responsive-table card-table"><thead><tr><th>카드</th><th>메타데이터</th><th>마감</th><th>담당자</th><th>상태</th><th><span class="sr-only">관리</span></th></tr></thead><tbody>${cardRows(visible)}</tbody></table></div>${tablePagination("cardPage", state.cardPagination?.page ?? state.cardPage, state.cardPagination?.total ?? visible.length, state.cardPagination?.pageSize ?? 20)}</section>${reviewDetail}</div>${contentCalendarPanel()}</div>`;
+  return `<div class="commercial-review-workspace"><div class="review-commandbar"><div><nav class="review-breadcrumb" aria-label="카드 > 검수"><span>카드</span><span aria-hidden="true">&gt;</span><strong>검수</strong></nav><h2>${isRoot() ? "전체 카드 운영" : "담당 카드 운영"}</h2><p>${isRoot() ? "아티스트 카드의 검수와 공개 상태를 관리합니다." : "배정된 아티스트의 카드 초안을 만들고 검수를 요청합니다."}</p></div><div class="review-command-actions"><button class="secondary" id="export-cards-csv" type="button">${icon("download")} CSV 내보내기</button>${can("cards:write") ? `<button class="primary review-register-cta" id="open-card-drawer" type="button">${icon("add_card")} 카드 등록</button>` : ""}</div></div>${reviewStatusTabs()}<div class="review-workbench"><section class="panel review-list-panel"><div class="review-list-heading"><div><p class="eyebrow">RELEASE REVIEW</p><h3>검수 대기열</h3></div><span>${state.cardPagination?.total ?? visible.length}개 항목</span></div><div class="toolbar compact-toolbar"><label class="search-field grow">${icon("search")}<input id="card-search" placeholder="카드명, 아티스트 검색" value="${escapeHtml(state.query)}" /></label>${adminSelect({ id: "card-artist-filter", value: state.cardArtist, label: "아티스트 필터", className: "filter-select card-artist-filter", options: artistOptions })}${adminSelect({ id: "card-status", value: state.status, label: "카드 상태 필터", className: "filter-select card-status-filter", options: statusOptions })}</div><div class="table-wrap"><table class="table responsive-table card-table"><thead><tr><th>카드</th><th>메타데이터</th><th>마감</th><th>담당자</th><th>상태</th><th><span class="sr-only">관리</span></th></tr></thead><tbody>${cardRows(visible)}</tbody></table></div>${tablePagination("cardPage", state.cardPagination?.page ?? state.cardPage, state.cardPagination?.total ?? visible.length, state.cardPagination?.pageSize ?? 10)}</section>${reviewDetail}</div>${contentCalendarPanel()}</div>`;
 }
 
 function legacyContentCalendarPanel() {
@@ -3301,7 +3323,7 @@ async function loadCardPacks(renderAfter = true) {
 
 async function loadCards(renderAfter = true) {
   if (!state.authenticated || !can("cards:read")) return;
-  const params = new URLSearchParams({ page: String(state.cardPage), pageSize: "20" });
+  const params = new URLSearchParams({ page: String(state.cardPage), pageSize: "10" });
   if (state.query.trim()) params.set("q", state.query.trim());
   if (state.status !== "all") params.set("status", state.status);
   if (state.cardArtist !== "all") params.set("artistId", state.cardArtist);
@@ -6174,6 +6196,7 @@ const cardOperationsPreviewState = {
   issueStatus: "all",
   issueType: "all",
   issuePeriod: "all",
+  issuePage: 1,
   packVersionDrafts: 0,
   compositionCards: [
     { code: "N-01", member: "지유", rarity: "UR", included: true, odds: 1, src: "./assets/preview/card-aurora-portrait.jpg" },
@@ -6323,14 +6346,17 @@ function issuanceCodesPreview() {
     { name: "Bloom Ver. 특전 카드 배치 #001", type: "한정 특전", quantity: 50, issued: 50, registered: 50, remaining: 0, code: "BL-2024-0508-001", status: "등록 완료", codeStatus: "생성 완료", created: "2024.05.08 09:15" },
     { name: "Petal Ver. 팩 배치 #001", type: "카드팩", quantity: 1500, issued: 1120, registered: 820, remaining: 380, code: "PT-2024-0507-001", status: "발급 중", codeStatus: "발급 시 생성", created: "2024.05.07 14:40" },
     { name: "Starlight Ver. 특전 카드 배치 #001", type: "한정 특전", quantity: 30, issued: 30, registered: 27, remaining: 3, code: "ST-2024-0506-001", status: "등록 완료", codeStatus: "생성 완료", created: "2024.04.06 16:05" },
+    { name: "Aurora Ver. 특전 카드 배치 #001", type: "한정 특전", quantity: 80, issued: 42, registered: 40, remaining: 38, code: "AU-2024-0505-001", status: "발급 중", codeStatus: "생성 완료", created: "2024.05.05 11:10" },
+    { name: "DREAMSCAPE QA 발급 배치 #001", type: "한정 특전", quantity: 20, issued: 20, registered: 20, remaining: 0, code: "QA-2024-0504-001", status: "등록 완료", codeStatus: "생성 완료", created: "2024.04.04 15:20" },
   ];
   const query = cardOperationsPreviewState.issueQuery.trim().toLowerCase();
   const visibleBatches = batches.map((batch, index) => ({ batch, index })).filter(({ batch }) => (!query || `${batch.name} ${batch.code}`.toLowerCase().includes(query)) && (cardOperationsPreviewState.issueStatus === "all" || batch.status === cardOperationsPreviewState.issueStatus) && (cardOperationsPreviewState.issueType === "all" || batch.type === cardOperationsPreviewState.issueType) && (cardOperationsPreviewState.issuePeriod === "all" || batch.created.startsWith(cardOperationsPreviewState.issuePeriod)));
+  const pagedBatches = pagedItems(visibleBatches, cardOperationsPreviewState.issuePage, 5);
   const selected = batches[cardOperationsPreviewState.selectedBatchIndex] || batches[0];
   return `<section class="card-ops-page issue-code-preview">
     <div class="card-ops-heading"><div><nav>카드 <span>›</span> <strong>발급·인증번호</strong></nav><h2>발급·인증번호</h2><p>카드 발급 배치와 인증 상태를 관리합니다.</p></div><button class="primary" type="button" data-create-issuance-batch>${icon("add")} 추가 발급 배치 만들기</button></div>
     <div class="card-ops-stats issue-stats"><article><span>${icon("calendar_month")}</span><small>예약 배치</small><strong>3개</strong></article><article><span>${icon("inventory_2")}</span><small>발급 중 배치</small><strong>5개</strong></article><article><span>${icon("check_circle")}</span><small>등록 완료 배치</small><strong>2개</strong></article><article><span>${icon("schedule")}</span><small>잔여 수량</small><strong>3,240장</strong></article></div>
-    <div class="card-ops-master-detail issuance-master-detail"><section class="panel card-ops-table-panel"><div class="card-ops-toolbar"><label class="search-field">${icon("search")}<input data-preview-search="issueQuery" value="${cardOperationsPreviewState.issueQuery}" placeholder="배치명, 카드명 검색" /></label>${adminSelect({ id: "preview-issue-status", value: cardOperationsPreviewState.issueStatus, label: "상태 필터", className: "preview-filter-control", dataPreviewFilter: "issueStatus", options: [{ value: "all", label: "전체 상태" }, { value: "등록 완료", label: "등록 완료" }, { value: "발급 중", label: "발급 중" }] })}${adminSelect({ id: "preview-issue-type-filter", value: cardOperationsPreviewState.issueType, label: "카드 유형 필터", className: "preview-filter-control", dataPreviewFilter: "issueType", options: [{ value: "all", label: "전체 카드 유형" }, { value: "한정 특전", label: "한정 특전" }, { value: "카드팩", label: "카드팩" }] })}${adminSelect({ id: "preview-issue-period", value: cardOperationsPreviewState.issuePeriod, label: "기간 필터", className: "preview-filter-control", dataPreviewFilter: "issuePeriod", options: [{ value: "all", label: "전체 기간" }, { value: "2024.05", label: "2024년 5월" }, { value: "2024.04", label: "2024년 4월" }] })}</div><div class="table-wrap"><table class="table"><thead><tr><th>배치명</th><th>카드 유형</th><th>수량</th><th>발급</th><th>등록 완료</th><th>잔여 수량</th><th>인증번호 상태</th><th>상태</th><th>생성일</th></tr></thead><tbody>${visibleBatches.map(({ batch, index }) => `<tr tabindex="0" data-preview-batch-index="${index}" class="${index === cardOperationsPreviewState.selectedBatchIndex ? "selected-preview-row" : ""}"><td><div class="code-batch-name">${previewCardThumb(index % 2 ? "./assets/preview/card-back-template.png" : "./assets/preview/card-aurora-portrait.jpg", batch.name)}<div><strong>${batch.name}</strong><small>${batch.type}</small></div></div></td><td>${batch.type}</td><td>${batch.quantity}장</td><td>${batch.issued}장</td><td>${batch.registered}장</td><td>${batch.remaining}장</td><td><span class="badge ${batch.codeStatus === "생성 완료" ? "success-badge" : "warning-badge"}">${batch.codeStatus}</span></td><td><span class="badge ${batch.status === "등록 완료" ? "success-badge" : "warning-badge"}">${batch.status}</span></td><td>${batch.created}</td></tr>`).join("")}</tbody></table></div><footer class="preview-table-footer"><strong>총 ${visibleBatches.length}개</strong><span class="pagination-control">‹ <b>1</b> ›</span></footer></section>
+    <div class="card-ops-master-detail issuance-master-detail"><section class="panel card-ops-table-panel"><div class="card-ops-toolbar"><label class="search-field">${icon("search")}<input data-preview-search="issueQuery" value="${cardOperationsPreviewState.issueQuery}" placeholder="배치명, 카드명 검색" /></label>${adminSelect({ id: "preview-issue-status", value: cardOperationsPreviewState.issueStatus, label: "상태 필터", className: "preview-filter-control", dataPreviewFilter: "issueStatus", options: [{ value: "all", label: "전체 상태" }, { value: "등록 완료", label: "등록 완료" }, { value: "발급 중", label: "발급 중" }] })}${adminSelect({ id: "preview-issue-type-filter", value: cardOperationsPreviewState.issueType, label: "카드 유형 필터", className: "preview-filter-control", dataPreviewFilter: "issueType", options: [{ value: "all", label: "전체 카드 유형" }, { value: "한정 특전", label: "한정 특전" }, { value: "카드팩", label: "카드팩" }] })}${adminSelect({ id: "preview-issue-period", value: cardOperationsPreviewState.issuePeriod, label: "기간 필터", className: "preview-filter-control", dataPreviewFilter: "issuePeriod", options: [{ value: "all", label: "전체 기간" }, { value: "2024.05", label: "2024년 5월" }, { value: "2024.04", label: "2024년 4월" }] })}</div><div class="table-wrap"><table class="table"><thead><tr><th>배치명</th><th>카드 유형</th><th>수량</th><th>발급</th><th>등록 완료</th><th>잔여 수량</th><th>인증번호 상태</th><th>상태</th><th>생성일</th></tr></thead><tbody>${pagedBatches.items.map(({ batch, index }) => `<tr tabindex="0" data-preview-batch-index="${index}" class="${index === cardOperationsPreviewState.selectedBatchIndex ? "selected-preview-row" : ""}"><td><div class="code-batch-name">${previewCardThumb(index % 2 ? "./assets/preview/card-back-template.png" : "./assets/preview/card-aurora-portrait.jpg", batch.name)}<div><strong>${batch.name}</strong><small>${batch.type}</small></div></div></td><td>${batch.type}</td><td>${batch.quantity}장</td><td>${batch.issued}장</td><td>${batch.registered}장</td><td>${batch.remaining}장</td><td><span class="badge ${batch.codeStatus === "생성 완료" ? "success-badge" : "warning-badge"}">${batch.codeStatus}</span></td><td><span class="badge ${batch.status === "등록 완료" ? "success-badge" : "warning-badge"}">${batch.status}</span></td><td>${batch.created}</td></tr>`).join("")}</tbody></table></div>${previewTablePagination("issuePage", pagedBatches.page, visibleBatches.length, 5)}</section>
     <aside class="panel issuance-detail-preview"><div class="detail-panel-heading"><div><small>배치 상세</small><h3>${selected.name}</h3><p><span class="badge draft">${selected.type}</span> <span class="badge success-badge">${selected.status}</span></p></div>${icon("close")}</div><section><h4>기본 정보</h4><dl><div><dt>배치 번호</dt><dd>${selected.code}</dd></div><div><dt>카드 유형</dt><dd>${selected.type}</dd></div><div><dt>수량</dt><dd>${selected.quantity}장</dd></div><div><dt>생성일</dt><dd>${selected.created}</dd></div><div><dt>생성자</dt><dd>운영 관리자</dd></div><div><dt>설명</dt><dd>${selected.name}</dd></div></dl></section><section><h4>발급 현황</h4><dl><div><dt>발급</dt><dd>${selected.issued}장</dd></div><div><dt>등록 완료</dt><dd>${selected.registered}장</dd></div><div><dt>잔여 수량</dt><dd>${selected.remaining}장</dd></div></dl></section><section><h4>고유 시리얼</h4><dl><div><dt>시작 시리얼</dt><dd>NBDL-********-000001</dd></div><div><dt>종료 시리얼</dt><dd>NBDL-********-${String(selected.quantity).padStart(6, "0")}</dd></div><div><dt>총 개수</dt><dd>${selected.quantity}개</dd></div></dl></section><section><h4>인증번호 상태</h4><dl><div><dt>생성 방식</dt><dd>${selected.codeStatus === "생성 완료" ? "사전 생성" : "발급 시 생성"}</dd></div><div><dt>상태</dt><dd><span class="badge success-badge">${selected.codeStatus}</span></dd></div></dl></section><div class="detail-actions"><button class="secondary" data-export-issuance-csv type="button">${icon("download")} CSV 내보내기</button></div></aside></div>
   </section>`;
 }
@@ -6431,6 +6457,11 @@ function renderCardOperationsPreview() {
     cardOperationsPreviewState.selectedBatchIndex = Number(row.dataset.previewBatchIndex);
     renderCardOperationsPreview();
   }));
+  document.querySelectorAll("[data-preview-issue-page]").forEach((button) => button.addEventListener("click", () => {
+    if (button.disabled) return;
+    cardOperationsPreviewState.issuePage = Number(button.dataset.previewIssuePage) || 1;
+    renderCardOperationsPreview();
+  }));
   document.querySelectorAll("[data-export-issuance-csv]").forEach((button) => button.addEventListener("click", downloadPreviewIssuanceCsv));
   document.querySelectorAll("[data-toggle-composition-card]").forEach((button) => button.addEventListener("click", () => {
     const card = cardOperationsPreviewState.compositionCards[Number(button.dataset.toggleCompositionCard)];
@@ -6447,6 +6478,7 @@ function renderCardOperationsPreview() {
   }));
   document.querySelectorAll("[data-preview-search]").forEach((input) => input.addEventListener("input", () => {
     cardOperationsPreviewState[input.dataset.previewSearch] = input.value;
+    if (input.dataset.previewSearch === "issueQuery") cardOperationsPreviewState.issuePage = 1;
     renderCardOperationsPreview();
     const next = document.querySelector(`[data-preview-search="${input.dataset.previewSearch}"]`);
     next?.focus();
@@ -6533,6 +6565,7 @@ function bindPreviewAdminSelects() {
     control.querySelector(".admin-select-trigger").setAttribute("aria-expanded", "false");
     if (control.dataset.previewFilter) {
       cardOperationsPreviewState[control.dataset.previewFilter] = option.dataset.value;
+      if (control.dataset.previewFilter.startsWith("issue")) cardOperationsPreviewState.issuePage = 1;
       renderCardOperationsPreview();
     }
   }));
