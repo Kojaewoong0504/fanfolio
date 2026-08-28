@@ -159,6 +159,8 @@ test('artist logout cancels pending autosave work before clearing the session', 
   const logoutBody = source.match(/async function logoutArtist\(\) \{([\s\S]*?)\n\}/)?.[1] || ''
 
   assert.match(logoutBody, /^\s*cancelAutosave\(\)\s*\n/)
+  assert.match(logoutBody, /const userId = state\.profile\?\.id/)
+  assert.match(logoutBody, /clearDraft\(userId\)/)
 })
 
 test('artist drafts are scoped to the authenticated artist', async () => {
@@ -177,6 +179,17 @@ test('card save validates required fields before calling the API', async () => {
 
   assert.match(saveDraftBody, /cardDraftErrors\(\{ form: state\.form, editor: state\.editor \}\)/)
   assert.match(saveDraftBody, /throw new Error\(draftErrors\.join\(' '\)\)/)
+})
+
+test('read-only cards never become restorable or persistable editor drafts', async () => {
+  const source = await readFile(appUrl, 'utf8')
+  const restoreBody = source.match(/function restoreDraftForUser\(userId, cards = \[\]\) \{([\s\S]*?)\n\}/)?.[1] || ''
+  const openCardBody = source.match(/async function openCard\(cardId\) \{([\s\S]*?)\n\}/)?.[1] || ''
+
+  assert.match(restoreBody, /cardEditorStage\(card\) === 'design'/)
+  assert.match(restoreBody, /localStorage\.removeItem\(draftStorageKey\(userId\)\)/)
+  assert.match(openCardBody, /if \(state\.stage === 'design'\) persistDraft\(\)/)
+  assert.match(openCardBody, /else clearDraft\(\)/)
 })
 
 test('bootstrap surfaces a data-load failure after a restored session', async () => {

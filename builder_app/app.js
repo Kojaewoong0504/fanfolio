@@ -333,8 +333,8 @@ function persistDraft() {
   }
 }
 
-function clearDraft() {
-  const key = draftStorageKey()
+function clearDraft(userId = state.profile?.id) {
+  const key = draftStorageKey(userId)
   if (key) localStorage.removeItem(key)
   localStorage.removeItem(DRAFT_KEY)
 }
@@ -343,7 +343,12 @@ function restoreDraftForUser(userId, cards = []) {
   const draft = readDraft(userId)
   localStorage.removeItem(DRAFT_KEY)
   if (!draft) return
-  const cardExists = draft.cardId && cards.some((card) => card.id === draft.cardId)
+  const card = draft.cardId ? cards.find((item) => item.id === draft.cardId) : null
+  const cardExists = Boolean(card && cardEditorStage(card) === 'design')
+  if (draft.cardId && card && !cardExists) {
+    localStorage.removeItem(draftStorageKey(userId))
+    return
+  }
   state.cardId = cardExists ? draft.cardId : null
   state.editingCardId = cardExists ? draft.editingCardId || draft.cardId : null
   state.effectVersionId = draft.effectVersionId || null
@@ -1247,6 +1252,7 @@ async function changePassword(formElement) {
 
 async function logoutArtist() {
   cancelAutosave()
+  const userId = state.profile?.id
   try {
     await api('/auth/logout', { method: 'POST' })
   } catch {
@@ -1258,7 +1264,7 @@ async function logoutArtist() {
   state.profile = null
   state.deviceMotionStatus = 'idle'
   state.deviceMotionEnabled = false
-  clearDraft()
+  clearDraft(userId)
   render()
 }
 
@@ -1539,7 +1545,8 @@ async function openCard(cardId) {
       })
     }
   }
-  persistDraft()
+  if (state.stage === 'design') persistDraft()
+  else clearDraft()
   render()
 }
 
