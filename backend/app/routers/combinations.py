@@ -7,6 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, Header, Response, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
+from app.db.session import begin_contention_safe_transaction
 from app.dependencies import CurrentAdmin, DbSession, FanUser
 from app.errors import AppError
 from app.models import (
@@ -242,6 +243,7 @@ async def combine_cards(
     background_tasks: BackgroundTasks,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict:
+    await begin_contention_safe_transaction(session)
     if idempotency_key:
         existing = await session.scalar(
             select(CardCombination).where(
@@ -328,7 +330,11 @@ async def combine_cards(
         source_type="card_combination",
         source_id=combination.id,
         acquisition_source="combination",
-        metadata={"recipeId": recipe.id, "packId": pack.id},
+        metadata={
+            "recipeId": recipe.id,
+            "packId": pack.id,
+            "probabilityVersion": recipe.probability_version,
+        },
     )
     combination.result_user_card_id = result.id
     engagement_event = await record_engagement_event(
@@ -359,6 +365,20 @@ async def combine_cards(
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
+        if (
+            idempotency_key
+            and "card_combinations.user_id, card_combinations.idempotency_key" in str(exc).lower()
+        ):
+            existing = await session.scalar(
+                select(CardCombination).where(
+                    CardCombination.user_id == user.id,
+                    CardCombination.idempotency_key == idempotency_key,
+                )
+            )
+            if existing:
+                card = await session.get(Card, existing.result_card_id)
+                response.status_code = status.HTTP_200_OK
+                return {"ok": True, "data": _combination_data(existing, card)}
         if "card_combination_material" in str(exc).lower():
             raise AppError(
                 409,

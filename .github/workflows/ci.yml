@@ -4,11 +4,22 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test scripts/tests/*.test.mjs
+      - run: bash -n scripts/*.sh
+
   backend:
     runs-on: ubuntu-latest
     defaults:
@@ -62,6 +73,60 @@ jobs:
       - run: npm run lint
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=high
+
+  admin:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin_app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --check app.js
+      - run: node --test tests/*.test.mjs
+
+  studio:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: builder_app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --check app.js
+      - run: node --check studio-core.js
+      - run: npm test
+
+  hosted-preflight:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check deployed Render and Vercel applications
+        run: ./scripts/hosted-preflight.sh
+
+  hosted-auth-smoke:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check deployed authenticated contracts
+        env:
+          API_URL: ${{ secrets.FANFOLIO_API_URL }}
+          FAN_EMAIL: ${{ secrets.FANFOLIO_SMOKE_FAN_EMAIL }}
+          FAN_PASSWORD: ${{ secrets.FANFOLIO_SMOKE_FAN_PASSWORD }}
+          ADMIN_EMAIL: ${{ secrets.FANFOLIO_SMOKE_ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.FANFOLIO_SMOKE_ADMIN_PASSWORD }}
+          ARTIST_USERNAME: ${{ secrets.FANFOLIO_SMOKE_ARTIST_USERNAME }}
+          ARTIST_PASSWORD: ${{ secrets.FANFOLIO_SMOKE_ARTIST_PASSWORD }}
+          HOSTED_SMOKE_REQUIRED: "1"
+        run: ./scripts/hosted-auth-smoke.sh
 
   integration:
     runs-on: ubuntu-latest

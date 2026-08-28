@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 
 from fastapi import FastAPI
@@ -123,6 +124,8 @@ def test_fan_can_combine_duplicates_into_a_weighted_pack_result(
     )
     assert combined["cardId"] == "combination_result_card"
     assert combined["consumedUserCardIds"] == material_ids
+    detail = assert_success(actors["fan"].get(f"/api/me/cards/{combined['userCardId']}"))
+    assert detail["probabilityVersion"] == recipe["probabilityVersion"]
 
     collection = assert_success(actors["fan"].get("/api/me/collection"))
     assert [card["cardId"] for card in collection["cards"]] == ["combination_result_card"]
@@ -163,3 +166,40 @@ def test_fan_can_combine_duplicates_into_a_weighted_pack_result(
         409,
         "CARD_COMBINATION_MATERIAL_UNAVAILABLE",
     )
+
+
+def test_concurrent_combination_replay_with_same_key_is_idempotent(
+    app: FastAPI, actors: dict[str, TestClient]
+) -> None:
+    material_ids = seed_combination_catalog()
+    recipe = assert_success(
+        actors["admin"].post(
+            "/api/admin/card-combination-recipes",
+            json={
+                "scopeType": "card_pack",
+                "scopeId": "pack_combination_v1",
+                "inputQuantity": 3,
+                "outputRarityPool": ["SR"],
+                "probabilitySnapshot": {"combination_result_card": 100},
+            },
+        ),
+        201,
+    )
+    payload = {"recipeId": recipe["id"], "materialUserCardIds": material_ids}
+
+    def submit() -> tuple[int, dict]:
+        client = TestClient(app)
+        client.cookies.set("fanfolio_session", "test-session-fan")
+        response = client.post(
+            "/api/me/card-combinations",
+            headers={"Idempotency-Key": "combination-concurrent-1"},
+            json=payload,
+        )
+        return response.status_code, response.json()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _: submit(), range(2)))
+
+    assert [status for status, _ in results].count(201) == 1
+    assert all(status in {200, 201} for status, _ in results)
+    assert len({body["data"]["combinationId"] for _, body in results}) == 1

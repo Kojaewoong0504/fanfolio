@@ -27,6 +27,8 @@ def test_root_statistics_tracks_redemption_and_collection_view(
     assert statistics["trackingSince"]
     assert statistics["kpis"]["issuedCards"]["current"] >= 1
     assert statistics["kpis"]["activeFans"]["current"] >= 1
+    assert statistics["kpis"]["combinations"]["current"] >= 0
+    assert statistics["kpis"]["trades"]["current"] >= 0
     funnel = {row["key"]: row for row in statistics["funnel"]}
     assert funnel["recognized"]["count"] >= 1
     assert funnel["registered"]["count"] >= 1

@@ -33,11 +33,15 @@ test('statistics preview supports root and partner scopes with working controls'
   assert.match(view, /data-statistics-scope="root"/)
   assert.match(view, /data-statistics-scope="partner"/)
   assert.match(view, /data-statistics-period/)
-  assert.match(view, /data-statistics-filter/)
+  assert.match(view, /dataStatisticsFilter:/)
   assert.match(view, /data-statistics-compare/)
   assert.match(render, /statisticsPreviewState\.scope/)
   assert.match(render, /statisticsPreviewState\.period/)
-  assert.match(render, /statisticsPreviewState\[select\.dataset\.statisticsFilter\]/)
+  assert.match(render, /statisticsPreviewState\[control\.dataset\.statisticsFilter\]/)
+  assert.match(render, /admin-select\.open/)
+  assert.doesNotMatch(render, /admin-select\.is-open/)
+  assert.match(render, /ArrowDown|ArrowUp/)
+  assert.match(render, /aria-expanded/)
 })
 
 test('root dashboard contains operational outcomes and integrity monitoring', () => {
@@ -80,4 +84,10 @@ test('statistics preview styling is responsive and namespaced', () => {
   assert.match(css, /\.statistics-trend-panel\s+\.statistics-panel-caption\s*\{[\s\S]*display:\s*none/)
   assert.match(css, /@media \(max-width: 1180px\)[\s\S]*\.statistics-dashboard-grid/)
   assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.statistics-kpi-grid/)
+})
+
+test('desktop statistics KPI summary is compact enough for one-row scanning', () => {
+  assert.match(css, /\.statistics-kpi-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(6,/)
+  assert.match(css, /\.statistics-kpi-card\s*\{[\s\S]*min-height:\s*104px/)
+  assert.match(css, /\.statistics-kpi-card\s*\{[\s\S]*padding:\s*14px/)
 })

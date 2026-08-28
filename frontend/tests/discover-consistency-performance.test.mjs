@@ -44,6 +44,12 @@ test('discover shows loading or honest empty states instead of temporary demo co
   assert.doesNotMatch(discoverSource, /resolveApiUrl\(featuredEvent\?\.heroUrl\) \|\| fanWeekNightStage/)
 })
 
+test('discover keeps featured pack and card tiles usable when a catalog asset is unavailable', () => {
+  assert.match(discoverSource, /featuredPackImage \? <img src=\{featuredPackImage\}[^>]*onError=\{event => keepCardVisual\(event, 'card-pack:discover-featured'\)/)
+  assert.match(discoverSource, /demoCardImage\(resolveApiUrl\(card\.imageUrl\), `card:\$\{card\.id\}`\)/)
+  assert.match(discoverSource, /onError=\{event => keepCardVisual\(event, `card:\$\{card\.id\}`\)\}/)
+})
+
 test('live card repository never renders preview groups while backend data is pending', () => {
   assert.match(repositorySource, /const repositoryLoading = !usePreviewData && remoteGroups === null/)
   assert.match(repositorySource, /const groups = usePreviewData \? cardCollectionGroups : remoteGroups \?\? \[\]/)

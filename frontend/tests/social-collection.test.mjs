@@ -27,6 +27,10 @@ test('fan app exposes public collection and fan connection controls', () => {
   assert.match(fanHubSource, /팬 찾기/)
   assert.match(fanHubSource, /팔로잉/)
   assert.match(appSource, /pathname === '\/fans'/)
+  assert.match(clientSource, /blockFan/)
+  assert.match(clientSource, /reportFan/)
+  assert.match(fanHubSource + readFileSync(new URL('../src/components/FanPublicProfile.tsx', import.meta.url), 'utf8'), /이 팬 차단/)
+  assert.match(readFileSync(new URL('../src/components/FanPublicProfile.tsx', import.meta.url), 'utf8'), /신고 접수/)
 })
 
 test('fan app exposes trade proposal constraints and submission', () => {
@@ -39,6 +43,9 @@ test('fan app exposes trade proposal constraints and submission', () => {
   assert.match(tradeInboxSource, /받은 제안/)
   assert.match(tradeInboxSource, /보낸 제안/)
   assert.match(tradeInboxSource, /respondToTradeProposal/)
+  assert.match(tradeInboxSource, /reportFan/)
+  assert.match(tradeInboxSource, /targetType: 'trade'/)
+  assert.match(tradeInboxSource, /안전 및 거래 신고/)
   assert.match(tradeComposerSource, /내가 보내는 카드/)
   assert.match(appSource, /pathname === '\/trades'/)
   assert.match(appSource, /pathname === '\/trades\/new'/)

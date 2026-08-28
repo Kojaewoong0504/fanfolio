@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from app.core.config import Settings
 
 
@@ -36,6 +38,15 @@ def test_database_backend_name_does_not_expose_connection_details() -> None:
     assert "secret" not in settings.database_backend
 
 
+def test_default_sqlite_database_is_anchored_to_the_backend_directory(monkeypatch) -> None:
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    settings = Settings(_env_file=None, app_env="development")
+
+    database_path = Path(settings.database_url.removeprefix("sqlite+aiosqlite:///"))
+    assert database_path == Path(__file__).resolve().parents[2] / "fanfolio.db"
+
+
 def test_render_postgres_url_is_normalized_for_the_async_driver() -> None:
     settings = Settings(database_url="postgresql://user:secret@render.internal/fanfolio")
 
@@ -51,7 +62,7 @@ def test_asyncpg_statement_cache_setting_is_only_applied_to_postgresql() -> None
     sqlite = Settings(database_statement_cache_size=0)
 
     assert postgres.database_connect_args == {"statement_cache_size": 0}
-    assert sqlite.database_connect_args == {}
+    assert sqlite.database_connect_args == {"timeout": 30}
 
 
 def test_supabase_storage_requires_the_server_side_s3_configuration() -> None:

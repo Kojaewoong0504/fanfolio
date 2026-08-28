@@ -89,7 +89,7 @@ export function TradeComposer({ recipientUserId, requestedUserCardIds, onBack, o
       .catch(e => { if (active) setError(e instanceof ApiError ? e.message : '거래할 컬렉션을 불러오지 못했어요.') })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [initialCards, initialRequestedCards, recipientUserId])
+  }, [initialCards, initialRequestedCards, initialOfferedUserCardId, recipientUserId])
   const selectableCards = cards.filter(card => card.tradable !== false)
   const offeredCards = selectableCards.length > 0 ? selectableCards : cards
   const mine = offeredCards.find(card => card.userCardId === selectedOfferedUserCardId) ?? offeredCards[0]

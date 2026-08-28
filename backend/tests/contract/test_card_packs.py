@@ -61,6 +61,32 @@ def test_admin_can_create_publish_and_fan_can_open_card_pack(
 
     collection = assert_success(actors["fan"].get("/api/me/collection"))
     assert any(card["userCardId"] == opened["userCardId"] for card in collection["cards"])
+    detail = assert_success(actors["fan"].get(f"/api/me/cards/{opened['userCardId']}"))
+    assert detail["probabilityVersion"] == created["version"]
+    assert detail["acquisitionProbability"] == 100
+
+
+def test_admin_card_pack_list_supports_server_pagination(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    first = assert_success(
+        actors["admin"].post("/api/admin/card-packs", json=_pack_payload(seeded)), 201
+    )
+    second_payload = _pack_payload(seeded)
+    second_payload["name"] = "Starlight Ver."
+    second = assert_success(actors["admin"].post("/api/admin/card-packs", json=second_payload), 201)
+
+    page_one = assert_success(actors["admin"].get("/api/admin/card-packs?page=1&pageSize=1"))
+    page_two = assert_success(actors["admin"].get("/api/admin/card-packs?page=2&pageSize=1"))
+
+    assert page_one["meta"]["pagination"] == {"page": 1, "pageSize": 1, "total": 2}
+    assert page_two["meta"]["pagination"] == {"page": 2, "pageSize": 1, "total": 2}
+    assert page_one["items"][0]["id"] != page_two["items"][0]["id"]
+    assert {page_one["items"][0]["id"], page_two["items"][0]["id"]} == {first["id"], second["id"]}
+
+    scoped = assert_success(actors["admin"].get("/api/admin/card-packs?artistId=artist_nova3"))
+    assert scoped["meta"]["pagination"]["total"] == 2
+    assert {item["artistId"] for item in scoped["items"]} == {"artist_nova3"}
 
 
 def test_open_card_pack_enqueues_committed_growth_event_once_for_idempotent_replay(
@@ -100,7 +126,7 @@ def test_open_card_pack_enqueues_committed_growth_event_once_for_idempotent_repl
     )
     second = assert_success(
         actors["fan"].post(f"/api/me/card-packs/{created['id']}/open", headers=headers),
-        201,
+        200,
     )
 
     assert second == first
@@ -117,6 +143,31 @@ def test_open_card_pack_enqueues_committed_growth_event_once_for_idempotent_repl
     assert len(events) == 1
     assert events[0].source_id == first["userCardId"]
     assert enqueued_event_ids == [events[0].id]
+
+
+def test_concurrent_card_pack_replay_with_same_key_returns_one_opening(
+    app, actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    created = assert_success(
+        actors["admin"].post("/api/admin/card-packs", json=_pack_payload(seeded)), 201
+    )
+    assert_success(actors["admin"].post(f"/api/admin/card-packs/{created['id']}/publish"))
+
+    def submit() -> tuple[int, dict]:
+        client = TestClient(app)
+        client.cookies.set("fanfolio_session", "test-session-fan")
+        response = client.post(
+            f"/api/me/card-packs/{created['id']}/open",
+            headers={"Idempotency-Key": "pack-open-concurrent-1"},
+        )
+        return response.status_code, response.json()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _: submit(), range(2)))
+
+    assert [status for status, _ in results].count(201) == 1
+    assert all(status in {200, 201} for status, _ in results)
+    assert len({body["data"]["openingId"] for _, body in results}) == 1
 
 
 def test_card_pack_requires_transparent_probability_total(

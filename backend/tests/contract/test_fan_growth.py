@@ -19,6 +19,7 @@ from app.models import (
     MissionDefinition,
     MissionProgress,
     Notification,
+    PassEntitlement,
     PassProgress,
     PassSeason,
     PassTier,
@@ -27,6 +28,7 @@ from app.models import (
     ProfileEquipment,
     RewardCatalog,
     RewardGrant,
+    ShopOrder,
     UserCard,
     XpLedger,
 )
@@ -831,6 +833,30 @@ def test_paid_season_exposes_two_lanes_and_unlocks_premium_after_purchase(
         actors["fan"].post("/api/me/pass-seasons/pass_paid_contract/purchase")
     )
     assert purchased["pricePoints"] == 1200
+
+    async def load_pass_order() -> tuple[ShopOrder | None, PassEntitlement | None]:
+        async with SessionLocal() as session:
+            order = await session.scalar(
+                select(ShopOrder).where(
+                    ShopOrder.user_id == "fan",
+                    ShopOrder.product_id == "pass_product_pass_paid_contract",
+                )
+            )
+            entitlement = await session.scalar(
+                select(PassEntitlement).where(
+                    PassEntitlement.user_id == "fan",
+                    PassEntitlement.season_id == "pass_paid_contract",
+                )
+            )
+            return order, entitlement
+
+    pass_order, pass_entitlement = asyncio.run(load_pass_order())
+    assert pass_order is not None
+    assert pass_order.product_name == "Paid Contract Season"
+    assert pass_order.price_points == 1200
+    assert pass_order.status == "completed"
+    assert pass_entitlement is not None
+    assert pass_entitlement.order_id == pass_order.id
     after_purchase = assert_success(actors["fan"].get("/api/me/pass"))
     purchased_season = next(
         item for item in after_purchase["seasons"] if item["id"] == "pass_paid_contract"
@@ -841,6 +867,69 @@ def test_paid_season_exposes_two_lanes_and_unlocks_premium_after_purchase(
         actors["fan"].post("/api/me/pass-tiers/pass_paid_contract_tier/claim?track=premium")
     )
     assert claimed["track"] == "premium"
+
+
+def test_global_paid_season_creates_a_global_order_product_and_unlocks_premium(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    async def seed_global_paid_season() -> None:
+        async with SessionLocal() as session:
+            reward = RewardCatalog(
+                id="reward_global_paid_premium",
+                artist_id=None,
+                reward_type="badge",
+                name="Global premium badge",
+                status="published",
+            )
+            season = PassSeason(
+                id="pass_global_paid_contract",
+                artist_id=None,
+                title="Global paid season",
+                description="A cross-artist premium season.",
+                status="published",
+                is_paid=True,
+                premium_enabled=True,
+                premium_price_points=300,
+                starts_at=now() - timedelta(days=1),
+                ends_at=now() + timedelta(days=30),
+            )
+            tier = PassTier(
+                id="pass_global_paid_contract_tier",
+                season_id=season.id,
+                tier=1,
+                required_xp=0,
+                reward_id=reward.id,
+                premium_reward_id=reward.id,
+            )
+            session.add_all([reward, season, tier, PointBalance(user_id="fan", balance=500)])
+            await session.commit()
+
+    asyncio.run(seed_global_paid_season())
+    purchased = assert_success(
+        actors["fan"].post("/api/me/pass-seasons/pass_global_paid_contract/purchase")
+    )
+    assert purchased["pricePoints"] == 300
+
+    async def load_global_order() -> tuple[ShopOrder | None, PassEntitlement | None]:
+        async with SessionLocal() as session:
+            order = await session.scalar(
+                select(ShopOrder).where(
+                    ShopOrder.user_id == "fan",
+                    ShopOrder.product_id == "pass_product_pass_global_paid_contract",
+                )
+            )
+            entitlement = await session.scalar(
+                select(PassEntitlement).where(
+                    PassEntitlement.user_id == "fan",
+                    PassEntitlement.season_id == "pass_global_paid_contract",
+                )
+            )
+            return order, entitlement
+
+    order, entitlement = asyncio.run(load_global_order())
+    assert order is not None
+    assert entitlement is not None
+    assert entitlement.order_id == order.id
 
 
 def test_point_charge_packages_credit_balance_idempotently_and_refund_to_ledger(

@@ -101,6 +101,9 @@ function FanGrowthLoading() {
   </section>
 }
 
+// The pass page shares this pure asset resolver; keep the component module as the
+// single source of truth while explicitly documenting the Fast Refresh exception.
+// oxlint-disable-next-line react(only-export-components)
 export { rewardArtworkUrl }
 
 function progressPercent(current: number, target: number): number {

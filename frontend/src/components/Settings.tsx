@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 
-import { apiFetch, changeFanPassword, deleteFanAccount, exportPersonalData, resolveApiUrl, type CatalogArtist, type CatalogMember, type CurrentUser, type FanProgression } from '../api/client'
+import { apiFetch, changeFanPassword, deleteFanAccount, exportPersonalData, getConsentHistory, recordConsent, resolveApiUrl, type CatalogArtist, type CatalogMember, type ConsentRecord, type CurrentUser, type FanProgression } from '../api/client'
 import profileDecorations from '../assets/profile-decorations-generated.png'
 import { ProfileAvatar } from './ProfileAvatar'
 
-type MyPanel = 'notifications' | 'language' | 'support' | 'terms' | 'privacy' | null
 type SettingsInfoScreen = 'language' | 'support' | 'terms' | 'privacy' | null
 
 type ProfileForm = {
@@ -50,6 +49,9 @@ function SettingsInfoScreenView({
   onPrivacyExport,
   onAccountDelete,
   privacyMessage,
+  consentHistory,
+  consentLoading,
+  onRecordConsent,
   onBack,
 }: {
   screen: Exclude<SettingsInfoScreen, null>
@@ -69,6 +71,9 @@ function SettingsInfoScreenView({
   onPrivacyExport: () => void
   onAccountDelete: (confirmation: string) => void
   privacyMessage: string
+  consentHistory: ConsentRecord[]
+  consentLoading: boolean
+  onRecordConsent: (policyKey: ConsentRecord['policyKey']) => void
   onBack: () => void
 }) {
   const titles = {
@@ -170,6 +175,12 @@ function SettingsInfoScreenView({
               <button type="button" className="settings-danger-action" onClick={event => onAccountDelete(event.currentTarget.parentElement?.querySelector<HTMLInputElement>('#account-delete-confirmation')?.value ?? '')}>계정 삭제</button>
               {privacyMessage && <p className="settings-info-note" role="status">{privacyMessage}</p>}
             </section>
+            <section className="settings-info-card settings-consent-history" aria-label="개인정보 동의 이력">
+              <strong>동의 이력</strong>
+              <p>약관과 개인정보 처리방침에 대한 동의·철회 기록을 확인할 수 있어요.</p>
+              {consentLoading ? <p role="status">동의 이력을 불러오는 중이에요.</p> : consentHistory.length ? <ul>{consentHistory.map(record => <li key={record.id}><span>{record.policyKey === 'terms' ? '이용 약관' : record.policyKey === 'privacy' ? '개인정보 처리방침' : '마케팅 알림'} · v{record.policyVersion}</span><small>{record.granted ? '동의' : '철회'} · {new Date(record.createdAt).toLocaleString('ko-KR')}</small></li>)}</ul> : <p>아직 기록된 동의 이력이 없어요.</p>}
+              <div className="settings-consent-actions"><button type="button" onClick={() => onRecordConsent('terms')}>이용 약관 동의 기록</button><button type="button" onClick={() => onRecordConsent('privacy')}>개인정보 동의 기록</button></div>
+            </section>
           </>}
         </article>
       )}
@@ -190,9 +201,8 @@ export function Settings({
   onUserUpdated: (user: CurrentUser) => void
   onLogout: () => Promise<void>
   onEvents: () => void
-  onNotificationSettings?: () => void
+  onNotificationSettings: () => void
 }) {
-  const [panel, setPanel] = useState<MyPanel>(null)
   const [infoScreen, setInfoScreen] = useState<SettingsInfoScreen>(null)
   const [supportMode, setSupportMode] = useState<'faq' | 'form'>('faq')
   const [supportSubject, setSupportSubject] = useState('')
@@ -201,6 +211,8 @@ export function Settings({
   const [supportSaving, setSupportSaving] = useState(false)
   const [supportMessage, setSupportMessage] = useState('')
   const [privacyMessage, setPrivacyMessage] = useState('')
+  const [consentHistory, setConsentHistory] = useState<ConsentRecord[]>([])
+  const [consentLoading, setConsentLoading] = useState(false)
   const [language, setLanguage] = useState<'ko' | 'en'>('ko')
   const [profileOpen, setProfileOpen] = useState(false)
   const [passwordOpen, setPasswordOpen] = useState(false)
@@ -267,6 +279,30 @@ export function Settings({
       await onLogout()
     } catch {
       setPrivacyMessage('계정 삭제에 실패했어요. 잠시 후 다시 시도해 주세요.')
+    }
+  }
+
+  useEffect(() => {
+    if (infoScreen !== 'privacy') return
+    let cancelled = false
+    setConsentLoading(true)
+    void getConsentHistory().then(result => {
+      if (!cancelled) setConsentHistory(result.data.items)
+    }).catch(() => {
+      if (!cancelled) setPrivacyMessage('동의 이력을 불러오지 못했어요.')
+    }).finally(() => {
+      if (!cancelled) setConsentLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [infoScreen])
+
+  const saveConsent = async (policyKey: ConsentRecord['policyKey']) => {
+    try {
+      const result = await recordConsent(policyKey, '2026-08-18')
+      setConsentHistory(history => [...history, result.data])
+      setPrivacyMessage('동의 이력을 기록했어요.')
+    } catch {
+      setPrivacyMessage('동의 이력을 기록하지 못했어요.')
     }
   }
 
@@ -395,14 +431,6 @@ export function Settings({
   const selectedArtists = artists.filter(artist => profileForm.artistIds.includes(artist.id))
   const filteredArtists = artists.filter(artist => artist.name.toLowerCase().includes(artistQuery.trim().toLowerCase()))
 
-  const panelTitle = {
-    notifications: '알림 설정',
-    language: '언어 설정',
-    support: '고객센터',
-    terms: '이용 약관',
-    privacy: '개인정보 처리방침',
-  }[panel ?? 'notifications']
-
   return (
     <section className="screen settings-screen">
       <div className="my-page">
@@ -435,7 +463,7 @@ export function Settings({
             <span>나의 이벤트</span>
             <Chevron />
           </button>
-          <button className="my-setting-row" type="button" onClick={() => onNotificationSettings ? onNotificationSettings() : setPanel('notifications')}>
+          <button className="my-setting-row" type="button" onClick={onNotificationSettings}>
             <MyIcon><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></MyIcon>
             <span>알림 설정</span>
             <Chevron />
@@ -465,7 +493,7 @@ export function Settings({
         <button className="my-logout" type="button" onClick={() => void onLogout()}>로그아웃</button>
       </div>
 
-      {infoScreen && <SettingsInfoScreenView screen={infoScreen} language={language} onLanguageChange={setLanguage} supportMode={supportMode} supportSubject={supportSubject} supportCategory={supportCategory} supportBody={supportBody} supportSaving={supportSaving} supportMessage={supportMessage} onSupportModeChange={mode => { setSupportMode(mode); setSupportMessage('') }} onSupportSubjectChange={setSupportSubject} onSupportCategoryChange={setSupportCategory} onSupportBodyChange={setSupportBody} onSupportSubmit={() => void submitSupportTicket()} onPrivacyExport={() => void downloadPersonalData()} onAccountDelete={confirmation => void requestAccountDeletion(confirmation)} privacyMessage={privacyMessage} onBack={() => setInfoScreen(null)} />}
+      {infoScreen && <SettingsInfoScreenView screen={infoScreen} language={language} onLanguageChange={setLanguage} supportMode={supportMode} supportSubject={supportSubject} supportCategory={supportCategory} supportBody={supportBody} supportSaving={supportSaving} supportMessage={supportMessage} onSupportModeChange={mode => { setSupportMode(mode); setSupportMessage('') }} onSupportSubjectChange={setSupportSubject} onSupportCategoryChange={setSupportCategory} onSupportBodyChange={setSupportBody} onSupportSubmit={() => void submitSupportTicket()} onPrivacyExport={() => void downloadPersonalData()} onAccountDelete={confirmation => void requestAccountDeletion(confirmation)} privacyMessage={privacyMessage} consentHistory={consentHistory} consentLoading={consentLoading} onRecordConsent={policyKey => void saveConsent(policyKey)} onBack={() => setInfoScreen(null)} />}
 
       {profileOpen && (
         <section className="profile-decorate-screen" aria-label={passwordOpen ? '비밀번호 변경' : '프로필 꾸미기'}>
@@ -531,14 +559,6 @@ export function Settings({
         </section>
       )}
 
-      {panel && (
-        <div className="my-panel-backdrop" role="presentation" onClick={() => setPanel(null)}>
-          <section className="my-panel" role="dialog" aria-modal="true" aria-label={panelTitle} onClick={(event) => event.stopPropagation()}>
-            <header><strong>{panelTitle}</strong><button type="button" onClick={() => setPanel(null)} aria-label="닫기">×</button></header>
-            <p>{panel === 'language' ? '현재 언어는 한국어입니다.' : '해당 메뉴의 상세 내용은 준비 중입니다.'}</p>
-          </section>
-        </div>
-      )}
     </section>
   )
 }

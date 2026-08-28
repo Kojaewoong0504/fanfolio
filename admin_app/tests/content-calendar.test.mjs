@@ -12,3 +12,13 @@ test("card operations workspace exposes the content calendar without a separate 
   assert.match(source, /data-calendar-status/);
   assert.doesNotMatch(source, /state\.view\s*=\s*["']calendar["']/);
 });
+
+test("content calendar exposes selectable card, event, and product targets", () => {
+  assert.match(source, /contentCalendarDraftType/);
+  assert.match(source, /data-calendar-content-type/);
+  assert.match(source, /콘텐츠 유형/);
+  assert.match(source, /state\.events\.map/);
+  assert.match(source, /shopProducts\s*\|\| \[\]\)\.map/);
+  assert.match(source, /content-calendar-type-select/);
+  assert.match(source, /content-calendar-id-select/);
+});

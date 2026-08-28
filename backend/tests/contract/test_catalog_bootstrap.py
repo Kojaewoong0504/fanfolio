@@ -13,8 +13,9 @@ from app.models import (
     PassTier,
     RewardCatalog,
     ShopProduct,
+    User,
 )
-from app.services import ensure_demo_catalog
+from app.services import ensure_demo_catalog, repair_demo_catalog_asset_urls
 
 
 def test_demo_catalog_bootstrap_creates_onboarding_catalog(client) -> None:
@@ -73,6 +74,50 @@ def test_bundled_demo_assets_are_served_by_api(client) -> None:
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("image/png")
     assert len(response.content) > 100_000
+
+
+def test_demo_catalog_image_urls_are_backend_served_assets(client, seeded) -> None:
+    """Fresh deployments must not persist frontend source paths in catalog data."""
+    client.cookies.set("fanfolio_session", seeded["sessions"]["fan"])
+
+    async def bootstrap() -> None:
+        async with SessionLocal() as session:
+            await ensure_demo_catalog(session)
+
+    asyncio.run(bootstrap())
+
+    response = client.get("/api/catalog/artists")
+    assert response.status_code == 200, response.text
+    artists = response.json()["data"]["items"]
+    image_urls = {artist["imageUrl"] for artist in artists}
+    assert all(url.startswith("/assets/") for url in image_urls)
+    assert all(not url.startswith("/src/") for url in image_urls)
+
+    for url in image_urls:
+        response = client.get(url)
+        assert response.status_code == 200, url
+        assert response.headers["content-type"].startswith("image/")
+
+
+def test_legacy_demo_asset_urls_are_repaired_without_creating_records(client, seeded) -> None:
+    client.cookies.set("fanfolio_session", seeded["sessions"]["fan"])
+
+    async def repair() -> int:
+        async with SessionLocal() as session:
+            artist = await session.get(Artist, "artist_luminous")
+            assert artist is not None
+            artist.image_url = "/src/assets/legacy.png"
+            user = await session.get(User, "local_demo_fan")
+            assert user is None
+            await session.commit()
+            return await repair_demo_catalog_asset_urls(session)
+
+    assert asyncio.run(repair()) == 1
+    artists = client.get("/api/catalog/artists").json()["data"]["items"]
+    assert (
+        next(item for item in artists if item["id"] == "artist_luminous")["imageUrl"]
+        == "/assets/card-yuna-lavender.jpg"
+    )
 
 
 def test_demo_catalog_bootstrap_creates_a_public_paid_season_pass(client) -> None:

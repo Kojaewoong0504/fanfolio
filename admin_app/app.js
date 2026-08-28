@@ -21,9 +21,34 @@ const API_BASE = isLocalHost
   : "/api";
 let ACCESS_TOKEN = "";
 let refreshInFlight = null;
+let storedNavSectionsCollapsed = {};
+try {
+  const rawNavSections = window.localStorage.getItem("fanfolio.admin.navSectionsCollapsed.v2");
+  if (rawNavSections) storedNavSectionsCollapsed = JSON.parse(rawNavSections) || {};
+} catch {
+  storedNavSectionsCollapsed = {};
+}
+const defaultNavSectionsCollapsed = {
+  content: true,
+  commerce: true,
+  fan: true,
+  control: true,
+  system: true,
+};
 const app = document.querySelector("#app");
+const initialUrlParams = typeof URLSearchParams !== "undefined"
+  ? new URLSearchParams(window.location.search || "")
+  : { get: () => null };
+const initialDrawer = initialUrlParams.get("drawer") === "event" ? "event" : null;
+const isEventDeepLink = () => new URLSearchParams(window.location.search || "").get("drawer") === "event";
+function clearEventDeepLink() {
+  if (!isEventDeepLink()) return;
+  const nextUrl = new URL(window.location.href);
+  nextUrl.searchParams.delete("drawer");
+  window.history.replaceState({}, "", nextUrl);
+}
 const state = {
-  view: "dashboard",
+  view: initialDrawer === "event" || initialUrlParams.get("view") === "events" ? "events" : "dashboard",
   authenticated: false,
   restoringSession: true,
   mustChangePassword: false,
@@ -31,12 +56,19 @@ const state = {
   mobileNavOpen: false,
   navCollapsed:
     window.localStorage.getItem("fanfolio.admin.navCollapsed") === "true",
+  navSectionsCollapsed: {
+    ...defaultNavSectionsCollapsed,
+    ...storedNavSectionsCollapsed,
+  },
   accountMenuOpen: false,
+  drawer: initialDrawer,
+  eventEditorOpen: initialDrawer === "event",
   notificationPanelOpen: false,
   metrics: null,
   operationalMetrics: null,
   operationsOverview: null,
   approvals: [],
+  selectedApprovalId: "",
   statistics: null,
   statisticsPeriod: "30",
   statisticsCompare: true,
@@ -47,19 +79,24 @@ const state = {
   notifications: [],
   unreadNotificationCount: 0,
   supportTickets: [],
-  supportPagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+  supportPagination: { page: 1, pageSize: 10, total: 0, totalPages: 0 },
   supportQuery: "",
   supportStatus: "all",
+  supportCategory: "all",
   selectedSupportTicket: null,
+  supportActivityDetailIndex: null,
+  supportActivityDetailTicketId: "",
   fan360: null,
   deliveryItems: [],
   deliveryPagination: { page: 1, pageSize: 50, total: 0 },
   deliveryStatus: "failed",
   deliveryChannel: "all",
   cards: [],
+  cardCatalog: [],
   contentCalendar: [],
   contentCalendarLoading: false,
   contentCalendarMessage: "",
+  contentCalendarDraftType: "card",
   cardPacks: [],
   shopProducts: [],
   pointChargePackages: [],
@@ -74,7 +111,11 @@ const state = {
   cardPackQuery: "",
   cardPackStatus: "all",
   cardPackArtist: "all",
+  cardPackPage: 1,
+  cardPackPagination: { page: 1, pageSize: 10, total: 0 },
   selectedCardPack: null,
+  selectedCompositionCardId: null,
+  cardActionMenuId: null,
   cardThumbnailUrls: {},
   drops: [],
   batches: [],
@@ -82,6 +123,7 @@ const state = {
   issuanceStatus: "all",
   issuanceType: "all",
   issuancePeriod: "all",
+  issuancePage: 1,
   selectedBatchId: null,
   events: [],
   eventPagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
@@ -110,9 +152,12 @@ const state = {
   fanPassQuery: "",
   fanPassStatus: "all",
   fanPassArtist: "all",
+  fanPassPage: 1,
   query: "",
   cardArtist: "all",
   status: "all",
+  cardPage: 1,
+  cardPagination: { page: 1, pageSize: 10, total: 0 },
   userQuery: "",
   userRole: "all",
   userPage: 1,
@@ -150,7 +195,6 @@ const state = {
   selectedOrganization: null,
   organizationMembers: [],
   partnerTab: "overview",
-  drawer: null,
   drawerData: null,
   temporaryCredential: null,
   organizationLogoFile: null,
@@ -158,6 +202,9 @@ const state = {
   organizationLogoRemoved: false,
   rewardImageFile: null,
   rewardImagePreviewUrl: "",
+  operationFeedback: null,
+  globalSearchOpen: false,
+  globalSearchQuery: "",
 };
 const escapeHtml = (value) =>
   String(value ?? "").replace(
@@ -204,11 +251,46 @@ const fanPassPresets = [
   { id: "season-30", label: "30LV 시즌 세트", description: "장기 활동 시즌에 맞춘 30단계 구성", tiers: Array.from({ length: 30 }, (_, index) => ({ tier: index + 1, requiredXp: index * 100 })) },
 ];
 
+const fanfolioDateTimeLocale = {
+  firstDayOfWeek: 1,
+  weekdays: {
+    shorthand: ["일", "월", "화", "수", "목", "금", "토"],
+    longhand: ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"],
+  },
+  months: {
+    shorthand: ["1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"],
+    longhand: ["1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"],
+  },
+  rangeSeparator: " ~ ",
+  weekAbbreviation: "주",
+  scrollTitle: "스크롤하여 변경",
+  toggleTitle: "클릭하여 전환",
+  amPM: ["오전", "오후"],
+  yearAriaLabel: "년",
+  monthAriaLabel: "월",
+  hourAriaLabel: "시",
+  minuteAriaLabel: "분",
+};
+
 function enhanceDateTimePickers(root = document) {
   if (typeof window.flatpickr !== "function") return;
   root.querySelectorAll('input[type="datetime-local"]:not([data-native-datetime]), input[data-calendar="datetime"]:not([data-native-datetime])').forEach((input) => {
     if (input._flatpickr) return;
-    window.flatpickr(input, { enableTime: true, time_24hr: false, dateFormat: "Y-m-d H:i", allowInput: true, locale: { firstDayOfWeek: 1 } });
+    window.flatpickr(input, {
+      enableTime: true,
+      time_24hr: true,
+      dateFormat: "Y-m-d H:i",
+      // Keep the named datetime-local input as the visible control. With
+      // altInput, FormData reads the hidden original field and operators can
+      // accidentally submit an empty date after typing into the alternate UI.
+      altInput: false,
+      altFormat: "Y년 m월 d일 H:i",
+      allowInput: true,
+      minuteIncrement: 5,
+      disableMobile: true,
+      locale: fanfolioDateTimeLocale,
+      onReady: (_, __, instance) => instance.calendarContainer.classList.add("fanfolio-calendar"),
+    });
   });
 }
 
@@ -354,46 +436,47 @@ function title() {
     support: "고객센터",
     deliveries: "전달 실패 큐",
     approvals: "승인 큐",
+    settings: "계정 설정",
   }[state.view];
 }
 
 function navItems() {
   const companyWorkspace = !isRoot() && state.adminContext?.accessLevel === "company_admin";
   return [
-    { id: "dashboard", label: "개요", icon: "space_dashboard" },
+    { id: "dashboard", label: "개요", icon: "space_dashboard", group: "overview" },
     ...(isRoot()
-      ? [{ id: "partners", label: "파트너", icon: "domain" }]
+      ? [{ id: "partners", label: "파트너", icon: "domain", group: "system" }]
       : []),
     ...(companyWorkspace
-      ? [{ id: "partners", label: "우리 회사", icon: "domain" }]
+      ? [{ id: "partners", label: "우리 회사", icon: "domain", group: "system" }]
       : []),
-    { id: "artists", label: "아티스트", icon: "recent_actors" },
-    { id: "cards", label: "카드", icon: "style" },
-    ...(can("cards:read") ? [{ id: "shop-products", label: "상점 상품", icon: "storefront" }] : []),
-    ...(isRoot() && can("engagement:points_adjust") ? [{ id: "point-charge-packages", label: "포인트 충전", icon: "payments" }] : []),
+    { id: "artists", label: "아티스트", icon: "recent_actors", group: "content" },
+    { id: "cards", label: "카드", icon: "style", group: "content" },
+    ...(can("cards:read") ? [{ id: "shop-products", label: "상점 상품", icon: "storefront", group: "commerce" }] : []),
+    ...(isRoot() && can("engagement:points_adjust") ? [{ id: "point-charge-packages", label: "포인트 충전", icon: "payments", group: "commerce" }] : []),
     ...(can("events:read")
-      ? [{ id: "events", label: "이벤트", icon: "campaign" }]
+      ? [{ id: "events", label: "이벤트", icon: "campaign", group: "fan" }]
       : []),
     ...(can("statistics:read")
-      ? [{ id: "statistics", label: "통계", icon: "monitoring" }]
+      ? [{ id: "statistics", label: "통계", icon: "monitoring", group: "control" }]
       : []),
     ...(canViewFanGrowth()
-      ? [{ id: "fan-growth", label: "팬 성장", icon: "workspace_premium" }]
+      ? [{ id: "fan-growth", label: "팬 성장", icon: "workspace_premium", group: "fan" }]
       : []),
     ...(can("support:read")
-      ? [{ id: "support", label: "고객센터", icon: "support_agent" }]
+      ? [{ id: "support", label: "고객센터", icon: "support_agent", group: "fan" }]
       : []),
     ...(can("engagement:retry")
-      ? [{ id: "deliveries", label: "전달 실패 큐", icon: "sync_problem" }]
+      ? [{ id: "deliveries", label: "전달 실패 큐", icon: "sync_problem", group: "control" }]
       : []),
     ...(can("audit:read")
-      ? [{ id: "approvals", label: "승인 큐", icon: "fact_check" }]
+      ? [{ id: "approvals", label: "승인 큐", icon: "fact_check", group: "control" }]
       : []),
     ...(isRoot()
-      ? [{ id: "users", label: "서비스 사용자", icon: "group" }]
+      ? [{ id: "users", label: "서비스 사용자", icon: "group", group: "system" }]
       : []),
-    { id: "audit", label: "감사 로그", icon: "history" },
-    { id: "guide", label: "운영 가이드", icon: "help" },
+    { id: "audit", label: "감사 로그", icon: "history", group: "control" },
+    { id: "guide", label: "운영 가이드", icon: "help", group: "system" },
   ];
 }
 
@@ -427,9 +510,28 @@ function navigationView() {
   const person = state.adminContext?.user || {};
   const role = isRoot() ? "루트 관리자" : `${state.adminContext?.accessLevel || "viewer"} · ${scopeLabel()}`;
   const navToggleLabel = state.navCollapsed ? "내비게이션 펼치기" : "내비게이션 접기";
+  const groupLabels = { overview: "운영 개요", content: "콘텐츠 운영", commerce: "커머스 운영", fan: "팬 운영", control: "검수·관제", system: "시스템 관리" };
   const cardSection = `<div class="nav-section-group"><button type="button" data-view="cards" class="nav-item ${["cards", "card-packs", "card-pack-create", "card-pack-composition", "batches", "issuance-create"].includes(state.view) ? "active" : ""}" aria-label="카드" title="카드">${icon("style")}<span>카드</span>${icon("expand_more", "nav-section-chevron")}</button><div class="nav-subitems"><button type="button" data-view="cards" class="nav-subitem ${state.view === "cards" ? "active" : ""}">카드 관리</button>${can("cards:read") ? `<button type="button" data-view="card-packs" class="nav-subitem ${["card-packs", "card-pack-create", "card-pack-composition"].includes(state.view) ? "active" : ""}">카드팩 관리</button>` : ""}${can("codes:read") ? `<button type="button" data-view="batches" class="nav-subitem ${["batches", "issuance-create"].includes(state.view) ? "active" : ""}">발급·인증번호</button>` : ""}</div></div>`;
-  const items = navItems().map((item) => item.id === "cards" ? cardSection : `<button type="button" data-view="${item.id}" class="nav-item ${state.view === item.id || (item.id === "shop-products" && state.view === "shop-product-create") ? "active" : ""}" aria-current="${state.view === item.id ? "page" : "false"}" aria-label="${escapeHtml(item.label)}" title="${escapeHtml(item.label)}">${icon(item.icon)}<span>${item.label}</span></button>`).join("");
-  return `<aside class="app-nav ${state.mobileNavOpen ? "open" : ""}" aria-label="관리자 주요 메뉴"><div class="nav-brand"><span class="nav-brand-mark"><img src="./assets/fanfolio-app-icon-192.png" alt="Fanfolio 서비스 아이콘" /></span><span class="nav-brand-copy"><strong>FANFOLIO</strong><small>OPERATIONS</small></span><button class="icon-button nav-toggle" id="desktop-nav-toggle" type="button" aria-label="${navToggleLabel}" title="${navToggleLabel}">${icon(state.navCollapsed ? "keyboard_double_arrow_right" : "keyboard_double_arrow_left")}</button></div><nav>${items}</nav><div class="nav-account"><span class="account-avatar">${escapeHtml((person.displayName || person.email || "관").slice(0, 1))}</span><div class="nav-account-copy"><strong>${escapeHtml(person.displayName || "관리자")}</strong><small>${escapeHtml(role)}</small></div><button class="icon-button" id="logout" type="button" aria-label="로그아웃" title="로그아웃">${icon("logout")}</button></div></aside>`;
+  const itemButton = (item) => `<button type="button" data-view="${item.id}" class="nav-item ${state.view === item.id || (item.id === "shop-products" && state.view === "shop-product-create") ? "active" : ""}" aria-current="${state.view === item.id ? "page" : "false"}" aria-label="${escapeHtml(item.label)}" title="${escapeHtml(item.label)}">${icon(item.icon)}<span>${item.label}</span>${navigationBadge(item.id)}</button>`;
+  const groupedItems = Object.keys(groupLabels).map((group) => {
+    const items = navItems().filter((item) => item.group === group);
+    if (!items.length) return "";
+    const currentGroup = items.some((item) => item.id === state.view || (item.id === "shop-products" && state.view === "shop-product-create")) || (group === "content" && ["cards", "card-packs", "card-pack-create", "card-pack-composition", "batches", "issuance-create"].includes(state.view));
+    const collapsed = Boolean(state.navSectionsCollapsed[group]);
+    return `<div class="nav-section ${collapsed ? "collapsed" : ""}" data-nav-section="${group}"><button class="nav-section-toggle" type="button" data-nav-section-toggle="${group}" aria-expanded="${!collapsed}" aria-controls="nav-section-content-${group}"><span>${groupLabels[group]}</span>${icon("expand_more")}</button><div class="nav-section-content" id="nav-section-content-${group}">${items.map((item) => item.id === "cards" ? cardSection : itemButton(item)).join("")}</div></div>`;
+  }).join("");
+  return `<aside class="app-nav ${state.mobileNavOpen ? "open" : ""}" aria-label="관리자 주요 메뉴"><div class="nav-brand"><span class="nav-brand-mark"><img src="./assets/fanfolio-app-icon-192.png" alt="Fanfolio 서비스 아이콘" /></span><span class="nav-brand-copy"><strong>FANFOLIO</strong><small>OPERATIONS</small></span><button class="icon-button nav-toggle" id="desktop-nav-toggle" type="button" aria-label="${navToggleLabel}" title="${navToggleLabel}">${icon(state.navCollapsed ? "keyboard_double_arrow_right" : "keyboard_double_arrow_left")}</button></div><nav>${groupedItems}</nav><div class="nav-account"><span class="account-avatar">${escapeHtml((person.displayName || person.email || "관").slice(0, 1))}</span><div class="nav-account-copy"><strong>${escapeHtml(person.displayName || "관리자")}</strong><small>${escapeHtml(role)}</small></div><button class="icon-button" id="logout" type="button" aria-label="로그아웃" title="로그아웃">${icon("logout")}</button></div></aside>`;
+}
+
+function navigationBadge(id) {
+  const count = id === "approvals"
+    ? state.approvals.filter((item) => item.status === "pending").length
+    : id === "deliveries"
+      ? state.deliveryItems.filter((item) => item.status === "failed").length
+      : id === "support"
+        ? state.supportTickets.filter((item) => !["answered", "closed"].includes(item.status)).length
+        : 0;
+  return count ? `<span class="nav-badge" data-nav-badge="${id}">${count > 99 ? "99+" : count}</span>` : "";
 }
 
 function topbarView() {
@@ -439,20 +541,33 @@ function topbarView() {
   const unreadBadge = state.unreadNotificationCount
     ? `<span class="notification-badge">${state.unreadNotificationCount}</span>`
     : "";
-  return `<header class="topbar"><div class="topbar-title"><button class="icon-button mobile-nav-toggle" id="mobile-nav-toggle" type="button" aria-label="메뉴 열기">${icon("menu")}</button><div><p class="eyebrow">FANFOLIO OPERATIONS</p><h1 class="title">${title()}</h1></div></div><div class="top-actions">${scopeContextChip()}<div class="notification-menu ${state.notificationPanelOpen ? "open" : ""}"><button class="icon-button notification-button" type="button" aria-label="알림" aria-expanded="${state.notificationPanelOpen}" data-open-notification="toggle">${icon("notifications")}${unreadBadge}</button>${notificationPanelView()}</div><div class="account-menu ${state.accountMenuOpen ? "open" : ""}"><button class="top-avatar" id="account-menu-toggle" type="button" aria-haspopup="menu" aria-expanded="${state.accountMenuOpen}" aria-label="${escapeHtml(personName)} 계정 메뉴" title="${escapeHtml(person.email || personName)}">${personInitial}</button><div class="account-popover" role="menu" aria-label="계정 메뉴"><button type="button" id="account-settings" role="menuitem">${icon("manage_accounts")}<span>계정 설정</span></button><button type="button" id="account-password-change" role="menuitem">${icon("password")}<span>비밀번호 변경</span></button><button type="button" id="account-logout" role="menuitem">${icon("logout")}<span>로그아웃</span></button></div></div></div></header>`;
+  return `<header class="topbar"><div class="topbar-title"><button class="icon-button mobile-nav-toggle" id="mobile-nav-toggle" type="button" aria-label="메뉴 열기">${icon("menu")}</button><div><p class="eyebrow">FANFOLIO OPERATIONS</p><h1 class="title">${title()}</h1></div></div><div class="top-actions"><button class="global-search-trigger" type="button" data-global-search-toggle aria-label="운영 데이터 검색">${icon("search")}<span>운영 데이터 검색</span><kbd>⌘K</kbd></button>${scopeContextChip()}<div class="notification-menu ${state.notificationPanelOpen ? "open" : ""}"><button class="icon-button notification-button" type="button" aria-label="알림" aria-expanded="${state.notificationPanelOpen}" data-open-notification="toggle">${icon("notifications")}${unreadBadge}</button>${notificationPanelView()}</div><div class="account-menu ${state.accountMenuOpen ? "open" : ""}"><button class="top-avatar" id="account-menu-toggle" type="button" aria-haspopup="menu" aria-expanded="${state.accountMenuOpen}" aria-label="${escapeHtml(personName)} 계정 메뉴" title="${escapeHtml(person.email || personName)}">${personInitial}</button><div class="account-popover" role="menu" aria-label="계정 메뉴"><button type="button" id="account-settings" role="menuitem">${icon("manage_accounts")}<span>계정 설정</span></button><button type="button" id="account-password-change" role="menuitem">${icon("password")}<span>비밀번호 변경</span></button><button type="button" id="account-logout" role="menuitem">${icon("logout")}<span>로그아웃</span></button></div></div></div></header>`;
 }
 
 function notificationPanelView() {
-  const items = state.notifications.length
-    ? state.notifications
+  const visibleNotifications = state.notifications.filter((item) => !item.isRead);
+  const items = visibleNotifications.length
+    ? visibleNotifications
         .slice(0, 8)
         .map(
           (item) =>
-            `<button class="notification-item ${item.isRead ? "" : "unread"}" type="button" data-open-notification="${escapeHtml(item.id)}" data-card-id="${escapeHtml(item.entityType === "card" ? item.entityId || "" : "")}"><strong>${escapeHtml(item.title || notificationKindLabel(item.kind))}</strong><span>${escapeHtml(item.body || notificationKindLabel(item.kind))}</span><small>${formatDate(item.createdAt)}</small></button>`,
+            (() => {
+              const destination = notificationDestination(item);
+              return `<button class="notification-item ${item.isRead ? "" : "unread"}" type="button" data-open-notification="${escapeHtml(item.id)}" data-notification-view="${escapeHtml(destination.view)}" data-card-id="${escapeHtml(destination.cardId || "")}" data-notification-ticket="${escapeHtml(destination.ticketId || "")}" data-notification-delivery="${escapeHtml(destination.deliveryId || "")}"><strong>${escapeHtml(item.title || notificationKindLabel(item.kind))}</strong><span>${escapeHtml(item.body || notificationKindLabel(item.kind))}</span><small>${formatDate(item.createdAt)}</small></button>`;
+            })(),
         )
         .join("")
     : `<div class="notification-empty">${icon("notifications_off")}<span>새 알림이 없습니다.</span></div>`;
-  return `<div class="notification-popover" role="menu" aria-label="알림 목록"><div class="notification-popover-heading"><strong>알림</strong><span>${state.unreadNotificationCount} unread</span></div><div class="notification-list">${items}</div></div>`;
+  return `<div class="notification-popover" role="menu" aria-label="알림 목록"><div class="notification-popover-heading"><strong>알림</strong><span>읽지 않음 ${state.unreadNotificationCount}개</span></div><div class="notification-list">${items}</div></div>`;
+}
+
+function notificationDestination(item) {
+  const kind = String(item?.kind || "");
+  const entityType = String(item?.entityType || "");
+  if (entityType === "card" || kind.startsWith("card_")) return { view: "cards", cardId: item.entityId };
+  if (entityType === "support_ticket" || kind.startsWith("support_ticket")) return { view: "support", ticketId: item.entityId };
+  if (entityType === "notification_delivery" || entityType === "delivery" || kind.startsWith("notification_delivery")) return { view: "deliveries", deliveryId: item.entityId };
+  return { view: "audit" };
 }
 
 function notificationKindLabel(kind) {
@@ -460,6 +575,10 @@ function notificationKindLabel(kind) {
     {
       card_partner_review_requested: "회사 검수 요청",
       card_platform_review_requested: "플랫폼 검수 요청",
+      "notification_delivery.failed": "알림 전달 실패",
+      "notification_delivery.retried": "알림 전달 재시도",
+      "support_ticket.created": "고객센터 문의 접수",
+      "support_ticket.status_changed": "고객센터 문의 상태 변경",
     }[kind] || "운영 알림"
   );
 }
@@ -487,12 +606,94 @@ function currentView() {
     deliveries: deliveriesView,
     approvals: approvalsView,
     guide: guideView,
+    settings: settingsView,
   }[state.view]?.() || dashboardView();
 }
 
-function adminSelect({ id, value, label, options, className = "", name = "" }) {
+function globalSearchRecords() {
+  const records = [];
+  cardCatalogItems().forEach((item) => records.push({ type: "카드", label: item.name, detail: item.artistName || item.artist || item.id, view: "cards" }));
+  state.cardPacks.forEach((item) => records.push({ type: "카드팩", label: item.name || item.title, detail: item.artistName || item.artist || item.id, view: "card-packs" }));
+  state.events.forEach((item) => records.push({ type: "이벤트", label: item.title || item.name, detail: item.status || item.id, view: "events" }));
+  state.users.forEach((item) => records.push({ type: "사용자", label: item.displayName || item.email, detail: item.email || item.id, view: "users" }));
+  state.organizations.forEach((item) => records.push({ type: "파트너", label: item.name, detail: item.code || item.id, view: "partners" }));
+  const query = state.globalSearchQuery.trim().toLowerCase();
+  return query ? records.filter((item) => `${item.label} ${item.detail} ${item.type}`.toLowerCase().includes(query)).slice(0, 12) : [];
+}
+
+function globalSearchView() {
+  if (!state.globalSearchOpen) return "";
+  const records = globalSearchRecords();
+  const body = records.length
+    ? records.map((item) => `<button class="global-search-result" type="button" data-global-search-result="${escapeHtml(item.view)}"><span class="search-result-type">${escapeHtml(item.type)}</span><span><strong>${escapeHtml(item.label || "이름 없음")}</strong><small>${escapeHtml(item.detail || "")}</small></span>${icon("arrow_forward")}</button>`).join("")
+    : `<div class="global-search-empty">${icon("search_off")}<strong>${state.globalSearchQuery ? "검색 결과가 없습니다" : "카드, 카드팩, 이벤트, 사용자, 파트너를 검색하세요"}</strong><span>${state.globalSearchQuery ? "다른 이름이나 ID로 다시 검색해 보세요." : "운영자가 현재 불러온 데이터 범위에서 검색합니다."}</span></div>`;
+  return `<div class="global-search-layer" role="dialog" aria-modal="true" aria-label="운영 데이터 검색"><button class="global-search-backdrop" type="button" data-global-search-toggle aria-label="검색 닫기"></button><div class="global-search-panel"><div class="global-search-heading"><div><p class="eyebrow">COMMAND CENTER</p><h2>운영 데이터 검색</h2></div><button class="icon-button" type="button" data-global-search-toggle aria-label="검색 닫기">${icon("close")}</button></div><label class="global-search-input">${icon("search")}<input data-global-search-input value="${escapeHtml(state.globalSearchQuery)}" placeholder="이름, ID, 상태 검색" autocomplete="off" /></label><div class="global-search-results">${body}</div><footer><span>Esc로 닫기</span><span>현재 로드된 운영 데이터 기준</span></footer></div></div>`;
+}
+
+function adminSelect({ id, value, label, options, className = "", name = "", required = false, dataFilter = "", dataSupportFilter = "", dataSupportTicket = "", dataStatisticsFilter = "", dataCalendarStatus = "", dataCalendarContentType = "", dataDeliveryFilter = "", dataPreviewFilter = "" }) {
   const selected = options.find((option) => option.value === value) || options[0];
-  return `<div class="admin-select ${className}" data-select-id="${escapeHtml(id)}" data-value="${escapeHtml(selected?.value || "")}">${name ? `<input class="admin-select-value" type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(selected?.value || "")}" />` : ""}<button class="admin-select-trigger" type="button" role="combobox" aria-label="${escapeHtml(label)}" aria-expanded="false" aria-controls="${escapeHtml(id)}-menu">${icon("expand_more")}<span class="admin-select-label">${escapeHtml(selected?.label || "선택")}</span></button><div class="admin-select-menu" id="${escapeHtml(id)}-menu" role="listbox" aria-label="${escapeHtml(label)}">${options.map((option) => `<button class="admin-select-option ${option.value === selected?.value ? "selected" : ""}" type="button" role="option" aria-selected="${option.value === selected?.value}" data-value="${escapeHtml(option.value)}" data-label="${escapeHtml(option.label)}">${escapeHtml(option.label)}${option.description ? `<small>${escapeHtml(option.description)}</small>` : ""}</button>`).join("")}</div></div>`;
+  return `<div class="admin-select ${className}" data-select-id="${escapeHtml(id)}"${dataFilter ? ` data-issuance-filter="${escapeHtml(dataFilter)}"` : ""}${dataSupportFilter ? ` data-support-filter="${escapeHtml(dataSupportFilter)}"` : ""}${dataSupportTicket ? ` data-support-ticket="${escapeHtml(dataSupportTicket)}"` : ""}${dataStatisticsFilter ? ` data-statistics-filter="${escapeHtml(dataStatisticsFilter)}"` : ""}${dataCalendarStatus ? ` data-calendar-status="${escapeHtml(dataCalendarStatus)}"` : ""}${dataCalendarContentType ? " data-calendar-content-type=\"true\"" : ""}${dataDeliveryFilter ? ` data-delivery-filter="${escapeHtml(dataDeliveryFilter)}"` : ""}${dataPreviewFilter ? ` data-preview-filter="${escapeHtml(dataPreviewFilter)}"` : ""} data-value="${escapeHtml(selected?.value || "")}">${name ? `<input class="admin-select-value" type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(selected?.value || "")}"${required ? " required" : ""} />` : ""}<button class="admin-select-trigger" type="button" role="combobox" aria-label="${escapeHtml(label)}" aria-expanded="false" aria-controls="${escapeHtml(id)}-menu">${icon("expand_more")}<span class="admin-select-label">${escapeHtml(selected?.label || "선택")}</span></button><div class="admin-select-menu" id="${escapeHtml(id)}-menu" role="listbox" aria-label="${escapeHtml(label)}">${options.map((option) => `<button class="admin-select-option ${option.value === selected?.value ? "selected" : ""}" type="button" role="option" aria-selected="${option.value === selected?.value}" data-value="${escapeHtml(option.value)}" data-label="${escapeHtml(option.label)}"${option.dataArtistId ? ` data-artist-id="${escapeHtml(option.dataArtistId)}"` : ""}>${escapeHtml(option.label)}${option.description ? `<small>${escapeHtml(option.description)}</small>` : ""}</button>`).join("")}</div></div>`;
+}
+
+function adminMultiSelect({ id, name, values = [], label, options, className = "" }) {
+  const selectedValues = new Set(values.filter(Boolean));
+  const selectedLabels = options.filter((option) => selectedValues.has(option.value)).map((option) => option.label);
+  const triggerLabel = selectedLabels.length ? `${selectedLabels.slice(0, 2).join(", ")}${selectedLabels.length > 2 ? ` 외 ${selectedLabels.length - 2}개` : ""}` : "선택하세요";
+  return `<div class="admin-select admin-multi-select ${className}" data-select-id="${escapeHtml(id)}" data-select-name="${escapeHtml(name)}" data-multi-select="true" data-value="${escapeHtml([...selectedValues].join(","))}"><button class="admin-select-trigger" type="button" role="combobox" aria-label="${escapeHtml(label)}" aria-expanded="false" aria-controls="${escapeHtml(id)}-menu"><span class="admin-select-label">${escapeHtml(triggerLabel)}</span><small class="admin-multi-select-count">${selectedValues.size ? `${selectedValues.size}개 선택` : "필수 선택"}</small>${icon("expand_more")}</button><div class="admin-select-menu" id="${escapeHtml(id)}-menu" role="listbox" aria-label="${escapeHtml(label)}" aria-multiselectable="true">${options.map((option) => { const selected = selectedValues.has(option.value); return `<button class="admin-select-option ${selected ? "selected" : ""}" type="button" role="option" aria-selected="${selected}" data-value="${escapeHtml(option.value)}" data-label="${escapeHtml(option.label)}"><span class="admin-multi-select-check" aria-hidden="true">${selected ? icon("check") : ""}</span>${escapeHtml(option.label)}${option.description ? `<small>${escapeHtml(option.description)}</small>` : ""}</button>`; }).join("")}</div>${[...selectedValues].map((value) => `<input class="admin-multi-select-value" type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(value)}" />`).join("")}</div>`;
+}
+
+const adminTablePageSize = 10;
+
+function pagedItems(items, page, pageSize = adminTablePageSize) {
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const safePage = Math.min(Math.max(Number(page) || 1, 1), totalPages);
+  return {
+    items: items.slice((safePage - 1) * pageSize, safePage * pageSize),
+    page: safePage,
+    totalPages,
+  };
+}
+
+function tablePagination(stateKey, page, total, pageSize = adminTablePageSize) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const safePage = Math.min(Math.max(Number(page) || 1, 1), totalPages);
+  const start = total ? (safePage - 1) * pageSize + 1 : 0;
+  const end = Math.min(safePage * pageSize, total);
+  if (totalPages === 1) return `<footer class="preview-table-footer"><strong>${start}-${end} / ${total}</strong></footer>`;
+  const pageButtons = Array.from({ length: totalPages }, (_, index) => index + 1)
+    .map((number) => `<button class="page-number ${number === safePage ? "active" : ""}" type="button" data-pagination-state="${escapeHtml(stateKey)}" data-pagination-page="${number}" aria-label="${number}페이지" aria-current="${number === safePage ? "page" : "false"}">${number}</button>`)
+    .join("");
+  return `<footer class="preview-table-footer admin-table-pagination"><strong>${start}-${end} / ${total}</strong><nav class="pagination-control" aria-label="목록 페이지 이동"><button class="icon-button" type="button" data-pagination-state="${escapeHtml(stateKey)}" data-pagination-page="${safePage - 1}" aria-label="이전 페이지" ${safePage <= 1 ? "disabled" : ""}>‹</button>${pageButtons}<button class="icon-button" type="button" data-pagination-state="${escapeHtml(stateKey)}" data-pagination-page="${safePage + 1}" aria-label="다음 페이지" ${safePage >= totalPages ? "disabled" : ""}>›</button></nav></footer>`;
+}
+
+function previewTablePagination(stateKey, page, total, pageSize = 5) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const safePage = Math.min(Math.max(Number(page) || 1, 1), totalPages);
+  const start = total ? (safePage - 1) * pageSize + 1 : 0;
+  const end = Math.min(safePage * pageSize, total);
+  if (totalPages === 1) return `<footer class="preview-table-footer"><strong>${start}-${end} / ${total}</strong></footer>`;
+  const pages = Array.from({ length: totalPages }, (_, index) => index + 1)
+    .map((number) => `<button class="page-number ${number === safePage ? "active" : ""}" type="button" data-preview-issue-page="${number}" aria-label="${number}페이지" aria-current="${number === safePage ? "page" : "false"}">${number}</button>`)
+    .join("");
+  return `<footer class="preview-table-footer admin-table-pagination"><strong>${start}-${end} / ${total}</strong><nav class="pagination-control" aria-label="발급 배치 페이지 이동"><button class="icon-button" type="button" data-preview-issue-page="${safePage - 1}" aria-label="이전 페이지" ${safePage <= 1 ? "disabled" : ""}>‹</button>${pages}<button class="icon-button" type="button" data-preview-issue-page="${safePage + 1}" aria-label="다음 페이지" ${safePage >= totalPages ? "disabled" : ""}>›</button></nav></footer>`;
+}
+
+function applyClientTablePagination() {
+  const tables = [
+    [".fan-pass-table", "fanPassPage"],
+  ];
+  tables.forEach(([selector, stateKey]) => {
+    const table = document.querySelector(selector);
+    const footer = table?.closest(".panel")?.querySelector(".preview-table-footer, .fan-pass-pagination");
+    const rows = Array.from(table?.querySelectorAll("tbody tr") || []).filter((row) => !row.querySelector(".empty"));
+    if (!table || !footer || !rows.length) return;
+    const { page, totalPages } = pagedItems(rows, state[stateKey]);
+    state[stateKey] = page;
+    rows.forEach((row, index) => {
+      row.hidden = index < (page - 1) * adminTablePageSize || index >= page * adminTablePageSize;
+    });
+    footer.outerHTML = tablePagination(stateKey, page, rows.length);
+  });
 }
 
 function guideView() {
@@ -509,18 +710,33 @@ function layout() {
     bind();
     return;
   }
+  if (isEventDeepLink()) {
+    state.view = "events";
+    state.drawer = "event";
+    state.eventEditorOpen = true;
+  }
   const partnerMode = state.view === "partners" && isRoot();
-  const eventEditorOpen = state.view === "events" && state.drawer === "event";
+  const eventEditorOpen = state.eventEditorOpen || state.drawer === "event" || isEventDeepLink();
   const fanPassEditorOpen = state.view === "fan-growth" && state.drawer === "fan-pass";
   const sidecarOpen = eventEditorOpen || fanPassEditorOpen;
   const page = `<section class="page-content">${currentView()}</section>`;
+  let eventEditorMarkup = "";
+  if (eventEditorOpen) {
+    try {
+      eventEditorMarkup = eventDrawer();
+    } catch (error) {
+      console.error("Event editor render failed", error);
+      eventEditorMarkup = `<div class="notice error" role="alert">이벤트 편집기를 불러오지 못했습니다. 입력 가능한 이벤트 정보와 권한을 확인해 주세요.</div>`;
+    }
+  }
   const editorColumn = eventEditorOpen
-    ? `<aside class="workspace-sidecar event-sidecar event-drawer" role="dialog" aria-modal="false" aria-label="이벤트 편집">${eventDrawer()}</aside>`
+    ? `<aside class="workspace-sidecar event-sidecar event-drawer" role="dialog" aria-modal="false" aria-label="이벤트 편집">${eventEditorMarkup}</aside>`
     : fanPassEditorOpen
       ? `<aside class="workspace-sidecar fan-pass-sidecar fan-pass-drawer" role="dialog" aria-modal="false" aria-label="레벨 패스 편집">${fanPassDrawer()}</aside>`
       : "";
-  const workspaceContent = sidecarOpen ? `<div class="workspace-sidecar-body ${eventEditorOpen ? "workspace-event-body" : "fan-pass-workspace-body"}">${state.error ? `<div class="notice error" role="alert">${escapeHtml(state.error)}</div>` : ""}${page}${editorColumn}</div>` : `${state.error ? `<div class="notice error" role="alert">${escapeHtml(state.error)}</div>` : ""}${page}`;
-  app.innerHTML = `<div class="admin-shell ${state.navCollapsed ? "nav-collapsed" : ""} ${partnerMode ? "partner-layout partner-directory" : ""}">${navigationView()}${partnerMode ? partnerListColumn() : ""}<main class="workspace ${partnerMode ? "partner-detail" : ""}">${topbarView()}${workspaceContent}</main></div>${sidecarOpen ? "" : drawerView()}${eventApplicantsModal()}${eventCommentsModal()}<div class="nav-scrim ${state.mobileNavOpen ? "show" : ""}" id="nav-scrim"></div><div class="toast" id="toast" role="status" aria-live="polite"></div>`;
+  const operationFeedback = state.operationFeedback ? `<div class="operation-feedback ${state.operationFeedback.tone === "error" ? "error" : "success"}" role="status" aria-live="polite">${icon(state.operationFeedback.tone === "error" ? "error" : "check_circle")}<span>${escapeHtml(state.operationFeedback.message)}</span></div>` : "";
+  const workspaceContent = sidecarOpen ? `<div class="workspace-sidecar-body ${eventEditorOpen ? "workspace-event-body" : "fan-pass-workspace-body"}">${operationFeedback}${state.error ? `<div class="notice error" role="alert">${escapeHtml(state.error)}</div>` : ""}${page}${editorColumn}</div>` : `${operationFeedback}${state.error ? `<div class="notice error" role="alert">${escapeHtml(state.error)}</div>` : ""}${page}`;
+  app.innerHTML = `<div class="admin-shell ${state.navCollapsed ? "nav-collapsed" : ""} ${partnerMode ? "partner-layout partner-directory" : ""}">${navigationView()}${partnerMode ? partnerListColumn() : ""}<main class="workspace ${partnerMode ? "partner-detail" : ""}">${topbarView()}${workspaceContent}</main></div>${sidecarOpen ? "" : drawerView()}${eventApplicantsModal()}${eventCommentsModal()}<div class="nav-scrim ${state.mobileNavOpen ? "show" : ""}" id="nav-scrim"></div>${globalSearchView()}<div class="toast" id="toast" role="status" aria-live="polite"></div>`;
   if (state.view === "dashboard" && state.operationalMetrics) {
     document
       .querySelector(".dashboard-grid")
@@ -530,6 +746,11 @@ function layout() {
     document
       .querySelector(".dashboard-grid")
       ?.insertAdjacentHTML("beforeend", operationsOverviewView(state.operationsOverview));
+  }
+  if (state.view === "statistics" && state.statistics?.kpis) {
+    document
+      .querySelector(".statistics-kpi-grid")
+      ?.insertAdjacentHTML("beforeend", statisticsLifecycleKpis(state.statistics.kpis));
   }
   bind();
   document
@@ -543,6 +764,14 @@ function layout() {
         () => void resetArtistPassword(button.dataset.artistReset),
       ),
     );
+}
+
+function resetWorkspaceScroll() {
+  window.scrollTo({ top: 0, behavior: "instant" });
+}
+
+function setOperationFeedback(message, tone = "success") {
+  state.operationFeedback = { message, tone };
 }
 
 function dashboardView() {
@@ -564,7 +793,7 @@ function dashboardView() {
   const draftPacks = state.cardPacks.length - publishedPacks;
   const packRows = state.cardPacks.slice(0, 3).map((pack) => `<li><span><strong>${escapeHtml(pack.name)}</strong><small>${escapeHtml(pack.seasonName || pack.version || "버전 미설정")}</small></span><em class="badge ${pack.status === "published" ? "success-badge" : "draft"}">${pack.status === "published" ? "공개됨" : "초안"}</em></li>`).join("");
   const packSummary = `<section class="panel card-pack-summary"><div class="panel-heading"><div><p class="eyebrow">CARD PACKS</p><h2>카드팩 연동 상태</h2></div><span class="panel-count">${state.cardPacks.length}개</span></div><div class="card-pack-summary-stats"><span><strong>${publishedPacks}</strong> 공개</span><span><strong>${draftPacks}</strong> 편집 중</span></div>${packRows ? `<ul class="card-pack-summary-list">${packRows}</ul>` : `<div class="empty">연결된 카드팩이 없습니다.</div>`}</section>`;
-  return `<div class="page-heading"><div><p class="eyebrow">TODAY</p><h2>운영 현황을 한눈에 확인하세요</h2><p>${escapeHtml(scopeDescription)}</p></div></div><div class="metrics"><article class="metric"><span class="metric-icon purple">${icon("style")}</span><div><span class="metric-label">전체 카드</span><strong class="metric-value">${metrics.totalCards}</strong><span class="metric-note">현재 범위 등록 카드</span></div></article><article class="metric"><span class="metric-icon green">${icon("public")}</span><div><span class="metric-label">공개 카드</span><strong class="metric-value">${metrics.publishedCards}</strong><span class="metric-note">팬에게 노출 중</span></div></article><article class="metric"><span class="metric-icon blue">${icon("campaign")}</span><div><span class="metric-label">진행 중 드롭</span><strong class="metric-value">${metrics.activeDrops}</strong><span class="metric-note">현재 라이브</span></div></article><article class="metric"><span class="metric-icon amber">${icon("qr_code_scanner")}</span><div><span class="metric-label">누적 발급</span><strong class="metric-value">${Number(metrics.redeemedCount).toLocaleString()}</strong><span class="metric-note">사용 완료 코드</span></div></article></div><div class="dashboard-grid"><section class="panel action-panel"><div class="panel-heading"><div><p class="eyebrow">QUICK ACTIONS</p><h2>바로 시작하기</h2></div></div><div class="quick-actions">${can("cards:write") ? `<button class="quick-action" id="open-card-drawer" type="button"><span>${icon("add_card")}</span><div><strong>새 카드 등록</strong><small>이미지와 카드 정보를 등록합니다.</small></div>${icon("arrow_forward")}</button>` : ""}${isRoot() ? `<button class="quick-action" data-view="partners" type="button"><span>${icon("domain_add")}</span><div><strong>파트너 관리</strong><small>기업 담당자와 아티스트를 배정합니다.</small></div>${icon("arrow_forward")}</button>` : ""}<button class="quick-action" data-view="artists" type="button"><span>${icon("recent_actors")}</span><div><strong>아티스트 확인</strong><small>소속과 계정 상태를 확인합니다.</small></div>${icon("arrow_forward")}</button></div></section>${packSummary}<section class="panel"><div class="panel-heading"><div><p class="eyebrow">RECENT ACTIVITY</p><h2>최근 운영 활동</h2></div><button class="text-button" data-view="audit" type="button">전체 보기 ${icon("arrow_forward")}</button></div><div class="activity-list">${activity}</div></section></div>`;
+  return `<div class="page-heading"><div><p class="eyebrow">TODAY</p><h2>운영 현황을 한눈에 확인하세요</h2><p>${escapeHtml(scopeDescription)}</p></div></div><div class="metrics"><article class="metric"><span class="metric-icon purple">${icon("style")}</span><div><span class="metric-label">전체 카드</span><strong class="metric-value">${metrics.totalCards}</strong><span class="metric-note">현재 범위 등록 카드</span></div></article><article class="metric"><span class="metric-icon green">${icon("public")}</span><div><span class="metric-label">공개 카드</span><strong class="metric-value">${metrics.publishedCards}</strong><span class="metric-note">팬에게 노출 중</span></div></article><article class="metric"><span class="metric-icon blue">${icon("campaign")}</span><div><span class="metric-label">진행 중 드롭</span><strong class="metric-value">${metrics.activeDrops}</strong><span class="metric-note">현재 라이브</span></div></article><article class="metric"><span class="metric-icon amber">${icon("qr_code_scanner")}</span><div><span class="metric-label">누적 발급</span><strong class="metric-value">${Number(metrics.redeemedCount).toLocaleString()}</strong><span class="metric-note">사용 완료 코드</span></div></article></div><div class="dashboard-grid"><section class="panel action-panel"><div class="panel-heading"><div><p class="eyebrow">QUICK ACTIONS</p><h2>바로 시작하기</h2></div></div><div class="quick-actions">${can("cards:write") ? `<button class="quick-action" id="open-card-drawer" type="button"><span>${icon("add_card")}</span><div><strong>새 카드 등록</strong><small>이미지와 카드 정보를 등록합니다.</small></div>${icon("arrow_forward")}</button>` : ""}${isRoot() ? `<button class="quick-action" data-view="partners" type="button"><span>${icon("domain_add")}</span><div><strong>파트너 관리</strong><small>기업 담당자와 아티스트를 배정합니다.</small></div>${icon("arrow_forward")}</button>` : ""}<button class="quick-action" data-view="artists" type="button"><span>${icon("recent_actors")}</span><div><strong>아티스트 확인</strong><small>소속과 계정 상태를 확인합니다.</small></div>${icon("arrow_forward")}</button></div></section>${packSummary}<section class="panel recent-activity-panel"><div class="panel-heading"><div><p class="eyebrow">RECENT ACTIVITY</p><h2>최근 운영 활동</h2></div><button class="text-button" data-view="audit" type="button">전체 보기 ${icon("arrow_forward")}</button></div><div class="activity-list">${activity}</div></section></div>`;
 }
 function operationalMetricsView(metrics) {
   const rarity = (metrics.byRarity || [])
@@ -578,7 +807,7 @@ function operationalMetricsView(metrics) {
       return `<span><small>${escapeHtml(label)}</small><strong>${Number(statuses.delivered || 0).toLocaleString()}건 전달</strong><em class="${failed ? "warning-text" : ""}">${pending ? `${pending}건 대기` : failed ? `${failed}건 확인 필요` : "정상"}</em></span>`;
     })
     .join("");
-  return `<section class="panel operational-metrics-panel"><div class="panel-heading"><div><p class="eyebrow">CARD OPERATIONS</p><h2>카드 운영 지표</h2></div><span class="panel-count">범위 내</span></div><div class="operational-metrics-grid"><span><small>카드팩 오픈</small><strong>${Number(metrics.packOpenings || 0).toLocaleString()}</strong></span><span><small>발급 카드</small><strong>${Number(metrics.issuedCards || 0).toLocaleString()}</strong></span><span><small>보유 팬</small><strong>${Number(metrics.cardHolders || 0).toLocaleString()}</strong></span><span><small>인증 성공</small><strong>${Number(metrics.redeem?.success || 0).toLocaleString()}</strong></span></div><div class="operational-rarity"><small>희귀도별 발급</small><div>${rarity || "집계된 카드가 없습니다."}</div></div>${delivery ? `<div class="operational-delivery"><small>알림 전달 상태</small><div>${delivery}</div></div>` : ""}</section>`;
+  return `<section class="panel operational-metrics-panel"><div class="panel-heading"><div><p class="eyebrow">CARD OPERATIONS</p><h2>카드 운영 지표</h2></div><span class="panel-count">범위 내</span></div><div class="operational-metrics-grid"><span><small>카드팩 오픈</small><strong>${Number(metrics.packOpenings || 0).toLocaleString()}</strong></span><span><small>발급 카드</small><strong>${Number(metrics.issuedCards || 0).toLocaleString()}</strong></span><span><small>보유 팬</small><strong>${Number(metrics.cardHolders || 0).toLocaleString()}</strong></span><span><small>인증 성공</small><strong>${Number(metrics.redeem?.success || 0).toLocaleString()}</strong></span><span><small>카드 조합</small><strong>${Number(metrics.combinations || 0).toLocaleString()}</strong></span><span><small>거래 제안</small><strong>${Number(metrics.trades?.total || 0).toLocaleString()}</strong></span></div><div class="operational-rarity"><small>희귀도별 발급</small><div>${rarity || "집계된 카드가 없습니다."}</div></div>${delivery ? `<div class="operational-delivery"><small>알림 전달 상태</small><div>${delivery}</div></div>` : ""}</section>`;
 }
 
 function operationsOverviewView(overview) {
@@ -586,7 +815,7 @@ function operationsOverviewView(overview) {
   const items = [
     ["실패한 전달", queues.failedDeliveries, "deliveries"],
     ["재시도 대기", queues.retryableDeliveries, "deliveries"],
-    ["실패한 작업", queues.failedEngagementEvents, "audit"],
+    ["실패한 작업", queues.failedEngagementEvents, "fan-growth"],
     ["미답변 문의", queues.openSupportTickets, "support"],
     ["대기 중 거래", queues.pendingTrades, "audit"],
     ["환불 주문", queues.refundedOrders, "audit"],
@@ -605,6 +834,16 @@ function operationsOverviewView(overview) {
 function activityLabel(action) {
   return (
     {
+      "notification_delivery.retried": "알림 전달을 재시도했습니다",
+      "notification_delivery.delivered": "알림 전달이 완료되었습니다",
+      "notification_delivery.failed": "알림 전달에 실패했습니다",
+      "notification_delivery.dead_lettered": "알림 전달이 보류되었습니다",
+      "support_ticket.status_changed": "고객센터 문의 상태가 변경되었습니다",
+      "support_ticket.replied": "고객센터 문의에 답변했습니다",
+      "support_ticket.action_recorded": "고객센터 처리 이력이 기록되었습니다",
+      "artist_account.password_reset": "아티스트 계정 임시 비밀번호를 발급했습니다",
+      "pass.purchased": "팬 패스를 구매했습니다",
+      "card_pack.opened": "카드팩을 개봉했습니다",
       "card.published": "카드가 공개되었습니다",
       "card.created": "카드가 등록되었습니다",
       "card.reviewed": "카드 검수가 처리되었습니다",
@@ -820,10 +1059,14 @@ function partnersView() {
   if (!organization) {
     return `<div class="partner-empty-state">${icon("domain_add")}<h2>첫 파트너를 등록해 보세요</h2><p>계약 기업을 등록한 뒤 담당 관리자와 아티스트를 연결할 수 있습니다.</p><button class="primary" id="empty-add-organization" type="button">파트너 등록</button></div>`;
   }
+  const partnerOptions = state.organizations.map((item) => ({
+    value: item.id,
+    label: item.name,
+  }));
   const managementActions = isRoot()
     ? `<div class="partner-hero-actions"><button class="secondary" id="edit-organization" type="button">${icon("edit")} 정보 수정</button><button class="secondary danger-button" id="toggle-organization-status" type="button" data-next-status="${organization.status === "active" ? "suspended" : "active"}">${icon(organization.status === "active" ? "pause_circle" : "play_circle")} ${organization.status === "active" ? "운영 중지" : "다시 활성화"}</button></div>`
     : "";
-  return `<section class="partner-detail-view"><div class="partner-mobile-selector">${isRoot() ? `<label>파트너 선택<select id="partner-mobile-select">${state.organizations.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === organization.id ? "selected" : ""}>${escapeHtml(item.name)}</option>`).join("")}</select></label>` : ""}</div><header class="partner-hero">${partnerLogoMarkup(organization, "large")}<div class="partner-identity"><div class="partner-name-row"><h2>${escapeHtml(organization.name)}</h2><span class="badge ${organization.status === "active" ? "success-badge" : "danger-badge"}">${organization.status === "active" ? "운영 중" : "운영 중지"}</span></div><p>${escapeHtml(organization.contactEmail || "대표 담당자 이메일 미등록")}</p><div class="partner-meta"><span>${icon("calendar_month")} ${formatContractDate(organization.contractStartsAt)} – ${formatContractDate(organization.contractEndsAt)}</span><span>${icon("update")} ${formatDate(organization.updatedAt)} 업데이트</span></div></div>${managementActions}</header><nav class="detail-tabs" aria-label="파트너 상세 메뉴">${[
+  return `<section class="partner-detail-view"><div class="partner-mobile-selector">${isRoot() ? `<label><span>파트너 선택</span>${adminSelect({ id: "partner-mobile-select", value: organization.id, label: "파트너 선택", className: "partner-mobile-select", options: partnerOptions })}</label>` : ""}</div><header class="partner-hero">${partnerLogoMarkup(organization, "large")}<div class="partner-identity"><div class="partner-name-row"><h2>${escapeHtml(organization.name)}</h2><span class="badge ${organization.status === "active" ? "success-badge" : "danger-badge"}">${organization.status === "active" ? "운영 중" : "운영 중지"}</span></div><p>${escapeHtml(organization.contactEmail || "대표 담당자 이메일 미등록")}</p><div class="partner-meta"><span>${icon("calendar_month")} ${formatContractDate(organization.contractStartsAt)} – ${formatContractDate(organization.contractEndsAt)}</span><span>${icon("update")} ${formatDate(organization.updatedAt)} 업데이트</span></div></div>${managementActions}</header><nav class="detail-tabs" aria-label="파트너 상세 메뉴">${[
     ["overview", "개요"],
     ["members", "관리자"],
     ["artists", "아티스트"],
@@ -948,12 +1191,14 @@ function eventDrawer() {
   const artists = scopedArtists();
   const type = event.eventType || "announcement";
   const selectedConnection = event.dropId || event.cardId || event.achievementId || event.externalUrl || "";
-  const eventTypes = ["announcement", "comment", "card_drop", "card", "fan_mission", "external"];
+  const eventTypes = ["announcement", "comment", "card_drop", "card", "fan_mission", "external"]
+    .map((value) => ({ value, label: eventTypeLabel(value) }));
+  const artistOptions = [{ value: "", label: "전체 서비스" }, ...artists.map((artist) => ({ value: artist.id, label: artist.name }))];
   return `${drawerHeader("EDITORIAL EVENT", event.id ? "이벤트 편집" : "새 이벤트 등록", "팬앱 홈과 이벤트 목록에 노출할 콘텐츠를 작성합니다.")}<form class="event-editor-form" id="event-form" data-event-id="${escapeHtml(event.id || "")}\"><div class="drawer-body form event-form-body">
     <section class="event-form-section event-media-section"><div class="event-form-section-heading"><div><p class="eyebrow">MEDIA</p><h3>이벤트 배너</h3><p>홈과 상세 화면에 표시할 대표 이미지를 등록합니다.</p></div><span class="event-section-status">필수</span></div><div class="event-upload-card"><div class="event-upload-dropzone"><div class="event-upload-thumbnail">${event.heroUrl ? `<img data-event-hero data-hero-url="${escapeHtml(event.heroUrl)}" src="${escapeHtml(resolveAdminAssetUrl(event.heroUrl))}" alt="현재 이벤트 배너" />` : icon("image")}</div><div class="event-upload-copy"><strong id="event-banner-file-name">${event.heroAssetId ? "현재 배너 에셋 연결됨" : "배너 이미지를 추가하세요"}</strong><small>권장 1200 × 600px · PNG, JPG, WEBP</small></div><button class="secondary event-upload-select" type="button">${event.heroAssetId ? "교체" : "파일 선택"}</button><input id="event-banner-file" name="bannerFile" type="file" accept="image/png,image/jpeg,image/webp" style="display:none" tabindex="-1" aria-hidden="true" ${event.id ? "" : "required"} /></div><label class="event-asset-field"><span>연결된 에셋</span><input name="heroAssetId" value="${escapeHtml(event.heroAssetId || "")}" placeholder="파일을 선택하면 자동으로 연결됩니다" readonly required /><small>${event.heroAssetId ? "업로드 완료 · 연결 상태 정상" : "업로드 후 에셋 ID가 자동으로 입력됩니다."}</small></label></div></section>
     <section class="event-form-section"><div class="event-form-section-heading"><div><p class="eyebrow">CONTENT</p><h3>기본 정보</h3><p>팬에게 보여줄 제목과 이벤트 설명을 입력합니다.</p></div></div><div class="event-form-fields"><label class="field"><span>이벤트명</span><input name="title" value="${escapeHtml(event.title || "")}" maxlength="100" placeholder="예: 컴백 기념 팬 이벤트" required /></label><label class="field"><span>한 줄 설명</span><input name="summary" value="${escapeHtml(event.summary || "")}" maxlength="180" placeholder="목록과 홈에 표시될 짧은 설명" required /></label><label class="field"><span>상세 설명 <em class="field-optional">선택</em></span><textarea name="description" rows="4" maxlength="5000" placeholder="이벤트 참여 방법과 내용을 입력하세요.">${escapeHtml(event.description || "")}</textarea></label><label class="field"><span>유의사항 <em class="field-optional">선택</em></span><textarea name="noticeItems" rows="5" maxlength="5000" placeholder="한 줄에 한 가지 유의사항을 입력하세요.">${escapeHtml((event.noticeItems || []).join("\n"))}</textarea><small class="field-help">줄바꿈으로 항목을 구분합니다.</small></label></div></section>
     <section class="event-form-section"><div class="event-form-section-heading"><div><p class="eyebrow">CARDS</p><h3>관련 카드</h3><p>선택한 순서대로 팬앱 이벤트 페이지에 표시됩니다.</p></div></div>${eventRelatedCardOptions(event)}</section>
-    <section class="event-form-section"><div class="event-form-section-heading"><div><p class="eyebrow">SCHEDULE</p><h3>노출 및 신청 일정</h3><p>이벤트 공개 기간과 신청 가능 기간을 설정합니다.</p></div></div><div class="form-grid"><label class="field"><span>이벤트 유형</span><select name="eventType">${eventTypes.map((value) => `<option value="${value}" ${type === value ? "selected" : ""}>${eventTypeLabel(value)}</option>`).join("")}</select></label><label class="field"><span>아티스트</span><select name="artistId"><option value="">전체 서비스</option>${artists.map((artist) => `<option value="${escapeHtml(artist.id)}" ${artist.id === event.artistId ? "selected" : ""}>${escapeHtml(artist.name)}</option>`).join("")}</select></label></div><div class="form-grid"><label class="field"><span>시작 일시</span><input name="startsAt" type="datetime-local" value="${event.startsAt ? String(event.startsAt).slice(0,16) : ""}" required /></label><label class="field"><span>종료 일시</span><input name="endsAt" type="datetime-local" value="${event.endsAt ? String(event.endsAt).slice(0,16) : ""}" /></label></div><div class="form-grid"><label class="field"><span>신청 시작</span><input name="applicationStartsAt" type="datetime-local" value="${event.applicationStartsAt ? String(event.applicationStartsAt).slice(0,16) : ""}" /></label><label class="field"><span>신청 마감</span><input name="applicationEndsAt" type="datetime-local" value="${event.applicationEndsAt ? String(event.applicationEndsAt).slice(0,16) : ""}" /></label></div></section>
+    <section class="event-form-section"><div class="event-form-section-heading"><div><p class="eyebrow">SCHEDULE</p><h3>노출 및 신청 일정</h3><p>이벤트 공개 기간과 신청 가능 기간을 설정합니다.</p></div></div><div class="form-grid"><label class="field"><span>이벤트 유형</span>${adminSelect({ id: "event-type", name: "eventType", value: type, label: "이벤트 유형", className: "form-select", options: eventTypes, required: true })}</label><label class="field"><span>아티스트</span>${adminSelect({ id: "event-artist", name: "artistId", value: event.artistId || "", label: "아티스트", className: "form-select", options: artistOptions })}</label></div><div class="form-grid"><label class="field"><span>시작 일시</span><input name="startsAt" type="datetime-local" value="${event.startsAt ? String(event.startsAt).slice(0,16) : ""}" required /></label><label class="field"><span>종료 일시</span><input name="endsAt" type="datetime-local" value="${event.endsAt ? String(event.endsAt).slice(0,16) : ""}" /></label></div><div class="form-grid"><label class="field"><span>신청 시작</span><input name="applicationStartsAt" type="datetime-local" value="${event.applicationStartsAt ? String(event.applicationStartsAt).slice(0,16) : ""}" /></label><label class="field"><span>신청 마감</span><input name="applicationEndsAt" type="datetime-local" value="${event.applicationEndsAt ? String(event.applicationEndsAt).slice(0,16) : ""}" /></label></div></section>
     <section class="event-form-section"><div class="event-form-section-heading"><div><p class="eyebrow">OPERATIONS</p><h3>운영 설정</h3><p>장소, 참여 인원, 연결 콘텐츠와 버튼 문구를 설정합니다.</p></div></div><div class="form-grid"><label class="field"><span>장소 <em class="field-optional">선택</em></span><input name="venue" value="${escapeHtml(event.venue || "")}" maxlength="200" placeholder="예: KSPO DOME" /></label><label class="field"><span>참여 인원 제한 <em class="field-optional">선택</em></span><input name="participantLimit" type="number" min="1" value="${event.participantLimit ?? ""}" placeholder="제한 없음" /></label></div><label class="field"><span>연결 대상</span><div id="event-connection-field">${eventConnectionOptions(type, selectedConnection)}</div></label><label class="field"><span>버튼 문구</span><input name="ctaLabel" value="${escapeHtml(event.ctaLabel || "이벤트 보기")}" maxlength="80" /></label><label class="event-featured-option"><input name="featured" type="checkbox" ${event.featured ? "checked" : ""} /><span><strong>홈 대표 이벤트로 우선 노출</strong><small>홈 상단 배너의 첫 번째 이벤트로 노출합니다.</small></span></label></section>
   </div><footer class="drawer-footer"><button class="secondary close-drawer" type="button">취소</button><button class="primary" type="submit">${event.id ? "변경 저장" : "초안 저장"}</button></footer></form>`;
 }
@@ -1030,7 +1275,8 @@ function dropLinkDrawer() {
     ? scoped.map((drop) => ({ value: drop.id, label: `${drop.name} · ${drop.status}` }))
     : [{ value: "", label: "연결 가능한 드롭이 없습니다." }];
   const artists = scopedArtists();
-  const artistOptions = artists.map((artist) => `<option value="${escapeHtml(artist.id)}" ${artist.id === (card.artistId || card.ownerArtistId) ? "selected" : ""}>${escapeHtml(artist.name)}</option>`).join("");
+  const artistOptions = artists.map((artist) => ({ value: artist.id, label: artist.name }));
+  const selectedArtistId = card.artistId || card.ownerArtistId || artists[0]?.id || "";
   const draftDrops = scoped.filter((drop) => drop.status === "draft");
   const pendingDrops = scoped.filter((drop) => drop.status === "pending_review");
   const lifecycleActions = draftDrops.length && can("drops:submit")
@@ -1038,7 +1284,7 @@ function dropLinkDrawer() {
     : pendingDrops.length && can("drops:write") && !isRoot()
       ? `<div class="inline-actions"><span class="hint">발행 요청을 검토한 뒤 팬앱 공개 여부를 결정합니다.</span>${pendingDrops.map((drop) => `<button class="primary drop-status" data-id="${escapeHtml(drop.id)}" data-status="live" type="button">공개하기</button>`).join("")}</div>`
       : "";
-  return `${drawerHeader("DROP READY", "승인 카드 드롭 연결", "승인된 카드를 드롭에 연결해 코드 발행 준비 상태로 전환합니다.")}<div class="drawer-body form"><div class="assignment-member"><span class="card-thumb">${icon("style")}</span><div><strong>${escapeHtml(card.name)}</strong><small>${escapeHtml(card.artistId || card.ownerArtistId || "아티스트 미지정")}</small></div></div><form id="drop-link-form" data-card-id="${escapeHtml(card.id)}"><label class="field"><span>연결할 드롭</span>${adminSelect({ id: "drop-link-drop", name: "dropId", value: options[0].value, label: "연결할 드롭", className: "form-select", options })}</label><p class="hint">라이브 드롭에 연결하면 팬앱 공개 카드로 전환되고, 초안 드롭이면 준비 상태로 보관됩니다.</p>${accessMessage ? `<div class="issuance-creation-note blocked">${icon("info")}<span>${escapeHtml(accessMessage)}</span><button class="secondary" type="button" data-view="guide">운영 가이드에서 권한 확인</button></div>` : ""}<footer class="drawer-footer"><button class="secondary close-drawer" type="button">취소</button><button class="primary" type="submit" ${scoped.length && canLink ? "" : "disabled"}>드롭 준비됨</button></footer></form>${lifecycleActions}<details class="inline-create-panel"><summary>새 드롭 만들기</summary><form id="drop-form" data-card-id="${escapeHtml(card.id)}"><input name="name" placeholder="예: 2026 SUMMER 홀로그램 드롭" required /><select name="artistId" required>${artistOptions || '<option value="">연결된 아티스트가 없습니다.</option>'}</select><label class="field"><span>시작 일시</span><input name="startsAt" type="datetime-local" data-native-datetime required /></label><label class="field"><span>종료 일시</span><input name="endsAt" type="datetime-local" data-native-datetime required /></label><button class="primary" type="submit" ${artists.length ? "" : "disabled"}>생성 후 카드 연결</button></form></details></div>`;
+  return `${drawerHeader("DROP READY", "승인 카드 드롭 연결", "승인된 카드를 드롭에 연결해 코드 발행 준비 상태로 전환합니다.")}<div class="drawer-body form"><div class="assignment-member"><span class="card-thumb">${icon("style")}</span><div><strong>${escapeHtml(card.name)}</strong><small>${escapeHtml(card.artistId || card.ownerArtistId || "아티스트 미지정")}</small></div></div><form id="drop-link-form" data-card-id="${escapeHtml(card.id)}"><label class="field"><span>연결할 드롭</span>${adminSelect({ id: "drop-link-drop", name: "dropId", value: options[0].value, label: "연결할 드롭", className: "form-select", options })}</label><p class="hint">라이브 드롭에 연결하면 팬앱 공개 카드로 전환되고, 초안 드롭이면 준비 상태로 보관됩니다.</p>${accessMessage ? `<div class="issuance-creation-note blocked">${icon("info")}<span>${escapeHtml(accessMessage)}</span><button class="secondary" type="button" data-view="guide">운영 가이드에서 권한 확인</button></div>` : ""}<footer class="drawer-footer"><button class="secondary close-drawer" type="button">취소</button><button class="primary" type="submit" ${scoped.length && canLink ? "" : "disabled"}>드롭 준비됨</button></footer></form>${lifecycleActions}<details class="inline-create-panel"><summary>새 드롭 만들기</summary><form id="drop-form" data-card-id="${escapeHtml(card.id)}"><input class="ops-control" name="name" placeholder="예: 2026 SUMMER 홀로그램 드롭" required />${adminSelect({ id: "drop-link-artist", name: "artistId", value: selectedArtistId, label: "아티스트", className: "form-select", options: artistOptions, required: true })}<label class="field"><span>시작 일시</span><input class="ops-control" name="startsAt" type="datetime-local" data-native-datetime required /></label><label class="field"><span>종료 일시</span><input class="ops-control" name="endsAt" type="datetime-local" data-native-datetime required /></label><button class="primary" type="submit" ${artists.length ? "" : "disabled"}>생성 후 카드 연결</button></form></details></div>`;
 }
 
 function memberPasswordDrawer() {
@@ -1068,7 +1314,28 @@ function artistAssignmentDrawer() {
 function cardCreateDrawer() {
   const artists = scopedArtists();
   const members = state.catalog.members || [];
-  return `${drawerHeader("NEW CARD", "운영 카드 등록", "이미지를 업로드하고 팬에게 보여줄 카드 정보를 입력합니다.")}<form class="drawer-body form" id="admin-card-form"><label class="upload-field"><input name="cardImage" type="file" accept="image/png,image/jpeg,image/webp" required /><span>${icon("add_photo_alternate")}</span><strong>카드 이미지 업로드</strong><small>PNG, JPG, WebP · 세로형 이미지를 권장합니다.</small></label><label class="field"><span>카드명</span><input name="name" placeholder="예: 컴백 기념 사인 카드" required /></label><label class="field"><span>시즌</span><input name="seasonName" placeholder="예: 2026 SUMMER" /></label><div class="form-grid"><label class="field"><span>아티스트</span><select name="artistId" ${isRoot() ? "" : "required"}><option value="">아티스트 선택</option>${artists.map((artist) => `<option value="${escapeHtml(artist.id)}">${escapeHtml(artist.name)}</option>`).join("")}</select></label><label class="field"><span>멤버</span><select name="memberId"><option value="">멤버 선택</option>${members.map((member) => `<option value="${escapeHtml(member.id)}" data-artist-id="${escapeHtml(member.artistId)}">${escapeHtml(member.name)}</option>`).join("")}</select></label></div><div class="form-grid"><label class="field"><span>등급</span><select name="rarity"><option value="N">N · 노멀</option><option value="R">R · 레어</option><option value="SR">SR · 슈퍼 레어</option><option value="Special">Special</option></select></label><label class="field"><span>발행 수량</span><input name="issueLimit" type="number" min="1" placeholder="제한 없음" /></label></div><footer class="drawer-footer"><button class="secondary close-drawer" type="button">취소</button><button class="primary" type="submit">카드 등록</button></footer></form>`;
+  const organizationScopeOptions = [
+    { value: "", label: "현재 조직 범위" },
+    ...state.organizations.map((organization) => ({ value: organization.id, label: organization.name })),
+  ];
+  const artistScopeOptions = [
+    { value: "", label: "전체 아티스트" },
+    ...artists.map((artist) => ({ value: artist.id, label: artist.name })),
+  ];
+  const memberScopeOptions = [
+    { value: "", label: "멤버 지정 없음" },
+    ...members.map((member) => ({ value: member.id, label: member.name, dataArtistId: member.artistId })),
+  ];
+  const conditionOptions = Object.entries(conditionLabels).map(([value, label]) => ({ value, label }));
+  const artistOptions = [{ value: "", label: "아티스트 선택" }, ...artists.map((artist) => ({ value: artist.id, label: artist.name }))];
+  const memberOptions = [{ value: "", label: "멤버 선택" }, ...members.map((member) => ({ value: member.id, label: member.name, dataArtistId: member.artistId }))];
+  const rarityOptions = [
+    { value: "N", label: "N · 노멀" },
+    { value: "R", label: "R · 레어" },
+    { value: "SR", label: "SR · 슈퍼 레어" },
+    { value: "Special", label: "Special" },
+  ];
+  return `${drawerHeader("NEW CARD", "운영 카드 등록", "이미지를 업로드하고 팬에게 보여줄 카드 정보를 입력합니다.")}<form class="drawer-body form" id="admin-card-form"><label class="upload-field"><input name="cardImage" type="file" accept="image/png,image/jpeg,image/webp" required /><span>${icon("add_photo_alternate")}</span><strong>카드 이미지 업로드</strong><small>PNG, JPG, WebP · 세로형 이미지를 권장합니다.</small></label><label class="field"><span>카드명</span><input name="name" placeholder="예: 컴백 기념 사인 카드" required /></label><label class="field"><span>시즌</span><input name="seasonName" placeholder="예: 2026 SUMMER" /></label><div class="form-grid"><label class="field"><span>아티스트</span>${adminSelect({ id: "admin-card-artist", name: "artistId", label: "아티스트 선택", options: artistOptions, className: "form-select", required: !isRoot() })}</label><label class="field"><span>멤버</span>${adminSelect({ id: "admin-card-member", name: "memberId", label: "멤버 선택", options: memberOptions, className: "form-select" })}</label></div><div class="form-grid"><label class="field"><span>등급</span>${adminSelect({ id: "admin-card-rarity", name: "rarity", value: "N", label: "등급", options: rarityOptions, className: "form-select", required: true })}</label><label class="field"><span>발행 수량</span><input name="issueLimit" type="number" min="1" placeholder="제한 없음" /></label></div><footer class="drawer-footer"><button class="secondary close-drawer" type="button">취소</button><button class="primary" type="submit">카드 등록</button></footer></form>`;
 }
 
 function rewardOptions(selected = "", filter = () => true) {
@@ -1110,6 +1377,14 @@ function rewardImageSource(reward = {}) {
 function rewardDrawer() {
   const reward = state.drawerData?.reward || {};
   const artists = scopedArtists();
+  const organizationScopeOptions = [
+    { value: "", label: "현재 조직 범위" },
+    ...state.organizations.map((organization) => ({ value: organization.id, label: organization.name })),
+  ];
+  const artistScopeOptions = [
+    { value: "", label: "전체 아티스트" },
+    ...artists.map((artist) => ({ value: artist.id, label: artist.name })),
+  ];
   const imagePreset = reward.metadata?.imagePreset || "ticket";
   const imageSource = rewardImageSource(reward);
   const rewardTypes = [
@@ -1124,9 +1399,9 @@ function rewardDrawer() {
       <div class="reward-image-presets" id="reward-image-presets" role="list" aria-label="보상 이미지 라이브러리">${rewardImagePresets.map((preset) => `<button class="reward-image-preset ${imagePreset === preset.id && !state.rewardImagePreviewUrl ? "selected" : ""}" type="button" data-reward-image-preset="${preset.id}" aria-label="${escapeHtml(preset.label)}"><img src="${preset.src}" alt="" />${imagePreset === preset.id && !state.rewardImagePreviewUrl ? `<span>${icon("check")}</span>` : ""}</button>`).join("")}</div>
     </section>
     <label class="field"><span>보상 이름</span><input name="name" value="${escapeHtml(reward.name || "")}" placeholder="예: NOVA 첫 수집가" required /></label>
-    <label class="field"><span>보상 종류</span>${adminSelect({ id: "reward-type", name: "rewardType", value: reward.rewardType || "badge", label: "보상 종류", className: "form-select", options: rewardTypes })}</label>
-    ${isRoot() ? `<label class="field"><span>조직</span><select name="organizationId">${organizationOptions(reward.organizationId || "")}</select><small>아티스트 범위 보상은 해당 조직과 함께 지정해야 합니다.</small></label>` : `<input name="organizationId" type="hidden" value="${escapeHtml(reward.organizationId || state.adminContext?.organizationId || "")}" />`}
-    <label class="field"><span>아티스트</span><select name="artistId"><option value="">전체 아티스트</option>${artists.map((artist) => `<option value="${escapeHtml(artist.id)}" ${reward.artistId === artist.id ? "selected" : ""}>${escapeHtml(artist.name)}</option>`).join("")}</select></label>
+    <label class="field"><span>보상 종류</span>${adminSelect({ id: "reward-type", name: "rewardType", value: reward.rewardType || "badge", label: "보상 종류", className: "form-select", options: rewardTypes })}<small class="field-help">포인트·카드팩은 미션 보상 또는 상점 상품에서 운영합니다.</small></label>
+    ${isRoot() ? `<label class="field"><span>조직</span>${adminSelect({ id: "reward-organization", name: "organizationId", value: reward.organizationId || "", label: "조직", className: "form-select", options: organizationScopeOptions })}<small>아티스트 범위 보상은 해당 조직과 함께 지정해야 합니다.</small></label>` : `<input name="organizationId" type="hidden" value="${escapeHtml(reward.organizationId || state.adminContext?.organizationId || "")}" />`}
+    <label class="field"><span>아티스트</span>${adminSelect({ id: "reward-artist", name: "artistId", value: reward.artistId || "", label: "아티스트", className: "form-select", options: artistScopeOptions })}</label>
     <label class="field"><span>표시 라벨</span><input name="label" value="${escapeHtml(reward.metadata?.label || "")}" placeholder="팬 프로필에 표시할 라벨" /></label>
     <label class="field"><span>보상 설명</span><textarea name="description" maxlength="500" placeholder="팬이 보상 카드를 눌렀을 때 표시할 설명">${escapeHtml(reward.metadata?.description || "")}</textarea></label>
     <section class="reward-live-preview"><h3>미리보기</h3><div><span class="reward-live-preview-image"><img id="reward-card-preview-image" src="${escapeHtml(imageSource)}" alt="" /></span><span><strong id="reward-card-preview-name">${escapeHtml(reward.name || "보상 이름")}</strong><small id="reward-card-preview-label">${escapeHtml(reward.metadata?.label || "팬앱 표시 라벨")}</small></span><em id="reward-card-preview-type">${escapeHtml(rewardTypes.find((type) => type.value === (reward.rewardType || "badge"))?.label || "뱃지")}</em><b>팬 앱 표시 예시 ${icon("info")}</b><i aria-hidden="true">›</i></div></section>
@@ -1150,28 +1425,28 @@ function achievementDrawer() {
   const visibleFields = new Set(conditionFields[selectedCondition] || []);
   const artists = scopedArtists();
   const members = state.catalog.members || [];
-  const cardOptions = state.cards.map(
-    (card) =>
-      `<option value="${escapeHtml(card.id)}" ${(payload.cardId || "") === card.id ? "selected" : ""}>${escapeHtml(card.name)}</option>`,
-  ).join("");
-  const campaignOptions = state.campaigns.map(
-    (campaign) =>
-      `<option value="${escapeHtml(campaign.id)}" ${(payload.campaignId || "") === campaign.id ? "selected" : ""}>${escapeHtml(campaign.name)}</option>`,
-  ).join("");
-  const dropOptions = state.drops.map(
-    (drop) =>
-      `<option value="${escapeHtml(drop.id)}" ${(payload.dropId || "") === drop.id ? "selected" : ""}>${escapeHtml(drop.name)}</option>`,
-  ).join("");
+  const cardOptions = cardCatalogItems().map((card) => ({ value: card.id, label: card.name }));
+  const campaignOptions = state.campaigns.map((campaign) => ({ value: campaign.id, label: campaign.name }));
+  const dropOptions = state.drops.map((drop) => ({ value: drop.id, label: drop.name }));
   const dateError = `<small id="achievement-date-error" class="field-error" hidden>업적 종료 시각은 시작 시각 이후로 선택해 주세요.</small>`;
   const approvalAction = canApproveFanGrowth() && achievement.id
     ? `<button class="primary fan-growth-transition" type="button" data-kind="achievement" data-action="approve" data-id="${escapeHtml(achievement.id)}">업적 공개 승인</button>`
     : "";
-  return `${drawerHeader("FAN GROWTH", "업적 템플릿", "조직·아티스트·멤버 범위와 서버 조건 템플릿으로 업적을 운영합니다.")}<form class="drawer-body form" id="achievement-form" data-id="${escapeHtml(achievement.id || "")}"><label class="field"><span>업적 이름</span><input name="title" value="${escapeHtml(achievement.title || "")}" placeholder="예: 첫 공식 카드 수집" required /></label><label class="field"><span>설명</span><textarea name="description" maxlength="500" placeholder="팬에게 표시되는 달성 설명">${escapeHtml(achievement.description || "")}</textarea></label><section class="scope-fields"><p class="eyebrow">범위</p><label class="field"><span>조직</span><select name="organizationId">${organizationOptions(achievement.organizationId || "")}</select></label><div class="form-grid"><label class="field"><span>아티스트</span><select name="artistId"><option value="">전체 아티스트</option>${artists.map((artist) => `<option value="${escapeHtml(artist.id)}" ${achievement.artistId === artist.id ? "selected" : ""}>${escapeHtml(artist.name)}</option>`).join("")}</select></label><label class="field"><span>멤버</span><select name="memberId"><option value="">멤버 지정 없음</option>${members.map((member) => `<option value="${escapeHtml(member.id)}" data-artist-id="${escapeHtml(member.artistId)}" ${achievement.memberId === member.id ? "selected" : ""}>${escapeHtml(member.name)}</option>`).join("")}</select></label></div></section><section class="condition-template-fields"><p class="eyebrow">조건 템플릿</p><label class="field"><span>조건</span><select name="conditionType" id="achievement-condition">${Object.entries(conditionLabels).map(([value, label]) => `<option value="${escapeHtml(value)}" ${selectedCondition === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("")}</select></label>${visibleFields.has("targetValue") ? `<label class="field"><span>목표 수치</span><input name="targetValue" type="number" min="1" value="${Number(achievement.targetValue || 1)}" required /></label>` : `<input type="hidden" name="targetValue" value="${Number(achievement.targetValue || 1)}" />`}${visibleFields.has("cardId") ? `<label class="field"><span>특정 카드</span><select name="cardId"><option value="">카드 선택</option>${cardOptions}</select></label>` : ""}${visibleFields.has("campaignId") ? `<label class="field"><span>세트 캠페인</span><select name="campaignId"><option value="">캠페인 선택</option>${campaignOptions}</select></label>` : ""}${visibleFields.has("dropId") ? `<label class="field"><span>드롭</span><select name="dropId"><option value="">드롭 선택</option>${dropOptions}</select></label>` : ""}</section><section class="reward-preview"><p class="eyebrow">XP · 보상 · 기간</p><div class="form-grid"><label class="field"><span>XP</span><input name="xpBonus" type="number" min="0" value="${Number(achievement.xpBonus || 0)}" /></label><label class="field"><span>보상</span><select name="rewardIds" multiple size="4">${rewardOptions((achievement.rewardIds || [])[0] || "")}</select></label></div><div class="form-grid"><label class="field"><span>기간 시작</span><input name="startsAt" type="datetime-local" value="${toLocalInputDateTime(achievement.startsAt)}" /></label><label class="field"><span>기간 종료</span><input name="endsAt" type="datetime-local" value="${toLocalInputDateTime(achievement.endsAt)}" />${dateError}</label></div></section><div id="achievement-form-error" class="form-error" role="alert" hidden></div><footer class="drawer-footer"><button class="secondary close-drawer" type="button">취소</button>${canManageFanGrowth() ? `<button class="secondary" type="submit" data-save-mode="draft">임시 저장</button>${achievement.id ? `<button class="secondary fan-growth-transition" type="button" data-kind="achievement" data-action="submit" data-id="${escapeHtml(achievement.id)}">검수 요청</button>` : ""}` : ""}${approvalAction}</footer></form>`;
+  const rewardChoices = (state.engagement.rewards || []).map((reward) => ({ value: reward.id, label: reward.name, description: reward.rewardType || "보상" }));
+  return `${drawerHeader("FAN GROWTH", "업적 템플릿", "조직·아티스트·멤버 범위와 서버 조건 템플릿으로 업적을 운영합니다.")}<form class="drawer-body form" id="achievement-form" data-id="${escapeHtml(achievement.id || "")}"><label class="field"><span>업적 이름</span><input name="title" value="${escapeHtml(achievement.title || "")}" placeholder="예: 첫 공식 카드 수집" required /></label><label class="field"><span>설명</span><textarea name="description" maxlength="500" placeholder="팬에게 표시되는 달성 설명">${escapeHtml(achievement.description || "")}</textarea></label><section class="scope-fields"><p class="eyebrow">범위</p><label class="field"><span>조직</span>${adminSelect({ id: "achievement-organization", name: "organizationId", value: achievement.organizationId || "", label: "조직", className: "form-select", options: organizationScopeOptions })}</label><div class="form-grid"><label class="field"><span>아티스트</span>${adminSelect({ id: "achievement-artist", name: "artistId", value: achievement.artistId || "", label: "아티스트", className: "form-select", options: artistScopeOptions })}</label><label class="field"><span>멤버</span>${adminSelect({ id: "achievement-member", name: "memberId", value: achievement.memberId || "", label: "멤버", className: "form-select", options: memberScopeOptions })}</label></div></section><section class="condition-template-fields"><p class="eyebrow">조건 템플릿</p><label class="field"><span>조건</span>${adminSelect({ id: "achievement-condition", name: "conditionType", value: selectedCondition, label: "조건", className: "form-select", options: conditionOptions })}</label>${visibleFields.has("targetValue") ? `<label class="field"><span>목표 수치</span><input name="targetValue" type="number" min="1" value="${Number(achievement.targetValue || 1)}" required /></label>` : `<input type="hidden" name="targetValue" value="${Number(achievement.targetValue || 1)}" />`}${visibleFields.has("cardId") ? `<label class="field"><span>특정 카드</span>${adminSelect({ id: "achievement-card", name: "cardId", value: payload.cardId || "", label: "카드 선택", className: "form-select", options: [{ value: "", label: "카드 선택" }, ...cardOptions] })}</label>` : ""}${visibleFields.has("campaignId") ? `<label class="field"><span>세트 캠페인</span>${adminSelect({ id: "achievement-campaign", name: "campaignId", value: payload.campaignId || "", label: "캠페인 선택", className: "form-select", options: [{ value: "", label: "캠페인 선택" }, ...campaignOptions] })}</label>` : ""}${visibleFields.has("dropId") ? `<label class="field"><span>드롭</span>${adminSelect({ id: "achievement-drop", name: "dropId", value: payload.dropId || "", label: "드롭 선택", className: "form-select", options: [{ value: "", label: "드롭 선택" }, ...dropOptions] })}</label>` : ""}</section><section class="reward-preview"><p class="eyebrow">XP · 보상 · 기간</p><div class="form-grid"><label class="field"><span>XP 보상 선택</span>${adminMultiSelect({ id: "achievement-rewards", name: "rewardIds", values: achievement.rewardIds || [], label: "업적 보상", className: "form-multi-select", options: rewardChoices })}</label></div><div class="form-grid"><label class="field"><span>기간 시작</span><input name="startsAt" type="datetime-local" value="${toLocalInputDateTime(achievement.startsAt)}" /></label><label class="field"><span>기간 종료</span><input name="endsAt" type="datetime-local" value="${toLocalInputDateTime(achievement.endsAt)}" />${dateError}</label></div></section><div id="achievement-form-error" class="form-error" role="alert" hidden></div><footer class="drawer-footer"><button class="secondary close-drawer" type="button">취소</button>${canManageFanGrowth() ? `<button class="secondary" type="submit" data-save-mode="draft">임시 저장</button>${achievement.id ? `<button class="secondary fan-growth-transition" type="button" data-kind="achievement" data-action="submit" data-id="${escapeHtml(achievement.id)}">검수 요청</button>` : ""}` : ""}${approvalAction}</footer></form>`;
 }
 
 function missionDrawer() {
   const mission = state.drawerData?.mission || {};
   const artists = scopedArtists();
+  const organizationScopeOptions = [
+    { value: "", label: "현재 조직 범위" },
+    ...state.organizations.map((organization) => ({ value: organization.id, label: organization.name })),
+  ];
+  const artistScopeOptions = [
+    { value: "", label: "전체 아티스트" },
+    ...artists.map((artist) => ({ value: artist.id, label: artist.name })),
+  ];
   const recurrence = [
     { value: "once", label: "1회" },
     { value: "daily", label: "매일" },
@@ -1183,12 +1458,13 @@ function missionDrawer() {
     { value: "card_redeemed", label: "카드 등록" },
     { value: "card_pack_opened", label: "카드팩 개봉" },
     { value: "event_joined", label: "이벤트 참여" },
+    { value: "collection_goal_completed", label: "컬렉션 완성" },
   ];
   const reward = mission.rewardPayload || {};
   const approvalAction = canApproveFanGrowth() && mission.id && mission.status === "pending_review"
     ? `<button class="primary fan-growth-transition" type="button" data-kind="mission" data-action="approve" data-id="${escapeHtml(mission.id)}">공개 승인</button>`
     : "";
-  return `${drawerHeader("FAN GROWTH", mission.id ? "미션 편집" : "미션 만들기", "팬 행동 이벤트와 XP·포인트 보상을 하나의 운영 규칙으로 관리합니다.")}<form class="drawer-body form" id="mission-form" data-id="${escapeHtml(mission.id || "")}"><label class="field"><span>미션 이름</span><input name="title" value="${escapeHtml(mission.title || "")}" placeholder="예: 이벤트 댓글로 응원하기" required /></label><label class="field"><span>설명</span><textarea name="description" maxlength="500" placeholder="팬에게 표시할 미션 설명">${escapeHtml(mission.description || "")}</textarea></label><section class="scope-fields"><p class="eyebrow">범위</p><label class="field"><span>조직</span><select name="organizationId">${organizationOptions(mission.organizationId || "")}</select></label><label class="field"><span>아티스트</span><select name="artistId"><option value="">전체 아티스트</option>${artists.map((artist) => `<option value="${escapeHtml(artist.id)}" ${mission.artistId === artist.id ? "selected" : ""}>${escapeHtml(artist.name)}</option>`).join("")}</select></label></section><div class="form-grid"><label class="field"><span>행동 이벤트</span>${adminSelect({ id: "mission-event-kind", name: "eventKind", value: mission.eventKind || "event_commented", label: "행동 이벤트", className: "form-select", options: eventKinds })}</label><label class="field"><span>반복 주기</span>${adminSelect({ id: "mission-recurrence", name: "recurrence", value: mission.recurrence || "once", label: "반복 주기", className: "form-select", options: recurrence })}</label></div><div class="form-grid"><label class="field"><span>목표 횟수</span><input name="targetValue" type="number" min="1" value="${Number(mission.targetValue || 1)}" required /></label><label class="field"><span>XP 보상</span><input name="xp" type="number" min="0" value="${Number(reward.xp || 0)}" /></label></div><div class="form-grid"><label class="field"><span>포인트 보상</span><input name="points" type="number" min="0" value="${Number(reward.points || 0)}" /></label><label class="field"><span>카드 보상 ID (선택)</span><input name="rewardId" value="${escapeHtml(reward.rewardId || "")}" placeholder="reward_..." /></label></div><div id="mission-form-error" class="form-error" role="alert" hidden></div><footer class="drawer-footer"><button class="secondary close-drawer" type="button">취소</button>${canManageFanGrowth() ? `<button class="primary" type="submit">저장</button>${mission.id && mission.status === "draft" ? `<button class="secondary fan-growth-transition" type="button" data-kind="mission" data-action="submit" data-id="${escapeHtml(mission.id)}">검수 요청</button>` : ""}` : ""}${approvalAction}</footer></form>`;
+  return `${drawerHeader("FAN GROWTH", mission.id ? "미션 편집" : "미션 만들기", "팬 행동 이벤트와 XP·포인트 보상을 하나의 운영 규칙으로 관리합니다.")}<form class="drawer-body form" id="mission-form" data-id="${escapeHtml(mission.id || "")}"><label class="field"><span>미션 이름</span><input name="title" value="${escapeHtml(mission.title || "")}" placeholder="예: 이벤트 댓글로 응원하기" required /></label><label class="field"><span>설명</span><textarea name="description" maxlength="500" placeholder="팬에게 표시할 미션 설명">${escapeHtml(mission.description || "")}</textarea></label><section class="scope-fields"><p class="eyebrow">범위</p><label class="field"><span>조직</span>${adminSelect({ id: "mission-organization", name: "organizationId", value: mission.organizationId || "", label: "조직", className: "form-select", options: organizationScopeOptions })}</label><label class="field"><span>아티스트</span>${adminSelect({ id: "mission-artist", name: "artistId", value: mission.artistId || "", label: "아티스트", className: "form-select", options: artistScopeOptions })}</label></section><div class="form-grid"><label class="field"><span>행동 이벤트</span>${adminSelect({ id: "mission-event-kind", name: "eventKind", value: mission.eventKind || "event_commented", label: "행동 이벤트", className: "form-select", options: eventKinds })}</label><label class="field"><span>반복 주기</span>${adminSelect({ id: "mission-recurrence", name: "recurrence", value: mission.recurrence || "once", label: "반복 주기", className: "form-select", options: recurrence })}</label></div><div class="form-grid"><label class="field"><span>목표 횟수</span><input name="targetValue" type="number" min="1" value="${Number(mission.targetValue || 1)}" required /></label><label class="field"><span>XP 보상</span><input name="xp" type="number" min="0" value="${Number(reward.xp || 0)}" /></label></div><div class="form-grid"><label class="field"><span>포인트 보상</span><input name="points" type="number" min="0" value="${Number(reward.points || 0)}" /></label><label class="field"><span>카드 보상 ID (선택)</span><input name="rewardId" value="${escapeHtml(reward.rewardId || "")}" placeholder="reward_..." /></label></div><div id="mission-form-error" class="form-error" role="alert" hidden></div><footer class="drawer-footer"><button class="secondary close-drawer" type="button">취소</button>${canManageFanGrowth() ? `<button class="primary" type="submit">저장</button>${mission.id && mission.status === "draft" ? `<button class="secondary fan-growth-transition" type="button" data-kind="mission" data-action="submit" data-id="${escapeHtml(mission.id)}">검수 요청</button>` : ""}` : ""}${approvalAction}</footer></form>`;
 }
 
 function fanPassDrawer() {
@@ -1197,17 +1473,32 @@ function fanPassDrawer() {
   const passRewardFilter = isGlobalPass
     ? (reward) => !reward.organizationId && !reward.artistId
     : () => true;
+  const passRewardOptions = [
+    { value: "", label: "보상 없음" },
+    ...(state.engagement.rewards || []).filter(passRewardFilter).map((reward) => ({
+      value: reward.id,
+      label: `${reward.name} · ${reward.rewardType || "reward"} · ${reward.artistId ? "아티스트 보상" : "전체 보상"}`,
+    })),
+  ];
+  const organizationScopeOptions = [
+    { value: "", label: "현재 조직 범위" },
+    ...state.organizations.map((organization) => ({ value: organization.id, label: organization.name })),
+  ];
+  const artistScopeOptions = [
+    { value: "", label: isGlobalPass ? "전체 서비스 · 글로벌 팬 레벨" : "담당 아티스트 선택" },
+    ...scopedArtists().map((artist) => ({ value: artist.id, label: artist.name })),
+  ];
   const tierCount = Math.max(3, Math.min(maxFanPassTiers, (season.tiers || []).length || 3));
   const presetOptions = fanPassPresets.map((preset) => `<option value="${preset.id}">${preset.label}</option>`).join("");
   const tiers = Array.from({ length: tierCount }, (_, index) => {
     const tier = (season.tiers || [])[index] || { tier: index + 1, requiredXp: "", rewardId: "", premiumRewardId: "" };
-    return `<article class="pass-tier-row"><span class="pass-tier-handle">${icon("drag_indicator")}</span><div class="pass-tier-heading"><strong>Lv.${index + 1}</strong><span class="pass-tier-visibility">${icon("lock_open")} 공개</span></div><button class="icon-button pass-tier-menu" type="button" aria-label="Lv.${index + 1} 옵션">${icon("more_horiz")}</button><label class="field"><span>필요 경험치 (XP)</span><input name="tierXp" type="number" min="0" value="${tier.requiredXp ?? ""}" placeholder="${index * 100}" /></label><label class="field"><span>무료 보상</span><select name="tierReward">${rewardOptions(tier.rewardId || "", passRewardFilter)}</select></label><label class="field"><span>프리미엄 보상</span><select name="tierPremiumReward">${rewardOptions(tier.premiumRewardId || "", passRewardFilter)}</select></label></article>`;
+    return `<article class="pass-tier-row"><span class="pass-tier-handle">${icon("drag_indicator")}</span><div class="pass-tier-heading"><strong>Lv.${index + 1}</strong><span class="pass-tier-visibility">${icon("lock_open")} 공개</span></div><button class="icon-button pass-tier-menu" type="button" aria-label="Lv.${index + 1} 옵션">${icon("more_horiz")}</button><label class="field"><span>필요 경험치 (XP)</span><input name="tierXp" type="number" min="0" value="${tier.requiredXp ?? ""}" placeholder="${index * 100}" /></label><label class="field"><span>무료 보상</span>${adminSelect({ id: `pass-tier-free-${index}`, name: "tierReward", value: tier.rewardId || "", label: "무료 보상", className: "form-select", options: passRewardOptions })}</label><label class="field"><span>프리미엄 보상</span>${adminSelect({ id: `pass-tier-premium-${index}`, name: "tierPremiumReward", value: tier.premiumRewardId || "", label: "프리미엄 보상", className: "form-select", options: passRewardOptions })}</label></article>`;
   }).join("");
   const approvalAction = canApproveFanGrowth() && season.id && season.status === "pending_review"
     ? `<button class="primary fan-growth-transition" type="button" data-kind="pass" data-action="approve" data-id="${escapeHtml(season.id)}">패스 공개 승인</button>`
     : "";
   const published = season.status === "published";
-  return `${drawerHeader("", season.id ? "레벨 패스 편집" : "레벨 패스 등록", isGlobalPass ? "전체 팬에게 공통으로 제공되는 레벨과 보상을 설정합니다." : "아티스트별 시즌과 경험치 구간 보상을 설정합니다.")}<form class="drawer-body form fan-pass-editor-form" id="fan-pass-form" data-id="${escapeHtml(season.id || "")}"><section class="fan-pass-form-section"><h3>기본 정보</h3><label class="field"><span>패스 이름</span><input name="title" value="${escapeHtml(season.title || "")}" placeholder="예: 드림스케이프 레벨 패스" required /></label><label class="field"><span>설명</span><textarea name="description" maxlength="500" placeholder="팬에게 표시할 시즌 설명">${escapeHtml(season.description || "")}</textarea><small class="field-counter">${String(season.description || "").length} / 500</small></label>${isRoot() ? `<div class="form-grid"><label class="field"><span>조직</span><select name="organizationId">${organizationOptions(season.organizationId || "")}</select></label><label class="field"><span>아티스트</span><select name="artistId" ${isGlobalPass ? "" : "required"}><option value="">${isGlobalPass ? "전체 서비스 · 글로벌 팬 레벨" : "아티스트 선택"}</option>${scopedArtists().map((artist) => `<option value="${escapeHtml(artist.id)}" ${season.artistId === artist.id ? "selected" : ""}>${escapeHtml(artist.name)}</option>`).join("")}</select></label></div>` : `<input type="hidden" name="organizationId" value="${escapeHtml(season.organizationId || state.adminContext?.organizationId || "")}"/><label class="field"><span>아티스트</span><select name="artistId" required><option value="">담당 아티스트 선택</option>${scopedArtists().map((artist) => `<option value="${escapeHtml(artist.id)}" ${season.artistId === artist.id ? "selected" : ""}>${escapeHtml(artist.name)}</option>`).join("")}</select></label>`}<div class="form-grid"><label class="field"><span>시즌 시작</span><input name="startsAt" type="datetime-local" value="${toLocalInputDateTime(season.startsAt)}" /></label><label class="field"><span>시즌 종료</span><input name="endsAt" type="datetime-local" value="${toLocalInputDateTime(season.endsAt)}" /><small id="fan-pass-date-error" class="field-error" hidden>패스 종료 시각은 시작 시각 이후로 선택해 주세요.</small></label></div><div class="form-grid"><label class="field toggle-field"><span>프리미엄 패스</span><input name="premiumEnabled" type="checkbox" ${season.premiumEnabled ? "checked" : ""} /><small>구매한 팬에게 오른쪽 프리미엄 보상 라인을 공개합니다.</small></label><label class="field"><span>프리미엄 가격 (P)</span><input name="premiumPricePoints" type="number" min="1" value="${season.premiumPricePoints ?? ""}" placeholder="1200" /></label></div></section><section class="fan-pass-form-section"><div class="fan-pass-section-heading"><h3>티어 마일스톤</h3><button class="secondary" id="add-pass-tier" type="button">${icon("add")} 티어 추가</button></div>${isGlobalPass ? `<p class="hint fan-pass-scope-hint">전체 팬 레벨에는 전체 보상만 연결할 수 있습니다. 아티스트 전용 보상은 목록에서 제외됩니다.</p>` : ""}<div class="pass-tier-list">${tiers}</div></section><section class="fan-pass-preview-grid"><article><strong>팬앱 미리보기</strong><button class="secondary" type="button">미리보기 열기 ${icon("open_in_new")}</button><p><b>예상 표시:</b> Lv.1 ~ Lv.${tierCount}</p><small>팬앱에서 보이는 레벨 진행과 보상 구성을 확인할 수 있습니다.</small></article><article><strong>공개 상태</strong><span class="badge ${published ? "success-badge" : season.status === "pending_review" ? "warning-badge" : "draft"}">${escapeHtml(fanGrowthStatusLabel(season.status || "draft"))}</span><small>${published ? "현재 팬에게 공개 중입니다." : "저장 후 검수 요청할 수 있습니다."}</small></article></section><div id="fan-pass-form-error" class="form-error" role="alert" hidden></div><footer class="drawer-footer"><button class="secondary close-drawer" type="button">취소</button>${canManageFanGrowth() ? `<button class="primary" type="submit">저장</button>` : ""}${season.id && season.status === "draft" && canManageFanGrowth() ? `<button class="secondary fan-growth-transition" type="button" data-kind="pass" data-action="submit" data-id="${escapeHtml(season.id)}">검수 요청</button>` : ""}${approvalAction}</footer></form>`;
+  return `${drawerHeader("", season.id ? "레벨 패스 편집" : "레벨 패스 등록", isGlobalPass ? "전체 팬에게 공통으로 제공되는 레벨과 보상을 설정합니다." : "아티스트별 시즌과 경험치 구간 보상을 설정합니다.")}<form class="drawer-body form fan-pass-editor-form" id="fan-pass-form" data-id="${escapeHtml(season.id || "")}"><section class="fan-pass-form-section"><h3>기본 정보</h3><label class="field"><span>패스 이름</span><input name="title" value="${escapeHtml(season.title || "")}" placeholder="예: 드림스케이프 레벨 패스" required /></label><label class="field"><span>설명</span><textarea name="description" maxlength="500" placeholder="팬에게 표시할 시즌 설명">${escapeHtml(season.description || "")}</textarea><small class="field-counter">${String(season.description || "").length} / 500</small></label>${isRoot() ? `<div class="form-grid"><label class="field"><span>조직</span>${adminSelect({ id: "fan-pass-organization", name: "organizationId", value: season.organizationId || "", label: "조직", className: "form-select", options: organizationScopeOptions })}</label><label class="field"><span>아티스트</span>${adminSelect({ id: "fan-pass-artist", name: "artistId", value: season.artistId || "", label: "아티스트", className: "form-select", options: artistScopeOptions, required: !isGlobalPass })}</label></div>` : `<input type="hidden" name="organizationId" value="${escapeHtml(season.organizationId || state.adminContext?.organizationId || "")}"/><label class="field"><span>아티스트</span>${adminSelect({ id: "fan-pass-artist", name: "artistId", value: season.artistId || "", label: "아티스트", className: "form-select", options: artistScopeOptions, required: true })}</label>`}<div class="form-grid"><label class="field"><span>시즌 시작</span><input name="startsAt" type="datetime-local" value="${toLocalInputDateTime(season.startsAt)}" /></label><label class="field"><span>시즌 종료</span><input name="endsAt" type="datetime-local" value="${toLocalInputDateTime(season.endsAt)}" /><small id="fan-pass-date-error" class="field-error" hidden>패스 종료 시각은 시작 시각 이후로 선택해 주세요.</small></label></div><div class="form-grid"><label class="field toggle-field"><span>프리미엄 패스</span><input name="premiumEnabled" type="checkbox" ${season.premiumEnabled ? "checked" : ""} /><small>구매한 팬에게 오른쪽 프리미엄 보상 라인을 공개합니다.</small></label><label class="field"><span>프리미엄 가격 (P)</span><input name="premiumPricePoints" type="number" min="1" value="${season.premiumPricePoints ?? ""}" placeholder="1200" /></label></div></section><section class="fan-pass-form-section"><div class="fan-pass-section-heading"><h3>티어 마일스톤</h3><button class="secondary" id="add-pass-tier" type="button">${icon("add")} 티어 추가</button></div>${isGlobalPass ? `<p class="hint fan-pass-scope-hint">전체 팬 레벨에는 전체 보상만 연결할 수 있습니다. 아티스트 전용 보상은 목록에서 제외됩니다.</p>` : ""}<div class="pass-tier-list">${tiers}</div></section><section class="fan-pass-preview-grid"><article><strong>팬앱 미리보기</strong><button class="secondary" type="button">미리보기 열기 ${icon("open_in_new")}</button><p><b>예상 표시:</b> Lv.1 ~ Lv.${tierCount}</p><small>팬앱에서 보이는 레벨 진행과 보상 구성을 확인할 수 있습니다.</small></article><article><strong>공개 상태</strong><span class="badge ${published ? "success-badge" : season.status === "pending_review" ? "warning-badge" : "draft"}">${escapeHtml(fanGrowthStatusLabel(season.status || "draft"))}</span><small>${published ? "현재 팬에게 공개 중입니다." : "저장 후 검수 요청할 수 있습니다."}</small></article></section><div id="fan-pass-form-error" class="form-error" role="alert" hidden></div><footer class="drawer-footer"><button class="secondary close-drawer" type="button">취소</button>${canManageFanGrowth() ? `<button class="primary" type="submit">저장</button>` : ""}${season.id && season.status === "draft" && canManageFanGrowth() ? `<button class="secondary fan-growth-transition" type="button" data-kind="pass" data-action="submit" data-id="${escapeHtml(season.id)}">검수 요청</button>` : ""}${approvalAction}</footer></form>`;
 }
 
 function cardsView() {
@@ -1227,54 +1518,80 @@ function cardsView() {
     { value: "drop_ready", label: "드롭 준비됨" },
     { value: "changes_requested", label: "수정 요청" },
   ];
-  const visible = state.cards.filter(
-    (card) =>
-      `${card.name}${card.ownerArtistId}${card.rarity}`
-        .toLowerCase()
-        .includes(state.query.toLowerCase()) &&
-      (state.cardArtist === "all" ||
-        card.ownerArtistId === state.cardArtist ||
-        card.artistId === state.cardArtist) &&
-      cardMatchesStatus(card, state.status),
-  );
+  const visible = state.cards || [];
   const emptyDetail = `<section class="panel review-detail-panel empty-detail">${icon("rate_review")}<strong>검수할 카드를 선택하세요</strong><small>대기열이나 카드 목록에서 항목을 열면 제출 스냅샷과 승인·반려 컨트롤이 표시됩니다.</small></section>`;
   const reviewDetail = reviewPanel() || emptyDetail;
-  return `<div class="commercial-review-workspace"><div class="review-commandbar"><div><nav class="review-breadcrumb" aria-label="카드 > 검수"><span>카드</span><span aria-hidden="true">&gt;</span><strong>검수</strong></nav><h2>${isRoot() ? "전체 카드 운영" : "담당 카드 운영"}</h2><p>${isRoot() ? "아티스트 카드의 검수와 공개 상태를 관리합니다." : "배정된 아티스트의 카드 초안을 만들고 검수를 요청합니다."}</p></div><div class="review-command-actions"><button class="secondary" id="export-cards-csv" type="button">${icon("download")} CSV 내보내기</button>${can("cards:write") ? `<button class="primary review-register-cta" id="open-card-drawer" type="button">${icon("add_card")} 카드 등록</button>` : ""}</div></div>${reviewStatusTabs()}<div class="review-workbench"><section class="panel review-list-panel"><div class="review-list-heading"><div><p class="eyebrow">RELEASE REVIEW</p><h3>검수 대기열</h3></div><span>${visible.length}개 항목</span></div><div class="toolbar compact-toolbar"><label class="search-field grow">${icon("search")}<input id="card-search" placeholder="카드명, 아티스트 검색" value="${escapeHtml(state.query)}" /></label>${adminSelect({ id: "card-artist-filter", value: state.cardArtist, label: "아티스트 필터", className: "filter-select card-artist-filter", options: artistOptions })}${adminSelect({ id: "card-status", value: state.status, label: "카드 상태 필터", className: "filter-select card-status-filter", options: statusOptions })}</div><div class="table-wrap"><table class="table responsive-table card-table"><thead><tr><th>카드</th><th>메타데이터</th><th>마감</th><th>담당자</th><th>상태</th><th><span class="sr-only">관리</span></th></tr></thead><tbody>${cardRows(visible)}</tbody></table></div></section>${reviewDetail}</div>${contentCalendarPanel()}</div>`;
+  return `<div class="commercial-review-workspace"><div class="review-commandbar"><div><nav class="review-breadcrumb" aria-label="카드 > 검수"><span>카드</span><span aria-hidden="true">&gt;</span><strong>검수</strong></nav><h2>${isRoot() ? "전체 카드 운영" : "담당 카드 운영"}</h2><p>${isRoot() ? "아티스트 카드의 검수와 공개 상태를 관리합니다." : "배정된 아티스트의 카드 초안을 만들고 검수를 요청합니다."}</p></div><div class="review-command-actions"><button class="secondary" id="export-cards-csv" type="button">${icon("download")} CSV 내보내기</button>${can("cards:write") ? `<button class="primary review-register-cta" id="open-card-drawer" type="button">${icon("add_card")} 카드 등록</button>` : ""}</div></div>${reviewStatusTabs()}<div class="review-workbench"><section class="panel review-list-panel"><div class="review-list-heading"><div><p class="eyebrow">RELEASE REVIEW</p><h3>검수 대기열</h3></div><span>${state.cardPagination?.total ?? visible.length}개 항목</span></div><div class="toolbar compact-toolbar"><label class="search-field grow">${icon("search")}<input id="card-search" placeholder="카드명, 아티스트 검색" value="${escapeHtml(state.query)}" /></label>${adminSelect({ id: "card-artist-filter", value: state.cardArtist, label: "아티스트 필터", className: "filter-select card-artist-filter", options: artistOptions })}${adminSelect({ id: "card-status", value: state.status, label: "카드 상태 필터", className: "filter-select card-status-filter", options: statusOptions })}</div><div class="table-wrap"><table class="table responsive-table card-table"><thead><tr><th>카드</th><th>메타데이터</th><th>마감</th><th>담당자</th><th>상태</th><th><span class="sr-only">관리</span></th></tr></thead><tbody>${cardRows(visible)}</tbody></table></div>${tablePagination("cardPage", state.cardPagination?.page ?? state.cardPage, state.cardPagination?.total ?? visible.length, state.cardPagination?.pageSize ?? 10)}</section>${reviewDetail}</div>${contentCalendarPanel()}</div>`;
+}
+
+function legacyContentCalendarPanel() {
+  const cards = cardCatalogItems();
+  const entries = state.contentCalendar || [];
+  const label = (entry) => `${entry.contentType || "card"} · ${entry.contentId || ""}`;
+  const statusOptions = [
+    { value: "scheduled", label: "예정" },
+    { value: "live", label: "진행 중" },
+    { value: "completed", label: "완료" },
+    { value: "cancelled", label: "취소" },
+  ];
+  const rows = entries.length
+    ? entries.map((entry) => `<li class="content-calendar-row"><div><strong>${escapeHtml(entry.title || label(entry))}</strong><small>${escapeHtml(label(entry))} · ${formatDate(entry.startsAt)} ~ ${formatDate(entry.endsAt)}</small></div>${adminSelect({ id: `calendar-status-${entry.id}`, value: entry.status || "scheduled", label: `${entry.title || "공개 일정"} 상태`, className: "calendar-status-select", dataCalendarStatus: entry.id, options: statusOptions })}</li>`).join("")
+    : `<li class="empty">등록된 공개 일정이 없습니다. 첫 공개 일정을 추가해 보세요.</li>`;
+  return `<section class="panel content-calendar-panel"><div class="panel-heading"><div><p class="eyebrow">CONTENT OPERATIONS</p><h3>공개 일정</h3><span>카드 운영 화면에서 카드·이벤트·상품의 공개 일정을 함께 관리합니다.</span></div><button class="secondary" id="refresh-content-calendar" type="button">${state.contentCalendarLoading ? "불러오는 중..." : "새로고침"}</button></div>${state.contentCalendarMessage ? `<div class="notice ${state.contentCalendarMessage.startsWith("실패") ? "error" : ""}">${escapeHtml(state.contentCalendarMessage)}</div>` : ""}<div class="content-calendar-layout"><ol class="content-calendar-list">${rows}</ol>${can("cards:write") ? `<form id="content-calendar-form" class="content-calendar-form"><label class="field"><span>콘텐츠 유형</span><select name="contentType"><option value="card">카드</option><option value="event">이벤트</option><option value="product">상품</option></select></label><label class="field"><span>콘텐츠 ID</span><select name="contentId" required><option value="">콘텐츠 선택</option>${cards.map((card) => `<option value="${escapeHtml(card.id)}">${escapeHtml(card.name || card.id)}</option>`).join("")}</select></label><label class="field"><span>일정 이름</span><input name="title" required maxlength="120" placeholder="예: DREAMSCAPE 1차 공개" /></label><div class="form-grid"><label class="field"><span>시작</span><input name="startsAt" type="datetime-local" required /></label><label class="field"><span>종료</span><input name="endsAt" type="datetime-local" required /></label></div><label class="field"><span>운영 메모</span><textarea name="notes" maxlength="500" placeholder="노출 위치·담당자·공지 메모"></textarea></label><button class="primary" type="submit">일정 추가</button></form>` : ""}</div></section>`;
 }
 
 function contentCalendarPanel() {
-  const cards = state.cards || [];
-  const entries = state.contentCalendar || [];
-  const label = (entry) => `${entry.contentType || "card"} · ${entry.contentId || ""}`;
-  const rows = entries.length
-    ? entries.map((entry) => `<li class="content-calendar-row"><div><strong>${escapeHtml(entry.title || label(entry))}</strong><small>${escapeHtml(label(entry))} · ${formatDate(entry.startsAt)} ~ ${formatDate(entry.endsAt)}</small></div><select data-calendar-status="${escapeHtml(entry.id)}" aria-label="${escapeHtml(entry.title || "공개 일정")} 상태"><option value="scheduled" ${entry.status === "scheduled" ? "selected" : ""}>예정</option><option value="live" ${entry.status === "live" ? "selected" : ""}>진행 중</option><option value="completed" ${entry.status === "completed" ? "selected" : ""}>완료</option><option value="cancelled" ${entry.status === "cancelled" ? "selected" : ""}>취소</option></select></li>`).join("")
-    : `<li class="empty">등록된 공개 일정이 없습니다. 첫 공개 일정을 추가해 보세요.</li>`;
-  return `<section class="panel content-calendar-panel"><div class="panel-heading"><div><p class="eyebrow">CONTENT OPERATIONS</p><h3>공개 일정</h3><span>카드 운영 화면에서 카드·이벤트·상품의 공개 일정을 함께 관리합니다.</span></div><button class="secondary" id="refresh-content-calendar" type="button">${state.contentCalendarLoading ? "불러오는 중..." : "새로고침"}</button></div>${state.contentCalendarMessage ? `<div class="notice ${state.contentCalendarMessage.startsWith("실패") ? "error" : ""}">${escapeHtml(state.contentCalendarMessage)}</div>` : ""}<div class="content-calendar-layout"><ol class="content-calendar-list">${rows}</ol>${can("cards:write") ? `<form id="content-calendar-form" class="content-calendar-form"><label class="field"><span>콘텐츠 유형</span><select name="contentType"><option value="card">카드</option><option value="event">이벤트</option><option value="product">상품</option></select></label><label class="field"><span>콘텐츠 ID</span><select name="contentId" required><option value="">콘텐츠 선택</option>${cards.map((card) => `<option value="${escapeHtml(card.id)}">${escapeHtml(card.name || card.id)}</option>`).join("")}</select></label><label class="field"><span>일정 이름</span><input name="title" required maxlength="120" placeholder="예: DREAMSCAPE 1차 공개" /></label><div class="form-grid"><label class="field"><span>시작</span><input name="startsAt" type="datetime-local" required /></label><label class="field"><span>종료</span><input name="endsAt" type="datetime-local" required /></label></div><label class="field"><span>운영 메모</span><textarea name="notes" maxlength="500" placeholder="노출 위치·담당자·공지 메모"></textarea></label><button class="primary" type="submit">일정 추가</button></form>` : ""}</div></section>`;
+  const type = state.contentCalendarDraftType || "card";
+  const targets = {
+    card: cardCatalogItems().map((item) => ({ value: item.id, label: item.name || item.id })),
+    event: (state.events || []).map((item) => ({ value: item.id, label: item.title || item.name || item.id })),
+    product: (state.shopProducts || []).map((item) => ({ value: item.id, label: item.name || item.title || item.id })),
+  };
+  const typeOptions = [
+    { value: "card", label: "카드" },
+    { value: "event", label: "이벤트" },
+    { value: "product", label: "상품" },
+  ];
+  const targetOptions = [{ value: "", label: targets[type].length ? "콘텐츠 선택" : "등록된 콘텐츠 없음" }, ...targets[type]];
+  const markup = legacyContentCalendarPanel();
+  return markup
+    .replace(
+      /<label class="field"><span>콘텐츠 유형<\/span><select name="contentType">[\s\S]*?<\/select><\/label>/,
+      `<label class="field"><span>콘텐츠 유형</span>${adminSelect({ id: "content-calendar-type", name: "contentType", value: type, label: "콘텐츠 유형", className: "content-calendar-type-select", dataCalendarContentType: "true", options: typeOptions })}</label>`,
+    )
+    .replace(
+      /<label class="field"><span>콘텐츠 ID<\/span><select name="contentId" required>[\s\S]*?<\/select><\/label>/,
+      `<label class="field"><span>콘텐츠 ID</span>${adminSelect({ id: "content-calendar-id", name: "contentId", value: "", label: "콘텐츠 ID", className: "content-calendar-id-select", required: true, options: targetOptions })}</label>`,
+    );
 }
 
 function shopProductStatusLabel(status) {
   return ({ published: "공개됨", draft: "초안", archived: "보관됨" }[status] || status || "-");
 }
 
+function shopProductTypeLabel(type) {
+  return ({ card_pack: "카드팩", reward: "보상", membership: "멤버십" }[type] || "상품");
+}
+
 function pointChargePackagesView() {
   const packages = state.pointChargePackages || [];
   const packageRows = packages.length
-    ? packages.map((item) => `<tr><td><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.id)}</small></td><td><input class="point-package-inline" name="points" type="number" min="1" value="${Number(item.points)}" aria-label="${escapeHtml(item.label)} 포인트" /></td><td><input class="point-package-inline" name="priceWon" type="number" min="1" value="${Number(item.priceWon)}" aria-label="${escapeHtml(item.label)} 가격" /></td><td><input class="point-package-inline point-package-label" name="label" value="${escapeHtml(item.label)}" aria-label="${escapeHtml(item.label)} 표시명" /><input class="point-package-inline point-package-schedule" name="scheduledPublishAt" type="datetime-local" value="${escapeHtml(toLocalInputDateTime(item.scheduledPublishAt))}" aria-label="${escapeHtml(item.label)} 예약 공개 시각" /><span class="badge ${item.status === "active" ? "success-badge" : "draft"}">${item.status === "active" ? "판매 중" : "중지"}</span></td><td><div class="point-package-actions"><button class="primary point-package-save" type="button" data-point-package-id="${escapeHtml(item.id)}">저장</button><button class="secondary point-package-toggle" type="button" data-point-package-id="${escapeHtml(item.id)}" data-point-package-status="${item.status === "active" ? "inactive" : "active"}">${item.status === "active" ? "판매 중지" : "판매 재개"}</button></div></td></tr>`).join("")
+    ? packages.map((item) => `<tr><td data-label="상품"><label class="point-package-product-field"><span>표시명</span><input class="point-package-inline point-package-label" name="label" value="${escapeHtml(item.label)}" aria-label="${escapeHtml(item.label)} 표시명" /></label><small class="point-package-id">${escapeHtml(item.id)}</small></td><td data-label="포인트"><label class="point-package-number-field"><span>지급 포인트</span><input class="point-package-inline" name="points" type="number" min="1" value="${Number(item.points)}" aria-label="${escapeHtml(item.label)} 포인트" /></label></td><td data-label="가격"><label class="point-package-number-field"><span>판매가</span><input class="point-package-inline" name="priceWon" type="number" min="1" value="${Number(item.priceWon)}" aria-label="${escapeHtml(item.label)} 가격" /></label></td><td data-label="상태·예약"><div class="point-package-state"><span class="badge ${item.status === "active" ? "success-badge" : "draft"}">${item.status === "active" ? "판매 중" : "판매 중지"}</span><label class="point-package-schedule-field"><span>예약 공개</span><input class="point-package-inline point-package-schedule" name="scheduledPublishAt" type="datetime-local" value="${escapeHtml(toLocalInputDateTime(item.scheduledPublishAt))}" aria-label="${escapeHtml(item.label)} 예약 공개 시각" /></label></div></td><td data-label="관리"><div class="point-package-actions"><button class="primary point-package-save" type="button" data-point-package-id="${escapeHtml(item.id)}">저장</button><button class="secondary point-package-toggle" type="button" data-point-package-id="${escapeHtml(item.id)}" data-point-package-status="${item.status === "active" ? "inactive" : "active"}">${item.status === "active" ? "판매 중지" : "판매 재개"}</button></div></td></tr>`).join("")
     : `<tr><td colspan="5" class="empty">등록된 포인트 상품이 없습니다.</td></tr>`;
   const charges = state.pointCharges || [];
   const chargeRows = charges.length
     ? charges.map((item) => `<tr><td><strong>${escapeHtml(item.userEmail || item.userId)}</strong><small>${escapeHtml(item.id)}</small></td><td>${Number(item.points).toLocaleString()}P</td><td>${Number(item.priceWon).toLocaleString()}원</td><td>${escapeHtml(item.paymentMethod)}</td><td><span class="badge ${item.status === "completed" ? "success-badge" : item.status === "refunded" ? "draft" : "danger-badge"}">${item.status === "completed" ? "완료" : item.status === "refunded" ? "환불" : escapeHtml(item.status)}</span></td><td>${formatDateTime(item.createdAt)}</td></tr>`).join("")
     : `<tr><td colspan="6" class="empty">충전 내역이 없습니다.</td></tr>`;
-  return `<div class="card-operations-page"><div class="page-heading"><div><p class="eyebrow">POINT ECONOMY / CONTROL ROOM</p><h2>포인트 상품·충전 관제</h2><p>팬앱 충전 패키지의 가격·예약 공개·판매 상태를 관리하고 최근 충전·환불 내역을 확인합니다.</p></div></div><section class="panel"><div class="panel-heading"><div><h3>충전 상품</h3><span>예약 시각 전에는 팬앱에 노출되지 않으며 변경 사항은 다음 카탈로그 조회부터 반영됩니다.</span></div><button class="secondary" id="refresh-point-charge-packages" type="button">새로고침</button></div><form id="point-package-form" class="toolbar point-package-form"><input name="id" class="search" placeholder="ID (예: points_500)" pattern="[a-z0-9_]+" required /><input name="label" class="search" placeholder="표시명 (예: 500P)" required /><input name="points" class="search" type="number" min="1" placeholder="포인트" required /><input name="priceWon" class="search" type="number" min="1" placeholder="가격(원)" required /><input name="scheduledPublishAt" class="search" type="datetime-local" aria-label="예약 공개 시각" /><button class="primary" type="submit">상품 추가</button></form><div class="table-wrap"><table class="table responsive-table"><thead><tr><th>상품</th><th>포인트</th><th>가격</th><th>상태·예약</th><th>관리</th></tr></thead><tbody>${packageRows}</tbody></table></div></section><section class="panel"><div class="panel-heading"><div><h3>최근 충전·환불 내역</h3><span>결제 승인·원장 반영·환불 상태를 확인합니다.</span></div><button class="secondary" id="refresh-point-charges" type="button">새로고침</button></div><div class="table-wrap"><table class="table responsive-table"><thead><tr><th>팬</th><th>포인트</th><th>금액</th><th>결제수단</th><th>상태</th><th>시각</th></tr></thead><tbody>${chargeRows}</tbody></table></div></section></div>`;
+  return `<div class="card-operations-page"><div class="page-heading"><div><p class="eyebrow">POINT ECONOMY / CONTROL ROOM</p><h2>포인트 상품·충전 관제</h2><p>팬앱 충전 패키지의 가격·예약 공개·판매 상태를 관리하고 최근 충전·환불 내역을 확인합니다.</p></div></div><section class="panel point-charge-catalog-panel"><div class="panel-heading"><div><h3>충전 상품</h3><span>예약 시각 전에는 팬앱에 노출되지 않으며 변경 사항은 다음 카탈로그 조회부터 반영됩니다.</span></div><button class="secondary" id="refresh-point-charge-packages" type="button">새로고침</button></div><form id="point-package-form" class="point-package-create-grid ops-form"><label class="field"><span>상품 ID</span><input name="id" class="ops-control" placeholder="예: points_500" pattern="[a-z0-9_]+" required /></label><label class="field"><span>표시명</span><input name="label" class="ops-control" placeholder="예: 500P" required /></label><label class="field"><span>포인트</span><input name="points" class="ops-control" type="number" min="1" placeholder="500" required /></label><label class="field"><span>가격(원)</span><input name="priceWon" class="ops-control" type="number" min="1" placeholder="5000" required /></label><label class="field"><span>예약 공개</span><input name="scheduledPublishAt" class="ops-control" type="datetime-local" aria-label="예약 공개 시각" /></label><button class="primary" type="submit">상품 추가</button></form><div class="table-wrap"><table class="table responsive-table point-package-table"><thead><tr><th>상품</th><th>포인트</th><th>가격</th><th>상태·예약</th><th>관리</th></tr></thead><tbody>${packageRows}</tbody></table></div></section><section class="panel"><div class="panel-heading"><div><h3>최근 충전·환불 내역</h3><span>결제 승인·원장 반영·환불 상태를 확인합니다.</span></div><button class="secondary" id="refresh-point-charges" type="button">새로고침</button></div><div class="table-wrap"><table class="table responsive-table"><thead><tr><th>팬</th><th>포인트</th><th>금액</th><th>결제수단</th><th>상태</th><th>시각</th></tr></thead><tbody>${chargeRows}</tbody></table></div></section></div>`;
 }
 
 function shopProductsView() {
   const products = state.shopProducts || [];
   const artistName = (id) => scopedArtists().find((artist) => artist.id === id)?.name || id || "-";
   const rows = products.length
-    ? products.map((product) => `<tr><td><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.productType || "card_pack")}${product.cardPackId ? ` · ${escapeHtml(product.cardPackId)}` : ""}</small></td><td>${escapeHtml(artistName(product.artistId))}</td><td>${Number(product.pricePoints || 0).toLocaleString()}P</td><td><span class="badge ${product.status === "published" ? "success-badge" : product.status === "archived" ? "draft" : "warning-badge"}">${escapeHtml(shopProductStatusLabel(product.status))}</span></td><td>${product.status === "draft" && can("cards:write") ? `<button class="secondary shop-product-publish" type="button" data-shop-product-id="${escapeHtml(product.id)}">공개</button>` : "-"}</td></tr>`).join("")
+    ? products.map((product) => `<tr class="shop-product-select-row" data-shop-product-row-id="${escapeHtml(product.id)}" tabindex="0"><td data-label="상품"><button class="shop-product-summary shop-product-open" type="button" data-shop-product-id="${escapeHtml(product.id)}"><span class="shop-product-icon">${icon(product.productType === "card_pack" ? "inventory_2" : "redeem")}</span><span><strong>${escapeHtml(product.name)}</strong><small><b>${escapeHtml(shopProductTypeLabel(product.productType))}</b>${product.cardPackId ? ` · ${escapeHtml(product.cardPackId)}` : ""}</small></span></button></td><td data-label="아티스트">${escapeHtml(artistName(product.artistId))}</td><td data-label="가격"><strong>${Number(product.pricePoints || 0).toLocaleString()}P</strong></td><td data-label="상태"><span class="badge ${product.status === "published" ? "success-badge" : product.status === "archived" ? "draft" : "warning-badge"}">${escapeHtml(shopProductStatusLabel(product.status))}</span></td><td data-label="관리"><div class="shop-product-manage">${product.status === "draft" && can("cards:write") ? `<button class="secondary shop-product-publish" type="button" data-shop-product-id="${escapeHtml(product.id)}">공개</button>` : ""}<button class="icon-button shop-product-open" type="button" data-shop-product-id="${escapeHtml(product.id)}" aria-label="${escapeHtml(product.name)} 상세 보기">${icon("chevron_right")}</button></div></td></tr>`).join("")
     : '<tr><td colspan="5" class="empty">등록된 상점 상품이 없습니다.</td></tr>';
-  return `<div class="card-operations-page"><div class="page-heading with-actions"><div><p class="eyebrow">SHOP CATALOG</p><h2>상점 상품 관리</h2><p>팬앱 상점에 노출할 카드팩 상품을 등록하고 공개 상태를 관리합니다.</p></div>${can("cards:write") ? `<button class="primary" id="open-shop-product-create" type="button">${icon("add")} 상품 등록</button>` : ""}</div><section class="panel"><div class="notice">상품은 카드팩과 연결되어야 팬앱에서 구매할 수 있습니다. 초안은 팬앱에 노출되지 않습니다.</div><div class="table-wrap"><table class="table responsive-table"><thead><tr><th>상품</th><th>아티스트</th><th>가격</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div><footer class="preview-table-footer"><strong>총 ${products.length}개</strong></footer></section></div>`;
+  return `<div class="card-operations-page"><div class="page-heading with-actions"><div><p class="eyebrow">SHOP CATALOG</p><h2>상점 상품 관리</h2><p>팬앱 상점에 노출할 카드팩 상품을 등록하고 공개 상태를 관리합니다.</p></div>${can("cards:write") ? `<button class="primary" id="open-shop-product-create" type="button">${icon("add")} 상품 등록</button>` : ""}</div><section class="panel shop-product-catalog-panel"><div class="notice">상품은 카드팩과 연결되어야 팬앱에서 구매할 수 있습니다. 초안은 팬앱에 노출되지 않습니다.</div><div class="table-wrap"><table class="table responsive-table shop-product-table"><thead><tr><th>상품</th><th>아티스트</th><th>가격</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div><footer class="preview-table-footer"><strong>총 ${products.length}개</strong></footer></section></div>`;
 }
 
 function shopProductEditorDraft() {
@@ -1296,6 +1613,21 @@ function shopProductContentBlocks() {
     : [{ key: "intro", type: "text", title: "상품 소개", body: "", imageUrl: "", alt: "" }];
 }
 
+async function loadShopProductDetail(productId) {
+  try {
+    const result = await api(`/admin/shop/products/${encodeURIComponent(productId)}`);
+    const product = result.data;
+    state.shopProductDraft = product;
+    state.shopProductBlocks = Array.isArray(product.detailContent) && product.detailContent.length
+      ? product.detailContent
+      : [{ key: "intro", type: "text", title: "상품 소개", body: product.description || "", imageUrl: "", alt: "" }];
+    state.view = "shop-product-create";
+    layout();
+  } catch (error) {
+    toast(error?.message || "상점 상품 상세를 불러오지 못했습니다.");
+  }
+}
+
 function shopProductBlockEditor(block, index) {
   const typeLabel = block.type === "image" ? "이미지" : "텍스트";
   return `<article class="shop-product-block-row" data-shop-content-block="${escapeHtml(block.key)}"><span class="shop-product-block-drag">${icon("drag_indicator")}</span><div class="shop-product-block-copy"><strong>${escapeHtml(block.title)}</strong><small>${typeLabel} · 팬앱 상품 상세에 표시되는 콘텐츠 블록</small></div><button class="icon-button shop-product-block-edit" type="button" data-shop-block-edit="${escapeHtml(block.key)}" aria-label="${escapeHtml(block.title)} 편집">${icon("edit")}</button><button class="icon-button danger-button shop-product-block-remove" type="button" data-shop-block-remove="${escapeHtml(block.key)}" aria-label="${escapeHtml(block.title)} 삭제" ${index === 0 ? "disabled" : ""}>${icon("delete")}</button></article>`;
@@ -1314,23 +1646,72 @@ function shopProductPreview(draft, blocks) {
   return `<div class="shop-product-preview-panel"><div class="shop-product-preview-toolbar"><strong>미리보기 패널</strong><div class="shop-product-preview-toggle" role="group" aria-label="미리보기 크기"><button type="button" class="${state.shopProductPreviewMode === "mobile" ? "active" : ""}" data-shop-preview-mode="mobile">${icon("phone_iphone")} 모바일</button><button type="button" class="${state.shopProductPreviewMode === "desktop" ? "active" : ""}" data-shop-preview-mode="desktop">${icon("desktop_windows")} 데스크톱</button></div></div><div class="shop-product-preview-surface ${state.shopProductPreviewMode === "mobile" ? "mobile" : "desktop"}"><div class="shop-product-preview-topbar">${icon("arrow_back")}<strong>상품 상세</strong>${icon("ios_share")}</div><div class="shop-product-preview-hero">${image}</div><div class="shop-product-preview-body"><span class="shop-product-preview-artist">${escapeHtml(artist?.name || "아티스트")}</span><h3 data-shop-preview-target="name">${escapeHtml(draft.name || "상품명")}</h3><strong class="shop-product-preview-price" data-shop-preview-target="price">${Number(draft.pricePoints || 0).toLocaleString()}P</strong><button class="primary full-width" type="button">${icon("shopping_cart")} 카드팩 구매하기</button><div class="shop-product-preview-tabs"><span class="active">상품 소개</span><span>구성품 안내</span><span>구매 안내</span></div>${content}</div></div></div>`;
 }
 
-function shopProductCreateView() {
+function legacyShopProductCreateView() {
   const artists = scopedArtists();
   const packs = state.cardPacks.filter((pack) => pack.status === "published");
   const draft = shopProductEditorDraft();
   const blocks = shopProductContentBlocks();
-  const blockFields = blocks.map((block) => `<div class="shop-product-block-input" data-shop-block-input="${escapeHtml(block.key)}"><div class="shop-product-block-input-heading"><strong>${escapeHtml(block.title)}</strong><span>${block.type === "image" ? "이미지 블록" : "텍스트 블록"}</span></div><label class="field"><span>블록 유형</span><select name="block_type_${escapeHtml(block.key)}" data-shop-block-type="${escapeHtml(block.key)}"><option value="text" ${block.type !== "image" ? "selected" : ""}>텍스트</option><option value="image" ${block.type === "image" ? "selected" : ""}>이미지</option></select></label><label class="field"><span>블록 제목</span><input name="block_title_${escapeHtml(block.key)}" value="${escapeHtml(block.title)}" data-shop-block-title="${escapeHtml(block.key)}" /></label>${block.type === "image" ? `<label class="field"><span>이미지 URL</span><input name="block_image_${escapeHtml(block.key)}" type="url" value="${escapeHtml(block.imageUrl || "")}" placeholder="https://..." data-shop-block-image="${escapeHtml(block.key)}" /><small class="field-help">상품 상세 안에 표시할 이미지를 연결합니다.</small></label><label class="field"><span>대체 텍스트</span><input name="block_alt_${escapeHtml(block.key)}" value="${escapeHtml(block.alt || "")}" placeholder="이미지 설명" data-shop-block-alt="${escapeHtml(block.key)}" /></label>` : `<label class="field"><span>텍스트 내용</span><textarea name="block_${escapeHtml(block.key)}" data-shop-preview-field="block-${escapeHtml(block.key)}">${escapeHtml(block.body || "")}</textarea></label>`}</div>`).join("");
+  const blockFields = blocks.map((block) => `<div class="shop-product-block-input" data-shop-block-input="${escapeHtml(block.key)}"><div class="shop-product-block-input-heading"><strong>${escapeHtml(block.title)}</strong><span>${block.type === "image" ? "이미지 블록" : "텍스트 블록"}</span></div><label class="field"><span>블록 유형</span>${adminSelect({ id: `shop-product-block-type-${block.key}`, name: `block_type_${block.key}`, value: block.type, label: `${block.title} 블록 유형`, className: "shop-product-block-type", options: [{ value: "text", label: "텍스트" }, { value: "image", label: "이미지" }] })}</label><label class="field"><span>블록 제목</span><input name="block_title_${escapeHtml(block.key)}" value="${escapeHtml(block.title)}" data-shop-block-title="${escapeHtml(block.key)}" /></label>${block.type === "image" ? `<label class="field"><span>이미지 URL</span><input name="block_image_${escapeHtml(block.key)}" type="url" value="${escapeHtml(block.imageUrl || "")}" placeholder="https://..." data-shop-block-image="${escapeHtml(block.key)}" /><small class="field-help">상품 상세 안에 표시할 이미지를 연결합니다.</small></label><label class="field"><span>대체 텍스트</span><input name="block_alt_${escapeHtml(block.key)}" value="${escapeHtml(block.alt || "")}" placeholder="이미지 설명" data-shop-block-alt="${escapeHtml(block.key)}" /></label>` : `<label class="field"><span>텍스트 내용</span><textarea name="block_${escapeHtml(block.key)}" data-shop-preview-field="block-${escapeHtml(block.key)}">${escapeHtml(block.body || "")}</textarea></label>`}</div>`).join("");
   const rewards = (state.engagement.rewards || []).filter((reward) => reward.status === "published");
   const productType = draft.productType || "card_pack";
+  const productTypeOptions = [
+    { value: "card_pack", label: "카드팩" },
+    { value: "point_item", label: "포인트 교환 보상" },
+    { value: "limited_item", label: "한정 상품 보상" },
+  ];
+  const artistOptions = [{ value: "", label: "아티스트 선택" }, ...artists.map((artist) => ({ value: artist.id, label: artist.name }))];
+  const exposureOptions = [
+    { value: "shop", label: "상점" },
+    { value: "featured", label: "추천 영역" },
+    { value: "hidden", label: "비노출" },
+  ];
   const fulfillmentField = productType === "card_pack"
-    ? `<label class="field"><span>연결 카드팩 <em>*</em></span><select name="cardPackId" required data-shop-preview-field="cardPackId"><option value="">공개 카드팩 선택</option>${packs.map((pack) => `<option value="${escapeHtml(pack.id)}" ${pack.id === draft.cardPackId ? "selected" : ""}>${escapeHtml(pack.name)} · ${escapeHtml(pack.version || "v1.0")}</option>`).join("")}</select></label>`
-    : `<label class="field"><span>지급할 보상 <em>*</em></span><select name="rewardId" required><option value="">공개 보상 선택</option>${rewards.map((reward) => `<option value="${escapeHtml(reward.id)}" ${reward.id === draft.rewardId ? "selected" : ""}>${escapeHtml(reward.title || reward.name || reward.id)}</option>`).join("")}</select><small class="field-help">PG 없이 포인트 결제 후 팬 계정에 원자적으로 지급됩니다.</small></label>`;
+    ? `<label class="field"><span>연결 카드팩 <em>*</em></span>${adminSelect({ id: "shop-product-card-pack", name: "cardPackId", required: true, value: draft.cardPackId, label: "공개 카드팩", className: "shop-product-fulfillment-select", options: [{ value: "", label: "공개 카드팩 선택" }, ...packs.map((pack) => ({ value: pack.id, label: pack.name + " · " + (pack.version || "v1.0") }))] })}</label>`
+    : `<label class="field"><span>지급할 보상 <em>*</em></span>${adminSelect({ id: "shop-product-reward", name: "rewardId", required: true, value: draft.rewardId, label: "공개 보상", className: "shop-product-fulfillment-select", options: [{ value: "", label: "공개 보상 선택" }, ...rewards.map((reward) => ({ value: reward.id, label: reward.title || reward.name || reward.id }))] })}<small class="field-help">PG 없이 포인트 결제 후 팬 계정에 원자적으로 지급됩니다.</small></label>`;
   return `<div class="card-operations-page shop-product-editor"><div class="page-heading with-actions"><div><p class="eyebrow">SHOP CATALOG / PRODUCT EDITOR</p><h2>상품 등록</h2><p>상품 정보를 입력하고 팬앱 상세 화면을 미리보며 콘텐츠를 편집합니다.</p></div><div class="shop-product-editor-actions"><button class="secondary" type="button" id="shop-product-save-draft">저장</button><button class="secondary" type="button" data-shop-preview-mode="desktop">${icon("visibility")} 미리보기</button><button class="primary" type="submit" form="shop-product-form">상품 등록하기</button></div></div><div class="shop-product-editor-layout"><form class="shop-product-editor-form form" id="shop-product-form"><section class="panel shop-product-basic-panel"><div class="panel-heading"><div><p class="eyebrow">PRODUCT INFORMATION</p><h3>기본 정보</h3></div></div><div class="shop-product-basic-grid"><div class="shop-product-image-field"><label class="field"><span>상품 이미지</span><div class="shop-product-image-preview">${draft.imageUrl ? `<img src="${escapeHtml(resolveAdminAssetUrl(draft.imageUrl))}" alt="상품 이미지" />` : `${icon("add_photo_alternate")}<small>상품 이미지를 등록하세요</small>`}</div><input name="imageUrl" type="url" value="${escapeHtml(draft.imageUrl)}" placeholder="이미지 URL" data-shop-preview-field="imageUrl" /></label></div><div class="shop-product-field-stack"><label class="field"><span>상품 유형 <em>*</em></span><select name="productType" required data-shop-product-type><option value="card_pack" ${productType === "card_pack" ? "selected" : ""}>카드팩</option><option value="point_item" ${productType === "point_item" ? "selected" : ""}>포인트 교환 보상</option><option value="limited_item" ${productType === "limited_item" ? "selected" : ""}>한정 상품 보상</option></select></label><label class="field"><span>상품명 <em>*</em></span><input name="name" value="${escapeHtml(draft.name)}" placeholder="예: DREAMSCAPE Nebula Ver. 카드팩" required data-shop-preview-field="name" /></label><label class="field"><span>아티스트 <em>*</em></span><select name="artistId" required data-shop-preview-field="artistId"><option value="">아티스트 선택</option>${artists.map((artist) => `<option value="${escapeHtml(artist.id)}" ${artist.id === draft.artistId ? "selected" : ""}>${escapeHtml(artist.name)}</option>`).join("")}</select></label>${fulfillmentField}<label class="field"><span>판매 가격 <em>*</em></span><div class="input-with-suffix"><input name="pricePoints" type="number" min="1" step="1" value="${escapeHtml(draft.pricePoints)}" required data-shop-preview-field="price" /><span>P</span></div></label><div class="form-grid shop-product-ops-fields"><label class="field"><span>재고 한도</span><input name="inventoryLimit" type="number" min="0" value="${escapeHtml(draft.inventoryLimit || "")}" placeholder="무제한" /><small class="field-help">비워 두면 무제한입니다.</small></label><label class="field"><span>1인 구매 한도</span><input name="perUserLimit" type="number" min="1" value="${escapeHtml(draft.perUserLimit || "")}" placeholder="무제한" /></label></div><div class="form-grid shop-product-ops-fields"><label class="field"><span>예약 공개 시각</span><input name="scheduledPublishAt" type="datetime-local" value="${escapeHtml(toLocalInputDateTime(draft.scheduledPublishAt))}" /></label><label class="field"><span>노출 영역</span><select name="exposureSlot"><option value="shop" ${draft.exposureSlot === "shop" || !draft.exposureSlot ? "selected" : ""}>상점</option><option value="featured" ${draft.exposureSlot === "featured" ? "selected" : ""}>추천 영역</option><option value="hidden" ${draft.exposureSlot === "hidden" ? "selected" : ""}>비노출</option></select></label></div></div></div></section><section class="panel shop-product-content-panel"><div class="panel-heading"><div><p class="eyebrow">DETAIL CONTENT</p><h3>상품 상세 콘텐츠</h3><span>팬앱 상품 상세 페이지에 표시할 콘텐츠를 구성합니다.</span></div><button class="secondary" id="shop-product-add-block" type="button">${icon("add")} 블록 추가</button></div><div class="shop-product-content-layout"><div class="shop-product-block-list">${blocks.map(shopProductBlockEditor).join("")}</div><div class="shop-product-block-editor"><label class="field"><span>상품 설명</span><textarea name="description" maxlength="1000" data-shop-preview-field="description">${escapeHtml(draft.description)}</textarea></label>${blockFields}</div></div></section><div class="notice shop-product-editor-notice">등록 후에는 초안으로 저장됩니다. 상품 목록에서 공개하면 팬앱 상점에 노출됩니다.</div><footer class="shop-product-editor-footer"><button class="secondary" type="button" data-view="shop-products">취소</button><button class="primary" type="submit" ${productType === "card_pack" ? (packs.length ? "" : "disabled") : (rewards.length ? "" : "disabled")}>상품 등록하기</button></footer></form><aside class="shop-product-preview">${shopProductPreview(draft, blocks)}</aside></div></div>`;
+}
+
+function shopProductCreateView() {
+  const draft = shopProductEditorDraft();
+  const productTypeOptions = [
+    { value: "card_pack", label: "카드팩" },
+    { value: "point_item", label: "포인트 교환 보상" },
+    { value: "limited_item", label: "한정 상품 보상" },
+  ];
+  const artistOptions = [{ value: "", label: "아티스트 선택" }, ...scopedArtists().map((artist) => ({ value: artist.id, label: artist.name }))];
+  const exposureOptions = [
+    { value: "shop", label: "상점" },
+    { value: "featured", label: "추천 영역" },
+    { value: "hidden", label: "비노출" },
+  ];
+  const markup = legacyShopProductCreateView();
+  return markup
+    .replace(/<select name="productType" required data-shop-product-type>[\s\S]*?<\/select>/, adminSelect({ id: "shop-product-type", name: "productType", required: true, value: draft.productType || "card_pack", label: "상품 유형", className: "shop-product-type-select", options: productTypeOptions }))
+    .replace(/<select name="artistId" required data-shop-preview-field="artistId">[\s\S]*?<\/select>/, adminSelect({ id: "shop-product-artist", name: "artistId", required: true, value: draft.artistId, label: "아티스트", className: "shop-product-artist-select", options: artistOptions }))
+    .replace(/<select name="exposureSlot">[\s\S]*?<\/select>/, adminSelect({ id: "shop-product-exposure", name: "exposureSlot", value: draft.exposureSlot || "shop", label: "노출 영역", className: "shop-product-exposure-select", options: exposureOptions }));
 }
 
 function bindShopProductEditor() {
   const form = document.querySelector("#shop-product-form");
   if (!form) return;
+  const editorActions = document.querySelector(".shop-product-editor-actions");
+  if (editorActions && !editorActions.querySelector(".shop-product-back")) {
+    const back = document.createElement("button");
+    back.className = "secondary shop-product-back";
+    back.type = "button";
+    back.dataset.view = "shop-products";
+    back.innerHTML = `${icon("arrow_back")} 상품 목록`;
+    back.addEventListener("click", () => {
+      state.view = "shop-products";
+      state.shopProductDraft = null;
+      layout();
+    });
+    editorActions.prepend(back);
+  }
+  if (state.shopProductDraft?.id) {
+    document.querySelector(".shop-product-editor .page-heading h2")?.replaceChildren(document.createTextNode("상품 수정"));
+    document.querySelectorAll('.shop-product-editor button[type="submit"]').forEach((button) => { button.textContent = "상품 수정하기"; });
+  }
   const syncDraft = () => {
     const values = Object.fromEntries(new FormData(form).entries());
     const currentDraft = shopProductEditorDraft();
@@ -1365,7 +1746,7 @@ function bindShopProductEditor() {
     input.addEventListener("input", updatePreview);
     input.addEventListener("change", updatePreview);
   });
-  form.querySelector("[data-shop-product-type]")?.addEventListener("change", () => {
+  form.querySelector(".shop-product-type-select")?.addEventListener("change", () => {
     syncDraft();
     layout();
   });
@@ -1381,7 +1762,7 @@ function bindShopProductEditor() {
     const image = document.querySelector(`[data-shop-preview-target="block-image-${CSS.escape(key)}"]`);
     if (image) image.src = resolveAdminAssetUrl(event.currentTarget.value) || resolveAdminAssetUrl(shopProductEditorDraft().imageUrl);
   }));
-  form.querySelectorAll("[data-shop-block-type]").forEach((input) => input.addEventListener("change", () => {
+  form.querySelectorAll(".shop-product-block-type").forEach((input) => input.addEventListener("change", () => {
     syncDraft();
     layout();
   }));
@@ -1417,24 +1798,20 @@ function cardPackStatusLabel(status) {
 
 function cardPackRows(packs) {
   if (!packs.length) return '<tr><td colspan="6" class="empty">등록된 카드팩이 없습니다.</td></tr>';
-  return packs.map((pack) => `<tr class="${state.selectedCardPack?.id === pack.id ? "selected-preview-row" : ""}"><td><button class="table-link card-pack-open" type="button" data-card-pack-id="${escapeHtml(pack.id)}"><strong>${escapeHtml(pack.name)}</strong><small>${escapeHtml(pack.seasonName || "시즌 미지정")} · ${escapeHtml(pack.version || "v1.0")}</small></button></td><td>${escapeHtml(pack.version || "-")}</td><td>${Number(pack.cards?.length || 0)}장</td><td><span class="badge ${pack.status === "published" ? "success-badge" : "draft"}">${escapeHtml(cardPackStatusLabel(pack.status))}</span></td><td>${pack.cards?.length ? `${pack.cards.filter((card) => card.enabled !== false).length}장 활성` : "구성 전"}</td><td><button class="secondary card-pack-compose" type="button" data-card-pack-id="${escapeHtml(pack.id)}">구성 편집</button></td></tr>`).join("");
+  return packs.map((pack) => `<tr class="card-pack-select-row ${state.selectedCardPack?.id === pack.id ? "selected-preview-row" : ""}" data-card-pack-row-id="${escapeHtml(pack.id)}" tabindex="0"><td><button class="table-link card-pack-open" type="button" data-card-pack-id="${escapeHtml(pack.id)}"><strong>${escapeHtml(pack.name)}</strong><small>${escapeHtml(pack.seasonName || "시즌 미지정")} · ${escapeHtml(pack.version || "v1.0")}</small></button></td><td>${escapeHtml(pack.version || "-")}</td><td>${Number(pack.cards?.length || 0)}장</td><td><span class="badge ${pack.status === "published" ? "success-badge" : "draft"}">${escapeHtml(cardPackStatusLabel(pack.status))}</span></td><td>${pack.cards?.length ? `${pack.cards.filter((card) => card.enabled !== false).length}장 활성` : "구성 전"}</td><td><button class="secondary card-pack-compose" type="button" data-card-pack-id="${escapeHtml(pack.id)}">구성 편집</button></td></tr>`).join("");
 }
 
 function cardPacksView() {
   const artists = scopedArtists();
-  const query = state.cardPackQuery.trim().toLowerCase();
-  const packs = state.cardPacks.filter((pack) => {
-    const haystack = `${pack.name} ${pack.seasonName || ""} ${pack.version || ""}`.toLowerCase();
-    return (!query || haystack.includes(query)) && (state.cardPackStatus === "all" || pack.status === state.cardPackStatus) && (state.cardPackArtist === "all" || pack.artistId === state.cardPackArtist);
-  });
+  const packs = state.cardPacks;
   const selected = state.selectedCardPack;
   const detail = selected ? `<aside class="panel card-pack-detail-panel"><div class="panel-heading"><div><p class="eyebrow">PACK DETAIL</p><h3>${escapeHtml(selected.name)}</h3><span>${escapeHtml(selected.seasonName || "시즌 미지정")} · ${escapeHtml(selected.version || "v1.0")}</span></div><span class="badge ${selected.status === "published" ? "success-badge" : "draft"}">${escapeHtml(cardPackStatusLabel(selected.status))}</span></div><dl class="detail-list"><div><dt>아티스트</dt><dd>${escapeHtml(artists.find((artist) => artist.id === selected.artistId)?.name || selected.artistId || "-")}</dd></div><div><dt>포함 카드</dt><dd>${Number(selected.cards?.length || 0)}장</dd></div><div><dt>확률 합계</dt><dd>${(selected.cards || []).filter((card) => card.enabled !== false).reduce((total, card) => total + Number(card.probability || 0), 0).toFixed(2)}%</dd></div></dl><div class="detail-actions"><button class="primary card-pack-compose" type="button" data-card-pack-id="${escapeHtml(selected.id)}">카드 구성 편집</button>${selected.status !== "published" && can("cards:write") ? `<button class="secondary card-pack-publish" type="button" data-card-pack-id="${escapeHtml(selected.id)}">검수 후 공개</button>` : ""}</div></aside>` : '<aside class="panel card-pack-detail-panel empty-detail">카드팩을 선택하면 구성과 확률을 확인할 수 있습니다.</aside>';
-  return `<div class="card-operations-page"><div class="page-heading with-actions"><div><p class="eyebrow">CARD PACKS</p><h2>카드팩 관리</h2><p>카드팩 기본 정보와 포함 카드 구성을 실제 서비스 데이터로 관리합니다.</p></div>${can("cards:write") ? `<button class="primary" id="open-card-pack-create" type="button">${icon("add")} 새 카드팩 만들기</button>` : ""}</div><div class="card-operations-layout"><section class="panel"><div class="toolbar compact-toolbar"><label class="search-field grow">${icon("search")}<input id="card-pack-search" placeholder="카드팩 또는 시즌 검색" value="${escapeHtml(state.cardPackQuery)}" /></label>${adminSelect({ id: "card-pack-artist", value: state.cardPackArtist, label: "아티스트", className: "filter-select", options: [{ value: "all", label: "전체 아티스트" }, ...artists.map((artist) => ({ value: artist.id, label: artist.name }))] })}${adminSelect({ id: "card-pack-status", value: state.cardPackStatus, label: "상태", className: "filter-select", options: [{ value: "all", label: "전체 상태" }, { value: "published", label: "공개됨" }, { value: "draft", label: "임시 저장" }, { value: "pending_review", label: "검수 대기" }] })}</div><div class="table-wrap"><table class="table responsive-table card-pack-table"><thead><tr><th>카드팩</th><th>버전</th><th>포함 카드</th><th>공개 상태</th><th>활성 구성</th><th>관리</th></tr></thead><tbody>${cardPackRows(packs)}</tbody></table></div><footer class="preview-table-footer"><strong>총 ${packs.length}개</strong><span class="pagination-control">‹ <b>1</b> ›</span></footer></section>${detail}</div></div>`;
+  return `<div class="card-operations-page"><div class="page-heading with-actions"><div><p class="eyebrow">CARD PACKS</p><h2>카드팩 관리</h2><p>카드팩 기본 정보와 포함 카드 구성을 실제 서비스 데이터로 관리합니다.</p></div>${can("cards:write") ? `<button class="primary" id="open-card-pack-create" type="button">${icon("add")} 새 카드팩 만들기</button>` : ""}</div><div class="card-operations-layout"><section class="panel"><div class="toolbar compact-toolbar"><label class="search-field grow">${icon("search")}<input id="card-pack-search" placeholder="카드팩 또는 시즌 검색" value="${escapeHtml(state.cardPackQuery)}" /></label>${adminSelect({ id: "card-pack-artist", value: state.cardPackArtist, label: "아티스트", className: "filter-select", options: [{ value: "all", label: "전체 아티스트" }, ...artists.map((artist) => ({ value: artist.id, label: artist.name }))] })}${adminSelect({ id: "card-pack-status", value: state.cardPackStatus, label: "상태", className: "filter-select", options: [{ value: "all", label: "전체 상태" }, { value: "published", label: "공개됨" }, { value: "draft", label: "임시 저장" }, { value: "pending_review", label: "검수 대기" }] })}</div><div class="table-wrap"><table class="table responsive-table card-pack-table"><thead><tr><th>카드팩</th><th>버전</th><th>포함 카드</th><th>공개 상태</th><th>활성 구성</th><th>관리</th></tr></thead><tbody>${cardPackRows(packs)}</tbody></table></div>${tablePagination("cardPackPage", state.cardPackPagination.page, state.cardPackPagination.total, state.cardPackPagination.pageSize)}</section>${detail}</div></div>`;
 }
 
 function cardPackCreateView() {
   const artists = scopedArtists();
-  const publishedCards = state.cards.filter((card) => card.status === "published");
+  const publishedCards = cardCatalogItems().filter((card) => card.status === "published");
   const defaultOdds = publishedCards.length >= 4 ? [1, 9, 30, 60] : publishedCards.map(() => Number((100 / Math.max(publishedCards.length, 1)).toFixed(2)));
   const cardChoices = publishedCards.map((card, index) => `<label class="pack-card-choice"><input type="checkbox" data-pack-card="${escapeHtml(card.id)}" ${index < Math.min(4, publishedCards.length) ? "checked" : ""} /><span><strong>${escapeHtml(card.name)}</strong><small>${escapeHtml(card.rarity || "N")} · ${escapeHtml(card.id)}</small></span><input class="pack-card-probability" data-pack-card-probability="${escapeHtml(card.id)}" type="number" min="0.01" max="100" step="0.01" value="${defaultOdds[index] || 0}" aria-label="${escapeHtml(card.name)} 확률" /></label>`).join("");
   return `<div class="card-operations-page"><div class="page-heading"><div><p class="eyebrow">PACK INFORMATION</p><h2>새 카드팩 만들기</h2><p>팬에게 표시될 카드팩 기본 정보를 등록한 뒤 카드 구성을 편집합니다.</p></div></div><div class="card-creation-layout"><form class="panel form" id="card-pack-form"><label class="field"><span>카드팩 이름</span><input name="name" placeholder="예: Nebula Ver." required /></label><div class="form-grid"><label class="field"><span>아티스트</span>${adminSelect({ id: "card-pack-create-artist", name: "artistId", value: artists[0]?.id || "", label: "아티스트", className: "form-select", options: artists.map((artist) => ({ value: artist.id, label: artist.name })) })}</label><label class="field"><span>버전</span><input name="version" value="v1.0" required /></label></div><label class="field"><span>시즌/앨범명</span><input name="seasonName" placeholder="예: 정규 1집 · DREAMSCAPE" /></label><label class="field"><span>카드팩 이미지 URL</span><input name="imageUrl" type="url" placeholder="https://..." /></label><label class="field"><span>설명</span><textarea name="description" maxlength="1000" placeholder="팬에게 공개할 카드팩 설명"></textarea></label><fieldset class="pack-card-selection"><legend>포함 카드와 확률</legend>${cardChoices || '<p class="empty">먼저 공개된 카드를 등록해 주세요.</p>'}</fieldset><div class="notice">카드팩은 먼저 임시 저장됩니다. 활성 카드 확률 합계가 100%일 때 공개할 수 있습니다.</div><footer class="drawer-footer"><button class="secondary" type="button" data-view="card-packs">취소</button><button class="primary" type="submit" ${publishedCards.length ? "" : "disabled"}>카드팩 만들고 구성 편집</button></footer></form><aside class="panel workflow-panel"><p class="eyebrow">WORKFLOW</p><h3>카드팩 등록 순서</h3><ol><li><strong>기본 정보 등록</strong><span>이름·시즌·이미지를 입력합니다.</span></li><li><strong>카드 구성 편집</strong><span>공개된 카드와 개별 확률을 연결합니다.</span></li><li><strong>검수 요청·공개</strong><span>확률이 100%인지 확인한 뒤 공개합니다.</span></li></ol></aside></div></div>`;
@@ -1445,8 +1822,30 @@ function cardPackCompositionView() {
   if (!pack) return '<div class="panel empty-detail">카드팩을 먼저 선택해 주세요.</div>';
   const total = (pack.cards || []).filter((card) => card.enabled !== false).reduce((sum, card) => sum + Number(card.probability || 0), 0);
   const editable = pack.status !== "published" && can("cards:write");
-  const rows = (pack.cards || []).map((card, index) => `<tr><td><strong>${escapeHtml(card.name)}</strong><small>${escapeHtml(card.cardId)}</small></td><td><span class="preview-rarity rarity-${String(card.rarity || "n").toLowerCase()}">${escapeHtml(card.rarity || "N")}</span></td><td>${editable ? `<input type="checkbox" data-composition-enabled="${escapeHtml(card.cardId)}" ${card.enabled !== false ? "checked" : ""} aria-label="${escapeHtml(card.name)} 포함" />` : (card.enabled !== false ? "포함" : "제외")}</td><td>${editable ? `<input class="pack-card-probability" data-composition-probability="${escapeHtml(card.cardId)}" type="number" min="0.01" max="100" step="0.01" value="${Number(card.probability || 0)}" aria-label="${escapeHtml(card.name)} 확률" /> %` : `${Number(card.probability || 0).toFixed(2)}%`}</td><td>${index + 1}</td></tr>`).join("");
-  return `<div class="card-operations-page"><div class="page-heading with-actions"><div><p class="eyebrow">CARD PACK COMPOSITION</p><h2>카드 구성 편집</h2><p>${escapeHtml(pack.seasonName || "시즌 미지정")} · ${escapeHtml(pack.name)} · ${escapeHtml(pack.version || "v1.0")}</p></div><button class="secondary" data-view="card-packs" type="button">${icon("arrow_back")} 카드팩 목록</button></div><div class="card-operations-layout"><section class="panel"><div class="panel-heading"><div><h3>포함 카드</h3><span>총 ${rows ? (pack.cards || []).length : 0}장</span></div><strong class="odds-total ${Math.abs(total - 100) < 0.001 ? "valid" : "invalid"}">확률 합계 ${total.toFixed(2)}%</strong></div><form id="card-pack-composition-form"><div class="table-wrap"><table class="table responsive-table composition-table"><thead><tr><th>카드</th><th>등급</th><th>포함 여부</th><th>확률</th><th>순서</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="empty">포함된 카드가 없습니다.</td></tr>'}</tbody></table></div>${editable ? `<footer class="drawer-footer"><button class="primary" type="submit">변경사항 저장</button></footer>` : ""}</form></section><aside class="panel odds-editor-panel"><div class="odds-validation"><span>${icon(Math.abs(total - 100) < 0.001 ? "check_circle" : "error")}</span><div><h3>확률 유효성 검증</h3><p>${Math.abs(total - 100) < 0.001 ? "모든 항목이 유효합니다." : "확률 합계를 100%로 맞춰 주세요."}</p></div></div><div class="odds-policy-card"><strong>${icon("verified_user")} 공개 확률표</strong><p>공개된 카드팩의 확률은 팬앱에도 동일하게 표시됩니다.</p></div>${pack.status !== "published" && can("cards:write") ? `<button class="primary full-width card-pack-publish" data-card-pack-id="${escapeHtml(pack.id)}" type="button" ${Math.abs(total - 100) < 0.001 ? "" : "disabled"}>저장 후 공개</button>` : `<span class="badge success-badge">공개된 구성</span>`}</aside></div></div>`;
+  const demoCardThumbnails = {
+    card_demo_published: "./assets/demo/dreamscape/yuna.png",
+    card_demo_harin: "./assets/demo/dreamscape/harin.png",
+    card_demo_sena: "./assets/demo/dreamscape/sena.png",
+    card_demo_rina: "./assets/demo/dreamscape/rina.png",
+  };
+  const selectedCompositionCard = (pack.cards || []).find((card) => card.cardId === state.selectedCompositionCardId) || pack.cards?.[0] || null;
+  const compositionPreview = selectedCompositionCard ? (() => {
+    const card = selectedCompositionCard;
+    const thumbnailUrl = state.cardThumbnailUrls[card.cardId] || demoCardThumbnails[card.cardId] || "";
+    const thumbnail = thumbnailUrl
+      ? `<img src="${escapeHtml(thumbnailUrl)}" alt="${escapeHtml(card.name)} 카드 미리보기" />`
+      : `<span class="composition-card-preview-fallback">${icon("image")}</span>`;
+    return `<div class="composition-card-preview-media">${thumbnail}</div><div class="composition-card-preview-copy"><span class="eyebrow">선택한 카드</span><h3>${escapeHtml(card.name)}</h3><p>${escapeHtml(card.cardId)}</p><dl><div><dt>등급</dt><dd data-composition-preview-rarity>${escapeHtml(card.rarity || "N")}</dd></div><div><dt>확률</dt><dd data-composition-preview-probability>${Number(card.probability || 0).toFixed(2)}%</dd></div></dl></div>`;
+  })() : `<div class="composition-card-preview-empty">카드를 선택하면 큰 미리보기가 표시됩니다.</div>`;
+  const rows = (pack.cards || []).map((card, index) => {
+    const thumbnailUrl = state.cardThumbnailUrls[card.cardId] || demoCardThumbnails[card.cardId] || "";
+    const thumbnail = thumbnailUrl
+      ? `<img src="${escapeHtml(thumbnailUrl)}" alt="${escapeHtml(card.name)} 카드 미리보기" />`
+      : `<span class="composition-card-thumbnail-fallback">${icon("image")}</span>`;
+    const selected = selectedCompositionCard?.cardId === card.cardId;
+    return `<tr class="composition-card-row ${selected ? "selected-composition-row" : ""}" data-composition-card-id="${escapeHtml(card.cardId)}" tabindex="0" aria-selected="${selected ? "true" : "false"}"><td data-label="카드"><div class="composition-card-cell"><span class="composition-card-thumbnail">${thumbnail}<span class="composition-card-index">${index + 1}</span></span><span><strong>${escapeHtml(card.name)}</strong><small>${escapeHtml(card.cardId)}</small></span></div></td><td data-label="등급"><span class="preview-rarity rarity-${String(card.rarity || "n").toLowerCase()}">${escapeHtml(card.rarity || "N")}</span></td><td data-label="포함 여부">${editable ? `<input type="checkbox" data-composition-enabled="${escapeHtml(card.cardId)}" ${card.enabled !== false ? "checked" : ""} aria-label="${escapeHtml(card.name)} 포함" />` : `<span class="composition-inclusion ${card.enabled !== false ? "included" : "excluded"}">${card.enabled !== false ? "포함" : "제외"}</span>`}</td><td data-label="확률">${editable ? `<label class="composition-probability-field"><input class="pack-card-probability" data-composition-probability="${escapeHtml(card.cardId)}" type="number" min="0.01" max="100" step="0.01" value="${Number(card.probability || 0)}" aria-label="${escapeHtml(card.name)} 확률" /><span>%</span></label>` : `<strong>${Number(card.probability || 0).toFixed(2)}%</strong>`}</td><td data-label="순서"><span class="composition-order">${index + 1}</span></td></tr>`;
+  }).join("");
+  return `<div class="card-operations-page card-pack-composition-page"><div class="page-heading with-actions"><div><p class="eyebrow">CARD PACK COMPOSITION</p><h2>카드 구성 편집</h2><p>${escapeHtml(pack.seasonName || "시즌 미지정")} · ${escapeHtml(pack.name)} · ${escapeHtml(pack.version || "v1.0")}</p></div><button class="secondary" data-view="card-packs" type="button">${icon("arrow_back")} 카드팩 목록</button></div><div class="card-operations-layout"><section class="panel"><div class="panel-heading"><div><h3>포함 카드</h3><span>총 ${(pack.cards || []).length}장</span></div><strong class="odds-total ${Math.abs(total - 100) < 0.001 ? "valid" : "invalid"}">확률 합계 ${total.toFixed(2)}%</strong></div><form id="card-pack-composition-form"><div class="table-wrap"><table class="table responsive-table composition-table"><thead><tr><th>카드</th><th>등급</th><th>포함 여부</th><th>확률</th><th>순서</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="empty">포함된 카드가 없습니다.</td></tr>'}</tbody></table></div>${editable ? `<footer class="drawer-footer"><button class="primary" type="submit">변경사항 저장</button></footer>` : ""}</form></section><aside class="panel odds-editor-panel"><div class="composition-card-preview" data-composition-card-preview>${compositionPreview}</div><div class="composition-status-panel"><div class="odds-validation"><span>${icon(Math.abs(total - 100) < 0.001 ? "check_circle" : "error")}</span><div><strong>확률 검증</strong><p>${Math.abs(total - 100) < 0.001 ? "합계가 100%입니다." : "합계를 100%로 맞춰 주세요."}</p></div></div><div class="odds-release-status"><span>${icon("public")}</span><div><strong>팬앱 공개</strong><p>${pack.status === "published" ? "현재 확률표가 공개 중입니다." : "공개 전 구성입니다."}</p></div></div></div><div class="odds-policy-card"><strong>${icon("verified_user")} 운영 안내</strong><p>공개 후에는 팬앱 카드팩 상세에도 같은 확률이 표시됩니다.</p></div>${pack.status !== "published" && can("cards:write") ? `<button class="primary full-width card-pack-publish" data-card-pack-id="${escapeHtml(pack.id)}" type="button" ${Math.abs(total - 100) < 0.001 ? "" : "disabled"}>저장 후 공개</button>` : `<div class="composition-published-state">${icon("check_circle")}<span><strong>공개된 구성</strong><small>팬앱에 반영된 상태입니다.</small></span></div>`}</aside></div></div>`;
 }
 function statusLabel(status) {
   return (
@@ -1490,6 +1889,12 @@ function scopeText(item) {
     .join(" · ");
 }
 
+function failedEngagementEventsPanel(events) {
+  if (!events.length) return "";
+  const rows = events.map((event) => `<li class="fan-growth-failed-event"><div><strong>${escapeHtml(event.kind || "성장 이벤트")}</strong><small>${escapeHtml(event.errorMessage || event.errorCode || "처리 실패")}</small></div><button class="secondary" type="button" data-engagement-retry="${escapeHtml(event.id)}">실패 이벤트 재처리</button></li>`).join("");
+  return `<section class="panel fan-growth-failed-events-panel"><div class="panel-heading"><div><p class="eyebrow">RECOVERY QUEUE</p><h2>실패 이벤트 재처리</h2><p>실패 원인을 확인한 뒤 팬 진행도 반영을 다시 시도합니다.</p></div><span class="badge warning-badge">${events.length}건</span></div><ul class="fan-growth-failed-events">${rows}</ul></section>`;
+}
+
 function fanGrowthView() {
   const passSeasons = state.engagement.passSeasons || [];
   const missions = state.engagement.missions || [];
@@ -1503,6 +1908,7 @@ function fanGrowthView() {
       && (state.fanPassStatus === "all" || item.status === state.fanPassStatus)
       && (state.fanPassArtist === "all" || item.artistId === state.fanPassArtist);
   });
+  const pagedPasses = pagedItems(visible, state.fanPassPage);
   const stats = [
     ["활성 패스", passSeasons.filter((item) => item.status === "published").length, "emoji_events", "공개 중인 레벨 패스"],
     ["검수 대기", passSeasons.filter((item) => item.status === "pending_review").length, "schedule", "검토가 필요한 패스"],
@@ -1514,7 +1920,7 @@ function fanGrowthView() {
     : "";
   const statusOptions = [{ value: "all", label: "모든 상태" }, { value: "published", label: "공개 중" }, { value: "pending_review", label: "검수 대기" }, { value: "draft", label: "임시 저장" }, { value: "ended", label: "종료" }];
   const artistOptions = [{ value: "all", label: "모든 아티스트" }, ...artists.map((artist) => ({ value: artist.id, label: artist.name }))];
-  return `<div class="fan-pass-admin"><div class="page-heading with-actions fan-pass-page-heading"><div><p class="eyebrow">FAN GROWTH</p><h2>팬 성장 운영</h2><p>${isRoot() ? "아티스트별 시즌 레벨 마일스톤과 보상을 관리합니다." : "담당 아티스트의 시즌 레벨 마일스톤과 보상을 관리합니다."}</p></div>${createActions}</div><div class="fan-growth-grid fan-pass-summary">${stats.map(([label, value, iconName, note], index) => `<article class="summary-card tone-${index + 1}"><span>${icon(iconName)}</span><div><small>${label}</small><strong>${Number(value).toLocaleString()}</strong><p>${note}</p></div></article>`).join("")}</div><section class="panel fan-pass-list-panel"><div class="panel-heading"><div><h2>레벨 패스 목록</h2></div><span>총 ${passSeasons.length}개</span></div><div class="toolbar compact-toolbar fan-pass-toolbar"><label class="search-field grow">${icon("search")}<input id="fan-pass-search" placeholder="패스 이름, 아티스트 검색" value="${escapeHtml(state.fanPassQuery)}" /></label>${adminSelect({ id: "fan-pass-status-filter", value: state.fanPassStatus, label: "패스 상태", className: "filter-select fan-pass-status-filter", options: statusOptions })}${isRoot() ? adminSelect({ id: "fan-pass-artist-filter", value: state.fanPassArtist, label: "패스 아티스트", className: "filter-select fan-pass-artist-filter", options: artistOptions }) : ""}<button class="secondary fan-pass-filter-reset" id="fan-pass-filter-reset" type="button">${icon("restart_alt")} 필터 초기화</button></div><div class="table-wrap"><table class="table fan-pass-table"><thead><tr><th>패스 이름</th><th>상태</th><th>아티스트</th><th>티어 수</th><th>시즌 기간</th><th>최종 업데이트</th><th><span class="sr-only">관리</span></th></tr></thead><tbody>${fanPassRows(visible)}</tbody></table></div><footer class="fan-pass-pagination"><button class="icon-button" type="button" aria-label="이전 페이지">${icon("chevron_left")}</button><button class="page-number active" type="button">1</button><button class="page-number" type="button">2</button><button class="page-number" type="button">3</button><button class="icon-button" type="button" aria-label="다음 페이지">${icon("chevron_right")}</button><span>1-${Math.min(visible.length, 10)} of ${visible.length}</span></footer></section><section class="fan-growth-admin-grid"><section class="panel"><div class="panel-heading"><div><p class="eyebrow">MISSION CONTROL</p><h2>미션 운영</h2><p>팬 행동 이벤트를 미션 진행도와 보상으로 연결합니다.</p></div><span>${missions.length}개</span></div><div class="table-wrap"><table class="table responsive-table"><thead><tr><th>미션</th><th>이벤트</th><th>목표</th><th>상태</th><th>관리</th></tr></thead><tbody>${missionRows(missions)}</tbody></table></div></section><section class="panel"><div class="panel-heading"><div><p class="eyebrow">OPERATIONS</p><h2>성장 시스템 상태</h2></div></div><div class="fan-growth-health-list"><div><span>활성 레벨 정책</span><strong>${escapeHtml(levelPolicies.find((item) => item.isActive)?.name || "없음")}</strong></div><div><span>실패 처리 이벤트</span><strong class="${failedEvents.length ? "danger-text" : "success-text"}">${failedEvents.length.toLocaleString()}건</strong></div><div><span>보상 카탈로그</span><strong>${(state.engagement.rewards || []).length.toLocaleString()}개</strong></div></div>${failedEvents.length ? `<div class="fan-growth-alert">${icon("error")} 실패 이벤트를 확인하고 재시도할 수 있습니다.</div>` : ""}</section></section></div>`;
+  return `<div class="fan-pass-admin"><div class="page-heading with-actions fan-pass-page-heading"><div><p class="eyebrow">FAN GROWTH</p><h2>팬 성장 운영</h2><p>${isRoot() ? "아티스트별 시즌 레벨 마일스톤과 보상을 관리합니다." : "담당 아티스트의 시즌 레벨 마일스톤과 보상을 관리합니다."}</p></div>${createActions}</div><div class="fan-growth-grid fan-pass-summary">${stats.map(([label, value, iconName, note], index) => `<article class="summary-card tone-${index + 1}"><span>${icon(iconName)}</span><div><small>${label}</small><strong>${Number(value).toLocaleString()}</strong><p>${note}</p></div></article>`).join("")}</div><section class="panel fan-pass-list-panel"><div class="panel-heading"><div><h2>레벨 패스 목록</h2></div><span>총 ${passSeasons.length}개</span></div><div class="toolbar compact-toolbar fan-pass-toolbar"><label class="search-field grow">${icon("search")}<input id="fan-pass-search" placeholder="패스 이름, 아티스트 검색" value="${escapeHtml(state.fanPassQuery)}" /></label>${adminSelect({ id: "fan-pass-status-filter", value: state.fanPassStatus, label: "패스 상태", className: "filter-select fan-pass-status-filter", options: statusOptions })}${isRoot() ? adminSelect({ id: "fan-pass-artist-filter", value: state.fanPassArtist, label: "패스 아티스트", className: "filter-select fan-pass-artist-filter", options: artistOptions }) : ""}<button class="secondary fan-pass-filter-reset" id="fan-pass-filter-reset" type="button">${icon("restart_alt")} 필터 초기화</button></div><div class="table-wrap"><table class="table fan-pass-table"><thead><tr><th>패스 이름</th><th>상태</th><th>아티스트</th><th>티어 수</th><th>시즌 기간</th><th>최종 업데이트</th><th><span class="sr-only">관리</span></th></tr></thead><tbody>${fanPassRows(pagedPasses.items)}</tbody></table></div>${tablePagination("fanPassPage", pagedPasses.page, visible.length)}</section><section class="fan-growth-admin-grid"><section class="panel"><div class="panel-heading"><div><p class="eyebrow">MISSION CONTROL</p><h2>미션 운영</h2><p>팬 행동 이벤트를 미션 진행도와 보상으로 연결합니다.</p></div><span>${missions.length}개</span></div><div class="table-wrap"><table class="table responsive-table"><thead><tr><th>미션</th><th>이벤트</th><th>목표</th><th>상태</th><th>관리</th></tr></thead><tbody>${missionRows(missions)}</tbody></table></div></section><section class="panel"><div class="panel-heading"><div><p class="eyebrow">OPERATIONS</p><h2>성장 시스템 상태</h2></div></div><div class="fan-growth-health-list"><div><span>활성 레벨 정책</span><strong>${escapeHtml(levelPolicies.find((item) => item.isActive)?.name || "없음")}</strong></div><div><span>실패 처리 이벤트</span><strong class="${failedEvents.length ? "danger-text" : "success-text"}">${failedEvents.length.toLocaleString()}건</strong></div><div><span>보상 카탈로그</span><strong>${(state.engagement.rewards || []).length.toLocaleString()}개</strong></div></div>${failedEvents.length ? `<div class="fan-growth-alert">${icon("error")} 실패 이벤트를 확인하고 재시도할 수 있습니다.</div>` : ""}</section></section>${failedEngagementEventsPanel(failedEvents)}</div>`;
 }
 
 function missionRows(missions) {
@@ -1621,6 +2027,10 @@ function cardAssigneeLabel(card) {
   return card.assigneeName || card.reviewerName || card.partnerReviewerName || card.platformReviewerName || cardCreatorLabel(card);
 }
 function reviewStatusTabs() {
+  // The review table is paginated, while the tab badges describe the full
+  // review queue. Prefer the already-loaded catalog so the counts do not
+  // misleadingly change with the current page.
+  const reviewCards = state.cardCatalog?.length ? state.cardCatalog : state.cards;
   const tabs = [
     { value: "all", label: "전체" },
     { value: "pending_review", label: "검수 대기" },
@@ -1629,7 +2039,7 @@ function reviewStatusTabs() {
   ];
   return `<div class="review-status-tabs" role="tablist" aria-label="카드 검수 상태">${tabs
     .map((tab) => {
-      const count = state.cards.filter((card) => cardMatchesStatus(card, tab.value)).length;
+      const count = reviewCards.filter((card) => cardMatchesStatus(card, tab.value)).length;
       return `<button class="${state.status === tab.value ? "active" : ""}" type="button" role="tab" aria-selected="${state.status === tab.value ? "true" : "false"}" data-review-status-tab="${escapeHtml(tab.value)}"><span>${escapeHtml(tab.label)}</span><strong>${Number(count).toLocaleString()}</strong></button>`;
     })
     .join("")}</div>`;
@@ -1639,7 +2049,9 @@ function cardRows(cards) {
     return '<tr><td colspan="6" class="empty">조건에 맞는 카드가 없습니다.</td></tr>';
   return cards
     .map((card) => {
-      const action = `<button class="icon-button review-card" type="button" data-id="${escapeHtml(card.id)}" aria-label="${escapeHtml(card.name)} 상세 보기">${icon("more_horiz")}</button>`;
+      const menuOpen = state.cardActionMenuId === card.id;
+      const menuItems = `<button class="row-action-menu-item review-card" type="button" data-id="${escapeHtml(card.id)}">${icon("visibility")}<span>상세 보기</span></button>${releaseStatus(card) === "draft" && can("cards:write") ? `<button class="row-action-menu-item danger-button delete-draft-card" type="button" data-card-action="delete" data-id="${escapeHtml(card.id)}">${icon("delete")}<span>초안 삭제</span></button>` : ""}`;
+      const action = `<div class="row-action-menu ${menuOpen ? "open" : ""}"><button class="icon-button row-action-menu-toggle" type="button" data-card-action-menu="${escapeHtml(card.id)}" aria-label="${escapeHtml(card.name)} 더보기" aria-expanded="${menuOpen}">${icon("more_horiz")}</button><div class="row-action-menu-popover" role="menu" aria-label="${escapeHtml(card.name)} 카드 작업">${menuItems}</div></div>`;
       const catalogArtist = state.catalog.artists.find(
         (artist) => artist.id === card.artistId,
       );
@@ -1667,10 +2079,41 @@ function activateReviewRow(event, id, open = openReview) {
   return true;
 }
 
+function positionOpenCardActionMenu() {
+  const toggle = document.querySelector('.row-action-menu.open [data-card-action-menu]');
+  const popover = document.querySelector('.row-action-menu.open .row-action-menu-popover');
+  if (!toggle || !popover) return;
+  const anchor = toggle.getBoundingClientRect();
+  const width = Math.max(popover.offsetWidth || 168, 168);
+  const height = Math.max(popover.offsetHeight || 44, 44);
+  const left = Math.min(window.innerWidth - width - 12, Math.max(12, anchor.right - width));
+  const below = anchor.bottom + 6;
+  const top = below + height <= window.innerHeight - 12 ? below : Math.max(12, anchor.top - height - 6);
+  popover.style.left = `${Math.round(left)}px`;
+  popover.style.top = `${Math.round(top)}px`;
+}
+
 function activateReviewButton(event, id, open = openReview) {
   event.stopPropagation();
+  state.cardActionMenuId = null;
   open(id);
   return true;
+}
+
+async function deleteDraftCard(cardId) {
+  const card = state.cards.find((item) => item.id === cardId);
+  if (!card || releaseStatus(card) !== "draft") {
+    toast("초안 카드만 삭제할 수 있습니다.");
+    return;
+  }
+  if (!window.confirm(`\"${card.name}\" 초안 카드를 삭제할까요? 삭제 후 복구할 수 없습니다.`)) return;
+  try {
+    await api(`/admin/cards/${encodeURIComponent(cardId)}`, { method: "DELETE" });
+    await loadData();
+    toast("초안 카드를 삭제했습니다.");
+  } catch (error) {
+    toast(error?.message || "초안 카드를 삭제하지 못했습니다. 연결된 카드팩이 있는지 확인해 주세요.");
+  }
 }
 
 function openReviewFromRow(event) {
@@ -1782,7 +2225,7 @@ function reviewPanel() {
   const canPrepareDrop = ["approved", "drop_ready"].includes(status) && (can("drops:write") || can("drops:manage"));
   const canEdit = can("cards:write") && !["pending_partner_review", "pending_platform_review", "drop_ready", "published"].includes(status);
   const editForm = canEdit
-    ? `<form class="form edit-card-form" id="admin-card-edit-form" data-id="${escapeHtml(card.id)}"><label class="field">카드명<input name="name" value="${escapeHtml(card.name)}" required /></label><label class="field">시즌<input name="seasonName" value="${escapeHtml(card.seasonName || "")}" placeholder="예: 2026 SUMMER" /></label><label class="field">등급<select name="rarity"><option value="N" ${card.rarity === "N" ? "selected" : ""}>N (노멀)</option><option value="R" ${card.rarity === "R" ? "selected" : ""}>R (레어)</option><option value="SR" ${card.rarity === "SR" ? "selected" : ""}>SR (슈퍼 레어)</option><option value="Special" ${card.rarity === "Special" ? "selected" : ""}>Special</option></select></label><label class="field">발행 수량<input name="issueLimit" type="number" min="1" value="${card.issueLimit || ""}" placeholder="제한 없음" /></label><label class="field">앞면 이미지 교체<input name="cardImage" type="file" accept="image/png,image/jpeg,image/webp" /><span class="hint">선택하지 않으면 기존 이미지를 유지합니다.</span></label><label class="field">뒷면 이미지 교체<input name="backCardImage" type="file" accept="image/png,image/jpeg,image/webp" /><span class="hint">선택하지 않으면 기본 템플릿 또는 기존 이미지를 유지합니다.</span></label><button class="primary" type="submit">변경 저장</button></form>`
+    ? `<form class="form edit-card-form" id="admin-card-edit-form" data-id="${escapeHtml(card.id)}"><label class="field">카드명<input name="name" value="${escapeHtml(card.name)}" required /></label><label class="field">시즌<input name="seasonName" value="${escapeHtml(card.seasonName || "")}" placeholder="예: 2026 SUMMER" /></label><label class="field">등급>${adminSelect({ id: "admin-card-rarity", name: "rarity", value: card.rarity || "N", label: "등급", className: "form-select", options: [{ value: "N", label: "N (노멀)" }, { value: "R", label: "R (레어)" }, { value: "SR", label: "SR (슈퍼 레어)" }, { value: "Special", label: "Special" }] })}</label><label class="field">발행 수량<input name="issueLimit" type="number" min="1" value="${card.issueLimit || ""}" placeholder="제한 없음" /></label><label class="field">앞면 이미지 교체<input name="cardImage" type="file" accept="image/png,image/jpeg,image/webp" /><span class="hint">선택하지 않으면 기존 이미지를 유지합니다.</span></label><label class="field">뒷면 이미지 교체<input name="backCardImage" type="file" accept="image/png,image/jpeg,image/webp" /><span class="hint">선택하지 않으면 기본 템플릿 또는 기존 이미지를 유지합니다.</span></label><button class="primary" type="submit">변경 저장</button></form>`
     : "";
   const reviewNote =
     canReviewPartner || canReviewPlatform || canSubmitReview
@@ -1855,17 +2298,34 @@ function eventTypeLabel(type) {
 }
 
 function eventConnectionOptions(type, selected = "") {
-  if (type === "announcement") return `<option value="">연결 없음</option>`;
+  if (type === "announcement") {
+    return adminSelect({
+      id: "event-connection-select",
+      name: "connection",
+      value: "",
+      label: "연결 대상",
+      className: "form-select",
+      options: [{ value: "", label: "연결 없음" }],
+    });
+  }
   if (type === "external") return `<input name="connection" value="${escapeHtml(selected)}" placeholder="https://..." required />`;
-  const source = type === "card_drop" ? state.drops : type === "card" ? state.cards : state.engagement.achievements;
-  const options = source.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === selected ? "selected" : ""}>${escapeHtml(item.name || item.title || item.id)}</option>`).join("");
-  return `<select name="connection" id="event-connection-select" required><option value="">연결 대상 선택</option>${options}</select>`;
+  const source = type === "card_drop" ? state.drops : type === "card" ? cardCatalogItems() : state.engagement.achievements;
+  return adminSelect({
+    id: "event-connection-select",
+    name: "connection",
+    value: selected,
+    label: "연결 대상",
+    className: "form-select",
+    required: true,
+    options: [{ value: "", label: "연결 대상 선택" }, ...source.map((item) => ({ value: item.id, label: item.name || item.title || item.id }))],
+  });
 }
 
 function eventRelatedCardOptions(event) {
   const selected = new Set(event.relatedCardIds || []);
-  if (!state.cards.length) return '<small class="field-help">연결 가능한 공개 카드가 없습니다.</small>';
-  return `<div class="event-related-card-options">${state.cards.map((card) => `<label class="event-card-option"><input type="checkbox" name="relatedCardIds" value="${escapeHtml(card.id)}" ${selected.has(card.id) ? "checked" : ""} /><span class="event-card-check" aria-hidden="true">${icon("check")}</span><span class="event-card-thumb" aria-hidden="true">${icon("style")}</span><span class="event-card-copy"><strong>${escapeHtml(card.name || card.id)}</strong><small>${escapeHtml(card.memberName || "공개 카드")}</small></span><span class="event-card-order">${selected.has(card.id) ? "선택됨" : "연결"}</span></label>`).join("")}</div>`;
+  const cards = cardCatalogItems().filter((card) => card.status === "published");
+  if (!cards.length) return '<small class="field-help">연결 가능한 공개 카드가 없습니다.</small>';
+  return `<div class="event-related-card-options">${cards.map((card) => `<label class="event-card-option"><input type="checkbox" name="relatedCardIds" value="${escapeHtml(card.id)}" ${selected.has(card.id) ? "checked" : ""} /><span class="event-card-check" aria-hidden="true">${icon("check")}</span><span class="event-card-thumb" aria-hidden="true">${icon("style")}</span><span class="event-card-copy"><strong>${escapeHtml(card.name || card.id)}</strong><small>${escapeHtml(card.memberName || "공개 카드")}</small></span><span class="event-card-order">${selected.has(card.id) ? "선택됨" : "연결"}</span></label>`).join("")}</div>`;
 }
 
 function eventsView() {
@@ -1875,10 +2335,16 @@ function eventsView() {
   const selected = state.selectedEvent;
   const rows = state.events.length ? state.events.map((event) => `<tr class="event-row ${selected?.id === event.id ? "selected-row" : ""}" data-event-row-id="${escapeHtml(event.id)}" tabindex="0"><td><div class="event-cell"><span class="event-cell-icon">${icon(eventTypeIcon(event.eventType))}</span><div><strong>${escapeHtml(event.title)}</strong><small>${escapeHtml(event.summary || "")}</small></div></div></td><td>${escapeHtml(eventTypeLabel(event.eventType))}</td><td>${formatDate(event.startsAt)}</td><td><span class="badge ${eventBadgeClass(event.workflowStatus)}">${escapeHtml(eventWorkflowLabel(event.workflowStatus))}</span></td><td><button class="icon-button event-more" type="button" data-event-action="open" data-id="${escapeHtml(event.id)}" aria-label="${escapeHtml(event.title)} 상세 보기">${icon("more_horiz")}</button></td></tr>`).join("") : `<tr><td colspan="5" class="empty">등록된 이벤트가 없습니다.</td></tr>`;
   const detail = selected ? eventDetailPanel(selected) : `<aside class="panel event-detail-empty"><span>${icon("campaign")}</span><h3>이벤트를 선택하세요</h3><p>목록에서 이벤트를 선택하면 미리보기와 운영 액션이 표시됩니다.</p></aside>`;
-  return `<div class="page-heading"><div><p class="eyebrow">EDITORIAL OPERATIONS</p><h2>이벤트 관리</h2><p>팬앱 홈과 이벤트 페이지에 노출할 콘텐츠를 등록하고 공개 일정을 관리합니다.</p></div>${can("events:write") ? `<button class="primary" id="open-event-drawer">${icon("add")} 이벤트 등록</button>` : ""}</div><div class="event-workspace"><section class="panel event-list-panel"><div class="panel-heading"><div><p class="eyebrow">EVENT QUEUE</p><h3>이벤트 목록</h3></div><span>${state.eventPagination.total || state.events.length}개 항목</span></div><div class="toolbar compact-toolbar"><label class="search-field grow">${icon("search")}<input id="event-search" placeholder="이벤트명, 설명 검색" value="${escapeHtml(state.eventQuery)}" /></label>${adminSelect({ id: "event-status-filter", value: state.eventStatus, label: "이벤트 상태", className: "filter-select event-status-filter", options: status })}${adminSelect({ id: "event-type-filter", value: state.eventType, label: "이벤트 유형", className: "filter-select event-type-filter", options: type })}${adminSelect({ id: "event-artist-filter", value: state.eventArtist, label: "아티스트", className: "filter-select event-artist-filter", options: artists })}</div><div class="table-wrap"><table class="table responsive-table event-table"><thead><tr><th>이벤트</th><th>유형</th><th>시작일</th><th>상태</th><th><span class="sr-only">관리</span></th></tr></thead><tbody>${rows}</tbody></table></div>${eventPagination()}</section>${detail}</div>`;
+  const deepLinkedEditor = isEventDeepLink() && can("events:write") && !state.eventEditorOpen
+    ? `<section class="panel event-editor-fallback" aria-label="이벤트 등록">${eventDrawer()}</section>`
+    : "";
+  return `<div class="page-heading"><div><p class="eyebrow">EDITORIAL OPERATIONS</p><h2>이벤트 관리</h2><p>팬앱 홈과 이벤트 페이지에 노출할 콘텐츠를 등록하고 공개 일정을 관리합니다.</p></div>${can("events:write") ? `<a class="primary" id="open-event-drawer" href="?view=events&drawer=event" aria-haspopup="dialog">${icon("add")} 이벤트 등록</a>` : ""}</div>${deepLinkedEditor}<div class="event-workspace"><section class="panel event-list-panel"><div class="panel-heading"><div><p class="eyebrow">EVENT QUEUE</p><h3>이벤트 목록</h3></div><span>${state.eventPagination.total || state.events.length}개 항목</span></div><div class="toolbar compact-toolbar"><label class="search-field grow">${icon("search")}<input id="event-search" placeholder="이벤트명, 설명 검색" value="${escapeHtml(state.eventQuery)}" /></label>${adminSelect({ id: "event-status-filter", value: state.eventStatus, label: "이벤트 상태", className: "filter-select event-status-filter", options: status })}${adminSelect({ id: "event-type-filter", value: state.eventType, label: "이벤트 유형", className: "filter-select event-type-filter", options: type })}${adminSelect({ id: "event-artist-filter", value: state.eventArtist, label: "아티스트", className: "filter-select event-artist-filter", options: artists })}</div><div class="table-wrap"><table class="table responsive-table event-table"><thead><tr><th>이벤트</th><th>유형</th><th>시작일</th><th>상태</th><th><span class="sr-only">관리</span></th></tr></thead><tbody>${rows}</tbody></table></div>${eventPagination()}</section>${detail}</div>`;
 }
 
 function eventTypeIcon(type) { return ({ comment: "chat_bubble", card_drop: "style", card: "style", fan_mission: "workspace_premium", external: "open_in_new" })[type] || "campaign"; }
+function cardCatalogItems() {
+  return state.cardCatalog.length ? state.cardCatalog : state.cards;
+}
 function eventBadgeClass(status) { return status === "published" ? "success-badge" : status === "pending_review" ? "warning-badge" : status === "changes_requested" ? "danger-badge" : status === "ended" ? "draft" : "violet-badge"; }
 function eventPagination() { const page = state.eventPagination.page || 1; const totalPages = state.eventPagination.totalPages || 1; return totalPages > 1 ? `<div class="pagination"><button class="secondary" data-event-page="${page - 1}" ${page <= 1 ? "disabled" : ""}>이전</button><span>${page} / ${totalPages}</span><button class="secondary" data-event-page="${page + 1}" ${page >= totalPages ? "disabled" : ""}>다음</button></div>` : ""; }
 function eventApplicantSummary(event) {
@@ -1922,7 +2388,7 @@ function eventDetailPanel(event) {
   const canReview = can("events:review") && event.workflowStatus === "pending_review";
   const canPublish = can("events:publish") && ["approved", "scheduled"].includes(event.workflowStatus);
   const canSubmit = can("events:submit") && ["draft", "changes_requested"].includes(event.workflowStatus);
-  const relatedCards = (event.relatedCardIds || []).map((id) => state.cards.find((card) => card.id === id)?.name || id).filter(Boolean);
+  const relatedCards = (event.relatedCardIds || []).map((id) => cardCatalogItems().find((card) => card.id === id)?.name || id).filter(Boolean);
   const artistName = scopedArtists().find((artist) => artist.id === event.artistId)?.name || "전체 서비스";
   const loadedApplicants = state.eventApplicantsEventId === event.id ? state.eventApplicants : [];
   const winnerCount = loadedApplicants.filter((item) => item.status === "winner").length;
@@ -1969,6 +2435,7 @@ async function loadCardPackDetail(packId, openComposition = false) {
   try {
     const result = await api(`/admin/card-packs/${encodeURIComponent(packId)}`);
     state.selectedCardPack = result.data;
+    state.selectedCompositionCardId = result.data.cards?.[0]?.cardId || null;
     state.view = openComposition ? "card-pack-composition" : "card-packs";
     layout();
   } catch {
@@ -1992,7 +2459,7 @@ async function createCardPack(event) {
     return;
   }
   const mismatchedCard = cards.find((entry) => {
-    const card = state.cards.find((candidate) => candidate.id === entry.cardId);
+    const card = cardCatalogItems().find((candidate) => candidate.id === entry.cardId);
     return card && artistId && (card.artistId || card.ownerArtistId) !== artistId;
   });
   if (mismatchedCard) {
@@ -2045,7 +2512,26 @@ async function createShopProduct(event) {
     imageUrl: values[`block_image_${block.key}`] || block.imageUrl || null,
     alt: values[`block_alt_${block.key}`] || block.alt || null,
   }));
+  const productId = state.shopProductDraft?.id;
   try {
+    if (productId) {
+      await api(`/admin/shop/products/${encodeURIComponent(productId)}`, { method: "PATCH", body: JSON.stringify({
+        name: values.name,
+        description: values.description || null,
+        imageUrl: values.imageUrl || null,
+        pricePoints: Number(values.pricePoints),
+        detailContent,
+        inventoryLimit: values.inventoryLimit ? Number(values.inventoryLimit) : null,
+        perUserLimit: values.perUserLimit ? Number(values.perUserLimit) : null,
+        scheduledPublishAt: values.scheduledPublishAt || null,
+        exposureSlot: values.exposureSlot || "shop",
+      }) });
+      toast("상점 상품을 수정했습니다.");
+      state.view = "shop-products";
+      state.shopProductDraft = null;
+      await loadData();
+      return;
+    }
     await api("/admin/shop/products", { method: "POST", body: JSON.stringify({
       artistId: values.artistId,
       productType: values.productType || "card_pack",
@@ -2113,7 +2599,7 @@ async function saveCardPackComposition(event) {
 }
 
 function issuanceBatchViewModel(batch) {
-  const card = state.cards.find((item) => item.id === batch.cardId) || null;
+    const card = cardCatalogItems().find((item) => item.id === batch.cardId) || null;
   const drop = state.drops.find((item) => item.id === batch.dropId) || null;
   const quantity = Number(batch.codeCount ?? batch.quantity ?? 0);
   const registered = Number(batch.usedCount || 0);
@@ -2148,7 +2634,7 @@ function issuanceBatchRows(items, selectedBatchId = state.selectedBatchId) {
 }
 
 function batchesView() {
-  const published = state.cards.filter((card) => card.status === "published");
+  const published = cardCatalogItems().filter((card) => card.status === "published");
   const liveDrops = state.drops.filter((drop) => drop.status === "live");
   const canOpenBatchCreation = published.length > 0 && liveDrops.length > 0;
   const canCreateBatch = !isRoot() && can("codes:write") && canOpenBatchCreation;
@@ -2161,16 +2647,34 @@ function batchesView() {
     const periodMatches = state.issuancePeriod === "all" || (state.issuancePeriod === "active" ? !item.expired : item.expired);
     return (!query || searchable.includes(query)) && statusMatches && typeMatches && periodMatches;
   });
-  const selected = items.find((item) => item.batch.id === state.selectedBatchId) || visibleItems[0] || items[0] || null;
+  const paged = pagedItems(visibleItems, state.issuancePage, 5);
+  const selected = items.find((item) => item.batch.id === state.selectedBatchId) || paged.items[0] || visibleItems[0] || items[0] || null;
   const reservedCount = items.filter((item) => item.status === "예약").length;
   const issuingCount = items.filter((item) => item.status === "발급 중").length;
   const completedCount = items.filter((item) => item.status === "등록 완료").length;
   const remainingCount = items.reduce((sum, item) => sum + item.remaining, 0);
-  return `<section class="card-ops-page issue-code-preview production-issuance-page"><div class="card-ops-heading"><div><p class="eyebrow">ISSUANCE</p><h2>발급·인증번호</h2><p>카드 발급 배치와 인증번호 상태를 관리합니다.</p></div><button class="primary" type="button" data-view="issuance-create" ${canOpenBatchCreation ? "" : "disabled"}>${icon("add")} 추가 발급 배치 만들기</button></div><div class="card-ops-stats issue-stats"><article><span>${icon("calendar_month")}</span><small>예약 배치</small><strong>${reservedCount.toLocaleString()}개</strong></article><article><span>${icon("inventory_2")}</span><small>발급 중 배치</small><strong>${issuingCount.toLocaleString()}개</strong></article><article><span>${icon("check_circle")}</span><small>등록 완료 배치</small><strong>${completedCount.toLocaleString()}개</strong></article><article><span>${icon("schedule")}</span><small>잔여 수량</small><strong>${remainingCount.toLocaleString()}장</strong></article></div><div class="card-ops-master-detail issuance-master-detail"><section class="panel card-ops-table-panel"><div class="card-ops-toolbar"><label class="search-field">${icon("search")}<input id="issuance-search" value="${escapeHtml(state.issuanceQuery)}" placeholder="배치명, 카드명 검색" /></label><select data-issuance-filter="status"><option value="all" ${state.issuanceStatus === "all" ? "selected" : ""}>전체 상태</option><option value="예약" ${state.issuanceStatus === "예약" ? "selected" : ""}>예약</option><option value="발급 중" ${state.issuanceStatus === "발급 중" ? "selected" : ""}>발급 중</option><option value="등록 완료" ${state.issuanceStatus === "등록 완료" ? "selected" : ""}>등록 완료</option><option value="만료" ${state.issuanceStatus === "만료" ? "selected" : ""}>만료</option></select><select data-issuance-filter="type"><option value="all" ${state.issuanceType === "all" ? "selected" : ""}>전체 카드 유형</option><option value="한정 특전" ${state.issuanceType === "한정 특전" ? "selected" : ""}>한정 특전</option><option value="다회 사용 코드" ${state.issuanceType === "다회 사용" ? "selected" : ""}>다회 사용 코드</option></select><select data-issuance-filter="period"><option value="all" ${state.issuancePeriod === "all" ? "selected" : ""}>전체 기간</option><option value="active" ${state.issuancePeriod === "active" ? "selected" : ""}>만료 전</option><option value="expired" ${state.issuancePeriod === "expired" ? "selected" : ""}>만료됨</option></select></div><div class="table-wrap"><table class="table"><thead><tr><th>배치명</th><th>카드 유형</th><th>수량</th><th>등록 완료</th><th>잔여 수량</th><th>인증번호 상태</th><th>상태</th><th>만료일</th></tr></thead><tbody>${issuanceBatchRows(visibleItems, selected?.batch.id)}</tbody></table></div><footer class="preview-table-footer"><strong>총 ${visibleItems.length.toLocaleString()}개</strong><span class="pagination-control">‹ <b>1</b> ›</span></footer></section>${issuanceDetailView(selected)}</div>${codeBatchPanel()}</section>`;
+  const issuanceStatusOptions = [
+    { value: "all", label: "전체 상태" },
+    { value: "예약", label: "예약" },
+    { value: "발급 중", label: "발급 중" },
+    { value: "등록 완료", label: "등록 완료" },
+    { value: "만료", label: "만료" },
+  ];
+  const issuanceTypeOptions = [
+    { value: "all", label: "전체 카드 유형" },
+    { value: "한정 특전", label: "한정 특전" },
+    { value: "다회 사용 코드", label: "다회 사용 코드" },
+  ];
+  const issuancePeriodOptions = [
+    { value: "all", label: "전체 기간" },
+    { value: "active", label: "만료 전" },
+    { value: "expired", label: "만료됨" },
+  ];
+  return `<section class="card-ops-page issue-code-preview production-issuance-page"><div class="card-ops-heading"><div><p class="eyebrow">ISSUANCE</p><h2>발급·인증번호</h2><p>카드 발급 배치와 인증번호 상태를 관리합니다.</p></div><button class="primary" type="button" data-view="issuance-create" ${canOpenBatchCreation ? "" : "disabled"}>${icon("add")} 추가 발급 배치 만들기</button></div><div class="card-ops-stats issue-stats"><article><span>${icon("calendar_month")}</span><small>예약 배치</small><strong>${reservedCount.toLocaleString()}개</strong></article><article><span>${icon("inventory_2")}</span><small>발급 중 배치</small><strong>${issuingCount.toLocaleString()}개</strong></article><article><span>${icon("check_circle")}</span><small>등록 완료 배치</small><strong>${completedCount.toLocaleString()}개</strong></article><article><span>${icon("schedule")}</span><small>잔여 수량</small><strong>${remainingCount.toLocaleString()}장</strong></article></div><div class="card-ops-master-detail issuance-master-detail"><section class="panel card-ops-table-panel"><div class="card-ops-toolbar"><label class="search-field">${icon("search")}<input id="issuance-search" value="${escapeHtml(state.issuanceQuery)}" placeholder="배치명, 카드명 검색" /></label>${adminSelect({ id: "issuance-status-filter", value: state.issuanceStatus, label: "발급 상태 필터", className: "filter-select issuance-status-filter", dataFilter: "status", options: issuanceStatusOptions })}${adminSelect({ id: "issuance-type-filter", value: state.issuanceType, label: "발급 상태 필터", className: "filter-select issuance-type-filter", dataFilter: "type", options: issuanceTypeOptions })}${adminSelect({ id: "issuance-period-filter", value: state.issuancePeriod, label: "기간 필터", className: "filter-select issuance-period-filter", dataFilter: "period", options: issuancePeriodOptions })}</div><div class="table-wrap"><table class="table"><thead><tr><th>배치명</th><th>카드 유형</th><th>수량</th><th>등록 완료</th><th>잔여 수량</th><th>인증번호 상태</th><th>상태</th><th>만료일</th></tr></thead><tbody>${issuanceBatchRows(paged.items, selected?.batch.id)}</tbody></table></div>${tablePagination("issuancePage", paged.page, visibleItems.length, 5)}</section>${issuanceDetailView(selected)}</div>${codeBatchPanel()}</section>`;
 }
 
 function issuanceCreationView() {
-  const publishedCards = state.cards.filter((card) => card.status === "published");
+  const publishedCards = cardCatalogItems().filter((card) => card.status === "published");
   const liveDrops = state.drops.filter((drop) => drop.status === "live");
   const defaultExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
   defaultExpiry.setMinutes(defaultExpiry.getMinutes() - defaultExpiry.getTimezoneOffset());
@@ -2235,10 +2739,8 @@ function codeBatchPanel() {
 }
 function dropsView() {
   const artists = scopedArtists();
-  const artistOptions = artists.length
-    ? artists.map((artist) => `<option value="${escapeHtml(artist.id)}">${escapeHtml(artist.name)}</option>`).join("")
-    : '<option value="">연결된 아티스트가 없습니다.</option>';
-  return `<div class="page-heading with-actions"><div><p class="eyebrow">DROP OPERATIONS</p><h2>드롭 운영</h2><p>승인된 카드를 팬에게 공개할 드롭을 만들고 발행 상태를 관리합니다.</p></div><span class="badge ${state.drops.some((drop) => drop.status === "live") ? "success-badge" : "draft"}">${state.drops.filter((drop) => drop.status === "live").length}개 공개 중</span></div><section class="panel"><div class="panel-heading"><div><h3>새 드롭 만들기</h3><span>아티스트를 선택한 뒤 기간을 설정하고 초안으로 저장합니다.</span></div></div><form id="drop-form" class="toolbar"><input class="search" name="name" placeholder="예: 2026 SUMMER 홀로그램 드롭" required /><select class="filter" name="artistId" required>${artistOptions}</select><label class="field"><span class="sr-only">시작 일시</span><input name="startsAt" type="datetime-local" required /></label><label class="field"><span class="sr-only">종료 일시</span><input name="endsAt" type="datetime-local" required /></label><button class="primary" type="submit" ${artists.length ? "" : "disabled"}>드롭 생성</button></form></section><section class="panel"><div class="panel-heading"><div><h3>등록된 드롭</h3><span>초안은 발행 요청 후 루트 관리자가 공개할 수 있습니다.</span></div><span>${state.drops.length}개</span></div><div class="table-wrap"><table class="table responsive-table"><thead><tr><th>드롭</th><th>상태</th><th>기간</th><th>관리</th></tr></thead><tbody>${dropRows()}</tbody></table></div></section></div>`;
+  const artistOptions = artists.map((artist) => ({ value: artist.id, label: artist.name }));
+  return `<div class="page-heading with-actions"><div><p class="eyebrow">DROP OPERATIONS</p><h2>드롭 운영</h2><p>승인된 카드를 팬에게 공개할 드롭을 만들고 발행 상태를 관리합니다.</p></div><span class="badge ${state.drops.some((drop) => drop.status === "live") ? "success-badge" : "draft"}">${state.drops.filter((drop) => drop.status === "live").length}개 공개 중</span></div><section class="panel"><div class="panel-heading"><div><h3>새 드롭 만들기</h3><span>아티스트를 선택한 뒤 기간을 설정하고 초안으로 저장합니다.</span></div></div><form id="drop-form" class="toolbar"><input class="search ops-control" name="name" placeholder="예: 2026 SUMMER 홀로그램 드롭" required />${adminSelect({ id: "drop-artist", name: "artistId", value: artists[0]?.id || "", label: "아티스트", className: "filter-select", options: artistOptions, required: true })}<label class="field"><span class="sr-only">시작 일시</span><input class="ops-control" name="startsAt" type="datetime-local" required /></label><label class="field"><span class="sr-only">종료 일시</span><input class="ops-control" name="endsAt" type="datetime-local" required /></label><button class="primary" type="submit" ${artists.length ? "" : "disabled"}>드롭 생성</button></form></section><section class="panel"><div class="panel-heading"><div><h3>등록된 드롭</h3><span>초안은 발행 요청 후 루트 관리자가 공개할 수 있습니다.</span></div><span>${state.drops.length}개</span></div><div class="table-wrap"><table class="table responsive-table"><thead><tr><th>드롭</th><th>상태</th><th>기간</th><th>관리</th></tr></thead><tbody>${dropRows()}</tbody></table></div></section></div>`;
 }
 
 function batchRows() {
@@ -2288,9 +2790,26 @@ function fan360Panel() {
   if (!fan) return "";
   const account = fan.account || {};
   const rows = (items, empty) => items?.length ? items.map((item) => `<li><strong>${escapeHtml(item.subject || item.productName || item.title || item.status || item.kind || "기록")}</strong><small>${escapeHtml(item.status || item.createdAt || item.updatedAt || "")}</small></li>`).join("") : `<li class="empty">${empty}</li>`;
+  const cardRows = (fan.cards || []).map((card) => `<li><strong>${escapeHtml(card.name || card.cardId)}</strong><small>${escapeHtml(card.rarity || "카드")} · ${card.tradeLocked ? "거래 잠금" : "거래 가능"} · ${formatDate(card.acquiredAt)}</small></li>`).join("") || '<li class="empty">보유 카드가 없습니다.</li>';
   const pointRows = (fan.pointCharges || []).map((charge) => `<li><strong>${Number(charge.points).toLocaleString()}P 충전</strong><small>${Number(charge.priceWon).toLocaleString()}원 · ${escapeHtml(charge.status)} · ${formatDate(charge.createdAt)}</small></li>`).join("") || '<li class="empty">충전 내역이 없습니다.</li>';
   const ledgerRows = (fan.pointLedger || []).map((entry) => `<li><strong>${entry.amount >= 0 ? "+" : ""}${Number(entry.amount).toLocaleString()}P</strong><small>${escapeHtml(entry.description || entry.type)} · 잔액 ${Number(entry.balanceAfter).toLocaleString()}P · ${formatDate(entry.createdAt)}</small></li>`).join("") || '<li class="empty">포인트 원장 내역이 없습니다.</li>';
-  return `<section class="panel fan-360-panel"><div class="panel-heading"><div><p class="eyebrow">FAN 360 VIEW</p><h2>${escapeHtml(fan.profile.nickname || fan.profile.email || fan.profile.id)}</h2><p>${escapeHtml(fan.profile.email || fan.profile.id)} · 비밀번호·민감 목적지는 표시하지 않습니다.</p></div><button class="secondary" type="button" data-close-fan360>닫기</button></div><div class="fan-360-summary"><span><small>포인트</small><strong>${Number(account.pointBalance || 0).toLocaleString()}P</strong></span><span><small>보유 카드</small><strong>${Number(account.cardCount || 0).toLocaleString()}장</strong></span><span><small>진행 문의</small><strong>${Number(account.openSupportTickets || 0).toLocaleString()}건</strong></span><span><small>온보딩</small><strong>${fan.profile.onboardingCompleted ? "완료" : "미완료"}</strong></span></div><div class="fan-360-columns"><section><h3>최근 주문</h3><ul>${rows(fan.orders, "주문 내역이 없습니다.")}</ul></section><section><h3>거래</h3><ul>${rows(fan.trades, "거래 내역이 없습니다.")}</ul></section><section><h3>포인트 충전</h3><ul>${pointRows}</ul></section><section><h3>포인트 원장</h3><ul>${ledgerRows}</ul></section><section><h3>문의·신고</h3><ul>${rows(fan.supportTickets, "문의 내역이 없습니다.")}</ul></section><section><h3>최근 알림</h3><ul>${rows(fan.recentNotifications, "알림 내역이 없습니다.")}</ul></section></div></section>`;
+  const notificationStatus = fan.profile.emailNotificationsEnabled ? "이메일 알림 켜짐" : "이메일 알림 꺼짐";
+  const supportContext = account.openSupportTickets ? `<div class="support-ticket-context warning"><strong>진행 중인 문의 ${Number(account.openSupportTickets).toLocaleString()}건</strong><span>고객센터 큐에서 담당자와 다음 조치를 확인하세요.</span></div>` : `<div class="support-ticket-context"><strong>진행 중인 문의 없음</strong><span>현재 별도 CS 조치가 필요하지 않습니다.</span></div>`;
+  return `<section class="panel fan-360-panel"><div class="panel-heading"><div><p class="eyebrow">FAN 360 VIEW</p><h2>${escapeHtml(fan.profile.nickname || fan.profile.email || fan.profile.id)}</h2><p>${escapeHtml(fan.profile.email || fan.profile.id)} · ${escapeHtml(notificationStatus)} · 비밀번호·민감 목적지는 표시하지 않습니다.</p></div><button class="secondary" type="button" data-close-fan360>닫기</button></div>${supportContext}<div class="fan-360-summary"><span><small>포인트</small><strong>${Number(account.pointBalance || 0).toLocaleString()}P</strong></span><span><small>보유 카드</small><strong>${Number(account.cardCount || 0).toLocaleString()}장</strong></span><span><small>진행 문의</small><strong>${Number(account.openSupportTickets || 0).toLocaleString()}건</strong></span><span><small>온보딩</small><strong>${fan.profile.onboardingCompleted ? "완료" : "미완료"}</strong></span></div>${fan360ActivityTimeline(fan)}<div class="fan-360-columns"><section><h3>보유 카드</h3><ul>${cardRows}</ul></section><section><h3>최근 주문</h3><ul>${rows(fan.orders, "주문 내역이 없습니다.")}</ul></section><section><h3>거래</h3><ul>${rows(fan.trades, "거래 내역이 없습니다.")}</ul></section><section><h3>포인트 충전</h3><ul>${pointRows}</ul></section><section><h3>포인트 원장</h3><ul>${ledgerRows}</ul></section><section><h3>문의·신고</h3><ul>${rows(fan.supportTickets, "문의 내역이 없습니다.")}</ul></section><section><h3>최근 알림</h3><ul>${rows(fan.recentNotifications, "최근 알림이 없습니다.")}</ul></section></div></section>`;
+}
+
+function fan360ActivityTimeline(fan) {
+  const sources = [
+    ...(fan.orders || []).map((item) => ({ label: "주문", title: item.productName || "상품 주문", status: item.status, at: item.createdAt })),
+    ...(fan.trades || []).map((item) => ({ label: "거래", title: "카드 거래", status: item.status, at: item.createdAt })),
+    ...(fan.pointCharges || []).map((item) => ({ label: "포인트", title: `${Number(item.points || 0).toLocaleString()}P 충전`, status: item.status, at: item.createdAt })),
+    ...(fan.supportTickets || []).map((item) => ({ label: "문의·신고", title: item.subject || item.category || "고객 문의", status: item.status, at: item.updatedAt })),
+    ...(fan.recentNotifications || []).map((item) => ({ label: "알림", title: item.title || item.kind || "알림", status: item.isRead ? "읽음" : "미확인", at: item.createdAt })),
+  ].filter((item) => item.at).sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()).slice(0, 12);
+  const body = sources.length
+    ? sources.map((item) => `<li><span class="fan-360-activity-dot" aria-hidden="true"></span><div><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.label)} · ${escapeHtml(item.status || "기록")} · ${formatDate(item.at)}</small></div></li>`).join("")
+    : '<li class="empty">확인할 활동 이력이 없습니다.</li>';
+  return `<section class="fan-360-timeline"><div class="section-heading"><div><p class="eyebrow">CUSTOMER TIMELINE</p><h3>최근 활동</h3></div><span class="hint">최근 ${sources.length}건</span></div><ol>${body}</ol></section>`;
 }
 function adminAccountPanel() {
   const account = state.adminProvisionedAccount;
@@ -2308,13 +2827,11 @@ function artistAccountRows() {
 }
 function artistAccountPanel() {
   const account = state.artistProvisionedAccount;
-  const artistOptions = state.catalog.artists.length
-    ? `<option value="">아티스트를 선택하세요</option>${state.catalog.artists.map((artist) => `<option value="${escapeHtml(artist.id)}">${escapeHtml(artist.name)}</option>`).join("")}`
-    : '<option value="">연결 가능한 아티스트가 없습니다</option>';
+  const artistOptions = [{ value: "", label: "아티스트를 선택하세요" }, ...state.catalog.artists.map((artist) => ({ value: artist.id, label: artist.name }))];
   const oneTimePassword = account
-    ? `<div class="notice"><strong>${account.wasReset ? "비밀번호 재발급 완료" : "계정 발급 완료"} · ${escapeHtml(account.username)}</strong><br />임시 비밀번호: <code>${escapeHtml(account.temporaryPassword)}</code><br /><small>평문 비밀번호는 지금만 표시됩니다. 담당자에게 안전한 경로로 전달하세요.</small></div>`
+    ? `<div class="notice"><strong>${account.wasReset ? "비밀번호 재발급 완료" : "계정 발급 완료"} · ${escapeHtml(account.username)}</strong><br />임시 비밀번호: <code id="artist-temporary-password">${escapeHtml(account.temporaryPassword)}</code> <button class="secondary" id="copy-artist-temporary-password" type="button">복사</button><br /><small>평문 비밀번호는 지금만 표시됩니다. 담당자에게 안전한 경로로 전달하세요.</small></div>`
     : "";
-  return `<div class="panel"><h2>아티스트 스튜디오 계정 발급</h2><p class="hint">개인별 아이디를 발급하고 담당 아티스트를 연결하세요. 임시 비밀번호는 생성 직후 한 번만 표시됩니다.</p><form id="artist-account-form" class="toolbar"><input class="search" name="username" placeholder="studio-id" pattern="[A-Za-z0-9._-]+" required /><input class="search" name="displayName" placeholder="담당자 또는 기업명" required /><select class="search" name="artistId" aria-label="담당 아티스트">${artistOptions}</select><button class="primary" type="submit">계정 발급</button></form>${oneTimePassword}<h2 class="subsection-title">아티스트 스튜디오 계정 목록</h2><p class="hint">계정은 데이터베이스에 유지됩니다. 비밀번호를 잊은 경우 계정을 다시 만들지 말고 재발급하세요.</p><div class="table-wrap"><table class="table"><thead><tr><th>계정</th><th>상태</th><th>복구</th></tr></thead><tbody>${artistAccountRows()}</tbody></table></div></div>`;
+  return `<div class="panel"><h2>아티스트 스튜디오 계정 발급</h2><p class="hint">개인별 아이디를 발급하고 담당 아티스트를 연결하세요. 임시 비밀번호는 생성 직후 한 번만 표시됩니다.</p><form id="artist-account-form" class="toolbar"><input class="search" name="username" placeholder="studio-id" pattern="[A-Za-z0-9._-]+" required /><input class="search" name="displayName" placeholder="담당자 또는 기업명" required />${adminSelect({ id: "artist-account-artist", name: "artistId", value: "", label: "담당 아티스트", className: "filter-select", options: artistOptions })}<button class="primary" type="submit">계정 발급</button></form>${oneTimePassword}<h2 class="subsection-title">아티스트 스튜디오 계정 목록</h2><p class="hint">계정은 데이터베이스에 유지됩니다. 비밀번호를 잊은 경우 계정을 다시 만들지 말고 재발급하세요.</p><div class="table-wrap"><table class="table"><thead><tr><th>계정</th><th>상태</th><th>복구</th></tr></thead><tbody>${artistAccountRows()}</tbody></table></div></div>`;
 }
 function artistProfileStatusLabel(status) {
   return (
@@ -2371,12 +2888,8 @@ function auditPagination() {
   return `<div class="pagination"><button class="secondary audit-page" data-page="${page - 1}" ${page <= 1 ? "disabled" : ""}>이전</button><span>${page} / ${pages}</span><button class="secondary audit-page" data-page="${page + 1}" ${page >= pages ? "disabled" : ""}>다음</button></div>`;
 }
 function campaignsPanel() {
-  const cards = state.cards
-    .map(
-      (card) =>
-        `<option value="${escapeHtml(card.id)}">${escapeHtml(card.name)} · ${escapeHtml(card.id)}</option>`,
-    )
-    .join("");
+  const cardOptions = cardCatalogItems().map((card) => ({ value: card.id, label: `${card.name} · ${card.id}` }));
+  const artistOptions = [{ value: "", label: "그룹 없음" }, ...state.catalog.artists.map((artist) => ({ value: artist.id, label: artist.name }))];
   const rows = state.campaigns.length
     ? state.campaigns
         .map(
@@ -2385,23 +2898,42 @@ function campaignsPanel() {
         )
         .join("")
     : '<tr><td colspan="5" class="empty">등록된 특전 캠페인이 없습니다.</td></tr>';
-  return `<div class="panel campaign-panel"><h2>컬렉션 특전 캠페인</h2><p class="hint">공개 카드 중 조합할 카드를 선택하고 완성 특전 내용을 설정합니다. 선택한 파일은 팬이 클레임한 뒤 다운로드할 수 있습니다.</p><form class="toolbar" id="campaign-form"><input class="search" name="name" placeholder="캠페인 이름" required /><input class="search" name="seasonName" placeholder="시즌 (선택)" /><select class="filter" name="artistId"><option value="">그룹 없음</option>${state.catalog.artists.map((artist) => `<option value="${escapeHtml(artist.id)}">${escapeHtml(artist.name)}</option>`).join("")}</select><select class="filter" name="requiredCardIds" multiple aria-label="캠페인 카드 선택">${cards}</select><input class="search" name="benefitTitle" placeholder="특전 제목" required /><input class="search" name="benefitDescription" placeholder="특전 설명" required /><label class="field">특전 파일 (선택)<input class="search" name="benefitFile" type="file" accept="image/png,image/jpeg,image/webp,application/pdf,audio/mpeg,audio/wav" /></label><button class="primary" type="submit">캠페인 등록</button></form><div class="table-wrap"><table class="table"><thead><tr><th>캠페인</th><th>필수 카드</th><th>특전</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  return `<div class="panel campaign-panel"><h2>컬렉션 특전 캠페인</h2><p class="hint">공개 카드 중 조합할 카드를 선택하고 완성 특전 내용을 설정합니다. 선택한 파일은 팬이 클레임한 뒤 다운로드할 수 있습니다.</p><form class="toolbar" id="campaign-form"><input class="search" name="name" placeholder="캠페인 이름" required /><input class="search" name="seasonName" placeholder="시즌 (선택)" />${adminSelect({ id: "campaign-artist", name: "artistId", value: "", label: "그룹", className: "filter-select", options: artistOptions })}<label class="campaign-card-picker"><span>필수 카드</span>${adminMultiSelect({ id: "campaign-required-cards", name: "requiredCardIds", label: "캠페인 카드 선택", className: "form-multi-select", options: cardOptions })}<small>팬이 카드를 모두 모으면 특전을 받을 수 있습니다.</small></label><input class="search" name="benefitTitle" placeholder="특전 제목" required /><input class="search" name="benefitDescription" placeholder="특전 설명" required /><label class="field">특전 파일 (선택)<input class="search" name="benefitFile" type="file" accept="image/png,image/jpeg,image/webp,application/pdf,audio/mpeg,audio/wav" /></label><button class="primary" type="submit">캠페인 등록</button></form><div class="table-wrap"><table class="table"><thead><tr><th>캠페인</th><th>필수 카드</th><th>특전</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 function settingsView() {
-  return "";
+  const person = state.adminContext?.user || {};
+  const organization = state.adminContext?.organization?.name || (isRoot() ? "전체 서비스" : "미지정");
+  const role = isRoot() ? "ROOT · 루트 관리자" : `${state.adminContext?.accessLevel || "viewer"} · ${organization}`;
+  return `<div class="page-heading"><div><p class="eyebrow">ACCOUNT & SECURITY</p><h2>계정 설정</h2><p>현재 운영 계정과 접근 범위를 확인하고 보안 설정을 관리합니다.</p></div><button class="secondary" type="button" data-settings-password-change>${icon("password")} 비밀번호 변경</button></div><div class="settings-grid"><section class="panel settings-profile-card"><div class="settings-profile-icon">${escapeHtml((person.displayName || person.email || "관").slice(0, 1))}</div><div><p class="eyebrow">SIGNED IN ACCOUNT</p><h3>${escapeHtml(person.displayName || "관리자")}</h3><p>${escapeHtml(person.email || "이메일 정보 없음")}</p></div></section><section class="panel"><div class="panel-heading"><div><p class="eyebrow">ACCESS SCOPE</p><h3>접근 권한</h3></div><span class="badge success-badge">인증됨</span></div><dl class="settings-list"><div><dt>역할</dt><dd>${escapeHtml(role)}</dd></div><div><dt>운영 범위</dt><dd>${escapeHtml(organization)}</dd></div><div><dt>세션 정책</dt><dd>보안 쿠키 · 자동 갱신</dd></div></dl></section><section class="panel settings-action-card"><span class="settings-action-icon">${icon("security")}</span><div><h3>보안 권장사항</h3><p>관리자 계정은 공유하지 말고, 발급받은 임시 비밀번호는 최초 로그인 후 즉시 변경하세요.</p><button class="secondary" type="button" data-settings-password-change>비밀번호 변경하기</button></div></section></div>`;
+}
+let toastTimer = null;
+function clearToast() {
+  const element = document.querySelector("#toast");
+  if (!element) return;
+  element.textContent = "";
+  element.classList.remove("show");
+  if (toastTimer) window.clearTimeout(toastTimer);
+  toastTimer = null;
 }
 function toast(message) {
   const element = document.querySelector("#toast");
+  if (!element) return;
   element.textContent = message;
   element.classList.add("show");
-  setTimeout(() => element.classList.remove("show"), 2600);
+  if (toastTimer) window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => {
+    element.classList.remove("show");
+    element.textContent = "";
+    toastTimer = null;
+  }, 2600);
 }
 async function refreshAccessToken() {
   if (refreshInFlight) return refreshInFlight;
-  refreshInFlight = fetch(`${API_BASE}/auth/refresh`, {
+  refreshInFlight = fetchWithRetry(`${API_BASE}/auth/refresh`, {
     method: "POST",
     credentials: "include",
     headers: { "X-Fanfolio-Client": "admin" },
+    timeoutMs: 10000,
   })
     .then(async (response) => {
       if (!response.ok) throw new Error(`REFRESH ${response.status}`);
@@ -2417,14 +2949,39 @@ async function refreshAccessToken() {
 async function fetchWithRetry(url, options = {}) {
   const method = String(options.method || "GET").toUpperCase();
   const maxAttempts = method === "GET" ? 3 : 1;
+  const timeoutMs = Number.isFinite(options.timeoutMs)
+    ? options.timeoutMs
+    : method === "GET" ? 8000 : 12000;
+  const { timeoutMs: _timeoutMs, ...fetchOptions } = options;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const controller = typeof AbortController === "function" ? new AbortController() : null;
+    let timedOut = false;
+    let timeoutId = null;
+    let removeExternalAbort = null;
+    if (controller) {
+      timeoutId = window.setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, timeoutMs);
+      if (fetchOptions.signal) {
+        const abortExternalRequest = () => controller.abort(fetchOptions.signal.reason);
+        if (fetchOptions.signal.aborted) abortExternalRequest();
+        else {
+          fetchOptions.signal.addEventListener("abort", abortExternalRequest, { once: true });
+          removeExternalAbort = () => fetchOptions.signal.removeEventListener("abort", abortExternalRequest);
+        }
+      }
+    }
     try {
-      return await fetch(url, options);
+      return await fetch(url, controller ? { ...fetchOptions, signal: controller.signal } : fetchOptions);
     } catch (error) {
-      const isNetworkFailure = error?.name === "TypeError";
+      const isNetworkFailure = error?.name === "TypeError" || (timedOut && error?.name === "AbortError");
       if (!isNetworkFailure || attempt === maxAttempts) throw error;
       console.warn(`Admin API network failure; retrying (${attempt}/${maxAttempts - 1})`, error);
       await new Promise((resolve) => setTimeout(resolve, attempt * 180));
+    } finally {
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+      removeExternalAbort?.();
     }
   }
   throw new Error("Admin API request failed");
@@ -2649,24 +3206,43 @@ function approvalStatusLabel(status) {
   return ({ pending: "승인 대기", approved: "승인 완료", rejected: "반려" })[status] || status || "미정";
 }
 
+function approvalNextAction(status) {
+  return ({ pending: "승인 또는 반려 필요", approved: "원 작업 반영 확인", rejected: "요청자에게 반려 사유 안내" })[status] || "상태 확인 필요";
+}
+
+function deliveryStatusLabel(status) {
+  return ({ delivered: "전달 완료", failed: "전달 실패", retry: "자동 재시도 대기", dead_letter: "재시도 한도 초과", pending: "전달 대기" })[status] || status || "상태 미정";
+}
+
+function deliveryNextAction(status) {
+  return ({ delivered: "추가 조치 없음", failed: "오류 확인 후 재시도", retry: "재시도 결과 확인", dead_letter: "원인 확인 후 수동 재처리", pending: "전달 결과 대기" })[status] || "상태 확인 필요";
+}
+
 function approvalsView() {
   const pending = state.approvals.filter((item) => item.status === "pending").length;
+  const selected = state.approvals.find((item) => item.id === state.selectedApprovalId) || null;
   const rows = state.approvals.length
-    ? state.approvals.map((item) => `<tr><td><strong>${escapeHtml(approvalKindLabel(item.kind))}</strong><small>${escapeHtml(item.entityType)} · ${escapeHtml(item.entityId)}</small></td><td>${escapeHtml(item.reason || "사유 미입력")}</td><td>${escapeHtml(item.requestedBy)}</td><td><span class="badge ${item.status === "approved" ? "success-badge" : item.status === "rejected" ? "danger-badge" : "warning-badge"}">${escapeHtml(approvalStatusLabel(item.status))}</span></td><td>${item.status === "pending" ? `<div class="approval-actions"><button class="secondary approval-action" data-approval-action="approve" data-approval-id="${escapeHtml(item.id)}">승인</button><button class="secondary danger-text approval-action" data-approval-action="reject" data-approval-id="${escapeHtml(item.id)}">반려</button></div>` : `<small>${formatDate(item.decidedAt || item.createdAt)}</small>`}</td></tr>`).join("")
+    ? state.approvals.map((item) => `<tr class="${item.id === state.selectedApprovalId ? "selected-approval-row" : ""}"><td><strong>${escapeHtml(approvalKindLabel(item.kind))}</strong><small>${escapeHtml(item.entityType)} · ${escapeHtml(item.entityId)}</small></td><td>${escapeHtml(item.reason || "사유 미입력")}</td><td>${escapeHtml(item.requestedBy)}</td><td><span class="badge ${item.status === "approved" ? "success-badge" : item.status === "rejected" ? "danger-badge" : "warning-badge"}">${escapeHtml(approvalStatusLabel(item.status))}</span><small class="approval-next-action">${escapeHtml(approvalNextAction(item.status))}</small></td><td><div class="approval-actions"><button class="secondary approval-detail-trigger" data-approval-detail="${escapeHtml(item.id)}">검토 내용</button>${item.status === "pending" ? `<button class="secondary approval-action" data-approval-action="approve" data-approval-id="${escapeHtml(item.id)}">승인</button><button class="secondary danger-text approval-action" data-approval-action="reject" data-approval-id="${escapeHtml(item.id)}">반려</button>` : `<small>${formatDate(item.decidedAt || item.createdAt)}</small>`}</div></td></tr>`).join("")
     : `<tr><td colspan="5" class="empty">대기 중인 승인 요청이 없습니다.</td></tr>`;
-  return `<div class="page-heading"><div><p class="eyebrow">DUAL CONTROL</p><h2>승인 큐</h2><p>환불·포인트 조정·상품 공개처럼 영향이 큰 운영 작업을 요청자와 별도 승인자로 분리합니다.</p></div><span class="badge ${pending ? "warning-badge" : "success-badge"}">${pending}건 대기</span></div><section class="panel approval-queue-panel"><div class="panel-heading"><div><h3>승인 요청</h3><span>승인 전에는 실제 원장·주문·공개 상태가 변경되지 않습니다.</span></div><button class="secondary" id="refresh-approvals" type="button">새로고침</button></div><div class="table-wrap"><table class="table"><thead><tr><th>요청 유형</th><th>사유</th><th>요청자</th><th>상태</th><th>조치</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+  const detail = selected
+    ? `<aside class="approval-detail-panel"><div class="panel-heading"><div><p class="eyebrow">REQUEST DETAIL</p><h3>${escapeHtml(approvalKindLabel(selected.kind))}</h3><span>${escapeHtml(selected.entityType || "대상")} · ${escapeHtml(selected.entityId || "대상 ID")}</span></div><span class="badge ${selected.status === "approved" ? "success-badge" : selected.status === "rejected" ? "danger-badge" : "warning-badge"}">${escapeHtml(approvalStatusLabel(selected.status))}</span></div><dl class="approval-detail-facts"><div><dt>요청자</dt><dd>${escapeHtml(selected.requestedBy || "미상")}</dd></div><div><dt>요청 사유</dt><dd>${escapeHtml(selected.reason || "사유 미입력")}</dd></div><div><dt>요청 시각</dt><dd>${escapeHtml(formatDate(selected.createdAt))}</dd></div></dl>${selected.status === "pending" ? `<label class="approval-reason-field">결정 사유<textarea data-approval-reason="${escapeHtml(selected.id)}" placeholder="승인 또는 반려 사유를 남겨 주세요."></textarea></label><div class="approval-detail-actions"><button class="primary approval-detail-action" data-approval-detail-action="approve" data-approval-id="${escapeHtml(selected.id)}">승인하고 기록</button><button class="secondary danger-text approval-detail-action" data-approval-detail-action="reject" data-approval-id="${escapeHtml(selected.id)}">반려하고 기록</button></div>` : `<p class="approval-decision-note">${escapeHtml(selected.decisionReason || "결정 사유가 기록되지 않았습니다.")}</p>`}</aside>`
+    : `<aside class="approval-detail-panel approval-detail-empty"><span class="material-symbols-rounded" aria-hidden="true">fact_check</span><strong>승인 요청을 선택하세요</strong><p>검토 내용을 열면 요청 대상, 사유, 요청자와 승인·반려 기록을 확인할 수 있습니다.</p></aside>`;
+  return `<div class="page-heading"><div><p class="eyebrow">DUAL CONTROL</p><h2>승인 큐</h2><p>환불·포인트 조정·상품 공개처럼 영향이 큰 운영 작업을 요청자와 별도 승인자로 분리합니다.</p></div><span class="badge ${pending ? "warning-badge" : "success-badge"}">${pending}건 대기</span></div><section class="panel approval-queue-panel"><div class="panel-heading"><div><h3>승인 요청</h3><span>승인 전에는 실제 원장·주문·공개 상태가 변경되지 않습니다.</span></div><button class="secondary" id="refresh-approvals" type="button">새로고침</button></div><div class="table-wrap"><table class="table"><thead><tr><th>요청 유형</th><th>사유</th><th>요청자</th><th>상태</th><th>조치</th></tr></thead><tbody>${rows}</tbody></table></div>${detail}</section>`;
 }
 
 async function decideApproval(approvalId, action) {
   try {
+    const reason = document.querySelector(`[data-approval-reason="${CSS.escape(approvalId)}"]`)?.value.trim();
     await api(`/admin/approvals/${encodeURIComponent(approvalId)}/${action}`, {
       method: "POST",
-      body: JSON.stringify({ reason: action === "reject" ? "관리자 승인 큐에서 반려" : null }),
+      body: JSON.stringify({ reason: reason || (action === "reject" ? "관리자 승인 큐에서 반려" : "관리자 승인 큐에서 승인") }),
     });
     await loadApprovals(false);
+    setOperationFeedback(action === "approve" ? "승인 요청을 처리했습니다. 원 작업 반영 상태를 확인하세요." : "승인 요청을 반려했습니다. 요청자에게 반려 사유를 안내하세요.");
     layout();
     toast(action === "approve" ? "승인 요청을 처리했습니다." : "승인 요청을 반려했습니다.");
   } catch (error) {
+    setOperationFeedback(error?.message || "승인 요청을 처리하지 못했습니다. 큐 상태와 권한을 확인해 주세요.", "error");
     toast(error?.message || "승인 요청을 처리하지 못했습니다.");
   }
 }
@@ -2782,6 +3358,38 @@ async function loadStatistics(renderAfter = true) {
   if (renderAfter) layout();
 }
 
+async function loadAllRedeemCodeBatches(fallback = { data: { items: [], meta: { pagination: {} } } }) {
+  const first = await loadOptionalAdminRequest(
+    "/admin/redeem-code-batches?page=1&pageSize=100",
+    fallback,
+    "redeem code batches",
+  );
+  const pagination = first.data?.meta?.pagination || {};
+  const total = Number(pagination.total || first.data?.items?.length || 0);
+  const pageSize = Number(pagination.pageSize || 100);
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  if (pageCount === 1 || !first.data?.items?.length) return first;
+  const remaining = await Promise.all(
+    Array.from({ length: pageCount - 1 }, (_, index) =>
+      loadOptionalAdminRequest(
+        `/admin/redeem-code-batches?page=${index + 2}&pageSize=${pageSize}`,
+        { data: { items: [] } },
+        "redeem code batches",
+      ),
+    ),
+  );
+  return {
+    ...first,
+    data: {
+      ...first.data,
+      items: [
+        ...(first.data.items || []),
+        ...remaining.flatMap((result) => result.data?.items || []),
+      ],
+    },
+  };
+}
+
 async function loadData() {
   state.error = "";
   try {
@@ -2804,11 +3412,18 @@ async function loadData() {
     if (state.auditQuery.trim()) auditParams.set("q", state.auditQuery.trim());
     if (state.auditAction !== "all")
       auditParams.set("action", state.auditAction);
+    const cardPackParams = new URLSearchParams({
+      page: String(state.cardPackPage),
+      pageSize: "10",
+    });
+    if (state.cardPackQuery.trim()) cardPackParams.set("q", state.cardPackQuery.trim());
+    if (state.cardPackStatus !== "all") cardPackParams.set("status", state.cardPackStatus);
+    if (state.cardPackArtist !== "all") cardPackParams.set("artistId", state.cardPackArtist);
     const [dashboard, cards, cardPacks, shopProducts, auditLogs, catalog, notifications, operationalMetrics, operationsOverview, approvals, statistics] = await Promise.all([
       api("/admin/dashboard"),
-      api("/admin/cards"),
+      loadCards(false).then(() => ({ data: { items: state.cards, meta: { pagination: state.cardPagination } } })),
       can("cards:read")
-        ? api("/admin/card-packs")
+        ? api(`/admin/card-packs?${cardPackParams}`)
         : Promise.resolve({ data: { items: [] } }),
       can("cards:read")
         ? api("/admin/shop/products")
@@ -2829,12 +3444,19 @@ async function loadData() {
     state.approvals = approvals.data.items || [];
     state.recentActivity = dashboard.data.recentActivity || [];
     state.cards = cards.data.items;
+    state.cardPagination = cards.data.meta?.pagination || state.cardPagination;
     state.cardPacks = cardPacks.data.items || [];
+    state.cardPackPagination = cardPacks.data.meta?.pagination || {
+      page: state.cardPackPage,
+      pageSize: 10,
+      total: state.cardPacks.length,
+    };
     state.shopProducts = shopProducts.data.items || [];
     void loadCardThumbnails(state.cards);
     state.auditLogs = auditLogs.data.items;
     state.auditPagination = auditLogs.data.meta.pagination;
     state.catalog = catalog.data;
+    await loadCardCatalog();
     state.notifications = notifications.data.items || [];
     state.unreadNotificationCount = notifications.data.unreadCount || 0;
     state.statistics = statistics.data;
@@ -2853,7 +3475,7 @@ async function loadData() {
       ] =
         await Promise.all([
           loadOptionalAdminRequest("/admin/drops", { data: { items: [] } }, "drops"),
-          loadOptionalAdminRequest("/admin/redeem-code-batches", { data: { items: [], meta: { pagination: {} } } }, "redeem code batches"),
+          loadAllRedeemCodeBatches(),
           loadOptionalAdminRequest(`/admin/users?${userParams}`, { data: { items: [], meta: { pagination: {} } } }, "users"),
           loadOptionalAdminRequest("/admin/collection-campaigns", { data: { items: [] } }, "collection campaigns"),
           loadOptionalAdminRequest("/admin/artist-accounts", { data: { items: [] } }, "artist accounts"),
@@ -2873,7 +3495,7 @@ async function loadData() {
         ? api("/admin/drops")
         : Promise.resolve({ data: { items: [] } });
       const batchesRequest = can("codes:read")
-        ? api("/admin/redeem-code-batches")
+        ? loadAllRedeemCodeBatches()
         : Promise.resolve({ data: { items: [] } });
       const requests = [dropsRequest, batchesRequest];
       if (state.adminContext.accessLevel === "company_admin") {
@@ -2907,6 +3529,10 @@ async function loadData() {
       }
     }
     if (!canViewFanGrowth() && state.view === "fan-growth") state.view = "dashboard";
+    if (initialDrawer === "event" && can("events:write")) {
+      state.view = "events";
+      state.drawer = "event";
+    }
     state.error = "";
   } catch (error) {
     if (error.status === 401) {
@@ -2927,6 +3553,73 @@ async function loadData() {
   layout();
 }
 
+async function loadCardPacks(renderAfter = true) {
+  if (!state.authenticated || !can("cards:read")) return;
+  const params = new URLSearchParams({ page: String(state.cardPackPage), pageSize: "10" });
+  if (state.cardPackQuery.trim()) params.set("q", state.cardPackQuery.trim());
+  if (state.cardPackStatus !== "all") params.set("status", state.cardPackStatus);
+  if (state.cardPackArtist !== "all") params.set("artistId", state.cardPackArtist);
+  try {
+    const result = await api(`/admin/card-packs?${params}`);
+    state.cardPacks = result.data.items || [];
+    state.cardPackPagination = result.data.meta?.pagination || {
+      page: state.cardPackPage,
+      pageSize: 10,
+      total: state.cardPacks.length,
+    };
+    if (renderAfter) layout();
+  } catch (error) {
+    state.error = error?.message || "카드팩 목록을 불러오지 못했습니다.";
+    if (renderAfter) layout();
+  }
+}
+
+async function loadCards(renderAfter = true) {
+  if (!state.authenticated || !can("cards:read")) return;
+  const params = new URLSearchParams({ page: String(state.cardPage), pageSize: "10" });
+  if (state.query.trim()) params.set("q", state.query.trim());
+  if (state.status !== "all") params.set("status", state.status);
+  if (state.cardArtist !== "all") params.set("artistId", state.cardArtist);
+  try {
+    const result = await api(`/admin/cards?${params}`);
+    state.cards = result.data.items || [];
+    state.cardPagination = result.data.meta?.pagination || {
+      page: state.cardPage,
+      pageSize: 20,
+      total: state.cards.length,
+    };
+    void loadCardThumbnails(state.cards);
+    if (renderAfter) layout();
+  } catch (error) {
+    state.error = error?.message || "카드 목록을 불러오지 못했습니다.";
+    if (renderAfter) layout();
+  }
+}
+
+async function loadCardCatalog() {
+  if (!state.authenticated || !can("cards:read")) {
+    state.cardCatalog = [];
+    return;
+  }
+  try {
+    const first = await api("/admin/cards?page=1&pageSize=100");
+    const firstItems = first.data.items || [];
+    const pagination = first.data.meta?.pagination || {};
+    const totalPages = Math.max(1, Math.ceil(Number(pagination.total || firstItems.length) / 100));
+    const remaining = await Promise.all(
+      Array.from({ length: totalPages - 1 }, (_, index) => api(`/admin/cards?page=${index + 2}&pageSize=100`)),
+    );
+    state.cardCatalog = [
+      ...firstItems,
+      ...remaining.flatMap((result) => result.data.items || []),
+    ];
+    void loadCardThumbnails(state.cardCatalog);
+  } catch (error) {
+    // The paged card table remains usable even if the optional full catalog fetch fails.
+    state.cardCatalog = state.cards;
+  }
+}
+
 async function loadAdminNotifications(renderAfter = true) {
   const result = await api("/admin/notifications");
   state.notifications = result.data.items || [];
@@ -2934,14 +3627,40 @@ async function loadAdminNotifications(renderAfter = true) {
   if (renderAfter) layout();
 }
 
+const supportPageSize = 10;
+const supportStatusLabels = { open: "접수", in_progress: "처리 중", answered: "답변 완료", closed: "종료" };
+const supportCategoryLabels = { general: "일반 문의", card: "카드", trade: "거래", order: "주문", report: "신고·분쟁" };
+const supportEvidenceLabels = {
+  record_evidence: "근거 기록",
+  case_note: "운영 근거 기록",
+  approval_requested: "승인 요청 생성",
+  approval_approved: "승인 완료",
+  approval_rejected: "승인 반려",
+  collection_hidden: "공개 컬렉션 숨김",
+  collection_restored: "공개 컬렉션 복구",
+  trade_hold: "거래 보류",
+  trade_release: "거래 보류 해제",
+  refund_order: "환불 승인 요청",
+  grant_points: "포인트 승인 요청",
+  hide_collection: "공개 컬렉션 숨김",
+  restore_collection: "공개 컬렉션 복구",
+};
+function supportStatusLabel(status) { return supportStatusLabels[status] || "확인 필요"; }
+function supportCategoryLabel(category) { return supportCategoryLabels[category] || "일반 문의"; }
+function supportEvidenceLabel(kind) { return supportEvidenceLabels[kind] || "운영 조치"; }
+
 async function loadSupportTickets(renderAfter = true) {
   if (!can("support:read")) return;
-  const params = new URLSearchParams({ page: "1", pageSize: "20" });
+  const page = Math.max(1, Number(state.supportPagination.page) || 1);
+  const params = new URLSearchParams({ page: String(page), pageSize: String(supportPageSize) });
   if (state.supportQuery.trim()) params.set("q", state.supportQuery.trim());
   if (state.supportStatus !== "all") params.set("status", state.supportStatus);
+  if (state.supportCategory !== "all") params.set("category", state.supportCategory);
   const result = await api(`/admin/support-tickets?${params}`);
   state.supportTickets = result.data.items || [];
-  state.supportPagination = result.data.meta?.pagination || result.data.pagination || state.supportPagination;
+  const pagination = result.data.meta?.pagination || result.data.pagination || {};
+  const total = Number(pagination.total ?? state.supportTickets.length);
+  state.supportPagination = { ...state.supportPagination, ...pagination, page, pageSize: supportPageSize, total, totalPages: Number(pagination.totalPages) || Math.max(1, Math.ceil(total / supportPageSize)) };
   if (state.selectedSupportTicket) {
     const selected = state.supportTickets.find(item => item.id === state.selectedSupportTicket.id);
     if (selected) state.selectedSupportTicket = selected;
@@ -2953,6 +3672,10 @@ async function openSupportTicket(ticketId) {
   try {
     const result = await api(`/admin/support-tickets/${encodeURIComponent(ticketId)}`);
     state.selectedSupportTicket = result.data;
+    if (state.supportActivityDetailTicketId !== ticketId) {
+      state.supportActivityDetailTicketId = ticketId;
+      state.supportActivityDetailIndex = null;
+    }
     layout();
   } catch {
     toast("문의 내용을 불러오지 못했습니다.");
@@ -2966,10 +3689,12 @@ async function updateSupportTicketStatus(ticketId, status) {
       body: JSON.stringify({ status }),
     });
     await loadSupportTickets(false);
+    setOperationFeedback("문의 상태를 변경했습니다. 담당자와 다음 응답 기한을 확인하세요.");
     if (state.selectedSupportTicket?.id === ticketId) await openSupportTicket(ticketId);
     else layout();
     toast("문의 상태를 변경했습니다.");
   } catch {
+    setOperationFeedback("문의 상태를 변경하지 못했습니다. 상태와 권한을 확인해 주세요.", "error");
     toast("문의 상태를 변경하지 못했습니다.");
   }
 }
@@ -2982,9 +3707,11 @@ async function updateSupportTicketAssignee(ticketId, assignedAdminId) {
       body: JSON.stringify({ assignedAdminId }),
     });
     await loadSupportTickets(false);
+    setOperationFeedback("담당자를 배정했습니다. 담당자가 후속 조치를 진행할 수 있습니다.");
     await openSupportTicket(ticketId);
     toast("담당자를 배정했습니다.");
   } catch (error) {
+    setOperationFeedback(error?.message || "담당자를 배정하지 못했습니다. 권한과 담당자 목록을 확인해 주세요.", "error");
     toast(error?.message || "담당자를 배정하지 못했습니다.");
   }
 }
@@ -3000,9 +3727,11 @@ async function replySupportTicket(event) {
       body: JSON.stringify({ body: body.trim() }),
     });
     await loadSupportTickets(false);
+    setOperationFeedback("답변을 등록했습니다. 문의 상태와 운영 활동에 기록되었습니다.");
     await openSupportTicket(ticketId);
     toast("답변을 등록했습니다.");
   } catch {
+    setOperationFeedback("답변을 등록하지 못했습니다. 내용을 확인해 주세요.", "error");
     toast("답변을 등록하지 못했습니다.");
   }
 }
@@ -3014,9 +3743,11 @@ async function actSupportTicket(ticketId, action, referenceId = null, note = nul
       body: JSON.stringify({ action, referenceId, note, amount }),
     });
     await loadSupportTickets(false);
+    setOperationFeedback(action === "record_evidence" ? "운영 근거를 기록했습니다." : "운영 조치를 등록했습니다. 승인 큐와 결과를 확인하세요.");
     await openSupportTicket(ticketId);
     toast(action === "record_evidence" ? "운영 근거를 기록했습니다." : "운영 조치를 기록했습니다.");
   } catch (error) {
+    setOperationFeedback(error?.message || "운영 조치를 처리하지 못했습니다. 대상과 권한을 확인해 주세요.", "error");
     toast(error?.message || "운영 조치를 처리하지 못했습니다.");
   }
 }
@@ -3039,40 +3770,232 @@ async function retryDelivery(deliveryId) {
       method: "POST",
       body: "{}",
     });
+    setOperationFeedback("전달 작업을 재시도 대기열에 넣었습니다. 다음 전달 결과를 확인하세요.");
     await loadDeliveryQueue(true);
     toast("전달 작업을 재시도 대기열에 넣었습니다.");
   } catch {
+    setOperationFeedback("전달 작업을 재시도하지 못했습니다. 실패 원인과 권한을 확인해 주세요.", "error");
     toast("전달 작업을 재시도하지 못했습니다.");
   }
 }
 
-function deliveriesView() {
+async function retryEngagementEvent(eventId) {
+  try {
+    await api(`/admin/engagement/events/${encodeURIComponent(eventId)}/retry`, {
+      method: "POST",
+      body: "{}",
+    });
+    setOperationFeedback("성장 이벤트를 재처리 대기열에 넣었습니다. 팬 진행도 반영 결과를 확인하세요.");
+    await loadFanGrowth();
+    toast("성장 이벤트를 재처리 대기열에 넣었습니다.");
+  } catch (error) {
+    setOperationFeedback(error?.message || "성장 이벤트를 재처리하지 못했습니다. 실패 원인과 권한을 확인해 주세요.", "error");
+    toast("성장 이벤트를 재처리하지 못했습니다.");
+  }
+}
+
+function supportActivityDescriptor(item) {
+  const kind = item.kind || "";
+  const targetId = item.referenceId || item.targetId || "";
+  const targetByKind = {
+    trade_hold: "거래",
+    trade_release: "거래",
+    refund_order: "주문",
+    grant_points: "포인트 조정",
+    hide_collection: "공개 컬렉션",
+    restore_collection: "공개 컬렉션",
+    collection_hidden: "공개 컬렉션",
+    collection_restored: "공개 컬렉션",
+    approval_requested: "승인 요청",
+  };
+  const copy = {
+    trade_hold: ["거래 보류 조치", "분쟁 검토를 위해 거래의 추가 이동을 제한했습니다."],
+    trade_release: ["거래 보류 해제", "검토가 끝난 거래의 보류를 해제했습니다."],
+    refund_order: ["환불 승인 요청", "주문 환불을 승인 큐에 등록했습니다."],
+    grant_points: ["포인트 지급 승인 요청", "포인트 조정 작업을 승인 큐에 등록했습니다."],
+    hide_collection: ["공개 컬렉션 숨김", "사용자 공개 컬렉션을 팬앱에서 숨겼습니다."],
+    restore_collection: ["공개 컬렉션 복구", "숨겨진 공개 컬렉션을 다시 노출했습니다."],
+    collection_hidden: ["공개 컬렉션 숨김", "사용자 공개 컬렉션을 팬앱에서 숨겼습니다."],
+    collection_restored: ["공개 컬렉션 복구", "숨겨진 공개 컬렉션을 다시 노출했습니다."],
+    record_evidence: ["운영 근거 기록", item.note || "문의 처리를 위한 운영 근거를 기록했습니다."],
+    case_note: ["운영 근거 기록", item.note || "문의 처리를 위한 운영 근거를 기록했습니다."],
+    approval_requested: ["승인 요청 생성", "위험 작업을 승인 큐에 등록했습니다."],
+    approval_approved: ["승인 완료", "승인 요청이 처리되었습니다."],
+    approval_rejected: ["승인 반려", "승인 요청이 반려되었습니다."],
+  };
+  const fallbackLabel = kind
+    ? kind.split("_").filter(Boolean).map((part) => part[0].toUpperCase() + part.slice(1)).join(" ")
+    : "운영 기록";
+  const [label, description] = copy[kind] || [supportEvidenceLabel(kind) === "운영 조치" ? fallbackLabel : supportEvidenceLabel(kind), item.note || "문의 처리 과정에서 운영 기록이 남았습니다."];
+  return { label, description, targetLabel: targetByKind[kind] || (targetId ? "운영 대상" : "문의"), targetId };
+}
+
+function supportActivityTimeline(ticket) {
+  const activities = [
+    ...(ticket?.messages || []).map((message) => ({
+      at: message.createdAt,
+      label: "고객센터 메시지",
+      actor: message.author?.nickname || message.author?.email || message.authorUserId || "사용자",
+      body: message.body,
+      kind: "message",
+      targetLabel: "문의 내용",
+      targetId: ticket?.id || "",
+    })),
+    ...(ticket?.evidence || []).map((item) => ({
+      at: item.createdAt || item.updatedAt,
+      ...supportActivityDescriptor(item),
+      actor: item.actor?.nickname || item.actor?.email || item.actorUserId || "관리자",
+      body: item.note || supportActivityDescriptor(item).description,
+      kind: item.kind,
+      targetId: item.referenceId || item.targetId || "",
+      raw: item,
+    })),
+  ].sort((a, b) => String(a.at || "").localeCompare(String(b.at || "")));
+  const selectedIndex = state.supportActivityDetailTicketId === ticket?.id && Number.isInteger(state.supportActivityDetailIndex)
+    ? state.supportActivityDetailIndex
+    : null;
+  const selected = selectedIndex !== null && activities[selectedIndex] ? activities[selectedIndex] : null;
+  const detail = selected
+    ? `<section class="support-activity-detail-panel"><div class="section-heading"><div><p class="eyebrow">ACTIVITY DETAIL</p><h4>${escapeHtml(selected.label)}</h4></div><button type="button" class="text-button" data-support-activity-close>닫기</button></div><p class="support-activity-detail-description">${escapeHtml(selected.description || selected.body || "운영 기록")}</p><dl><div><dt>대상</dt><dd>${escapeHtml(selected.targetLabel || "문의")}</dd></div><div><dt>처리자</dt><dd>${escapeHtml(selected.actor)} · ${escapeHtml(formatDate(selected.at))}</dd></div>${selected.targetId ? `<div><dt>원문 ID</dt><dd class="support-activity-raw-id"><code>${escapeHtml(selected.targetId)}</code><button type="button" class="text-button" data-support-activity-copy="${escapeHtml(selected.targetId)}">ID 복사</button></dd></div>` : ""}</dl></section>`
+    : "";
+  return activities.length
+    ? `<section class="support-activity-timeline"><div class="section-heading"><div><p class="eyebrow">CASE HISTORY</p><h3>운영 활동</h3><p class="hint">문자열 대신 사건과 대상을 기준으로 표시했습니다. 항목을 선택하면 처리 근거를 확인할 수 있습니다.</p></div><span class="hint">${activities.length}건</span></div><ol>${activities.map((item, index) => `<li class="support-activity-item"><span class="support-activity-dot" aria-hidden="true"></span><button type="button" class="support-activity-entry ${selectedIndex === index ? "selected" : ""}" data-support-activity-detail="${index}"><span class="support-activity-entry-copy"><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.actor)} · ${formatDate(item.at)}</small><p>${escapeHtml(item.body)}</p>${item.targetId ? `<span class="support-activity-target">대상: ${escapeHtml(item.targetLabel)} · <code>${escapeHtml(item.targetId)}</code></span>` : ""}</span><span class="support-activity-open">상세 보기</span></button></li>`).join("")}</ol>${detail}</section>`
+    : `<section class="support-activity-timeline empty"><div class="section-heading"><div><p class="eyebrow">CASE HISTORY</p><h3>운영 활동</h3></div></div><p class="hint">아직 기록된 운영 활동이 없습니다.</p></section>`;
+}
+
+function legacyDeliveriesView() {
   const rows = state.deliveryItems.length
     ? state.deliveryItems.map((item) => {
       const retryable = ["failed", "retry", "dead_letter"].includes(item.status);
       const statusClass = item.status === "delivered" ? "success-badge" : retryable ? "warning-badge" : "draft";
-      return `<tr><td><strong>${escapeHtml(item.notification?.title || item.notification?.kind || "알림")}</strong><small>${escapeHtml(item.notification?.kind || "")}</small></td><td>${escapeHtml(item.channel)}</td><td><span class="badge ${statusClass}">${escapeHtml(item.status)}</span></td><td>${Number(item.attemptCount || 0).toLocaleString()}회</td><td>${escapeHtml(item.lastError || "-")}</td><td>${retryable ? `<button type="button" class="secondary delivery-retry" data-delivery-retry="${escapeHtml(item.id)}">재시도</button>` : "-"}</td></tr>`;
+      return `<tr><td><strong>${escapeHtml(item.notification?.title || item.notification?.kind || "알림")}</strong><small>${escapeHtml(item.notification?.kind || "")}</small></td><td>${escapeHtml(item.channel)}</td><td><span class="badge ${statusClass}">${escapeHtml(deliveryStatusLabel(item.status))}</span><small class="delivery-next-action">${escapeHtml(deliveryNextAction(item.status))}</small></td><td>${Number(item.attemptCount || 0).toLocaleString()}회</td><td>${escapeHtml(item.lastError || "-")}</td><td>${retryable ? `<button type="button" class="secondary delivery-retry" data-delivery-retry="${escapeHtml(item.id)}">재시도</button>` : "-"}</td></tr>`;
     }).join("")
     : '<tr><td colspan="6" class="empty">조건에 맞는 전달 작업이 없습니다.</td></tr>';
-  return `<div class="page-heading"><div><p class="eyebrow">DELIVERY OPERATIONS</p><h2>전달 실패 큐</h2><p>이메일·푸시 전달 실패를 확인하고 destination을 노출하지 않은 채 재처리합니다.</p></div></div><section class="panel delivery-queue-panel"><div class="toolbar compact-toolbar"><select id="delivery-status-filter"><option value="failed" ${state.deliveryStatus === "failed" ? "selected" : ""}>failed</option><option value="pending" ${state.deliveryStatus === "pending" ? "selected" : ""}>pending</option><option value="retry" ${state.deliveryStatus === "retry" ? "selected" : ""}>retry</option><option value="dead_letter" ${state.deliveryStatus === "dead_letter" ? "selected" : ""}>dead_letter</option><option value="all" ${state.deliveryStatus === "all" ? "selected" : ""}>전체 상태</option></select><select id="delivery-channel-filter"><option value="all" ${state.deliveryChannel === "all" ? "selected" : ""}>전체 채널</option><option value="email" ${state.deliveryChannel === "email" ? "selected" : ""}>email</option><option value="push" ${state.deliveryChannel === "push" ? "selected" : ""}>push</option></select><span class="panel-count">${Number(state.deliveryPagination.total || 0).toLocaleString()}건</span></div><div class="table-wrap"><table class="table responsive-table delivery-table"><thead><tr><th>알림</th><th>채널</th><th>상태</th><th>시도</th><th>최근 오류</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+  const hasDeliveryFilter = state.deliveryStatus !== "failed" || state.deliveryChannel !== "all";
+  return `<div class="page-heading"><div><p class="eyebrow">DELIVERY OPERATIONS</p><h2>전달 실패 큐</h2><p>이메일·푸시 전달 실패를 확인하고 destination을 노출하지 않은 채 재처리합니다.</p></div></div><section class="panel delivery-queue-panel"><div class="toolbar compact-toolbar ops-form"><label class="sr-only" for="delivery-status-filter">전달 상태 필터</label><select class="ops-control" id="delivery-status-filter"><option value="failed" ${state.deliveryStatus === "failed" ? "selected" : ""}>전달 실패</option><option value="pending" ${state.deliveryStatus === "pending" ? "selected" : ""}>전달 대기</option><option value="retry" ${state.deliveryStatus === "retry" ? "selected" : ""}>재시도 대기</option><option value="dead_letter" ${state.deliveryStatus === "dead_letter" ? "selected" : ""}>재시도 한도 초과</option><option value="all" ${state.deliveryStatus === "all" ? "selected" : ""}>전체 상태</option></select><label class="sr-only" for="delivery-channel-filter">전달 채널 필터</label><select class="ops-control" id="delivery-channel-filter"><option value="all" ${state.deliveryChannel === "all" ? "selected" : ""}>전체 채널</option><option value="email" ${state.deliveryChannel === "email" ? "selected" : ""}>이메일</option><option value="push" ${state.deliveryChannel === "push" ? "selected" : ""}>푸시</option></select>${hasDeliveryFilter ? `<button class="text-button delivery-filter-reset" id="delivery-filter-reset" type="button">${icon("restart_alt")} 필터 초기화</button>` : ""}<span class="panel-count">${Number(state.deliveryPagination.total || 0).toLocaleString()}건</span></div><div class="table-wrap"><table class="table responsive-table delivery-table"><thead><tr><th>알림</th><th>채널</th><th>상태</th><th>시도</th><th>최근 오류</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
 }
 
-function supportView() {
+function deliveriesView() {
+  const statusOptions = [
+    { value: "failed", label: "전달 실패" },
+    { value: "pending", label: "전달 대기" },
+    { value: "retry", label: "재시도 대기" },
+    { value: "dead_letter", label: "재시도 한도 초과" },
+    { value: "all", label: "전체 상태" },
+  ];
+  const channelOptions = [
+    { value: "all", label: "전체 채널" },
+    { value: "email", label: "이메일" },
+    { value: "push", label: "푸시" },
+  ];
+  return legacyDeliveriesView()
+    .replace(
+      /<label class="sr-only" for="delivery-status-filter">전달 상태 필터<\/label><select class="ops-control" id="delivery-status-filter">[\s\S]*?<\/select>/,
+      `${adminSelect({ id: "delivery-status-filter", value: state.deliveryStatus, label: "전달 상태 필터", className: "filter-select delivery-status-filter", dataDeliveryFilter: "status", options: statusOptions })}`,
+    )
+    .replace(
+      /<label class="sr-only" for="delivery-channel-filter">전달 채널 필터<\/label><select class="ops-control" id="delivery-channel-filter">[\s\S]*?<\/select>/,
+      `${adminSelect({ id: "delivery-channel-filter", value: state.deliveryChannel, label: "전달 채널 필터", className: "filter-select delivery-channel-filter", dataDeliveryFilter: "channel", options: channelOptions })}`,
+    );
+}
+
+function legacySupportView() {
   const rows = state.supportTickets.length
-    ? state.supportTickets.map(ticket => `<button type="button" class="support-ticket-row ${state.selectedSupportTicket?.id === ticket.id ? "selected" : ""}" data-support-ticket="${escapeHtml(ticket.id)}"><span><strong>${escapeHtml(ticket.subject)}</strong><small>${escapeHtml(ticket.owner?.nickname || ticket.owner?.email || ticket.userId)} · ${escapeHtml(ticket.category)}</small></span><span class="badge ${ticket.status === "closed" ? "success-badge" : ticket.status === "answered" ? "draft" : "warning-badge"}">${escapeHtml(ticket.status)}</span></button>`).join("")
-    : '<div class="empty">현재 접수된 문의가 없습니다.</div>';
+    ? state.supportTickets.map(ticket => `<button type="button" class="support-ticket-row ${state.selectedSupportTicket?.id === ticket.id ? "selected" : ""}" data-support-ticket="${escapeHtml(ticket.id)}"><span><strong>${escapeHtml(ticket.subject)}</strong><small>${escapeHtml(ticket.owner?.nickname || ticket.owner?.email || ticket.userId)} · ${escapeHtml(supportCategoryLabel(ticket.category))}</small></span><span class="badge ${ticket.status === "closed" ? "success-badge" : ticket.status === "answered" ? "draft" : "warning-badge"}">${escapeHtml(supportStatusLabel(ticket.status))}</span></button>`).join("")
+    : "";
   const ticket = state.selectedSupportTicket;
+  const supportPagination = state.supportPagination || {};
   const assignees = [
     ...(state.users || []).filter((user) => user.role === "admin"),
     ...(state.adminContext?.user?.id && !(state.users || []).some((user) => user.id === state.adminContext.user.id)
       ? [{ id: state.adminContext.user.id, email: state.adminContext.user.email, nickname: state.adminContext.user.displayName }]
       : []),
   ];
+  const assigneeSelectOptions = [{ value: "", label: "담당자 없음" }, ...assignees.map((admin) => ({ value: admin.id, label: admin.nickname || admin.email || admin.id }))];
+  const statusSelectOptions = [
+    { value: "open", label: "접수" },
+    { value: "in_progress", label: "처리 중" },
+    { value: "answered", label: "답변 완료" },
+    { value: "closed", label: "종료" },
+  ];
   const assigneeOptions = assignees.length
     ? assignees.map((admin) => `<option value="${escapeHtml(admin.id)}" ${admin.id === ticket?.assignedAdminId ? "selected" : ""}>${escapeHtml(admin.nickname || admin.email || admin.id)}</option>`).join("")
-    : `<option value="${escapeHtml(ticket.assignedAdminId || "")}" selected>${escapeHtml(ticket.assignedAdminId || "담당자 없음")}</option>`;
-  const detail = ticket ? `<section class="panel support-ticket-detail"><div class="panel-heading"><div><p class="eyebrow">TICKET DETAIL</p><h2>${escapeHtml(ticket.subject)}</h2><p>${escapeHtml(ticket.owner?.email || ticket.userId)} · ${escapeHtml(ticket.category)}</p></div><div class="toolbar-actions"><label class="support-assignee-field"><span>담당자 배정</span><select data-support-assignee="${escapeHtml(ticket.id)}">${assigneeOptions}</select></label><select data-support-status="${escapeHtml(ticket.id)}"><option value="open" ${ticket.status === "open" ? "selected" : ""}>open</option><option value="in_progress" ${ticket.status === "in_progress" ? "selected" : ""}>in_progress</option><option value="answered" ${ticket.status === "answered" ? "selected" : ""}>answered</option><option value="closed" ${ticket.status === "closed" ? "selected" : ""}>closed</option></select></div></div><div class="support-action-bar"><label class="support-action-reference"><span>대상 ID 또는 운영 메모</span><input data-support-action-reference="${escapeHtml(ticket.id)}" placeholder="거래 ID·주문 ID·메모" /></label><label class="support-action-amount"><span>포인트 조정 금액</span><input data-support-action-amount="${escapeHtml(ticket.id)}" type="number" step="1" placeholder="예: 100" /></label><button type="button" class="secondary" data-support-action="record_evidence" data-support-id="${escapeHtml(ticket.id)}">근거 기록</button><button type="button" class="secondary" data-support-action="hold_trade" data-support-id="${escapeHtml(ticket.id)}">거래 보류</button><button type="button" class="secondary" data-support-action="refund_order" data-support-id="${escapeHtml(ticket.id)}">환불 승인 요청</button><button type="button" class="secondary" data-support-action="grant_points" data-support-id="${escapeHtml(ticket.id)}">포인트 승인 요청</button></div><div class="support-evidence-list">${(ticket.evidence || []).map(item => `<span class="badge draft">${escapeHtml(item.kind)} · ${escapeHtml(item.referenceId || item.note || "기록")}</span>`).join("") || '<span class="hint">아직 운영 근거가 없습니다.</span>'}</div><div class="support-message-list">${(ticket.messages || []).map(message => `<article class="support-message"><strong>${escapeHtml(message.author?.nickname || message.author?.email || message.authorUserId)}</strong><small>${formatDate(message.createdAt)}</small><p>${escapeHtml(message.body)}</p></article>`).join("")}</div>${ticket.status !== "closed" ? `<form class="support-reply-form" data-support-reply="${escapeHtml(ticket.id)}"><textarea name="body" rows="4" placeholder="답변 내용을 입력하세요." required></textarea><button class="primary" type="submit">답변 등록</button></form>` : '<p class="hint">종료된 문의입니다. 다시 답변하려면 상태를 open으로 변경하세요.</p>'}</section>` : '<section class="panel empty">왼쪽 목록에서 문의를 선택하세요.</section>';
-  return `<div class="page-heading"><div><p class="eyebrow">CUSTOMER SUPPORT</p><h2>고객센터 운영 큐</h2><p>문의 접수부터 답변·종료까지 운영 상태를 한곳에서 관리합니다.</p></div></div><div class="support-layout"><section class="panel support-ticket-list"><div class="toolbar"><input class="search" id="support-search" value="${escapeHtml(state.supportQuery)}" placeholder="제목·이메일 검색" /><select id="support-status-filter"><option value="all" ${state.supportStatus === "all" ? "selected" : ""}>전체 상태</option><option value="open" ${state.supportStatus === "open" ? "selected" : ""}>open</option><option value="in_progress" ${state.supportStatus === "in_progress" ? "selected" : ""}>in_progress</option><option value="answered" ${state.supportStatus === "answered" ? "selected" : ""}>answered</option><option value="closed" ${state.supportStatus === "closed" ? "selected" : ""}>closed</option></select></div>${rows}</section>${detail}</div>`;
+    : `<option value="${escapeHtml(ticket?.assignedAdminId || "")}" selected>${escapeHtml(ticket?.assignedAdminId || "담당자 없음")}</option>`;
+  const canHideCollection = ticket && ticket.category === "report" && ticket.targetType === "user" && Boolean(ticket.targetId);
+  const collectionModerationAction = canHideCollection
+    ? `<button type="button" class="secondary" data-support-action="hide_collection" data-support-id="${escapeHtml(ticket.id)}">공개 컬렉션 숨김</button>`
+    : "";
+  const detail = ticket ? `<section class="panel support-ticket-detail"><div class="panel-heading"><div><p class="eyebrow">TICKET DETAIL</p><h2>${escapeHtml(ticket.subject)}</h2><p>${escapeHtml(ticket.owner?.email || ticket.userId)} · ${escapeHtml(supportCategoryLabel(ticket.category))}</p></div><div class="toolbar-actions"><label class="support-assignee-field"><span>담당자 배정</span><select data-support-assignee="${escapeHtml(ticket.id)}">${assigneeOptions}</select></label><select data-support-status="${escapeHtml(ticket.id)}"><option value="open" ${ticket.status === "open" ? "selected" : ""}>접수</option><option value="in_progress" ${ticket.status === "in_progress" ? "selected" : ""}>처리 중</option><option value="answered" ${ticket.status === "answered" ? "selected" : ""}>답변 완료</option><option value="closed" ${ticket.status === "closed" ? "selected" : ""}>종료</option></select></div></div><div class="support-action-bar"><label class="support-action-reference"><span>대상 ID 또는 운영 메모</span><input data-support-action-reference="${escapeHtml(ticket.id)}" placeholder="거래 ID·주문 ID·메모" /></label><label class="support-action-amount"><span>포인트 조정 금액</span><input data-support-action-amount="${escapeHtml(ticket.id)}" type="number" step="1" placeholder="예: 100" /></label><button type="button" class="secondary" data-support-action="record_evidence" data-support-id="${escapeHtml(ticket.id)}">근거 기록</button><button type="button" class="secondary" data-support-action="hold_trade" data-support-id="${escapeHtml(ticket.id)}">거래 보류</button>${collectionModerationAction}<button type="button" class="secondary" data-support-action="refund_order" data-support-id="${escapeHtml(ticket.id)}">환불 승인 요청</button><button type="button" class="secondary" data-support-action="grant_points" data-support-id="${escapeHtml(ticket.id)}">포인트 승인 요청</button></div><div class="support-evidence-list">${(ticket.evidence || []).map(item => `<span class="badge draft">${escapeHtml(supportEvidenceLabel(item.kind))} · ${escapeHtml(item.referenceId || item.note || "기록")}</span>`).join("") || '<span class="hint">아직 운영 근거가 없습니다.</span>'}</div>${supportActivityTimeline(ticket)}<div class="support-message-list">${(ticket.messages || []).map(message => `<article class="support-message"><strong>${escapeHtml(message.author?.nickname || message.author?.email || message.authorUserId)}</strong><small>${formatDate(message.createdAt)}</small><p>${escapeHtml(message.body)}</p></article>`).join("")}</div>${ticket.status !== "closed" ? `<form class="support-reply-form" data-support-reply="${escapeHtml(ticket.id)}"><textarea name="body" rows="4" placeholder="답변 내용을 입력하세요." required></textarea><button class="primary" type="submit">답변 등록</button></form>` : '<p class="hint">종료된 문의입니다. 다시 답변하려면 상태를 접수로 변경하세요.</p>'}</section>` : '<section class="panel empty">왼쪽 목록에서 문의를 선택하세요.</section>';
+  const hasSupportFilter = Boolean(state.supportQuery.trim()) || state.supportStatus !== "all" || state.supportCategory !== "all";
+  const emptySupportMessage = hasSupportFilter ? "검색 조건을 바꾸거나 필터를 초기화해 주세요." : "현재 접수된 문의가 없습니다.";
+  const pagination = supportPagination;
+  const total = Number(pagination.total) || state.supportTickets.length;
+  const page = Math.max(1, Number(pagination.page) || 1);
+  const totalPages = Math.max(1, Number(pagination.totalPages) || Math.ceil(total / supportPageSize));
+  const rangeStart = total ? (page - 1) * supportPageSize + 1 : 0;
+  const rangeEnd = Math.min(page * supportPageSize, total);
+  const paginationView = total ? `<footer class="support-pagination"><span>${rangeStart}-${rangeEnd} / ${total}</span>${totalPages > 1 ? `<div class="support-pagination-controls"><button type="button" class="pagination-button" data-support-page="${page - 1}" ${page <= 1 ? "disabled" : ""} aria-label="이전 페이지">${icon("chevron_left")}</button>${Array.from({ length: totalPages }, (_, index) => index + 1).map(item => `<button type="button" class="pagination-button ${item === page ? "active" : ""}" data-support-page="${item}" ${item === page ? "aria-current=\"page\"" : ""}>${item}</button>`).join("")}<button type="button" class="pagination-button" data-support-page="${page + 1}" ${page >= totalPages ? "disabled" : ""} aria-label="다음 페이지">${icon("chevron_right")}</button></div>` : ""}</footer>` : "";
+  return `<div class="page-heading"><div><p class="eyebrow">CUSTOMER SUPPORT</p><h2>고객센터 운영 큐</h2><p>문의·신고·거래 분쟁을 한곳에서 분류하고 처리합니다.</p></div></div><div class="support-layout"><section class="panel support-ticket-list"><div class="toolbar ops-form support-filter-toolbar"><label class="search-field grow" for="support-search">${icon("search")}<input class="search ops-control" id="support-search" value="${escapeHtml(state.supportQuery)}" placeholder="제목·이메일 검색" /></label><label class="sr-only" for="support-status-filter">문의 상태 필터</label><select class="ops-control" id="support-status-filter"><option value="all" ${state.supportStatus === "all" ? "selected" : ""}>전체 상태</option><option value="open" ${state.supportStatus === "open" ? "selected" : ""}>접수</option><option value="in_progress" ${state.supportStatus === "in_progress" ? "selected" : ""}>처리 중</option><option value="answered" ${state.supportStatus === "answered" ? "selected" : ""}>답변 완료</option><option value="closed" ${state.supportStatus === "closed" ? "selected" : ""}>종료</option></select><label class="sr-only" for="support-category-filter">문의 유형 필터</label><select class="ops-control" id="support-category-filter"><option value="all" ${state.supportCategory === "all" ? "selected" : ""}>전체 유형</option><option value="general" ${state.supportCategory === "general" ? "selected" : ""}>일반 문의</option><option value="card" ${state.supportCategory === "card" ? "selected" : ""}>카드</option><option value="trade" ${state.supportCategory === "trade" ? "selected" : ""}>거래</option><option value="order" ${state.supportCategory === "order" ? "selected" : ""}>주문</option><option value="report" ${state.supportCategory === "report" ? "selected" : ""}>신고·분쟁</option></select>${hasSupportFilter ? `<button class="text-button support-filter-reset" id="support-filter-reset" type="button">${icon("restart_alt")} 필터 초기화</button>` : ""}</div>${rows || `<div class="empty support-filter-empty">${icon("search_off")}<strong>문의가 없습니다.</strong><span>${emptySupportMessage}</span></div>`}${paginationView}</section>${detail}</div>`;
+}
+
+function supportView() {
+  const rendered = legacySupportView();
+  const filterOptions = {
+    status: [
+      { value: "all", label: "전체 상태" },
+      { value: "open", label: "접수" },
+      { value: "in_progress", label: "처리 중" },
+      { value: "answered", label: "답변 완료" },
+      { value: "closed", label: "종료" },
+    ],
+    category: [
+      { value: "all", label: "전체 유형" },
+      { value: "general", label: "일반 문의" },
+      { value: "card", label: "카드" },
+      { value: "trade", label: "거래" },
+      { value: "order", label: "주문" },
+      { value: "report", label: "신고·분쟁" },
+    ],
+  };
+  const withFilters = rendered
+    .replace(
+      /<select class="ops-control" id="support-status-filter">[\s\S]*?<\/select>/,
+      adminSelect({ id: "support-status-filter", value: state.supportStatus, label: "문의 상태 필터", className: "support-filter-status", dataSupportFilter: "status", options: filterOptions.status }),
+    )
+    .replace(
+      /<select class="ops-control" id="support-category-filter">[\s\S]*?<\/select>/,
+      adminSelect({ id: "support-category-filter", value: state.supportCategory, label: "문의 유형 필터", className: "support-filter-category", dataSupportFilter: "category", options: filterOptions.category }),
+    );
+  const ticketId = state.selectedSupportTicket?.id;
+  if (!ticketId) return withFilters;
+  const supportAssignees = [
+    ...(state.users || []).filter((user) => user.role === "admin"),
+    ...(state.adminContext?.user?.id && !(state.users || []).some((user) => user.id === state.adminContext.user.id)
+      ? [{ id: state.adminContext.user.id, displayName: state.adminContext.user.displayName, email: state.adminContext.user.email }]
+      : []),
+  ];
+  const assigneeOptions = supportAssignees.length
+    ? supportAssignees.map((user) => ({ value: user.id, label: user.displayName || user.nickname || user.email || user.id }))
+    : [{ value: state.selectedSupportTicket.assignedAdminId || "", label: state.selectedSupportTicket.assignedAdminId || "담당자 없음" }];
+  const assignee = adminSelect({
+    id: `support-assignee-${ticketId}`,
+    value: state.selectedSupportTicket.assignedAdminId || "",
+    label: "담당자 배정",
+    className: "support-assignee-select",
+    dataSupportTicket: ticketId,
+    options: assigneeOptions,
+  });
+  const status = adminSelect({
+    id: `support-status-${ticketId}`,
+    value: state.selectedSupportTicket.status,
+    label: "문의 상태",
+    className: "support-status-select",
+    dataSupportTicket: ticketId,
+    options: filterOptions.status.slice(1),
+  });
+  return withFilters
+    .replace(/<select data-support-assignee="[^"]*">[\s\S]*?<\/select>/, assignee)
+    .replace(/<select data-support-status="[^"]*">[\s\S]*?<\/select>/, `<label class="support-status-field"><span>문의 상태</span>${status}</label>`);
 }
 
 async function loadOrganizations(renderAfter = true) {
@@ -3212,6 +4135,9 @@ async function createAdminAccount(event) {
 }
 
 function openDrawer(name, data = null) {
+  clearToast();
+  if (name === "event") state.view = "events";
+  if (name === "event") state.eventEditorOpen = true;
   if (name === "organization") resetOrganizationLogoState();
   if (name === "reward") resetRewardImageState();
   state.drawer = name;
@@ -3223,12 +4149,16 @@ function openDrawer(name, data = null) {
   );
 }
 
+window.__fanfolioOpenEventDrawer = () => openDrawer("event");
+
 function closeDrawer() {
   resetOrganizationLogoState();
   resetRewardImageState();
   state.drawer = null;
+  state.eventEditorOpen = false;
   state.drawerData = null;
   state.temporaryCredential = null;
+  clearEventDeepLink();
   layout();
 }
 
@@ -3575,8 +4505,8 @@ async function createCampaign(event) {
   event.preventDefault();
   const form = new FormData(event.target);
   const requiredCardIds = Array.from(
-    event.target.querySelector('[name="requiredCardIds"]').selectedOptions,
-  ).map((option) => option.value);
+    event.target.querySelectorAll('.admin-multi-select-value[name="requiredCardIds"]'),
+  ).map((input) => input.value).filter(Boolean);
   const benefitFile = form.get("benefitFile");
   try {
     const benefitAssetId =
@@ -3627,6 +4557,14 @@ function toggleDesktopNavigation() {
   );
   layout();
 }
+function toggleNavigationSection(group) {
+  state.navSectionsCollapsed[group] = !state.navSectionsCollapsed[group];
+  window.localStorage.setItem(
+    "fanfolio.admin.navSectionsCollapsed.v2",
+    JSON.stringify(state.navSectionsCollapsed),
+  );
+  layout();
+}
 function closeAccountMenu() {
   if (!state.accountMenuOpen) return;
   state.accountMenuOpen = false;
@@ -3649,6 +4587,7 @@ async function logoutAdmin() {
   state.unreadNotificationCount = 0;
   state.notificationPanelOpen = false;
   state.cards = [];
+  state.cardCatalog = [];
   state.cardPacks = [];
   state.drops = [];
   state.batches = [];
@@ -3875,7 +4814,7 @@ async function submitPartnerReviewRequest(cardId) {
     toast("검수 요청에 실패했습니다. 카드 상태와 권한을 확인해 주세요.");
   }
 }
-async function openNotification(notificationId, cardId) {
+async function openNotification(notificationId, cardId, view, ticketId, deliveryId) {
   if (notificationId === "toggle") {
     state.notificationPanelOpen = !state.notificationPanelOpen;
     state.accountMenuOpen = false;
@@ -3888,9 +4827,12 @@ async function openNotification(notificationId, cardId) {
       body: JSON.stringify({ read: true }),
     });
     state.notificationPanelOpen = false;
+    state.notifications = state.notifications.filter((item) => item.id !== notificationId);
     await loadAdminNotifications(false);
+    state.notifications = state.notifications.filter((item) => item.id !== notificationId && !item.isRead);
     if (cardId) await openReview(cardId);
-    else layout();
+    else if (view === "support" && ticketId) { state.view = "support"; await openSupportTicket(ticketId); }
+    else { state.view = view || "audit"; if (view === "deliveries") await loadDeliveryQueue(true); else layout(); }
   } catch {
     toast("알림 처리에 실패했습니다.");
   }
@@ -4129,16 +5071,27 @@ async function createDrop(event) {
 }
 async function saveEvent(event) {
   event.preventDefault();
-  const form = new FormData(event.currentTarget);
+  const eventForm = event.currentTarget;
+  const form = new FormData(eventForm);
   const id = event.currentTarget.dataset.eventId;
   const bannerFile = form.get("bannerFile");
+  const submitButton = eventForm.querySelector('[type="submit"]');
   if (!form.get("heroAssetId") && bannerFile instanceof File && bannerFile.size) {
-    try { event.currentTarget.querySelector('[type="submit"]').disabled = true; form.set("heroAssetId", await uploadAsset(bannerFile, "event_banner")); } catch { toast("이벤트 배너 업로드에 실패했습니다."); return; }
+    if (submitButton) submitButton.disabled = true;
+    try {
+      form.set("heroAssetId", await uploadAsset(bannerFile, "event_banner"));
+    } catch (error) {
+      toast(error?.message || "이벤트 배너 업로드에 실패했습니다.");
+      return;
+    } finally {
+      if (submitButton) submitButton.disabled = false;
+    }
   }
   const kind = form.get("eventType");
   const connection = String(form.get("connection") || "").trim();
   const payload = { heroAssetId: String(form.get("heroAssetId") || "").trim(), title: String(form.get("title") || "").trim(), summary: String(form.get("summary") || "").trim(), description: String(form.get("description") || ""), noticeItems: String(form.get("noticeItems") || "").split(/\r?\n/).map((item) => item.trim()).filter(Boolean), relatedCardIds: Array.from(event.currentTarget.querySelectorAll('input[name="relatedCardIds"]:checked')).map((input) => input.value), eventType: kind, artistId: form.get("artistId") || null, startsAt: new Date(form.get("startsAt")).toISOString(), endsAt: form.get("endsAt") ? new Date(form.get("endsAt")).toISOString() : null, applicationStartsAt: form.get("applicationStartsAt") ? new Date(form.get("applicationStartsAt")).toISOString() : null, applicationEndsAt: form.get("applicationEndsAt") ? new Date(form.get("applicationEndsAt")).toISOString() : null, venue: String(form.get("venue") || "").trim() || null, participantLimit: form.get("participantLimit") ? Number(form.get("participantLimit")) : null, ctaLabel: String(form.get("ctaLabel") || "").trim() || null, featured: form.get("featured") === "on", ...(kind === "card_drop" ? { dropId: connection } : {}), ...(kind === "card" ? { cardId: connection } : {}), ...(kind === "fan_mission" ? { achievementId: connection } : {}), ...(kind === "external" ? { externalUrl: connection } : {}) };
-  try { await api(id ? `/admin/events/${encodeURIComponent(id)}` : "/admin/events", { method: id ? "PATCH" : "POST", body: JSON.stringify(payload) }); closeDrawer(); await loadEvents(true); toast(id ? "이벤트를 저장했습니다." : "이벤트 초안을 저장했습니다."); } catch { toast("이벤트 저장에 실패했습니다. 입력값과 권한을 확인해 주세요."); }
+  if (submitButton) submitButton.disabled = true;
+  try { await api(id ? `/admin/events/${encodeURIComponent(id)}` : "/admin/events", { method: id ? "PATCH" : "POST", body: JSON.stringify(payload) }); closeDrawer(); await loadEvents(true); toast(id ? "이벤트를 저장했습니다." : "이벤트 초안을 저장했습니다."); } catch (error) { toast(error?.message || "이벤트 저장에 실패했습니다. 입력값과 권한을 확인해 주세요."); } finally { if (submitButton) submitButton.disabled = false; }
 }
 async function eventTransition(id, action, decision = null) { const endpoint = { submit: "submit", review: "review", publish: "publish", end: "end" }[action]; try { await api(`/admin/events/${encodeURIComponent(id)}/${endpoint}`, { method: "POST", body: decision ? JSON.stringify({ decision }) : "{}" }); await loadEvents(true); toast(action === "submit" ? "검수 요청을 보냈습니다." : action === "review" ? (decision === "approve" ? "이벤트를 승인했습니다." : "수정 요청을 보냈습니다.") : "이벤트 상태를 변경했습니다."); } catch { toast("이벤트 상태 변경에 실패했습니다."); } }
 async function submitEvent(id) { await eventTransition(id, "submit"); }
@@ -4220,9 +5173,9 @@ async function saveArtistProfileReview(event) {
 }
 
 function selectedValues(form, name) {
-  return Array.from(form.querySelectorAll(`[name="${name}"] option:checked`))
-    .map((option) => option.value)
-    .filter(Boolean);
+  const hiddenValues = Array.from(form.querySelectorAll(`.admin-multi-select-value[name="${name}"]`)).map((input) => input.value).filter(Boolean);
+  if (hiddenValues.length) return hiddenValues;
+  return Array.from(form.querySelectorAll(`[name="${name}"] option:checked`)).map((option) => option.value).filter(Boolean);
 }
 
 function applyFanPassPreset(presetId) {
@@ -4345,6 +5298,22 @@ async function saveFanPass(event) {
   const startsAt = data.get("startsAt");
   const endsAt = data.get("endsAt");
   const dateError = form.querySelector("#fan-pass-date-error");
+  const errorBox = form.querySelector("#fan-pass-form-error");
+  const submitButton = form.querySelector('button[type="submit"]');
+  const organizationId = String(data.get("organizationId") || "").trim();
+  const artistId = String(data.get("artistId") || "").trim();
+  const premiumEnabled = form.elements.premiumEnabled?.checked === true;
+  const premiumPrice = Number(data.get("premiumPricePoints") || 0);
+  if (isRoot() && ((organizationId && !artistId) || (!organizationId && artistId))) {
+    errorBox.textContent = "조직과 아티스트 범위를 함께 선택해 주세요.";
+    errorBox.hidden = false;
+    return;
+  }
+  if (premiumEnabled && (!Number.isInteger(premiumPrice) || premiumPrice < 1)) {
+    errorBox.textContent = "프리미엄 패스 가격을 1P 이상 입력해 주세요.";
+    errorBox.hidden = false;
+    return;
+  }
   if (startsAt && endsAt && endsAt <= startsAt) {
     dateError.hidden = false;
     return;
@@ -4358,6 +5327,8 @@ async function saveFanPass(event) {
     .filter((tier) => tier.rawXp !== "" && Number.isFinite(tier.requiredXp) && tier.requiredXp >= 0)
     .map(({ rawXp, ...tier }) => tier)
     .slice(0, maxFanPassTiers);
+  errorBox.hidden = true;
+  if (submitButton) submitButton.disabled = true;
   try {
     const seasonId = form.dataset.id;
     await api(seasonId ? `/admin/engagement/pass-seasons/${seasonId}` : "/admin/engagement/pass-seasons", {
@@ -4365,22 +5336,23 @@ async function saveFanPass(event) {
       body: JSON.stringify({
         title: String(data.get("title") || "").trim(),
         description: String(data.get("description") || "").trim() || null,
-        organizationId: data.get("organizationId") || null,
-        artistId: data.get("artistId") || null,
+        organizationId: organizationId || null,
+        artistId: artistId || null,
         startsAt: startsAt ? new Date(startsAt).toISOString() : null,
         endsAt: endsAt ? new Date(endsAt).toISOString() : null,
-        premiumEnabled: form.elements.premiumEnabled?.checked === true,
-        premiumPricePoints: Number(data.get("premiumPricePoints") || 0) || null,
+        premiumEnabled,
+        premiumPricePoints: premiumEnabled ? premiumPrice : null,
         tiers: tiers.length ? tiers : [{ tier: 1, requiredXp: 1, rewardId: null }],
       }),
     });
     closeDrawer();
     await loadFanGrowth(true);
     toast(seasonId ? "레벨 패스를 저장했습니다." : "레벨 패스 초안을 등록했습니다.");
-  } catch {
-    const errorBox = form.querySelector("#fan-pass-form-error");
-    errorBox.textContent = "레벨 패스 저장에 실패했습니다. 범위, 기간과 티어 값을 확인해 주세요.";
+  } catch (error) {
+    errorBox.textContent = error?.message || "레벨 패스 저장에 실패했습니다. 범위, 기간과 티어 값을 확인해 주세요.";
     errorBox.hidden = false;
+  } finally {
+    if (submitButton) submitButton.disabled = false;
   }
 }
 
@@ -4437,26 +5409,98 @@ async function transitionFanGrowth(kind, action, id) {
 function bind() {
   enhanceDateTimePickers();
   void loadEventHeroPreview();
+  document.querySelectorAll("[data-preview-search], [data-preview-filter], #issuance-search, [data-issuance-filter]").forEach((control) => control.classList.add("ops-control"));
+  document.querySelectorAll("[data-global-search-toggle]").forEach((button) => button.addEventListener("click", () => {
+    state.globalSearchOpen = !state.globalSearchOpen;
+    if (!state.globalSearchOpen) state.globalSearchQuery = "";
+    layout();
+    if (state.globalSearchOpen) setTimeout(() => document.querySelector("[data-global-search-input]")?.focus(), 0);
+  }));
+  document.querySelector("[data-global-search-input]")?.addEventListener("input", (event) => {
+    state.globalSearchQuery = event.currentTarget.value;
+    const position = event.currentTarget.selectionStart;
+    layout();
+    const next = document.querySelector("[data-global-search-input]");
+    next?.focus();
+    if (position !== null) next?.setSelectionRange(position, position);
+  });
+  document.querySelectorAll("[data-global-search-result]").forEach((button) => button.addEventListener("click", () => {
+    clearToast();
+    state.view = button.dataset.globalSearchResult;
+    state.globalSearchOpen = false;
+    state.globalSearchQuery = "";
+    layout();
+    if (state.view === "events") void loadEvents(true);
+    if (state.view === "partners") void loadOrganizations(true);
+  }));
+  document.onkeydown = (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      event.preventDefault();
+      state.globalSearchOpen = true;
+      state.accountMenuOpen = false;
+      layout();
+      setTimeout(() => document.querySelector("[data-global-search-input]")?.focus(), 0);
+      return;
+    }
+    if (event.key === "Escape" && state.globalSearchOpen) {
+      state.globalSearchOpen = false;
+      state.globalSearchQuery = "";
+      layout();
+    }
+  };
   document
     .querySelector("#admin-login-form")
     ?.addEventListener("submit", loginAdmin);
-  document.querySelectorAll("[data-view]").forEach((button) => {
-    button.addEventListener("click", () => {
+  document.querySelectorAll("[data-nav-section-toggle]").forEach((button) => {
+    button.addEventListener("click", () =>
+      toggleNavigationSection(button.dataset.navSectionToggle),
+    );
+  });
+  document.querySelectorAll("[data-view]:not([data-open-drawer])").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      state.operationFeedback = null;
+      clearToast();
+      state.drawer = null;
+      state.drawerData = null;
+      state.eventEditorOpen = false;
+      state.temporaryCredential = null;
+      clearEventDeepLink();
       state.view = button.dataset.view;
       state.mobileNavOpen = false;
       state.accountMenuOpen = false;
       layout();
-      if (state.view === "events") void loadEvents(true);
-      if (state.view === "cards") void loadContentCalendar(true);
-      if (state.view === "statistics") void loadStatistics(true);
-      if (state.view === "support") void loadSupportTickets(true);
-      if (state.view === "deliveries") void loadDeliveryQueue(true);
-      if (state.view === "approvals") void loadApprovals(true);
+      resetWorkspaceScroll();
+      if (state.view === "events") void loadEvents(true).then(resetWorkspaceScroll);
+      if (state.view === "cards") void loadContentCalendar(true).then(resetWorkspaceScroll);
+      if (state.view === "statistics") void loadStatistics(true).then(resetWorkspaceScroll);
+      if (state.view === "support") void loadSupportTickets(true).then(resetWorkspaceScroll);
+      if (state.view === "deliveries") void loadDeliveryQueue(true).then(resetWorkspaceScroll);
+      if (state.view === "approvals") void loadApprovals(true).then(resetWorkspaceScroll);
+    });
+  });
+  document.querySelectorAll("[data-open-drawer]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openDrawer(button.dataset.openDrawer);
     });
   });
   document.querySelector("#refresh-approvals")?.addEventListener("click", () => void loadApprovals(true));
+  document.querySelectorAll("[data-approval-detail]").forEach((button) =>
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      state.selectedApprovalId = button.dataset.approvalDetail;
+      layout();
+    }),
+  );
   document.querySelectorAll(".approval-action").forEach((button) =>
     button.addEventListener("click", () => void decideApproval(button.dataset.approvalId, button.dataset.approvalAction)),
+  );
+  document.querySelectorAll(".approval-detail-action").forEach((button) =>
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void decideApproval(button.dataset.approvalId, button.dataset.approvalDetailAction);
+    }),
   );
   document.querySelectorAll("[data-production-statistics-period]").forEach((button) =>
     button.addEventListener("click", () => {
@@ -4492,9 +5536,6 @@ function bind() {
   document.querySelector("#card-pack-form")?.addEventListener("submit", createCardPack);
   document.querySelector("#content-calendar-form")?.addEventListener("submit", createContentCalendar);
   document.querySelector("#refresh-content-calendar")?.addEventListener("click", () => void loadContentCalendar(true));
-  document.querySelectorAll("[data-calendar-status]").forEach((select) => {
-    select.addEventListener("change", () => void updateContentCalendarStatus(select.dataset.calendarStatus, select.value));
-  });
   document.querySelector("#shop-product-form")?.addEventListener("submit", createShopProduct);
   document.querySelector("#point-package-form")?.addEventListener("submit", createPointChargePackage);
   document.querySelector("#refresh-point-charge-packages")?.addEventListener("click", () => void loadPointChargeOperations(true));
@@ -4519,10 +5560,61 @@ function bind() {
   document.querySelectorAll(".shop-product-publish").forEach((button) =>
     button.addEventListener("click", () => void publishShopProduct(button.dataset.shopProductId)),
   );
+  document.querySelectorAll(".shop-product-open").forEach((button) =>
+    button.addEventListener("click", () => void loadShopProductDetail(button.dataset.shopProductId)),
+  );
+  document.querySelectorAll("[data-shop-product-row-id]").forEach((row) => {
+    const open = () => void loadShopProductDetail(row.dataset.shopProductRowId);
+    row.addEventListener("click", (event) => {
+      if (event.target.closest("button, a, input, select")) return;
+      open();
+    });
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); }
+    });
+  });
   document.querySelector("#card-pack-composition-form")?.addEventListener("submit", saveCardPackComposition);
+  document.querySelectorAll("[data-composition-card-id]").forEach((row) => {
+    const select = () => {
+      state.selectedCompositionCardId = row.dataset.compositionCardId;
+      document.querySelectorAll("[data-composition-card-id]").forEach((candidate) => {
+        const selected = candidate.dataset.compositionCardId === state.selectedCompositionCardId;
+        candidate.classList.toggle("selected-composition-row", selected);
+        candidate.setAttribute("aria-selected", String(selected));
+      });
+      const preview = document.querySelector("[data-composition-card-preview]");
+      const card = state.selectedCardPack?.cards?.find((candidate) => candidate.cardId === state.selectedCompositionCardId);
+      if (preview && card) {
+        const thumbnailUrl = state.cardThumbnailUrls[card.cardId] || ({
+          card_demo_published: "./assets/demo/dreamscape/yuna.png",
+          card_demo_harin: "./assets/demo/dreamscape/harin.png",
+          card_demo_sena: "./assets/demo/dreamscape/sena.png",
+          card_demo_rina: "./assets/demo/dreamscape/rina.png",
+        })[card.cardId] || "";
+        const media = preview.querySelector(".composition-card-preview-media");
+        if (media) media.replaceChildren(thumbnailUrl ? Object.assign(document.createElement("img"), { src: thumbnailUrl, alt: `${card.name} 카드 미리보기` }) : document.createTextNode("이미지 없음"));
+        preview.querySelector(".composition-card-preview-copy h3").textContent = card.name;
+        preview.querySelector(".composition-card-preview-copy p").textContent = card.cardId;
+        preview.querySelector("[data-composition-preview-rarity]").textContent = card.rarity || "N";
+        preview.querySelector("[data-composition-preview-probability]").textContent = `${Number(card.probability || 0).toFixed(2)}%`;
+      }
+    };
+    row.addEventListener("click", (event) => { if (!event.target.closest("input,button,a,label,select,textarea")) select(); });
+    row.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); select(); } });
+  });
   document.querySelectorAll(".card-pack-open").forEach((button) =>
     button.addEventListener("click", () => void loadCardPackDetail(button.dataset.cardPackId)),
   );
+  document.querySelectorAll("[data-card-pack-row-id]").forEach((row) => {
+    const open = () => void loadCardPackDetail(row.dataset.cardPackRowId);
+    row.addEventListener("click", (event) => {
+      if (event.target.closest("button, a, input, select")) return;
+      open();
+    });
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); }
+    });
+  });
   document.querySelectorAll(".card-pack-compose").forEach((button) =>
     button.addEventListener("click", () => void loadCardPackDetail(button.dataset.cardPackId, true)),
   );
@@ -4531,16 +5623,14 @@ function bind() {
   );
   document.querySelector("#card-pack-search")?.addEventListener("input", (event) => {
     state.cardPackQuery = event.currentTarget.value;
-    layout();
-    const input = document.querySelector("#card-pack-search");
-    input?.focus();
-    input?.setSelectionRange(state.cardPackQuery.length, state.cardPackQuery.length);
+    state.cardPackPage = 1;
+    void loadCardPacks(true);
   });
   document.querySelectorAll("[data-select-id=card-pack-artist] .admin-select-option").forEach((button) =>
-    button.addEventListener("click", () => { state.cardPackArtist = button.dataset.value; layout(); }),
+    button.addEventListener("click", () => { state.cardPackArtist = button.dataset.value; state.cardPackPage = 1; void loadCardPacks(true); }),
   );
   document.querySelectorAll("[data-select-id=card-pack-status] .admin-select-option").forEach((button) =>
-    button.addEventListener("click", () => { state.cardPackStatus = button.dataset.value; layout(); }),
+    button.addEventListener("click", () => { state.cardPackStatus = button.dataset.value; state.cardPackPage = 1; void loadCardPacks(true); }),
   );
   document
     .querySelector("#desktop-nav-toggle")
@@ -4561,11 +5651,42 @@ function bind() {
   });
   document.querySelectorAll("[data-open-notification]").forEach((button) =>
     button.addEventListener("click", () =>
-      void openNotification(button.dataset.openNotification, button.dataset.cardId),
+      void openNotification(button.dataset.openNotification, button.dataset.cardId, button.dataset.notificationView, button.dataset.notificationTicket, button.dataset.notificationDelivery),
     ),
   );
   document.querySelectorAll("[data-support-ticket]").forEach((button) =>
     button.addEventListener("click", () => void openSupportTicket(button.dataset.supportTicket)),
+  );
+  document.querySelectorAll("[data-support-activity-detail]").forEach((button) =>
+    button.addEventListener("click", () => {
+      state.supportActivityDetailTicketId = state.selectedSupportTicket?.id || "";
+      state.supportActivityDetailIndex = Number(button.dataset.supportActivityDetail);
+      layout();
+    }),
+  );
+  document.querySelector("[data-support-activity-close]")?.addEventListener("click", () => {
+    state.supportActivityDetailIndex = null;
+    layout();
+  });
+  document.querySelectorAll("[data-support-activity-copy]").forEach((button) =>
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      const value = button.dataset.supportActivityCopy || "";
+      try {
+        await navigator.clipboard.writeText(value);
+        toast("원문 ID를 복사했습니다.");
+      } catch {
+        toast("원문 ID를 복사하지 못했습니다.");
+      }
+    }),
+  );
+  document.querySelectorAll("[data-support-page]").forEach((button) =>
+    button.addEventListener("click", () => {
+      const page = Number(button.dataset.supportPage);
+      if (button.disabled || !Number.isInteger(page) || page < 1 || page === state.supportPagination.page) return;
+      state.supportPagination.page = page;
+      void loadSupportTickets(true);
+    }),
   );
   document.querySelectorAll("[data-support-status]").forEach((select) =>
     select.addEventListener("change", () => void updateSupportTicketStatus(select.dataset.supportStatus, select.value)),
@@ -4586,16 +5707,26 @@ function bind() {
     releaseButton.textContent = "보류 해제";
     actionBar?.append(releaseButton);
   }
+  if (state.selectedSupportTicket?.evidence?.some((item) => item.kind === "collection_hidden") && !state.selectedSupportTicket?.evidence?.some((item) => item.kind === "collection_restored")) {
+    const actionBar = document.querySelector(".support-action-bar");
+    const restoreButton = document.createElement("button");
+    restoreButton.type = "button";
+    restoreButton.className = "secondary";
+    restoreButton.dataset.supportAction = "restore_collection";
+    restoreButton.dataset.supportId = state.selectedSupportTicket.id;
+    restoreButton.textContent = "공개 컬렉션 복구";
+    actionBar?.append(restoreButton);
+  }
   document.querySelectorAll("[data-support-action]").forEach((button) =>
     button.addEventListener("click", () => {
-      const referenceField = document.querySelector(`[data-support-action-reference="${button.dataset.supportId}"]`);
+    const referenceField = document.querySelector(`[data-support-action-reference="${button.dataset.supportId}"]`);
       const reference = referenceField?.value?.trim() || "";
-      if (!reference) {
+      const needsReference = ["hold_trade", "release_trade", "refund_order", "grant_points"].includes(button.dataset.supportAction);
+      if (needsReference && !reference) {
         toast("대상 ID 또는 운영 메모를 입력해 주세요.");
         referenceField?.focus();
         return;
       }
-      const needsReference = ["hold_trade", "release_trade", "refund_order", "grant_points"].includes(button.dataset.supportAction);
       const amountField = document.querySelector(`[data-support-action-amount="${button.dataset.supportId}"]`);
       const amount = button.dataset.supportAction === "grant_points" ? Number(amountField?.value || 0) : null;
       if (button.dataset.supportAction === "grant_points" && (!Number.isInteger(amount) || amount === 0)) {
@@ -4611,14 +5742,31 @@ function bind() {
   );
   document.querySelector("#support-status-filter")?.addEventListener("change", (event) => {
     state.supportStatus = event.currentTarget.value;
+    state.supportPagination.page = 1;
+    void loadSupportTickets(true);
+  });
+  document.querySelector("#support-category-filter")?.addEventListener("change", (event) => {
+    state.supportCategory = event.currentTarget.value;
+    state.supportPagination.page = 1;
     void loadSupportTickets(true);
   });
   document.querySelector("#support-search")?.addEventListener("input", (event) => {
     state.supportQuery = event.currentTarget.value;
+    state.supportPagination.page = 1;
+    void loadSupportTickets(true);
+  });
+  document.querySelector("#support-filter-reset")?.addEventListener("click", () => {
+    state.supportQuery = "";
+    state.supportStatus = "all";
+    state.supportCategory = "all";
+    state.supportPagination.page = 1;
     void loadSupportTickets(true);
   });
   document.querySelectorAll("[data-delivery-retry]").forEach((button) =>
     button.addEventListener("click", () => void retryDelivery(button.dataset.deliveryRetry)),
+  );
+  document.querySelectorAll("[data-engagement-retry]").forEach((button) =>
+    button.addEventListener("click", () => void retryEngagementEvent(button.dataset.engagementRetry)),
   );
   document.querySelector("#delivery-status-filter")?.addEventListener("change", (event) => {
     state.deliveryStatus = event.currentTarget.value;
@@ -4628,10 +5776,22 @@ function bind() {
     state.deliveryChannel = event.currentTarget.value;
     void loadDeliveryQueue(true);
   });
-  document.querySelector("#account-settings")?.addEventListener("click", () => {
-    toast("계정 설정은 관리자 API 연결 후 제공됩니다.");
-    closeAccountMenu();
+  document.querySelector("#delivery-filter-reset")?.addEventListener("click", () => {
+    state.deliveryStatus = "failed";
+    state.deliveryChannel = "all";
+    void loadDeliveryQueue(true);
   });
+  document.querySelector("#account-settings")?.addEventListener("click", () => {
+    state.view = "settings";
+    state.accountMenuOpen = false;
+    layout();
+  });
+  document.querySelectorAll("[data-settings-password-change]").forEach((button) => button.addEventListener("click", () => {
+    state.mustChangePassword = true;
+    state.accountMenuOpen = false;
+    state.loginError = "";
+    layout();
+  }));
   document.querySelector("#account-password-change")?.addEventListener("click", () => {
     state.mustChangePassword = true;
     state.accountMenuOpen = false;
@@ -4662,11 +5822,6 @@ function bind() {
       () => void loadSelectedOrganization(button.dataset.partnerId),
     ),
   );
-  document
-    .querySelector("#partner-mobile-select")
-    ?.addEventListener("change", (event) =>
-      void loadSelectedOrganization(event.currentTarget.value),
-    );
   document.querySelectorAll("[data-partner-tab]").forEach((button) =>
     button.addEventListener("click", () => {
       state.partnerTab = button.dataset.partnerTab;
@@ -4759,6 +5914,7 @@ function bind() {
   );
   document.querySelector("#fan-pass-search")?.addEventListener("input", (event) => {
     state.fanPassQuery = event.target.value;
+    state.fanPassPage = 1;
     layout();
     const search = document.querySelector("#fan-pass-search");
     search?.focus();
@@ -4768,6 +5924,7 @@ function bind() {
     state.fanPassQuery = "";
     state.fanPassStatus = "all";
     state.fanPassArtist = "all";
+    state.fanPassPage = 1;
     layout();
   });
   document.querySelectorAll(".close-drawer").forEach((button) =>
@@ -4826,10 +5983,11 @@ function bind() {
   });
   const fanPassForm = document.querySelector("#fan-pass-form");
   if (isRoot() && fanPassForm) {
-    const artistSelect = fanPassForm.querySelector('[name="artistId"]');
-    const globalOption = artistSelect?.querySelector('option[value=""]');
-    artistSelect?.removeAttribute("required");
-    if (globalOption) globalOption.textContent = "전체 서비스 · 글로벌 팬 레벨";
+    const artistSelect = fanPassForm.querySelector('[data-select-id="fan-pass-artist"]');
+    const artistValue = artistSelect?.querySelector('[name="artistId"]');
+    if (state.drawerData?.season?.scopeType === "global" || (!state.drawerData?.season?.organizationId && !state.drawerData?.season?.artistId)) {
+      artistValue?.removeAttribute("required");
+    }
   }
   document.querySelector(".fan-pass-preview-grid article:first-child button")?.addEventListener("click", () => {
     const previewUrl = `${window.location.protocol}//${window.location.hostname}:4173/?preview=fan-growth`;
@@ -4840,9 +5998,9 @@ function bind() {
     if (tierSection) {
       const presetSection = document.createElement("section");
       presetSection.className = "fan-pass-form-section fan-pass-preset-section";
-      presetSection.innerHTML = `<div class="fan-pass-section-heading"><div><h3>기본 세트로 시작</h3><small>레벨 수와 XP 구간을 한 번에 채운 뒤 보상은 단계별로 연결할 수 있습니다.</small></div><label class="field preset-field"><span class="sr-only">기본 세트</span><select id="fan-pass-preset" aria-label="기본 세트 선택"><option value="">세트 선택</option>${fanPassPresets.map((preset) => `<option value="${preset.id}">${preset.label}</option>`).join("")}</select></label></div>`;
+      presetSection.innerHTML = `<div class="fan-pass-section-heading"><div><h3>기본 세트로 시작</h3><small>레벨 수와 XP 구간을 한 번에 채운 뒤 보상은 단계별로 연결할 수 있습니다.</small></div><label class="field preset-field"><span class="sr-only">기본 세트</span>${adminSelect({ id: "fan-pass-preset", name: "preset", value: "", label: "기본 세트 선택", className: "form-select", options: [{ value: "", label: "세트 선택" }, ...fanPassPresets.map((preset) => ({ value: preset.id, label: preset.label }))] })}</label></div>`;
       tierSection.before(presetSection);
-      document.querySelector("#fan-pass-preset")?.addEventListener("change", (event) => applyFanPassPreset(event.target.value));
+      document.querySelector('[data-select-id="fan-pass-preset"] .admin-select-value')?.addEventListener("change", (event) => applyFanPassPreset(event.target.value));
     }
   }
   document
@@ -4904,13 +6062,13 @@ function bind() {
     if (preview) preview.textContent = event.target.value.trim() || "팬앱 표시 라벨";
   });
   document
-    .querySelector("#achievement-condition")
+    .querySelector('#achievement-condition .admin-select-value')
     ?.addEventListener("change", () => {
       state.drawerData = {
         ...(state.drawerData || {}),
         achievement: {
           ...(state.drawerData?.achievement || {}),
-          conditionType: document.querySelector("#achievement-condition").value,
+          conditionType: document.querySelector('#achievement-condition [name="conditionType"]')?.value || "first_card",
         },
       };
       layout();
@@ -4934,6 +6092,18 @@ function bind() {
           state.temporaryCredential?.temporaryPassword || "",
         );
         toast("임시 비밀번호를 복사했습니다.");
+      } catch {
+        toast("브라우저에서 복사를 허용하지 않았습니다.");
+      }
+    });
+  document
+    .querySelector("#copy-artist-temporary-password")
+    ?.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(
+          document.querySelector("#artist-temporary-password")?.textContent || "",
+        );
+        toast("아티스트 임시 비밀번호를 복사했습니다.");
       } catch {
         toast("브라우저에서 복사를 허용하지 않았습니다.");
       }
@@ -4999,7 +6169,6 @@ function bind() {
   document
     .querySelector("#admin-card-edit-form")
     ?.addEventListener("submit", updateAdminCard);
-  document.querySelector("#open-event-drawer")?.addEventListener("click", () => openDrawer("event"));
   document.querySelector("#event-form")?.addEventListener("submit", saveEvent);
   document.querySelector(".event-upload-select")?.addEventListener("click", () => document.querySelector("#event-banner-file")?.click());
   document.querySelector("#event-banner-file")?.addEventListener("change", async (event) => {
@@ -5009,7 +6178,7 @@ function bind() {
     if (!file) return;
     try { event.currentTarget.form.elements.heroAssetId.value = await uploadAsset(file, "event_banner"); toast("이벤트 배너를 업로드했습니다."); } catch { event.currentTarget.value = ""; toast("이벤트 배너 업로드에 실패했습니다."); }
   });
-  document.querySelector('#event-form select[name="eventType"]')?.addEventListener("change", (event) => {
+  document.querySelector('#event-form [data-select-id="event-type"] .admin-select-value')?.addEventListener("change", (event) => {
     const field = document.querySelector("#event-connection-field"); if (!field) return;
     field.innerHTML = eventConnectionOptions(event.currentTarget.value);
   });
@@ -5041,24 +6210,40 @@ function bind() {
   document
     .querySelector("#drop-link-form")
     ?.addEventListener("submit", linkApprovedCardToDrop);
-  document
-    .querySelector('#admin-card-form select[name="artistId"]')
-    ?.addEventListener("change", (event) => {
-      const artistId = event.currentTarget.value;
-      const memberSelect = document.querySelector(
-        '#admin-card-form select[name="memberId"]',
-      );
-      if (!memberSelect) return;
-      Array.from(memberSelect.options).forEach((option) => {
-        option.hidden = Boolean(
-          artistId && option.dataset.artistId !== artistId,
-        );
-      });
-      if (memberSelect.selectedOptions[0]?.hidden) memberSelect.value = "";
+  const filterCardMembers = (artistId) => {
+    const memberControl = document.querySelector(
+      '#admin-card-form [data-select-id="admin-card-member"]',
+    );
+    if (!memberControl) return;
+    const options = Array.from(memberControl.querySelectorAll(".admin-select-option"));
+    options.forEach((option) => {
+      const hidden = Boolean(artistId && option.dataset.value && option.dataset.artistId !== artistId);
+      option.hidden = hidden;
+      option.disabled = hidden;
     });
+    const selected = memberControl.dataset.value;
+    const selectedOption = options.find((option) => option.dataset.value === selected);
+    if (selectedOption?.hidden) {
+      memberControl.dataset.value = "";
+      memberControl.querySelector(".admin-select-label").textContent = "멤버 선택";
+      const hiddenValue = memberControl.querySelector(".admin-select-value");
+      if (hiddenValue) hiddenValue.value = "";
+      options.forEach((option) => {
+        option.classList.toggle("selected", option.dataset.value === "");
+        option.setAttribute("aria-selected", String(option.dataset.value === ""));
+      });
+    }
+  };
+  document
+    .querySelector('#admin-card-form [data-select-id="admin-card-artist"] .admin-select-value')
+    ?.addEventListener("change", (event) => filterCardMembers(event.currentTarget.value));
+  filterCardMembers(
+    document.querySelector('#admin-card-form [data-select-id="admin-card-artist"]')?.dataset.value || "",
+  );
   document.querySelector("#card-search")?.addEventListener("input", (event) => {
     state.query = event.target.value;
-    layout();
+    state.cardPage = 1;
+    void loadCards(true);
   });
   document
     .querySelectorAll(".review-card")
@@ -5066,7 +6251,22 @@ function bind() {
       button.addEventListener("click", (event) =>
         activateReviewButton(event, button.dataset.id),
       ),
-    );
+      );
+  document.querySelectorAll("[data-card-action-menu]").forEach((button) =>
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const id = button.dataset.cardActionMenu;
+      state.cardActionMenuId = state.cardActionMenuId === id ? null : id;
+      layout();
+      requestAnimationFrame(positionOpenCardActionMenu);
+    }),
+  );
+  document.querySelectorAll(".delete-draft-card").forEach((button) =>
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void deleteDraftCard(button.dataset.id);
+    }),
+  );
   document.querySelectorAll("[data-review-row-id]").forEach((row) => {
     row.addEventListener("click", openReviewFromRow);
     row.addEventListener("keydown", openReviewFromRowKey);
@@ -5074,7 +6274,8 @@ function bind() {
   document.querySelectorAll("[data-review-status-tab]").forEach((button) =>
     button.addEventListener("click", () => {
       state.status = button.dataset.reviewStatusTab || "all";
-      layout();
+      state.cardPage = 1;
+      void loadCards(true);
     }),
   );
   document.querySelectorAll("[data-review-side]").forEach((button) =>
@@ -5159,21 +6360,13 @@ function bind() {
     ?.addEventListener("click", () => void downloadBatchQrZip());
   document.querySelector("#issuance-search")?.addEventListener("input", (event) => {
     state.issuanceQuery = event.currentTarget.value;
+    state.issuancePage = 1;
     const position = event.currentTarget.selectionStart;
     layout();
     const input = document.querySelector("#issuance-search");
     input?.focus();
     input?.setSelectionRange(position, position);
   });
-  document.querySelectorAll("[data-issuance-filter]").forEach((select) =>
-    select.addEventListener("change", () => {
-      const key = select.dataset.issuanceFilter;
-      if (key === "status") state.issuanceStatus = select.value;
-      if (key === "type") state.issuanceType = select.value;
-      if (key === "period") state.issuancePeriod = select.value;
-      layout();
-    }),
-  );
   document.querySelectorAll("[data-batch-id]").forEach((row) => {
     const selectBatch = () => {
       state.selectedBatchId = row.dataset.batchId;
@@ -5244,18 +6437,84 @@ function bind() {
       button.addEventListener("click", () => void submitDrop(button.dataset.id)),
     );
   document.querySelectorAll(".admin-select-trigger").forEach((trigger) => {
-    trigger.addEventListener("click", () => {
+    const toggleSelect = (focusFirst = false, reverse = false) => {
       const control = trigger.closest(".admin-select");
       const isOpen = control.classList.toggle("open");
       trigger.setAttribute("aria-expanded", String(isOpen));
       document.querySelectorAll(".admin-select.open").forEach((other) => {
         if (other !== control) other.classList.remove("open");
       });
+      if (isOpen && focusFirst) {
+        const options = [...control.querySelectorAll(".admin-select-option")];
+        (reverse ? options.at(-1) : options[0])?.focus();
+      }
+    };
+    trigger.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleSelect();
+    });
+    trigger.addEventListener("keydown", (event) => {
+      const control = trigger.closest(".admin-select");
+      const options = [...control.querySelectorAll(".admin-select-option")];
+      const currentIndex = Math.max(0, options.findIndex((option) => option.classList.contains("selected")));
+      if (["ArrowDown", "ArrowUp"].includes(event.key)) {
+        event.preventDefault();
+        if (!control.classList.contains("open")) {
+          toggleSelect(true, event.key === "ArrowUp");
+          return;
+        }
+        options[(currentIndex + (event.key === "ArrowDown" ? 1 : -1) + options.length) % options.length]?.focus();
+      } else if (["Home", "End"].includes(event.key) && control.classList.contains("open")) {
+        event.preventDefault();
+        (event.key === "Home" ? options[0] : options.at(-1))?.focus();
+      } else if (event.key === "Escape" && control.classList.contains("open")) {
+        event.preventDefault();
+        control.classList.remove("open");
+        trigger.setAttribute("aria-expanded", "false");
+      }
     });
   });
-  document.querySelectorAll(".admin-select-option").forEach((option) =>
-    option.addEventListener("click", () => {
+  document.querySelectorAll(".admin-select-option").forEach((option) => {
+    option.addEventListener("keydown", (event) => {
       const control = option.closest(".admin-select");
+      const options = [...control.querySelectorAll(".admin-select-option")];
+      const index = options.indexOf(option);
+      if (["ArrowDown", "ArrowUp"].includes(event.key)) {
+        event.preventDefault();
+        options[(index + (event.key === "ArrowDown" ? 1 : -1) + options.length) % options.length]?.focus();
+      } else if (["Home", "End"].includes(event.key)) {
+        event.preventDefault();
+        (event.key === "Home" ? options[0] : options.at(-1))?.focus();
+      } else if (["Enter", " "].includes(event.key)) {
+        event.preventDefault();
+        option.click();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        control.classList.remove("open");
+        control.querySelector(".admin-select-trigger")?.focus();
+      }
+    });
+    option.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const control = option.closest(".admin-select");
+      if (control.dataset.multiSelect) {
+        const selected = option.classList.toggle("selected");
+        option.setAttribute("aria-selected", String(selected));
+        const values = [...control.querySelectorAll(".admin-select-option.selected")].map((item) => item.dataset.value);
+        control.dataset.value = values.join(",");
+        control.querySelectorAll(".admin-multi-select-value").forEach((input) => input.remove());
+        const name = control.dataset.selectName;
+        if (name) control.insertAdjacentHTML("beforeend", values.map((value) => `<input class="admin-multi-select-value" type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(value)}" />`).join(""));
+        control.querySelectorAll(".admin-select-option").forEach((item) => {
+          const isSelected = item.classList.contains("selected");
+          item.querySelector(".admin-multi-select-check").innerHTML = isSelected ? icon("check") : "";
+        });
+        const labels = [...control.querySelectorAll(".admin-select-option.selected")].map((item) => item.dataset.label);
+        control.querySelector(".admin-select-label").textContent = labels.length ? `${labels.slice(0, 2).join(", ")}${labels.length > 2 ? ` 외 ${labels.length - 2}개` : ""}` : "선택하세요";
+        const count = control.querySelector(".admin-multi-select-count");
+        if (count) count.textContent = labels.length ? `${labels.length}개 선택` : "필수 선택";
+        return;
+      }
       const previous = control.dataset.value;
       control.dataset.value = option.dataset.value;
       control.querySelector(".admin-select-label").textContent = option.dataset.label;
@@ -5273,11 +6532,13 @@ function bind() {
       control.querySelector(".admin-select-trigger").setAttribute("aria-expanded", "false");
       if (control.classList.contains("card-artist-filter") && previous !== option.dataset.value) {
         state.cardArtist = option.dataset.value;
-        layout();
+        state.cardPage = 1;
+        void loadCards(true);
       }
       if (control.classList.contains("card-status-filter") && previous !== option.dataset.value) {
         state.status = option.dataset.value;
-        layout();
+        state.cardPage = 1;
+        void loadCards(true);
       }
       if (control.classList.contains("event-status-filter") && previous !== option.dataset.value) {
         state.eventStatus = option.dataset.value; state.eventPage = 1; void loadEvents(true);
@@ -5290,10 +6551,20 @@ function bind() {
       }
       if (control.classList.contains("fan-pass-status-filter") && previous !== option.dataset.value) {
         state.fanPassStatus = option.dataset.value;
+        state.fanPassPage = 1;
         layout();
       }
       if (control.classList.contains("fan-pass-artist-filter") && previous !== option.dataset.value) {
         state.fanPassArtist = option.dataset.value;
+        state.fanPassPage = 1;
+        layout();
+      }
+      if (control.dataset.issuanceFilter && previous !== option.dataset.value) {
+        const key = control.dataset.issuanceFilter;
+        if (key === "status") state.issuanceStatus = option.dataset.value;
+        if (key === "type") state.issuanceType = option.dataset.value;
+        if (key === "period") state.issuancePeriod = option.dataset.value;
+        state.issuancePage = 1;
         layout();
       }
       if (control.classList.contains("user-role-filter") && previous !== option.dataset.value) {
@@ -5306,9 +6577,58 @@ function bind() {
         state.auditPage = 1;
         void loadData();
       }
-    }),
-  );
+      if (control.dataset.supportFilter && previous !== option.dataset.value) {
+        if (control.dataset.supportFilter === "status") state.supportStatus = option.dataset.value;
+        if (control.dataset.supportFilter === "category") state.supportCategory = option.dataset.value;
+        state.supportPagination.page = 1;
+        void loadSupportTickets(true);
+      }
+      if (control.dataset.statisticsFilter && previous !== option.dataset.value) {
+        if (control.dataset.statisticsFilter === "organization") {
+          state.statisticsOrganization = option.dataset.value;
+          state.statisticsArtist = "all";
+          state.statisticsPack = "all";
+        } else if (control.dataset.statisticsFilter === "artist") {
+          state.statisticsArtist = option.dataset.value;
+          state.statisticsPack = "all";
+        } else {
+          state.statisticsPack = option.dataset.value;
+        }
+        void loadStatistics(true);
+      }
+      if (control.dataset.calendarStatus && previous !== option.dataset.value) {
+        void updateContentCalendarStatus(control.dataset.calendarStatus, option.dataset.value);
+      }
+      if (control.dataset.calendarContentType && previous !== option.dataset.value) {
+        state.contentCalendarDraftType = option.dataset.value;
+        layout();
+      }
+      if (control.dataset.deliveryFilter && previous !== option.dataset.value) {
+        if (control.dataset.deliveryFilter === "status") state.deliveryStatus = option.dataset.value;
+        if (control.dataset.deliveryFilter === "channel") state.deliveryChannel = option.dataset.value;
+        void loadDeliveryQueue(true);
+      }
+      if (control.dataset.previewFilter && previous !== option.dataset.value) {
+        cardOperationsPreviewState[control.dataset.previewFilter] = option.dataset.value;
+        renderCardOperationsPreview();
+      }
+      if (control.classList.contains("partner-mobile-select") && previous !== option.dataset.value) {
+        void loadSelectedOrganization(option.dataset.value);
+      }
+      if (control.classList.contains("support-assignee-select") && previous !== option.dataset.value) {
+        void updateSupportTicketAssignee(control.dataset.supportTicket, option.dataset.value);
+      }
+      if (control.classList.contains("support-status-select") && previous !== option.dataset.value) {
+        void updateSupportTicketStatus(control.dataset.supportTicket, option.dataset.value);
+      }
+    });
+  });
   document.addEventListener("click", (event) => {
+    if (state.cardActionMenuId && !event.target.closest(".row-action-menu")) {
+      state.cardActionMenuId = null;
+      layout();
+      return;
+    }
     if (
       state.accountMenuOpen &&
       !event.target.closest(".account-menu") &&
@@ -5360,6 +6680,20 @@ function bind() {
       if (profile) openDrawer("artist-profile-review", { profile });
     }),
   );
+  applyClientTablePagination();
+  document.querySelectorAll("[data-pagination-state]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (button.disabled) return;
+      state[button.dataset.paginationState] = Number(button.dataset.paginationPage) || 1;
+      if (button.dataset.paginationState === "cardPackPage") {
+        void loadCardPacks(true);
+      } else if (button.dataset.paginationState === "cardPage") {
+        void loadCards(true);
+      } else {
+        layout();
+      }
+    });
+  });
   document.onkeydown = (event) => {
     if (event.key === "Escape" && state.accountMenuOpen) {
       closeAccountMenu();
@@ -5391,6 +6725,7 @@ const cardOperationsPreviewState = {
   issueStatus: "all",
   issueType: "all",
   issuePeriod: "all",
+  issuePage: 1,
   packVersionDrafts: 0,
   compositionCards: [
     { code: "N-01", member: "지유", rarity: "UR", included: true, odds: 1, src: "./assets/preview/card-aurora-portrait.jpg" },
@@ -5474,7 +6809,7 @@ function cardManagementPreview() {
   const selectedMethod = cardOperationsPreviewState.selectedIssuanceMethod || (selected.method === "한정 특전" ? "limited" : "random");
   return `<section class="card-ops-page card-library-preview">
     <div class="card-ops-heading"><div><nav>카드 <span>›</span> <strong>카드 관리</strong></nav><h2>카드 관리</h2><p>아티스트 스튜디오에서 등록된 카드와 공개 상태를 관리합니다.</p></div><span class="source-info"><span class="source-info-label">등록 경로</span> 아티스트 스튜디오</span></div>
-    <div class="card-ops-master-detail card-library-master-detail"><section class="panel card-ops-table-panel"><div class="card-ops-toolbar"><label class="search-field">${icon("search")}<input data-preview-search="cardQuery" value="${cardOperationsPreviewState.cardQuery}" placeholder="카드명 또는 아티스트 검색" /></label><select data-preview-filter="cardArtist"><option value="all" ${cardOperationsPreviewState.cardArtist === "all" ? "selected" : ""}>전체 아티스트</option><option value="DREAMSCAPE" ${cardOperationsPreviewState.cardArtist === "DREAMSCAPE" ? "selected" : ""}>DREAMSCAPE</option><option value="LUMINA" ${cardOperationsPreviewState.cardArtist === "LUMINA" ? "selected" : ""}>LUMINA</option></select><select data-preview-filter="cardRarity"><option value="all" ${cardOperationsPreviewState.cardRarity === "all" ? "selected" : ""}>전체 희귀도</option><option value="UR" ${cardOperationsPreviewState.cardRarity === "UR" ? "selected" : ""}>UR</option><option value="SR" ${cardOperationsPreviewState.cardRarity === "SR" ? "selected" : ""}>SR</option><option value="R" ${cardOperationsPreviewState.cardRarity === "R" ? "selected" : ""}>R</option><option value="N" ${cardOperationsPreviewState.cardRarity === "N" ? "selected" : ""}>N</option></select><select data-preview-filter="cardStatus"><option value="all" ${cardOperationsPreviewState.cardStatus === "all" ? "selected" : ""}>전체 상태</option><option value="공개됨" ${cardOperationsPreviewState.cardStatus === "공개됨" ? "selected" : ""}>공개됨</option><option value="검수 완료" ${cardOperationsPreviewState.cardStatus === "검수 완료" ? "selected" : ""}>검수 완료</option></select></div><div class="table-wrap"><table class="table"><thead><tr><th>카드</th><th>카드명</th><th>아티스트</th><th>시즌</th><th>희귀도</th><th>발행 방식</th><th>발행 수량</th><th>공개 상태</th></tr></thead><tbody>${visibleCards.map(({ card, index }) => `<tr tabindex="0" data-preview-card-index="${index}" class="${index === cardOperationsPreviewState.selectedCardIndex ? "selected-preview-row" : ""}"><td>${previewCardThumb(card.src, card.name)}</td><td><strong>${card.name}</strong></td><td>${card.artist}</td><td>정규 1집</td><td class="rarity-cell"><span class="preview-rarity rarity-${card.rarity.toLowerCase()}">${card.rarity}</span></td><td>${card.method}</td><td>${card.count}</td><td><span class="badge ${card.status === "공개됨" ? "success-badge" : "warning-badge"}">${card.status}</span></td></tr>`).join("")}</tbody></table></div><footer class="preview-table-footer"><strong>총 ${visibleCards.length}개</strong><span class="pagination-control">‹ <b>1</b> ›</span></footer></section>
+    <div class="card-ops-master-detail card-library-master-detail"><section class="panel card-ops-table-panel"><div class="card-ops-toolbar"><label class="search-field">${icon("search")}<input data-preview-search="cardQuery" value="${cardOperationsPreviewState.cardQuery}" placeholder="카드명 또는 아티스트 검색" /></label>${adminSelect({ id: "preview-card-artist", value: cardOperationsPreviewState.cardArtist, label: "아티스트 필터", className: "preview-filter-control", dataPreviewFilter: "cardArtist", options: [{ value: "all", label: "전체 아티스트" }, { value: "DREAMSCAPE", label: "DREAMSCAPE" }, { value: "LUMINA", label: "LUMINA" }] })}${adminSelect({ id: "preview-card-rarity", value: cardOperationsPreviewState.cardRarity, label: "희귀도 필터", className: "preview-filter-control", dataPreviewFilter: "cardRarity", options: [{ value: "all", label: "전체 희귀도" }, { value: "UR", label: "UR" }, { value: "SR", label: "SR" }, { value: "R", label: "R" }, { value: "N", label: "N" }] })}${adminSelect({ id: "preview-card-status", value: cardOperationsPreviewState.cardStatus, label: "상태 필터", className: "preview-filter-control", dataPreviewFilter: "cardStatus", options: [{ value: "all", label: "전체 상태" }, { value: "공개됨", label: "공개됨" }, { value: "검수 완료", label: "검수 완료" }] })}</div><div class="table-wrap"><table class="table"><thead><tr><th>카드</th><th>카드명</th><th>아티스트</th><th>시즌</th><th>희귀도</th><th>발행 방식</th><th>발행 수량</th><th>공개 상태</th></tr></thead><tbody>${visibleCards.map(({ card, index }) => `<tr tabindex="0" data-preview-card-index="${index}" class="${index === cardOperationsPreviewState.selectedCardIndex ? "selected-preview-row" : ""}"><td>${previewCardThumb(card.src, card.name)}</td><td><strong>${card.name}</strong></td><td>${card.artist}</td><td>정규 1집</td><td class="rarity-cell"><span class="preview-rarity rarity-${card.rarity.toLowerCase()}">${card.rarity}</span></td><td>${card.method}</td><td>${card.count}</td><td><span class="badge ${card.status === "공개됨" ? "success-badge" : "warning-badge"}">${card.status}</span></td></tr>`).join("")}</tbody></table></div><footer class="preview-table-footer"><strong>총 ${visibleCards.length}개</strong><span class="pagination-control">‹ <b>1</b> ›</span></footer></section>
     <aside class="panel card-detail-preview"><div class="detail-panel-heading"><div><small>카드 상세</small><h3>${selected.name} <span class="preview-rarity rarity-${selected.rarity.toLowerCase()}">${selected.rarity}</span></h3></div>${icon("close")}</div><div class="card-detail-images"><figure><figcaption>앞면</figcaption><img src="${selected.src}" alt="${selected.name} 앞면" /></figure><figure><figcaption>뒷면</figcaption><img src="./assets/preview/card-back-template.png" alt="${selected.name} 뒷면" /></figure></div><section class="card-detail-message"><strong>아티스트 메시지</strong><p>${selected.message}</p></section><dl><div><dt>아티스트</dt><dd>${selected.artist}</dd></div><div><dt>시즌</dt><dd>정규 1집</dd></div><div><dt>희귀도</dt><dd><span class="preview-rarity rarity-${selected.rarity.toLowerCase()}">${selected.rarity}</span></dd></div><div><dt>발행 수량</dt><dd>${selected.count}</dd></div><div><dt>공개 상태</dt><dd><span class="badge success-badge">공개됨</span></dd></div></dl><div class="issuance-method-preview"><strong>발행 방식</strong><button type="button" class="issuance-method-option ${selectedMethod === "limited" ? "selected" : ""}" data-issuance-method="limited" aria-pressed="${selectedMethod === "limited"}"><span>${icon("featured_seasonal_and_gifts")}</span><span><b>한정 특전</b><small>행사 등록 코드로 팬 컬렉션에 추가됩니다.</small></span><em>${selected.count}</em></button><button type="button" class="issuance-method-option ${selectedMethod === "random" ? "selected" : ""}" data-issuance-method="random" aria-pressed="${selectedMethod === "random"}"><span>${icon("inventory_2")}</span><span><b>카드팩 랜덤</b><small>카드팩 개봉 시 확률에 따라 발급됩니다.</small></span><em>${selectedMethod === "random" ? selected.count : "-"}</em></button></div></aside></div>
   </section>`;
 }
@@ -5490,7 +6825,7 @@ function packManagementPreview() {
   const visiblePacks = packs.map((pack, index) => ({ pack, index })).filter(({ pack }) => (!query || `${pack[0]} ${pack[4]}`.toLowerCase().includes(query)) && (cardOperationsPreviewState.packArtist === "all" || pack[4] === cardOperationsPreviewState.packArtist) && (cardOperationsPreviewState.packStatus === "all" || pack[3] === cardOperationsPreviewState.packStatus));
   return `<section class="card-ops-page pack-management-preview">
     <div class="card-ops-heading"><div><nav>카드 <span>›</span> <strong>카드팩 관리</strong></nav><h2>카드팩 관리</h2><p>카드팩 이미지와 정보, 버전별 카드 구성 및 공개 확률을 관리합니다.</p></div><button class="primary" type="button" data-create-pack-version>${icon("add")} 새 버전 만들기</button></div>
-    <div class="card-ops-master-detail"><section class="panel card-ops-table-panel"><div class="card-ops-toolbar"><label class="search-field">${icon("search")}<input data-preview-search="packQuery" value="${cardOperationsPreviewState.packQuery}" placeholder="카드팩 또는 아티스트 검색" /></label><select data-preview-filter="packArtist"><option value="all" ${cardOperationsPreviewState.packArtist === "all" ? "selected" : ""}>전체 아티스트</option><option value="DREAMSCAPE" ${cardOperationsPreviewState.packArtist === "DREAMSCAPE" ? "selected" : ""}>DREAMSCAPE</option></select><select data-preview-filter="packStatus"><option value="all" ${cardOperationsPreviewState.packStatus === "all" ? "selected" : ""}>전체 상태</option><option value="공개됨" ${cardOperationsPreviewState.packStatus === "공개됨" ? "selected" : ""}>공개됨</option><option value="임시 저장" ${cardOperationsPreviewState.packStatus === "임시 저장" ? "selected" : ""}>임시 저장</option></select></div><div class="table-wrap"><table class="table"><thead><tr><th>카드팩</th><th>버전</th><th>포함 카드</th><th>확률 합계</th><th>공개 상태</th><th></th></tr></thead><tbody>${visiblePacks.map(({ pack, index }) => { const [name, count, total, status] = pack; const version = name === cardOperationsPreviewState.packDraftTitle ? "v1.0" : `v${3 - index}.0`; return `<tr class="${index === 0 ? "selected-preview-row" : ""}"><td><div class="pack-table-name"><img src="./assets/demo/dreamscape/card-pack.png" alt="${name} 카드팩 이미지" /><div><small>정규 1집 · DREAMSCAPE</small><strong>${name}</strong></div></div></td><td>${version}</td><td>${count}</td><td><strong>${total}</strong></td><td><span class="badge ${status === "공개됨" ? "success-badge" : "draft"}">${status}</span></td><td><button class="icon-button" type="button">${icon("chevron_right")}</button></td></tr>`; }).join("")}</tbody></table></div><footer class="preview-table-footer"><strong>총 ${visiblePacks.length}개</strong><span class="pagination-control">‹ <b>1</b> ›</span></footer></section>
+    <div class="card-ops-master-detail"><section class="panel card-ops-table-panel"><div class="card-ops-toolbar"><label class="search-field">${icon("search")}<input data-preview-search="packQuery" value="${cardOperationsPreviewState.packQuery}" placeholder="카드팩 또는 아티스트 검색" /></label>${adminSelect({ id: "preview-pack-artist", value: cardOperationsPreviewState.packArtist, label: "아티스트 필터", className: "preview-filter-control", dataPreviewFilter: "packArtist", options: [{ value: "all", label: "전체 아티스트" }, { value: "DREAMSCAPE", label: "DREAMSCAPE" }] })}${adminSelect({ id: "preview-pack-status", value: cardOperationsPreviewState.packStatus, label: "상태 필터", className: "preview-filter-control", dataPreviewFilter: "packStatus", options: [{ value: "all", label: "전체 상태" }, { value: "공개됨", label: "공개됨" }, { value: "임시 저장", label: "임시 저장" }] })}</div><div class="table-wrap"><table class="table"><thead><tr><th>카드팩</th><th>버전</th><th>포함 카드</th><th>확률 합계</th><th>공개 상태</th><th></th></tr></thead><tbody>${visiblePacks.map(({ pack, index }) => { const [name, count, total, status] = pack; const version = name === cardOperationsPreviewState.packDraftTitle ? "v1.0" : `v${3 - index}.0`; return `<tr class="${index === 0 ? "selected-preview-row" : ""}"><td><div class="pack-table-name"><img src="./assets/demo/dreamscape/card-pack.png" alt="${name} 카드팩 이미지" /><div><small>정규 1집 · DREAMSCAPE</small><strong>${name}</strong></div></div></td><td>${version}</td><td>${count}</td><td><strong>${total}</strong></td><td><span class="badge ${status === "공개됨" ? "success-badge" : "draft"}">${status}</span></td><td><button class="icon-button" type="button">${icon("chevron_right")}</button></td></tr>`; }).join("")}</tbody></table></div><footer class="preview-table-footer"><strong>총 ${visiblePacks.length}개</strong><span class="pagination-control">‹ <b>1</b> ›</span></footer></section>
     <aside class="panel pack-detail-preview"><div class="pack-detail-cover"><img src="./assets/preview/card-back-template.png" alt="Nebula Ver. 카드팩 이미지" /><div><small>정규 1집 · DREAMSCAPE</small><h3>Nebula Ver.</h3><span class="badge success-badge">공개됨</span></div></div><dl><div><dt>아티스트</dt><dd>DREAMSCAPE</dd></div><div><dt>포함 카드</dt><dd>14장</dd></div><div><dt>확률 합계</dt><dd>100%</dd></div><div><dt>공개 상태</dt><dd>공개됨</dd></div><div><dt>업데이트</dt><dd>2026. 8. 19. 13:20</dd></div></dl><div class="public-odds-mini"><strong>공개 확률 미리보기</strong><span><b>UR</b> 1%</span><span><b>SR</b> 9%</span><span><b>R</b> 30%</span><span><b>N</b> 60%</span></div><button class="primary" type="button" data-card-ops-view="composition">${icon("edit_square")} 카드 구성 편집</button><button class="secondary" type="button" data-open-odds-preview>${icon("public")} 확률표 공개</button></aside></div>
   </section>`;
 }
@@ -5498,7 +6833,7 @@ function packManagementPreview() {
 function packCreationPreview() {
   return `<section class="card-ops-page pack-creation-preview">
     <div class="card-ops-heading"><div><nav>카드 <span>›</span> <strong>카드팩 관리</strong> <span>›</span> <strong>새 카드팩 만들기</strong></nav><h2>새 카드팩 만들기</h2><p>카드팩의 기본 정보와 이미지를 등록한 뒤 카드 구성을 편집합니다.</p></div><span class="badge draft">초안</span></div>
-    <div class="pack-creation-layout"><form class="panel pack-creation-form" data-pack-creation-form><div class="panel-heading"><div><p class="eyebrow">PACK INFORMATION</p><h3>카드팩 기본 정보</h3><p>먼저 팬에게 노출될 카드팩 정보를 등록하세요.</p></div></div><label class="field"><span>카드팩 이름</span><input name="packTitle" value="${cardOperationsPreviewState.packDraftTitle}" placeholder="예: Nebula Ver." required /></label><div class="form-grid"><label class="field"><span>아티스트</span><select name="packArtist"><option>DREAMSCAPE</option><option>LUMINA</option></select></label><label class="field"><span>버전</span><input name="packVersion" type="text" value="v1.0" placeholder="예: v1.0" required /></label></div><label class="field"><span>카드팩 이미지</span><input name="packImage" type="file" accept="image/png,image/jpeg,image/webp" /><small class="field-help">PNG, JPG, WebP · 세로형 카드팩 이미지를 권장합니다.</small></label><label class="field"><span>설명 <em class="field-optional">선택</em></span><textarea name="packDescription" rows="4" placeholder="팬에게 표시할 카드팩 설명"></textarea></label><footer class="drawer-footer"><button class="secondary" data-card-ops-view="packs" type="button">취소</button><button class="primary" data-create-pack type="submit">카드팩 만들고 구성 편집</button></footer></form><aside class="panel pack-creation-guide"><p class="eyebrow">WORKFLOW</p><h3>카드팩 등록 순서</h3><ol><li class="active"><b>1</b><span><strong>기본 정보 등록</strong><small>이름·이미지·버전을 입력합니다.</small></span></li><li><b>2</b><span><strong>카드 구성 편집</strong><small>포함 카드와 개별 확률을 설정합니다.</small></span></li><li><b>3</b><span><strong>검수 요청 및 공개</strong><small>확률표를 확인하고 검수를 요청합니다.</small></span></li></ol><div class="pack-creation-note">공개된 버전은 확률을 수정할 수 없습니다. 변경이 필요하면 새 버전을 만들어야 합니다.</div></aside></div>
+    <div class="pack-creation-layout"><form class="panel pack-creation-form" data-pack-creation-form><div class="panel-heading"><div><p class="eyebrow">PACK INFORMATION</p><h3>카드팩 기본 정보</h3><p>먼저 팬에게 노출될 카드팩 정보를 등록하세요.</p></div></div><label class="field"><span>카드팩 이름</span><input name="packTitle" value="${cardOperationsPreviewState.packDraftTitle}" placeholder="예: Nebula Ver." required /></label><div class="form-grid"><label class="field"><span>아티스트</span>${adminSelect({ id: "preview-pack-artist", value: "DREAMSCAPE", label: "아티스트", name: "packArtist", required: true, className: "preview-form-control", options: [{ value: "DREAMSCAPE", label: "DREAMSCAPE" }, { value: "LUMINA", label: "LUMINA" }] })}</label><label class="field"><span>버전</span><input name="packVersion" type="text" value="v1.0" placeholder="예: v1.0" required /></label></div><label class="field"><span>카드팩 이미지</span><input name="packImage" type="file" accept="image/png,image/jpeg,image/webp" /><small class="field-help">PNG, JPG, WebP · 세로형 카드팩 이미지를 권장합니다.</small></label><label class="field"><span>설명 <em class="field-optional">선택</em></span><textarea name="packDescription" rows="4" placeholder="팬에게 표시할 카드팩 설명"></textarea></label><footer class="drawer-footer"><button class="secondary" data-card-ops-view="packs" type="button">취소</button><button class="primary" data-create-pack type="submit">카드팩 만들고 구성 편집</button></footer></form><aside class="panel pack-creation-guide"><p class="eyebrow">WORKFLOW</p><h3>카드팩 등록 순서</h3><ol><li class="active"><b>1</b><span><strong>기본 정보 등록</strong><small>이름·이미지·버전을 입력합니다.</small></span></li><li><b>2</b><span><strong>카드 구성 편집</strong><small>포함 카드와 개별 확률을 설정합니다.</small></span></li><li><b>3</b><span><strong>검수 요청 및 공개</strong><small>확률표를 확인하고 검수를 요청합니다.</small></span></li></ol><div class="pack-creation-note">공개된 버전은 확률을 수정할 수 없습니다. 변경이 필요하면 새 버전을 만들어야 합니다.</div></aside></div>
   </section>`;
 }
 
@@ -5540,14 +6875,17 @@ function issuanceCodesPreview() {
     { name: "Bloom Ver. 특전 카드 배치 #001", type: "한정 특전", quantity: 50, issued: 50, registered: 50, remaining: 0, code: "BL-2024-0508-001", status: "등록 완료", codeStatus: "생성 완료", created: "2024.05.08 09:15" },
     { name: "Petal Ver. 팩 배치 #001", type: "카드팩", quantity: 1500, issued: 1120, registered: 820, remaining: 380, code: "PT-2024-0507-001", status: "발급 중", codeStatus: "발급 시 생성", created: "2024.05.07 14:40" },
     { name: "Starlight Ver. 특전 카드 배치 #001", type: "한정 특전", quantity: 30, issued: 30, registered: 27, remaining: 3, code: "ST-2024-0506-001", status: "등록 완료", codeStatus: "생성 완료", created: "2024.04.06 16:05" },
+    { name: "Aurora Ver. 특전 카드 배치 #001", type: "한정 특전", quantity: 80, issued: 42, registered: 40, remaining: 38, code: "AU-2024-0505-001", status: "발급 중", codeStatus: "생성 완료", created: "2024.05.05 11:10" },
+    { name: "DREAMSCAPE QA 발급 배치 #001", type: "한정 특전", quantity: 20, issued: 20, registered: 20, remaining: 0, code: "QA-2024-0504-001", status: "등록 완료", codeStatus: "생성 완료", created: "2024.04.04 15:20" },
   ];
   const query = cardOperationsPreviewState.issueQuery.trim().toLowerCase();
   const visibleBatches = batches.map((batch, index) => ({ batch, index })).filter(({ batch }) => (!query || `${batch.name} ${batch.code}`.toLowerCase().includes(query)) && (cardOperationsPreviewState.issueStatus === "all" || batch.status === cardOperationsPreviewState.issueStatus) && (cardOperationsPreviewState.issueType === "all" || batch.type === cardOperationsPreviewState.issueType) && (cardOperationsPreviewState.issuePeriod === "all" || batch.created.startsWith(cardOperationsPreviewState.issuePeriod)));
+  const pagedBatches = pagedItems(visibleBatches, cardOperationsPreviewState.issuePage, 5);
   const selected = batches[cardOperationsPreviewState.selectedBatchIndex] || batches[0];
   return `<section class="card-ops-page issue-code-preview">
     <div class="card-ops-heading"><div><nav>카드 <span>›</span> <strong>발급·인증번호</strong></nav><h2>발급·인증번호</h2><p>카드 발급 배치와 인증 상태를 관리합니다.</p></div><button class="primary" type="button" data-create-issuance-batch>${icon("add")} 추가 발급 배치 만들기</button></div>
     <div class="card-ops-stats issue-stats"><article><span>${icon("calendar_month")}</span><small>예약 배치</small><strong>3개</strong></article><article><span>${icon("inventory_2")}</span><small>발급 중 배치</small><strong>5개</strong></article><article><span>${icon("check_circle")}</span><small>등록 완료 배치</small><strong>2개</strong></article><article><span>${icon("schedule")}</span><small>잔여 수량</small><strong>3,240장</strong></article></div>
-    <div class="card-ops-master-detail issuance-master-detail"><section class="panel card-ops-table-panel"><div class="card-ops-toolbar"><label class="search-field">${icon("search")}<input data-preview-search="issueQuery" value="${cardOperationsPreviewState.issueQuery}" placeholder="배치명, 카드명 검색" /></label><select data-preview-filter="issueStatus"><option value="all" ${cardOperationsPreviewState.issueStatus === "all" ? "selected" : ""}>전체 상태</option><option value="등록 완료" ${cardOperationsPreviewState.issueStatus === "등록 완료" ? "selected" : ""}>등록 완료</option><option value="발급 중" ${cardOperationsPreviewState.issueStatus === "발급 중" ? "selected" : ""}>발급 중</option></select><select data-preview-filter="issueType"><option value="all" ${cardOperationsPreviewState.issueType === "all" ? "selected" : ""}>전체 카드 유형</option><option value="한정 특전" ${cardOperationsPreviewState.issueType === "한정 특전" ? "selected" : ""}>한정 특전</option><option value="카드팩" ${cardOperationsPreviewState.issueType === "카드팩" ? "selected" : ""}>카드팩</option></select><select data-preview-filter="issuePeriod"><option value="all" ${cardOperationsPreviewState.issuePeriod === "all" ? "selected" : ""}>전체 기간</option><option value="2024.05" ${cardOperationsPreviewState.issuePeriod === "2024.05" ? "selected" : ""}>2024년 5월</option><option value="2024.04" ${cardOperationsPreviewState.issuePeriod === "2024.04" ? "selected" : ""}>2024년 4월</option></select></div><div class="table-wrap"><table class="table"><thead><tr><th>배치명</th><th>카드 유형</th><th>수량</th><th>발급</th><th>등록 완료</th><th>잔여 수량</th><th>인증번호 상태</th><th>상태</th><th>생성일</th></tr></thead><tbody>${visibleBatches.map(({ batch, index }) => `<tr tabindex="0" data-preview-batch-index="${index}" class="${index === cardOperationsPreviewState.selectedBatchIndex ? "selected-preview-row" : ""}"><td><div class="code-batch-name">${previewCardThumb(index % 2 ? "./assets/preview/card-back-template.png" : "./assets/preview/card-aurora-portrait.jpg", batch.name)}<div><strong>${batch.name}</strong><small>${batch.type}</small></div></div></td><td>${batch.type}</td><td>${batch.quantity}장</td><td>${batch.issued}장</td><td>${batch.registered}장</td><td>${batch.remaining}장</td><td><span class="badge ${batch.codeStatus === "생성 완료" ? "success-badge" : "warning-badge"}">${batch.codeStatus}</span></td><td><span class="badge ${batch.status === "등록 완료" ? "success-badge" : "warning-badge"}">${batch.status}</span></td><td>${batch.created}</td></tr>`).join("")}</tbody></table></div><footer class="preview-table-footer"><strong>총 ${visibleBatches.length}개</strong><span class="pagination-control">‹ <b>1</b> ›</span></footer></section>
+    <div class="card-ops-master-detail issuance-master-detail"><section class="panel card-ops-table-panel"><div class="card-ops-toolbar"><label class="search-field">${icon("search")}<input data-preview-search="issueQuery" value="${cardOperationsPreviewState.issueQuery}" placeholder="배치명, 카드명 검색" /></label>${adminSelect({ id: "preview-issue-status", value: cardOperationsPreviewState.issueStatus, label: "상태 필터", className: "preview-filter-control", dataPreviewFilter: "issueStatus", options: [{ value: "all", label: "전체 상태" }, { value: "등록 완료", label: "등록 완료" }, { value: "발급 중", label: "발급 중" }] })}${adminSelect({ id: "preview-issue-type-filter", value: cardOperationsPreviewState.issueType, label: "카드 유형 필터", className: "preview-filter-control", dataPreviewFilter: "issueType", options: [{ value: "all", label: "전체 카드 유형" }, { value: "한정 특전", label: "한정 특전" }, { value: "카드팩", label: "카드팩" }] })}${adminSelect({ id: "preview-issue-period", value: cardOperationsPreviewState.issuePeriod, label: "기간 필터", className: "preview-filter-control", dataPreviewFilter: "issuePeriod", options: [{ value: "all", label: "전체 기간" }, { value: "2024.05", label: "2024년 5월" }, { value: "2024.04", label: "2024년 4월" }] })}</div><div class="table-wrap"><table class="table"><thead><tr><th>배치명</th><th>카드 유형</th><th>수량</th><th>발급</th><th>등록 완료</th><th>잔여 수량</th><th>인증번호 상태</th><th>상태</th><th>생성일</th></tr></thead><tbody>${pagedBatches.items.map(({ batch, index }) => `<tr tabindex="0" data-preview-batch-index="${index}" class="${index === cardOperationsPreviewState.selectedBatchIndex ? "selected-preview-row" : ""}"><td><div class="code-batch-name">${previewCardThumb(index % 2 ? "./assets/preview/card-back-template.png" : "./assets/preview/card-aurora-portrait.jpg", batch.name)}<div><strong>${batch.name}</strong><small>${batch.type}</small></div></div></td><td>${batch.type}</td><td>${batch.quantity}장</td><td>${batch.issued}장</td><td>${batch.registered}장</td><td>${batch.remaining}장</td><td><span class="badge ${batch.codeStatus === "생성 완료" ? "success-badge" : "warning-badge"}">${batch.codeStatus}</span></td><td><span class="badge ${batch.status === "등록 완료" ? "success-badge" : "warning-badge"}">${batch.status}</span></td><td>${batch.created}</td></tr>`).join("")}</tbody></table></div>${previewTablePagination("issuePage", pagedBatches.page, visibleBatches.length, 5)}</section>
     <aside class="panel issuance-detail-preview"><div class="detail-panel-heading"><div><small>배치 상세</small><h3>${selected.name}</h3><p><span class="badge draft">${selected.type}</span> <span class="badge success-badge">${selected.status}</span></p></div>${icon("close")}</div><section><h4>기본 정보</h4><dl><div><dt>배치 번호</dt><dd>${selected.code}</dd></div><div><dt>카드 유형</dt><dd>${selected.type}</dd></div><div><dt>수량</dt><dd>${selected.quantity}장</dd></div><div><dt>생성일</dt><dd>${selected.created}</dd></div><div><dt>생성자</dt><dd>운영 관리자</dd></div><div><dt>설명</dt><dd>${selected.name}</dd></div></dl></section><section><h4>발급 현황</h4><dl><div><dt>발급</dt><dd>${selected.issued}장</dd></div><div><dt>등록 완료</dt><dd>${selected.registered}장</dd></div><div><dt>잔여 수량</dt><dd>${selected.remaining}장</dd></div></dl></section><section><h4>고유 시리얼</h4><dl><div><dt>시작 시리얼</dt><dd>NBDL-********-000001</dd></div><div><dt>종료 시리얼</dt><dd>NBDL-********-${String(selected.quantity).padStart(6, "0")}</dd></div><div><dt>총 개수</dt><dd>${selected.quantity}개</dd></div></dl></section><section><h4>인증번호 상태</h4><dl><div><dt>생성 방식</dt><dd>${selected.codeStatus === "생성 완료" ? "사전 생성" : "발급 시 생성"}</dd></div><div><dt>상태</dt><dd><span class="badge success-badge">${selected.codeStatus}</span></dd></div></dl></section><div class="detail-actions"><button class="secondary" data-export-issuance-csv type="button">${icon("download")} CSV 내보내기</button></div></aside></div>
   </section>`;
 }
@@ -5555,7 +6893,7 @@ function issuanceCodesPreview() {
 function issuanceCreationPreview() {
   return `<section class="card-ops-page issuance-creation-preview">
     <div class="card-ops-heading"><div><nav>카드 <span>›</span> <strong>발급·인증번호</strong> <span>›</span> <strong>새 발급 배치 만들기</strong></nav><h2>새 발급 배치 만들기</h2><p>발급 대상과 수량, 인증번호 생성 방식을 먼저 등록합니다.</p></div><span class="badge draft">초안</span></div>
-    <div class="issuance-creation-layout"><form class="panel issuance-creation-form" data-issuance-creation-form><div class="panel-heading"><div><p class="eyebrow">ISSUANCE BATCH</p><h3>배치 기본 정보</h3><p>등록 후 발급 현황과 인증번호 상태를 추적할 수 있습니다.</p></div></div><label class="field"><span>배치명</span><input name="issueName" value="${cardOperationsPreviewState.issueDraftName}" placeholder="예: Nebula Ver. 특전 카드 배치 #002" required /></label><div class="form-grid"><label class="field"><span>발급 유형</span><select name="issueType"><option value="limited" ${cardOperationsPreviewState.issueDraftType === "limited" ? "selected" : ""}>한정 특전 카드</option><option value="pack" ${cardOperationsPreviewState.issueDraftType === "pack" ? "selected" : ""}>카드팩</option></select></label><label class="field"><span>발급 수량</span><input name="issueQuantity" type="number" min="1" step="1" value="${cardOperationsPreviewState.issueDraftQuantity}" required /></label></div><label class="field"><span>발급 대상</span><select name="issueTarget"><option>Nebula Ver. · DREAMSCAPE</option><option>Starlight Ver. · DREAMSCAPE</option><option>Bloom Ver. · LUMINA</option></select></label><label class="field"><span>인증번호 생성 방식</span><select name="issueCodeMode"><option value="pre-generated">발급 전 일괄 생성 · 한정 특전용</option><option value="on-issue">발급 시 생성 · 카드팩용</option></select><small class="field-help">한정 특전은 생성 수량만큼 고유 인증번호를 미리 만들고, 카드팩은 실제 카드 발급 시 번호를 생성합니다.</small></label><label class="field"><span>설명 <em class="field-optional">선택</em></span><textarea name="issueDescription" rows="4" placeholder="운영 메모 또는 발급 조건"></textarea></label><footer class="drawer-footer"><button class="secondary" data-card-ops-view="codes" type="button">취소</button><button class="primary" data-create-issuance type="submit">배치 만들기</button></footer></form><aside class="panel issuance-creation-guide"><p class="eyebrow">WORKFLOW</p><h3>발급 배치 등록 순서</h3><ol><li class="active"><b>1</b><span><strong>배치 기본 정보</strong><small>유형·대상·수량을 입력합니다.</small></span></li><li><b>2</b><span><strong>인증번호 준비</strong><small>유형에 맞는 생성 방식으로 준비합니다.</small></span></li><li><b>3</b><span><strong>발급 현황 관리</strong><small>발급·등록 완료·잔여 수량을 추적합니다.</small></span></li></ol><div class="issuance-creation-note">고유 인증번호는 중복되지 않으며, 한정 특전은 사전 생성하고 카드팩은 발급 시 생성합니다.</div></aside></div>
+    <div class="issuance-creation-layout"><form class="panel issuance-creation-form" data-issuance-creation-form><div class="panel-heading"><div><p class="eyebrow">ISSUANCE BATCH</p><h3>배치 기본 정보</h3><p>등록 후 발급 현황과 인증번호 상태를 추적할 수 있습니다.</p></div></div><label class="field"><span>배치명</span><input name="issueName" value="${cardOperationsPreviewState.issueDraftName}" placeholder="예: Nebula Ver. 특전 카드 배치 #002" required /></label><div class="form-grid"><label class="field"><span>발급 유형</span>${adminSelect({ id: "preview-issue-type", value: cardOperationsPreviewState.issueDraftType, label: "발급 유형", name: "issueType", required: true, className: "preview-form-control", options: [{ value: "limited", label: "한정 특전 카드" }, { value: "pack", label: "카드팩" }] })}</label><label class="field"><span>발급 수량</span><input name="issueQuantity" type="number" min="1" step="1" value="${cardOperationsPreviewState.issueDraftQuantity}" required /></label></div><label class="field"><span>발급 대상</span>${adminSelect({ id: "preview-issue-target", value: "nebula", label: "발급 대상", name: "issueTarget", options: [{ value: "nebula", label: "Nebula Ver. · DREAMSCAPE" }, { value: "starlight", label: "Starlight Ver. · DREAMSCAPE" }, { value: "bloom", label: "Bloom Ver. · LUMINA" }] })}</label><label class="field"><span>인증번호 생성 방식</span>${adminSelect({ id: "preview-issue-code-mode", value: "pre-generated", label: "인증번호 생성 방식", name: "issueCodeMode", options: [{ value: "pre-generated", label: "발급 전 일괄 생성 · 한정 특전용" }, { value: "on-issue", label: "발급 시 생성 · 카드팩용" }] })}<small class="field-help">한정 특전은 생성 수량만큼 고유 인증번호를 미리 만들고, 카드팩은 실제 카드 발급 시 번호를 생성합니다.</small></label><label class="field"><span>설명 <em class="field-optional">선택</em></span><textarea name="issueDescription" rows="4" placeholder="운영 메모 또는 발급 조건"></textarea></label><footer class="drawer-footer"><button class="secondary" data-card-ops-view="codes" type="button">취소</button><button class="primary" data-create-issuance type="submit">배치 만들기</button></footer></form><aside class="panel issuance-creation-guide"><p class="eyebrow">WORKFLOW</p><h3>발급 배치 등록 순서</h3><ol><li class="active"><b>1</b><span><strong>배치 기본 정보</strong><small>유형·대상·수량을 입력합니다.</small></span></li><li><b>2</b><span><strong>인증번호 준비</strong><small>유형에 맞는 생성 방식으로 준비합니다.</small></span></li><li><b>3</b><span><strong>발급 현황 관리</strong><small>발급·등록 완료·잔여 수량을 추적합니다.</small></span></li></ol><div class="issuance-creation-note">고유 인증번호는 중복되지 않으며, 한정 특전은 사전 생성하고 카드팩은 발급 시 생성합니다.</div></aside></div>
   </section>`;
 }
 
@@ -5595,6 +6933,7 @@ function cardOperationsPreviewView() {
 
 function renderCardOperationsPreview() {
   app.innerHTML = cardOperationsPreviewView();
+  bindPreviewAdminSelects();
   document.querySelectorAll("[data-card-ops-view]").forEach((button) => button.addEventListener("click", () => {
     cardOperationsPreviewState.view = button.dataset.cardOpsView;
     cardOperationsPreviewState.publicPreviewOpen = false;
@@ -5647,6 +6986,11 @@ function renderCardOperationsPreview() {
     cardOperationsPreviewState.selectedBatchIndex = Number(row.dataset.previewBatchIndex);
     renderCardOperationsPreview();
   }));
+  document.querySelectorAll("[data-preview-issue-page]").forEach((button) => button.addEventListener("click", () => {
+    if (button.disabled) return;
+    cardOperationsPreviewState.issuePage = Number(button.dataset.previewIssuePage) || 1;
+    renderCardOperationsPreview();
+  }));
   document.querySelectorAll("[data-export-issuance-csv]").forEach((button) => button.addEventListener("click", downloadPreviewIssuanceCsv));
   document.querySelectorAll("[data-toggle-composition-card]").forEach((button) => button.addEventListener("click", () => {
     const card = cardOperationsPreviewState.compositionCards[Number(button.dataset.toggleCompositionCard)];
@@ -5663,14 +7007,11 @@ function renderCardOperationsPreview() {
   }));
   document.querySelectorAll("[data-preview-search]").forEach((input) => input.addEventListener("input", () => {
     cardOperationsPreviewState[input.dataset.previewSearch] = input.value;
+    if (input.dataset.previewSearch === "issueQuery") cardOperationsPreviewState.issuePage = 1;
     renderCardOperationsPreview();
     const next = document.querySelector(`[data-preview-search="${input.dataset.previewSearch}"]`);
     next?.focus();
     next?.setSelectionRange(next.value.length, next.value.length);
-  }));
-  document.querySelectorAll("[data-preview-filter]").forEach((select) => select.addEventListener("change", () => {
-    cardOperationsPreviewState[select.dataset.previewFilter] = select.value;
-    renderCardOperationsPreview();
   }));
   document.querySelectorAll("[data-composition-index]").forEach((row) => {
     row.addEventListener("dragstart", (event) => {
@@ -5710,6 +7051,53 @@ function renderCardOperationsPreview() {
     cardOperationsPreviewState.publicPreviewOpen = false;
     renderCardOperationsPreview();
   });
+}
+
+function bindPreviewAdminSelects() {
+  document.querySelectorAll(".admin-select-trigger").forEach((trigger) => {
+    trigger.addEventListener("click", () => {
+      const control = trigger.closest(".admin-select");
+      const open = control.classList.toggle("open");
+      trigger.setAttribute("aria-expanded", String(open));
+      document.querySelectorAll(".admin-select.open").forEach((other) => {
+        if (other !== control) {
+          other.classList.remove("open");
+          other.querySelector(".admin-select-trigger")?.setAttribute("aria-expanded", "false");
+        }
+      });
+    });
+    trigger.addEventListener("keydown", (event) => {
+      const control = trigger.closest(".admin-select");
+      const options = [...control.querySelectorAll(".admin-select-option")];
+      if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        if (!control.classList.contains("open")) trigger.click();
+        options.find((option) => option.classList.contains("selected"))?.focus();
+      } else if (event.key === "Escape") {
+        control.classList.remove("open");
+        trigger.setAttribute("aria-expanded", "false");
+      }
+    });
+  });
+  document.querySelectorAll(".admin-select-option").forEach((option) => option.addEventListener("click", () => {
+    const control = option.closest(".admin-select");
+    control.dataset.value = option.dataset.value;
+    control.querySelector(".admin-select-label").textContent = option.dataset.label;
+    const hidden = control.querySelector(".admin-select-value");
+    if (hidden) hidden.value = option.dataset.value;
+    control.querySelectorAll(".admin-select-option").forEach((item) => {
+      const selected = item === option;
+      item.classList.toggle("selected", selected);
+      item.setAttribute("aria-selected", String(selected));
+    });
+    control.classList.remove("open");
+    control.querySelector(".admin-select-trigger").setAttribute("aria-expanded", "false");
+    if (control.dataset.previewFilter) {
+      cardOperationsPreviewState[control.dataset.previewFilter] = option.dataset.value;
+      if (control.dataset.previewFilter.startsWith("issue")) cardOperationsPreviewState.issuePage = 1;
+      renderCardOperationsPreview();
+    }
+  }));
 }
 
 const statisticsPreviewState = {
@@ -5768,8 +7156,22 @@ function statisticsDelta(value, suffix = "%") {
   return `${number > 0 ? "+" : ""}${number.toFixed(1)}${suffix}`;
 }
 
+function statisticsLifecycleKpis(kpis) {
+  const combinations = kpis.combinations || { current: 0, change: null };
+  const trades = kpis.trades || { current: 0, change: null };
+  return `${statisticsMetricCard({ iconName: "merge_type", label: "카드 조합", value: statisticsFormatNumber(combinations.current), unit: "회", delta: statisticsDelta(combinations.change), tone: "blue", description: " 중복 카드 소모" })}${statisticsMetricCard({ iconName: "swap_horiz", label: "거래 제안", value: statisticsFormatNumber(trades.current), unit: "건", delta: statisticsDelta(trades.change), tone: "violet", description: " 팬 간 거래" })}`;
+}
+
 function statisticsOptions(items, selected, allLabel) {
   return `<option value="all">${allLabel}</option>${items.map((item) => `<option value="${escapeHtml(item.id)}" ${selected === item.id ? "selected" : ""}>${escapeHtml(item.name)}</option>`).join("")}`;
+}
+
+function statisticsFilterOptions(items, selected, allLabel) {
+  return [{ value: "all", label: allLabel }, ...items.map((item) => ({ value: item.id, label: item.name }))];
+}
+
+function productionStatisticsFilterMarkup(data, rootScope) {
+  return `${rootScope ? adminSelect({ id: "statistics-organization", value: state.statisticsOrganization, label: "파트너 필터", className: "statistics-filter-control", options: statisticsFilterOptions(data.filters.organizations, state.statisticsOrganization, "전체 파트너"), dataStatisticsFilter: "organization" }) : ""}${adminSelect({ id: "statistics-artist", value: state.statisticsArtist, label: "아티스트 필터", className: "statistics-filter-control", options: statisticsFilterOptions(data.filters.artists, state.statisticsArtist, "전체 아티스트"), dataStatisticsFilter: "artist" })}${adminSelect({ id: "statistics-pack", value: state.statisticsPack, label: "카드팩 필터", className: "statistics-filter-control", options: statisticsFilterOptions(data.filters.packs, state.statisticsPack, "전체 카드팩"), dataStatisticsFilter: "pack" })}`;
 }
 
 function statisticsSampleTrend(rows, maximumPoints = 8) {
@@ -5792,6 +7194,8 @@ function statisticsView() {
   const kpis = Object.fromEntries(
     Object.entries(data.kpis).map(([key, metric]) => [key, { ...metric, change: comparisonEnabled ? metric.change : null }]),
   );
+  kpis.combinations ||= { current: 0, previous: 0, change: null };
+  kpis.trades ||= { current: 0, previous: 0, change: null };
   const packRows = data.packPerformance.map((row, index) => ({
     pack: row.name,
     season: row.seasonName || "시즌 미지정",
@@ -5804,7 +7208,7 @@ function statisticsView() {
   const sampledTrend = statisticsSampleTrend(data.trend);
   const trendValues = sampledTrend.map((row) => Number(row.activeFans || 0));
   const health = data.operationHealth;
-  return `<div class="statistics-production"><div class="statistics-hero"><div><nav>통계 <span>›</span> <strong>${rootScope ? "서비스 전체" : "파트너 성과"}</strong></nav><h2>${rootScope ? "서비스 운영 통계" : "파트너 성과 통계"}</h2><p>${rootScope ? "팬 활동부터 카드 발급 무결성까지 실제 서비스 데이터를 확인합니다." : "내 조직과 배정 아티스트 범위의 실제 성과를 확인합니다."}</p></div><span class="scope-chip ${rootScope ? "root-scope" : "company-scope"}">${icon(rootScope ? "shield_person" : "domain")}<span>${rootScope ? "ROOT 전체 범위" : "파트너 전용 범위"}</span></span></div><div class="statistics-filter-bar"><div class="statistics-periods" role="group" aria-label="조회 기간">${["7", "30", "90"].map((period) => `<button type="button" data-production-statistics-period="${period}" class="${state.statisticsPeriod === period ? "active" : ""}">${period}일</button>`).join("")}</div><div class="statistics-selects">${rootScope ? `<select aria-label="파트너 필터" data-production-statistics-filter="organization">${statisticsOptions(data.filters.organizations, state.statisticsOrganization, "전체 파트너")}</select>` : ""}<select aria-label="아티스트 필터" data-production-statistics-filter="artist">${statisticsOptions(data.filters.artists, state.statisticsArtist, "전체 아티스트")}</select><select aria-label="카드팩 필터" data-production-statistics-filter="pack">${statisticsOptions(data.filters.packs, state.statisticsPack, "전체 카드팩")}</select><label class="statistics-compare-toggle"><input type="checkbox" data-production-statistics-compare ${state.statisticsCompare ? "checked" : ""}/><span></span>전기 비교</label></div></div><section class="statistics-kpi-grid">${statisticsMetricCard({ iconName: "groups", label: rootScope ? "전체 활성 팬" : "파트너 활성 팬", value: statisticsFormatNumber(kpis.activeFans.current), unit: "명", delta: statisticsDelta(kpis.activeFans.change), tone: "violet", description: " 이전 기간 대비" })}${statisticsMetricCard({ iconName: "playing_cards", label: "카드 발급", value: statisticsFormatNumber(kpis.issuedCards.current), unit: "장", delta: statisticsDelta(kpis.issuedCards.change), tone: "blue", description: " 현재 범위" })}${statisticsMetricCard({ iconName: "inventory_2", label: "카드팩 개봉", value: statisticsFormatNumber(kpis.packOpenings.current), unit: "회", delta: statisticsDelta(kpis.packOpenings.change), tone: "mint", description: " 공개 카드팩 기준" })}${statisticsMetricCard({ iconName: "verified", label: "등록 완료율", value: Number(kpis.registrationRate.current).toFixed(1), unit: "%", delta: statisticsDelta(kpis.registrationRate.change, "%p"), tone: "amber", description: " 인식 대비 등록" })}</section><section class="statistics-dashboard-grid"><article class="statistics-panel statistics-trend-panel"><div class="statistics-panel-heading"><div><p class="eyebrow">ACTIVITY TREND</p><h3>일별 활성 팬 추이</h3></div><span class="statistics-panel-caption">${data.period.days}일 실제 기록</span></div>${statisticsTrendChart(trendValues, [], sampledTrend.map((row) => row.date.slice(5)), false)}</article><article class="statistics-panel"><div class="statistics-panel-heading"><div><p class="eyebrow">REGISTRATION FUNNEL</p><h3>카드 등록 퍼널</h3></div><span class="statistics-panel-caption">추적 시작 ${escapeHtml(data.trackingSince.slice(0, 10))}</span></div><div class="statistics-funnel">${data.funnel.map((row, index) => `<div style="--funnel-width:${Math.max(4, row.rate)}%"><span><b>${index + 1}</b>${escapeHtml(row.label)}</span><strong>${statisticsFormatNumber(row.count)}<small>${Number(row.rate).toFixed(1)}%</small></strong></div>`).join("")}</div></article><article class="statistics-panel statistics-wide-panel"><div class="statistics-panel-heading"><div><p class="eyebrow">PACK PERFORMANCE</p><h3>카드팩 성과</h3></div><span class="statistics-panel-caption">${packRows.length}개 카드팩</span></div>${packRows.length ? statisticsPerformanceTable(packRows, !rootScope) : '<div class="empty">선택한 범위에 카드팩 개봉 기록이 없습니다.</div>'}</article><article class="statistics-panel"><div class="statistics-panel-heading"><div><p class="eyebrow">OPERATION HEALTH</p><h3>운영 이상 징후</h3></div><span class="statistics-live-chip"><i></i> 실데이터</span></div><div class="statistics-alert-list"><div class="${health.redemptionFailures ? "warning" : "safe"}">${icon(health.redemptionFailures ? "error" : "check_circle")}<span><strong>등록 실패</strong><small>선택 기간 ${statisticsFormatNumber(health.redemptionFailures)}건</small></span><em>${health.redemptionFailures ? "확인 필요" : "정상"}</em></div><div>${icon("content_copy")}<span><strong>중복 등록 시도</strong><small>${statisticsFormatNumber(health.duplicateAttempts)}건</small></span><em>${health.duplicateAttempts ? "관찰" : "정상"}</em></div><div class="${health.oddsStatus === "normal" ? "safe" : "warning"}">${icon("fact_check")}<span><strong>확률 편차</strong><small>공개 확률 대비 실제 발급</small></span><em>${health.oddsStatus === "normal" ? "정상" : "확인"}</em></div></div></article><article class="statistics-panel statistics-wide-panel"><div class="statistics-panel-heading"><div><p class="eyebrow">ODDS INTEGRITY</p><h3>공개 확률 대비 실제 발급</h3></div><span class="statistics-panel-caption">선택 범위 기준</span></div>${statisticsOddsComparison(data.oddsIntegrity)}</article></section></div>`;
+  return `<div class="statistics-production"><div class="statistics-hero"><div><nav>통계 <span>›</span> <strong>${rootScope ? "서비스 전체" : "파트너 성과"}</strong></nav><h2>${rootScope ? "서비스 운영 통계" : "파트너 성과 통계"}</h2><p>${rootScope ? "팬 활동부터 카드 발급 무결성까지 실제 서비스 데이터를 확인합니다." : "내 조직과 배정 아티스트 범위의 실제 성과를 확인합니다."}</p></div><span class="scope-chip ${rootScope ? "root-scope" : "company-scope"}">${icon(rootScope ? "shield_person" : "domain")}<span>${rootScope ? "ROOT 전체 범위" : "파트너 전용 범위"}</span></span></div><div class="statistics-filter-bar"><div class="statistics-periods" role="group" aria-label="조회 기간">${["7", "30", "90"].map((period) => `<button type="button" data-production-statistics-period="${period}" class="${state.statisticsPeriod === period ? "active" : ""}">${period}일</button>`).join("")}</div><div class="statistics-selects">${productionStatisticsFilterMarkup(data, rootScope)}<label class="statistics-compare-toggle"><input type="checkbox" data-production-statistics-compare ${state.statisticsCompare ? "checked" : ""}/><span></span>전기 비교</label></div></div><section class="statistics-kpi-grid">${statisticsMetricCard({ iconName: "groups", label: rootScope ? "전체 활성 팬" : "파트너 활성 팬", value: statisticsFormatNumber(kpis.activeFans.current), unit: "명", delta: statisticsDelta(kpis.activeFans.change), tone: "violet", description: " 이전 기간 대비" })}${statisticsMetricCard({ iconName: "playing_cards", label: "카드 발급", value: statisticsFormatNumber(kpis.issuedCards.current), unit: "장", delta: statisticsDelta(kpis.issuedCards.change), tone: "blue", description: " 현재 범위" })}${statisticsMetricCard({ iconName: "inventory_2", label: "카드팩 개봉", value: statisticsFormatNumber(kpis.packOpenings.current), unit: "회", delta: statisticsDelta(kpis.packOpenings.change), tone: "mint", description: " 공개 카드팩 기준" })}${statisticsMetricCard({ iconName: "verified", label: "등록 완료율", value: Number(kpis.registrationRate.current).toFixed(1), unit: "%", delta: statisticsDelta(kpis.registrationRate.change, "%p"), tone: "amber", description: " 인식 대비 등록" })}</section><section class="statistics-dashboard-grid"><article class="statistics-panel statistics-trend-panel"><div class="statistics-panel-heading"><div><p class="eyebrow">ACTIVITY TREND</p><h3>일별 활성 팬 추이</h3></div><span class="statistics-panel-caption">${data.period.days}일 실제 기록</span></div>${statisticsTrendChart(trendValues, [], sampledTrend.map((row) => row.date.slice(5)), false)}</article><article class="statistics-panel"><div class="statistics-panel-heading"><div><p class="eyebrow">REGISTRATION FUNNEL</p><h3>카드 등록 퍼널</h3></div><span class="statistics-panel-caption">추적 시작 ${escapeHtml(data.trackingSince.slice(0, 10))}</span></div><div class="statistics-funnel">${data.funnel.map((row, index) => `<div style="--funnel-width:${Math.max(4, row.rate)}%"><span><b>${index + 1}</b>${escapeHtml(row.label)}</span><strong>${statisticsFormatNumber(row.count)}<small>${Number(row.rate).toFixed(1)}%</small></strong></div>`).join("")}</div></article><article class="statistics-panel statistics-wide-panel"><div class="statistics-panel-heading"><div><p class="eyebrow">PACK PERFORMANCE</p><h3>카드팩 성과</h3></div><span class="statistics-panel-caption">${packRows.length}개 카드팩</span></div>${packRows.length ? statisticsPerformanceTable(packRows, !rootScope) : '<div class="empty">선택한 범위에 카드팩 개봉 기록이 없습니다.</div>'}</article><article class="statistics-panel"><div class="statistics-panel-heading"><div><p class="eyebrow">OPERATION HEALTH</p><h3>운영 이상 징후</h3></div><span class="statistics-live-chip"><i></i> 실데이터</span></div><div class="statistics-alert-list"><div class="${health.redemptionFailures ? "warning" : "safe"}">${icon(health.redemptionFailures ? "error" : "check_circle")}<span><strong>등록 실패</strong><small>선택 기간 ${statisticsFormatNumber(health.redemptionFailures)}건</small></span><em>${health.redemptionFailures ? "확인 필요" : "정상"}</em></div><div>${icon("content_copy")}<span><strong>중복 등록 시도</strong><small>${statisticsFormatNumber(health.duplicateAttempts)}건</small></span><em>${health.duplicateAttempts ? "관찰" : "정상"}</em></div><div class="${health.oddsStatus === "normal" ? "safe" : "warning"}">${icon("fact_check")}<span><strong>확률 편차</strong><small>공개 확률 대비 실제 발급</small></span><em>${health.oddsStatus === "normal" ? "정상" : "확인"}</em></div></div></article><article class="statistics-panel statistics-wide-panel"><div class="statistics-panel-heading"><div><p class="eyebrow">ODDS INTEGRITY</p><h3>공개 확률 대비 실제 발급</h3></div><span class="statistics-panel-caption">선택 범위 기준</span></div>${statisticsOddsComparison(data.oddsIntegrity)}</article></section></div>`;
 }
 
 function rootStatisticsPreview() {
@@ -5835,7 +7239,10 @@ function statisticsPreviewNavigation() {
 
 function statisticsPreviewView() {
   const rootScope = statisticsPreviewState.scope === "root";
-  return `<div class="admin-shell statistics-preview">${statisticsPreviewNavigation()}<main class="workspace"><header class="topbar statistics-preview-topbar"><div class="topbar-title"><div><p class="eyebrow">INSIGHTS</p><h1 class="title">통계</h1></div></div><div class="top-actions"><span class="scope-chip ${rootScope ? "root-scope" : "partner-scope"}">${icon(rootScope ? "shield_person" : "domain")}<span>${rootScope ? "ROOT 운영 영역" : "파트너 운영 영역"}</span></span><button class="icon-button" type="button" aria-label="알림">${icon("notifications")}</button><span class="top-avatar">운</span></div></header><section class="page-content statistics-preview-content"><div class="statistics-hero"><div><nav>통계 <span>›</span> <strong>${rootScope ? "서비스 전체" : "파트너 성과"}</strong></nav><h2>${rootScope ? "서비스 운영 통계" : "파트너 성과 통계"}</h2><p>${rootScope ? "팬 성장부터 카드 발급 무결성까지 서비스 전체 흐름을 확인합니다." : "파트너와 소속 아티스트의 팬 활동 및 카드 성과를 확인합니다."}</p></div><div class="statistics-scope-switch" role="tablist" aria-label="통계 범위"><button type="button" data-statistics-scope="root" class="${rootScope ? "active" : ""}">${icon("shield_person")} ROOT</button><button type="button" data-statistics-scope="partner" class="${rootScope ? "" : "active"}">${icon("domain")} 파트너</button></div></div><div class="statistics-filter-bar"><div class="statistics-periods" role="group" aria-label="조회 기간">${[["7", "7일"], ["30", "30일"], ["90", "90일"]].map(([value, label]) => `<button type="button" data-statistics-period="${value}" class="${statisticsPreviewState.period === value ? "active" : ""}">${label}</button>`).join("")}</div><div class="statistics-selects">${rootScope ? `<select aria-label="파트너 필터" data-statistics-filter="partner"><option value="all" ${statisticsPreviewState.partner === "all" ? "selected" : ""}>전체 파트너</option><option value="dream" ${statisticsPreviewState.partner === "dream" ? "selected" : ""}>DREAM Entertainment</option><option value="luminous" ${statisticsPreviewState.partner === "luminous" ? "selected" : ""}>Luminous Lab</option></select>` : ""}<select aria-label="아티스트 필터" data-statistics-filter="artist"><option value="all" ${statisticsPreviewState.artist === "all" ? "selected" : ""}>전체 아티스트</option><option value="DREAMSCAPE" ${statisticsPreviewState.artist === "DREAMSCAPE" ? "selected" : ""}>DREAMSCAPE</option><option value="LUMINA" ${statisticsPreviewState.artist === "LUMINA" ? "selected" : ""}>LUMINA</option></select><select aria-label="카드팩 필터" data-statistics-filter="pack"><option value="all" ${statisticsPreviewState.pack === "all" ? "selected" : ""}>전체 카드팩</option><option value="Nebula Ver." ${statisticsPreviewState.pack === "Nebula Ver." ? "selected" : ""}>Nebula Ver.</option><option value="Starlight Ver." ${statisticsPreviewState.pack === "Starlight Ver." ? "selected" : ""}>Starlight Ver.</option><option value="Midnight Ver." ${statisticsPreviewState.pack === "Midnight Ver." ? "selected" : ""}>Midnight Ver.</option></select><label class="statistics-compare-toggle"><input type="checkbox" data-statistics-compare ${statisticsPreviewState.compare ? "checked" : ""}/><span></span>전기 비교</label></div></div>${rootScope ? rootStatisticsPreview() : partnerStatisticsPreview()}</section></main></div>`;
+  const partnerOptions = [{ value: "all", label: "전체 파트너" }, { value: "dream", label: "DREAM Entertainment" }, { value: "luminous", label: "Luminous Lab" }];
+  const artistOptions = [{ value: "all", label: "전체 아티스트" }, { value: "DREAMSCAPE", label: "DREAMSCAPE" }, { value: "LUMINA", label: "LUMINA" }];
+  const packOptions = [{ value: "all", label: "전체 카드팩" }, { value: "Nebula Ver.", label: "Nebula Ver." }, { value: "Starlight Ver.", label: "Starlight Ver." }, { value: "Midnight Ver.", label: "Midnight Ver." }];
+  return `<div class="admin-shell statistics-preview">${statisticsPreviewNavigation()}<main class="workspace"><header class="topbar statistics-preview-topbar"><div class="topbar-title"><div><p class="eyebrow">INSIGHTS</p><h1 class="title">통계</h1></div></div><div class="top-actions"><span class="scope-chip ${rootScope ? "root-scope" : "partner-scope"}">${icon(rootScope ? "shield_person" : "domain")}<span>${rootScope ? "ROOT 운영 영역" : "파트너 운영 영역"}</span></span><button class="icon-button" type="button" aria-label="알림">${icon("notifications")}</button><span class="top-avatar">운</span></div></header><section class="page-content statistics-preview-content"><div class="statistics-hero"><div><nav>통계 <span>›</span> <strong>${rootScope ? "서비스 전체" : "파트너 성과"}</strong></nav><h2>${rootScope ? "서비스 운영 통계" : "파트너 성과 통계"}</h2><p>${rootScope ? "팬 성장부터 카드 발급 무결성까지 서비스 전체 흐름을 확인합니다." : "파트너와 소속 아티스트의 팬 활동 및 카드 성과를 확인합니다."}</p></div><div class="statistics-scope-switch" role="tablist" aria-label="통계 범위"><button type="button" data-statistics-scope="root" class="${rootScope ? "active" : ""}">${icon("shield_person")} ROOT</button><button type="button" data-statistics-scope="partner" class="${rootScope ? "" : "active"}">${icon("domain")} 파트너</button></div></div><div class="statistics-filter-bar"><div class="statistics-periods" role="group" aria-label="조회 기간">${[["7", "7일"], ["30", "30일"], ["90", "90일"]].map(([value, label]) => `<button type="button" data-statistics-period="${value}" class="${statisticsPreviewState.period === value ? "active" : ""}">${label}</button>`).join("")}</div><div class="statistics-selects">${rootScope ? adminSelect({ id: "statistics-partner", value: statisticsPreviewState.partner, label: "파트너 필터", className: "statistics-filter-select", dataStatisticsFilter: "partner", options: partnerOptions }) : ""}${adminSelect({ id: "statistics-artist", value: statisticsPreviewState.artist, label: "아티스트 필터", className: "statistics-filter-select", dataStatisticsFilter: "artist", options: artistOptions })}${adminSelect({ id: "statistics-pack", value: statisticsPreviewState.pack, label: "카드팩 필터", className: "statistics-filter-select", dataStatisticsFilter: "pack", options: packOptions })}<label class="statistics-compare-toggle"><input type="checkbox" data-statistics-compare ${statisticsPreviewState.compare ? "checked" : ""}/><span></span>전기 비교</label></div></div>${rootScope ? rootStatisticsPreview() : partnerStatisticsPreview()}</section></main></div>`;
 }
 
 function renderStatisticsPreview() {
@@ -5850,10 +7257,59 @@ function renderStatisticsPreview() {
     statisticsPreviewState.period = button.dataset.statisticsPeriod;
     renderStatisticsPreview();
   }));
-  document.querySelectorAll("[data-statistics-filter]").forEach((select) => select.addEventListener("change", () => {
-    statisticsPreviewState[select.dataset.statisticsFilter] = select.value;
-    renderStatisticsPreview();
-  }));
+  document.querySelectorAll("[data-statistics-filter]").forEach((control) => {
+    const trigger = control.querySelector(".admin-select-trigger");
+    trigger?.addEventListener("click", () => {
+      document.querySelectorAll(".admin-select.open").forEach((item) => {
+        if (item !== control) {
+          item.classList.remove("open");
+          item.querySelector(".admin-select-trigger")?.setAttribute("aria-expanded", "false");
+        }
+      });
+      control.classList.toggle("open");
+      trigger.setAttribute("aria-expanded", String(control.classList.contains("open")));
+    });
+    trigger?.addEventListener("keydown", (event) => {
+      const options = [...control.querySelectorAll(".admin-select-option")];
+      const selectedIndex = Math.max(0, options.findIndex((option) => option.classList.contains("selected")));
+      if (["ArrowDown", "ArrowUp"].includes(event.key)) {
+        event.preventDefault();
+        if (!control.classList.contains("open")) trigger.click();
+        options[(selectedIndex + (event.key === "ArrowDown" ? 1 : -1) + options.length) % options.length]?.focus();
+      } else if (["Home", "End"].includes(event.key) && control.classList.contains("open")) {
+        event.preventDefault();
+        (event.key === "Home" ? options[0] : options.at(-1))?.focus();
+      } else if (event.key === "Escape" && control.classList.contains("open")) {
+        event.preventDefault();
+        control.classList.remove("open");
+        trigger.setAttribute("aria-expanded", "false");
+      }
+    });
+    control.querySelectorAll(".admin-select-option").forEach((option) => {
+      option.addEventListener("keydown", (event) => {
+        const options = [...control.querySelectorAll(".admin-select-option")];
+        const index = options.indexOf(option);
+        if (["ArrowDown", "ArrowUp"].includes(event.key)) {
+          event.preventDefault();
+          options[(index + (event.key === "ArrowDown" ? 1 : -1) + options.length) % options.length]?.focus();
+        } else if (["Home", "End"].includes(event.key)) {
+          event.preventDefault();
+          (event.key === "Home" ? options[0] : options.at(-1))?.focus();
+        } else if (["Enter", " "].includes(event.key)) {
+          event.preventDefault();
+          option.click();
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          control.classList.remove("open");
+          trigger?.focus();
+        }
+      });
+      option.addEventListener("click", () => {
+        statisticsPreviewState[control.dataset.statisticsFilter] = option.dataset.value;
+        renderStatisticsPreview();
+      });
+    });
+  });
   document.querySelector("[data-statistics-compare]")?.addEventListener("change", (event) => {
     statisticsPreviewState.compare = event.currentTarget.checked;
     renderStatisticsPreview();
@@ -5867,6 +7323,9 @@ async function restoreAdminSession() {
     state.authenticated = true;
     state.restoringSession = false;
     await loadData();
+    if (new URLSearchParams(window.location.search || "").get("drawer") === "event" && can("events:write")) {
+      openDrawer("event");
+    }
   } catch {
     // An absent or expired scoped cookie keeps the login screen visible.
     state.restoringSession = false;

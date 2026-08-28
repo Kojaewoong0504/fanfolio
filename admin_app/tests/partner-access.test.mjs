@@ -266,6 +266,13 @@ test('admin uses accessible custom controls in dedicated role and artist review 
   assert.match(source, /id="artist-profile-review-form"/)
 })
 
+test('mobile partner switching uses the shared combobox contract', () => {
+  const view = functionBody('partnersView')
+  assert.doesNotMatch(view, /<select id="partner-mobile-select"/)
+  assert.match(view, /className: "partner-mobile-select"/)
+  assert.match(source, /partner-mobile-select[\s\S]*loadSelectedOrganization/)
+})
+
 test('admin gives a useful card preview fallback when stored media is unavailable', () => {
   assert.match(source, /review-image-fallback/)
   assert.match(source, /원본 이미지가 등록되지 않았거나 저장소에서 찾을 수 없습니다/)
@@ -310,7 +317,7 @@ test('admin brand mark is the actual Fanfolio app icon and missing media has a r
 
 test('admin entrypoint busts stale app script caches after a deployment', async () => {
   const html = await readFile(new URL('../index.html', import.meta.url), 'utf8')
-  assert.match(html, /app\.js\?v=local-qa-bootstrap-calendar-20260826/)
+  assert.match(html, /app\.js\?v=operations-ui-20260828/)
 })
 
 test('partner logo picker is optional and exposes preview replacement and removal controls', () => {

@@ -68,6 +68,42 @@ def test_admin_can_load_catalog_for_card_registration(actors: dict[str, TestClie
     }
 
 
+def test_admin_card_list_supports_server_pagination_and_artist_filter(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    first = assert_success(
+        actors["admin"].post(
+            "/api/admin/cards",
+            json={"name": "페이지 카드 1", "artistId": "artist_nova3"},
+        ),
+        201,
+    )
+    second = assert_success(
+        actors["admin"].post(
+            "/api/admin/cards",
+            json={"name": "페이지 카드 2", "artistId": "artist_nova3"},
+        ),
+        201,
+    )
+    page_one = assert_success(
+        actors["admin"].get(
+            "/api/admin/cards?page=1&pageSize=1&artistId=artist_nova3&q=%ED%8E%98%EC%9D%B4%EC%A7%80%20%EC%B9%B4%EB%93%9C"
+        )
+    )
+    page_two = assert_success(
+        actors["admin"].get(
+            "/api/admin/cards?page=2&pageSize=1&artistId=artist_nova3&q=%ED%8E%98%EC%9D%B4%EC%A7%80%20%EC%B9%B4%EB%93%9C"
+        )
+    )
+
+    assert page_one["meta"]["pagination"] == {"page": 1, "pageSize": 1, "total": 2}
+    assert page_two["meta"]["pagination"] == {"page": 2, "pageSize": 1, "total": 2}
+    assert page_one["items"][0]["id"] != page_two["items"][0]["id"]
+    assert {first["id"], second["id"]}.issubset(
+        {item["id"] for item in page_one["items"] + page_two["items"]}
+    )
+
+
 def test_admin_can_preview_the_uploaded_source_image_for_a_card(
     actors: dict[str, TestClient],
 ) -> None:

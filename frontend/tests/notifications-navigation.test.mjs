@@ -29,6 +29,15 @@ test('notification screen preserves server-provided body copy', () => {
   assert.match(appSource, /item\.body && <span className="notification-body">\{item\.body\}<\/span>/)
 })
 
+test('notification empty state is shown only when the filtered list is empty', () => {
+  const alertsSource = appSource.slice(appSource.indexOf('function Alerts('), appSource.indexOf('type RevealCardProps'))
+  const conditional = alertsSource.slice(alertsSource.indexOf('{groups.length > 0 ?'))
+  const emptyStateIndex = conditional.indexOf('notification-empty')
+  const fallbackIndex = conditional.indexOf(' : <div')
+  assert.ok(emptyStateIndex > fallbackIndex, 'empty state must belong to the false branch')
+  assert.equal(conditional.slice(0, fallbackIndex).includes('notification-empty'), false)
+})
+
 test('reward, combination, and trade notifications open a useful fan destination', () => {
   assert.match(appSource, /kind === 'reward_claimed'\) return 'rewardInventory'/)
   assert.match(appSource, /kind === 'card_combined' \|\| kind === 'trade_accepted'\) return 'collection'/)

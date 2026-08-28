@@ -32,6 +32,7 @@ from app.models import (
     CardPack,
     CardPackCard,
     CardPackOpening,
+    CardVisibility,
     CollectionCampaign,
     ContentCalendarEntry,
     Drop,
@@ -442,6 +443,39 @@ async def admin_statistics(
             opening_stmt = opening_stmt.where(CardPackOpening.pack_id == pack_id)
         openings = list((await session.execute(opening_stmt)).all())
 
+        combination_stmt = (
+            select(CardCombination.created_at)
+            .join(Card, Card.id == CardCombination.result_card_id)
+            .where(
+                *card_filters,
+                CardCombination.created_at >= start_at,
+                CardCombination.created_at < end_at,
+            )
+        )
+        if pack_id:
+            combination_stmt = combination_stmt.join(
+                CardPackCard, CardPackCard.card_id == CardCombination.result_card_id
+            ).where(CardPackCard.pack_id == pack_id, CardPackCard.enabled.is_(True))
+        combinations = list((await session.execute(combination_stmt)).all())
+
+        trade_stmt = (
+            select(func.count(func.distinct(TradeProposal.id)))
+            .select_from(TradeProposal)
+            .join(TradeItem, TradeItem.proposal_id == TradeProposal.id)
+            .join(UserCard, UserCard.id == TradeItem.user_card_id)
+            .join(Card, Card.id == UserCard.card_id)
+            .where(
+                *card_filters,
+                TradeProposal.created_at >= start_at,
+                TradeProposal.created_at < end_at,
+            )
+        )
+        if pack_id:
+            trade_stmt = trade_stmt.join(
+                CardPackCard, CardPackCard.card_id == UserCard.card_id
+            ).where(CardPackCard.pack_id == pack_id, CardPackCard.enabled.is_(True))
+        trade_count = int((await session.scalar(trade_stmt)) or 0)
+
         analytics_filters: list[object] = [
             AnalyticsEvent.created_at >= start_at,
             AnalyticsEvent.created_at < end_at,
@@ -498,6 +532,8 @@ async def admin_statistics(
         return {
             "userCards": user_cards,
             "openings": openings,
+            "combinations": combinations,
+            "tradeCount": trade_count,
             "analytics": analytics,
             "xpRows": xp_rows,
             "activeFans": len(active_users),
@@ -510,6 +546,8 @@ async def admin_statistics(
         else {
             "userCards": [],
             "openings": [],
+            "combinations": [],
+            "tradeCount": 0,
             "analytics": [],
             "activeFans": 0,
         }
@@ -524,6 +562,10 @@ async def admin_statistics(
     previous_pack_openings = len(previous["openings"])
     issued_cards = len(current["userCards"])
     previous_issued_cards = len(previous["userCards"])
+    combinations = len(current["combinations"])
+    previous_combinations = len(previous["combinations"])
+    trades = current["tradeCount"]
+    previous_trades = previous["tradeCount"]
     registration_rate = round(registered / recognized * 100, 1) if recognized else 0.0
     previous_recognized = previous_events.count("redemption.recognized")
     previous_registered = sum(1 for row in previous["userCards"] if row.redeem_code_id)
@@ -719,6 +761,16 @@ async def admin_statistics(
                     "current": registration_rate,
                     "previous": previous_registration_rate,
                     "change": round(registration_rate - previous_registration_rate, 1),
+                },
+                "combinations": {
+                    "current": combinations,
+                    "previous": previous_combinations,
+                    "change": _statistics_change(combinations, previous_combinations),
+                },
+                "trades": {
+                    "current": trades,
+                    "previous": previous_trades,
+                    "change": _statistics_change(trades, previous_trades),
                 },
             },
             "trend": trend,
@@ -943,6 +995,8 @@ async def _admin_support_ticket_data(session: DbSession, ticket: SupportTicket) 
         "userNickname": owner.nickname if owner else None,
         "category": ticket.category,
         "subject": ticket.subject,
+        "targetType": ticket.target_type,
+        "targetId": ticket.target_id,
         "status": ticket.status,
         "assignedAdminId": ticket.assigned_admin_id,
         "evidence": [
@@ -1196,6 +1250,56 @@ async def act_on_support_ticket(
                 reference_id=approval.id,
                 note=payload.note,
             )
+        )
+    elif payload.action in {"hide_collection", "restore_collection"}:
+        if ticket.target_type != "user" or not ticket.target_id:
+            raise AppError(
+                422,
+                "REPORT_TARGET_REQUIRED",
+                "사용자 신고 대상이 확인된 경우에만 컬렉션을 숨길 수 있습니다.",
+            )
+        target = await session.get(User, ticket.target_id)
+        if target is None or target.role.value != "fan":
+            raise AppError(404, "FAN_NOT_FOUND", "신고 대상 팬을 찾을 수 없습니다.")
+        visibility = await session.get(CardVisibility, ticket.target_id)
+        next_public = payload.action == "restore_collection"
+        if visibility is None:
+            if next_public:
+                raise AppError(
+                    404, "COLLECTION_VISIBILITY_NOT_FOUND", "숨김 처리된 컬렉션을 찾을 수 없습니다."
+                )
+            session.add(CardVisibility(user_id=ticket.target_id, public_enabled=False))
+        else:
+            visibility.public_enabled = next_public
+            visibility.updated_at = now
+        session.add(
+            SupportEvidence(
+                id=f"evidence_{uuid4().hex[:12]}",
+                ticket_id=ticket.id,
+                actor_user_id=context.user.id,
+                kind="collection_restored" if next_public else "collection_hidden",
+                reference_id=ticket.target_id,
+                note=payload.note
+                or (
+                    "신고 검토 후 공개 컬렉션 복구"
+                    if next_public
+                    else "신고 검토 중 공개 컬렉션 숨김"
+                ),
+            )
+        )
+        await notify_user_once(
+            session,
+            user_id=target.id,
+            kind="support",
+            title="공개 컬렉션 공개 상태가 변경되었습니다",
+            body=(
+                "신고 검토에 따라 공개 컬렉션이 다시 공개되었습니다."
+                if next_public
+                else "신고 검토를 위해 공개 컬렉션이 일시적으로 숨겨졌습니다."
+            ),
+            entity_type="support_ticket",
+            entity_id=ticket.id,
+            event_key=f"support_collection_visibility:{ticket.id}:{'restored' if next_public else 'hidden'}",
         )
     elif payload.action == "resolve":
         ticket.status = "closed"
@@ -3342,6 +3446,7 @@ async def cards(
     session: DbSession,
     q: str | None = None,
     card_status: str | None = Query(default=None, alias="status"),
+    artist_id: str | None = Query(default=None, alias="artistId"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100, alias="pageSize"),
 ) -> dict:
@@ -3350,6 +3455,8 @@ async def cards(
         filters.append(Card.name.ilike(f"%{q}%"))
     if card_status:
         filters.append(Card.status == card_status)
+    if artist_id:
+        filters.append(or_(Card.artist_id == artist_id, Card.owner_artist_id == artist_id))
     if not context.is_root:
         filters.append(Card.artist_id.in_(context.assigned_artist_ids))
         filters.append(
@@ -3424,6 +3531,9 @@ async def list_card_packs(
     session: DbSession,
     q: str | None = None,
     pack_status: str | None = Query(default=None, alias="status"),
+    artist_id: str | None = Query(default=None, alias="artistId"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100, alias="pageSize"),
 ) -> dict:
     _require_scoped_action(context, "cards:read")
     filters = []
@@ -3431,6 +3541,8 @@ async def list_card_packs(
         filters.append(or_(CardPack.name.ilike(f"%{q}%"), CardPack.season_name.ilike(f"%{q}%")))
     if pack_status:
         filters.append(CardPack.status == pack_status)
+    if artist_id:
+        filters.append(CardPack.artist_id == artist_id)
     if not context.is_root:
         filters.append(CardPack.artist_id.in_(context.assigned_artist_ids))
         filters.append(
@@ -3439,11 +3551,14 @@ async def list_card_packs(
                 CardPack.organization_id.is_(None),
             )
         )
+    total = await session.scalar(select(func.count()).select_from(CardPack).where(*filters)) or 0
     packs = list(
         await session.scalars(
             select(CardPack)
             .where(*filters)
             .order_by(CardPack.created_at.desc(), CardPack.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
         )
     )
     cards_by_pack: dict[str, list[dict]] = {pack.id: [] for pack in packs}
@@ -3458,7 +3573,10 @@ async def list_card_packs(
             cards_by_pack[link.pack_id].append(_card_pack_card_data(link, card))
     return {
         "ok": True,
-        "data": {"items": [card_pack_data(pack, cards_by_pack[pack.id]) for pack in packs]},
+        "data": {
+            "items": [card_pack_data(pack, cards_by_pack[pack.id]) for pack in packs],
+            "meta": {"pagination": {"page": page, "pageSize": page_size, "total": total}},
+        },
     }
 
 
@@ -4349,6 +4467,42 @@ async def update_admin_card(
     )
     await session.commit()
     return {"ok": True, "data": admin_card_data(card)}
+
+
+@router.delete("/cards/{card_id}")
+async def delete_admin_card(
+    card_id: str,
+    context: CurrentAdmin,
+    session: DbSession,
+) -> dict:
+    card = await session.get(Card, card_id)
+    if not card:
+        raise AppError(404, "CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
+    context.require_organization(card.organization_id)
+    context.require_artist(card.artist_id)
+    context.require_write()
+    if card.status != "draft" or card.release_status != "draft":
+        raise AppError(409, "INVALID_CARD_STATUS", "초안 상태의 카드만 삭제할 수 있습니다.")
+    linked = await session.scalar(
+        select(CardPackCard.id).where(CardPackCard.card_id == card.id).limit(1)
+    )
+    if linked:
+        raise AppError(
+            409, "CARD_IN_USE", "카드팩 구성에 연결된 카드는 먼저 구성에서 제거해 주세요."
+        )
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="card.deleted",
+        entity_type="card",
+        entity_id=card.id,
+        organization_id=context.membership.organization_id,
+        artist_id=card.artist_id,
+        details={"status": "draft"},
+    )
+    await session.delete(card)
+    await session.commit()
+    return {"ok": True, "data": {"id": card_id, "deleted": True}}
 
 
 @router.get("/cards/{card_id}/preview/image")
@@ -5373,7 +5527,12 @@ def redeem_code_status(code: RedeemCode) -> str:
 
 
 @router.get("/redeem-code-batches")
-async def list_code_batches(context: CurrentAdmin, session: DbSession) -> dict:
+async def list_code_batches(
+    context: CurrentAdmin,
+    session: DbSession,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, alias="pageSize", ge=1, le=100),
+) -> dict:
     _require_scoped_action(context, "codes:read")
     statement = (
         select(RedeemCodeBatch)
@@ -5384,7 +5543,13 @@ async def list_code_batches(context: CurrentAdmin, session: DbSession) -> dict:
         statement = statement.where(Drop.organization_id == context.membership.organization_id)
         if context.membership.access_level != "company_admin":
             statement = statement.where(Drop.artist_id.in_(context.assigned_artist_ids))
-    batches = await session.scalars(statement)
+    total = await session.scalar(
+        select(func.count())
+        .select_from(RedeemCodeBatch)
+        .join(Drop, RedeemCodeBatch.drop_id == Drop.id)
+        .where(*statement.whereclause if statement.whereclause is not None else [])
+    )
+    batches = await session.scalars(statement.offset((page - 1) * page_size).limit(page_size))
     usage_rows = (
         await session.execute(
             select(
@@ -5418,7 +5583,14 @@ async def list_code_batches(context: CurrentAdmin, session: DbSession) -> dict:
                     "qrZipUrl": f"/api/admin/redeem-code-batches/{batch.id}/qr.zip",
                 }
                 for batch in batches
-            ]
+            ],
+            "meta": {
+                "pagination": {
+                    "page": page,
+                    "pageSize": page_size,
+                    "total": total or 0,
+                }
+            },
         },
     }
 

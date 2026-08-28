@@ -31,4 +31,23 @@ Running upgrade -> 0021_artist_card_layers
 - 배포 직후 `/api/health`와 `/api/health/ready`를 모두 확인한다. `health`만 200이고 `ready`가 503이면 운영 트래픽을 정상으로 보지 않는다.
 - 운영 DB의 정기 백업과 복구 리허설을 별도로 설정한다.
 
+백업 파일 자체의 가독성은 다음처럼 확인할 수 있다. 이 명령은 운영 DB에 접속하지 않는다.
+
+```bash
+BACKUP_FILE=/secure/path/fanfolio.dump ./scripts/backup-restore-verify.sh
+```
+
+격리된 복원 대상이 준비된 경우에만 schema-only 복원 리허설을 실행한다. 스크립트는 데이터베이스를
+생성·삭제·초기화하지 않으므로, `RESTORE_DATABASE_URL`은 운영 DB가 아닌 별도의 복원용 DB여야 한다.
+
+```bash
+BACKUP_FILE=/secure/path/fanfolio.dump \
+RESTORE_DATABASE_URL='postgresql://restore-user:encoded-password@restore-host:5432/fanfolio_restore' \
+BACKUP_RESTORE_CONFIRM=I_UNDERSTAND_THIS_IS_ISOLATED \
+./scripts/backup-restore-verify.sh
+```
+
+실제 운영 백업을 사용한 복원 증적(실행 시각, 대상 DB, 마이그레이션 결과, 핵심 레코드 수)은 별도로
+보관해야 하며, 이 로컬 절차의 통과만으로 운영 백업·복원 게이트를 완료 처리하지 않는다.
+
 현재 코드도 production에서 SQLite와 schema 자동 생성 설정을 거부하지만, 빈 PostgreSQL을 정상적인 DB로 오인하는 문제는 인프라의 DB 연결 대상과 백업 정책으로 막아야 한다.

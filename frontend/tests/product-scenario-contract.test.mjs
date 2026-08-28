@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8')
-const apiSource = readFileSync(new URL('../src/api/client.ts', import.meta.url), 'utf8')
+const _apiSource = readFileSync(new URL('../src/api/client.ts', import.meta.url), 'utf8')
 
 test('fan release scenario uses live pack, redemption, collection, and detail APIs', () => {
   assert.match(appSource, /getCardPacks/)

@@ -25,7 +25,7 @@ function extractFunction(name) {
 }
 
 function reviewRowHarness() {
-  const sandbox = {}
+  const sandbox = { state: { cardActionMenuId: 'card-6' } }
   vm.createContext(sandbox)
   vm.runInContext(
     [
@@ -43,8 +43,169 @@ test('page root clips accidental horizontal overflow and layout children can shr
   assert.match(css, /min-width:\s*0/)
 })
 
+test('admin shell keeps the full navigation reachable while dense dashboards stay compact', () => {
+  assert.match(css, /\.app-nav nav\s*\{[^}]*overflow-y:\s*auto/s)
+  assert.match(css, /\.app-nav nav\s*\{[^}]*scrollbar-width:\s*none/s)
+  assert.match(css, /\.app-nav nav::-webkit-scrollbar\s*\{[^}]*display:\s*none/s)
+  assert.match(css, /\.admin-shell\s*\{[^}]*overflow-x:\s*clip/s)
+  assert.match(css, /\.fan-pass-summary\s*\{[^}]*grid-template-columns:\s*repeat\(4/s)
+  assert.match(css, /\.operational-metrics-grid\s*\{[^}]*grid-template-columns:\s*repeat\(6/s)
+  assert.match(css, /\.artist-overview-grid\s*\{[^}]*grid-template-columns:\s*repeat\(4/s)
+})
+
+test('admin dashboard keeps operational panels in a balanced two-column rhythm', () => {
+  assert.match(css, /\.dashboard-grid\s*>\s*\.action-panel\s*\{[^}]*grid-column:\s*1/s)
+  assert.match(css, /\.dashboard-grid\s*>\s*\.card-pack-summary\s*\{[^}]*grid-column:\s*2/s)
+  assert.match(css, /\.dashboard-grid\s*>\s*\.operational-metrics-panel\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/s)
+})
+
+test('large admin collections expose bounded list and interaction contracts', () => {
+  assert.match(source, /tablePagination\("issuancePage"/)
+  assert.match(source, /data-card-action="delete"/)
+  assert.match(source, /function deleteDraftCard\(/)
+  assert.match(source, /class="content-calendar-list"/)
+  assert.match(css, /\.content-calendar-list \.empty/)
+})
+
 test('desktop partner layout uses 208px navigation and 280px directory columns', () => {
   assert.match(css, /208px\s+280px\s+minmax\(0,\s*1fr\)/)
+})
+
+test('admin navigation groups operational pages by workflow while keeping card issuance nested', () => {
+  assert.match(source, /groupLabels\s*=\s*\{[^}]*콘텐츠 운영/)
+  assert.match(source, /groupLabels\s*=\s*\{[^}]*커머스 운영/)
+  assert.match(source, /groupLabels\s*=\s*\{[^}]*팬 운영/)
+  assert.match(source, /groupLabels\s*=\s*\{[^}]*검수·관제/)
+  assert.match(source, /groupLabels\s*=\s*\{[^}]*시스템 관리/)
+  assert.match(source, /data-nav-section="\$\{group\}"/)
+  assert.match(source, /nav-section-group.*카드 관리/s)
+})
+
+test('admin navigation sections can collapse without hiding the current workflow context', () => {
+  assert.match(source, /navSectionsCollapsed/)
+  assert.match(source, /data-nav-section-toggle="\$\{group\}"/)
+  assert.match(source, /aria-expanded="\$\{!collapsed\}"/)
+  assert.match(source, /toggleNavigationSection/)
+  assert.match(css, /\.nav-section\.collapsed\s+\.nav-section-content\s*\{[^}]*display:\s*none/s)
+  assert.match(css, /\.nav-section-toggle\s*\{/)
+})
+
+test('new operational forms use the shared control visual contract and sticky action treatment', () => {
+  assert.match(css, /\.ops-control,\s*[\s\S]*\.ops-form\s*>\s*input\s*\{/)
+  assert.match(css, /\.ops-control:focus-visible,\s*[\s\S]*\.ops-form\s*>\s*input:focus-visible\s*\{/)
+  assert.match(css, /\.ops-action-bar\s*\{[^}]*position:\s*sticky/s)
+  assert.match(css, /\.toolbar\s*>\s*\.search,[\s\S]*\.card-ops-toolbar\s*>\s*select\s*\{/)
+  assert.match(source, /class="[^"]*ops-control/)
+  assert.match(source, /shop-product-editor-footer/)
+})
+
+test('native selects across older admin workflows inherit the shared control language', () => {
+  assertCssMatches(
+    /select:not\(\[multiple\]\)\s*\{[^}]*min-height:\s*40px[\s\S]*border-radius:\s*10px/s,
+    'legacy native selects keep the same size and radius as newer controls',
+  )
+  assertCssMatches(
+    /select\[multiple\]\s*\{[^}]*border-radius:\s*10px/s,
+    'multi-selects keep the same surface treatment without a misleading chevron',
+  )
+})
+
+test('account and drop creation forms use the shared admin combobox contract', () => {
+  assert.match(source, /id: "artist-account-artist"[\s\S]*name: "artistId"/)
+  assert.match(source, /id: "drop-artist"[\s\S]*name: "artistId"/)
+  assert.doesNotMatch(source, /<select class="search" name="artistId"/)
+  assert.doesNotMatch(source, /<select class="filter ops-control" name="artistId"/)
+})
+
+test('single-value editors use the shared admin combobox while preserving form names', () => {
+  assert.match(source, /function eventConnectionOptions\([\s\S]*adminSelect\(/)
+  assert.match(source, /id: "admin-card-rarity"[\s\S]*name: "rarity"/)
+  assert.match(source, /id: "campaign-artist"[\s\S]*name: "artistId"/)
+  assert.match(source, /id: "fan-pass-preset"[\s\S]*name: "preset"/)
+})
+
+test('card operations preview filters and creation forms use the shared combobox contract', () => {
+  assert.match(source, /data-preview-filter="cardArtist"[\s\S]*adminSelect|adminSelect\([\s\S]*cardArtist/)
+  assert.match(source, /data-preview-filter="packArtist"[\s\S]*adminSelect|adminSelect\([\s\S]*packArtist/)
+  assert.match(source, /data-preview-filter="issueType"[\s\S]*adminSelect|adminSelect\([\s\S]*issueType/)
+  assert.match(source, /id: "preview-pack-artist"[\s\S]*name: "packArtist"/)
+  assert.match(source, /id: "preview-issue-type"[\s\S]*name: "issueType"/)
+  assert.doesNotMatch(source, /<select data-preview-filter=/)
+  assert.doesNotMatch(source, /<select name="packArtist"/)
+  assert.doesNotMatch(source, /<select name="issueType"/)
+})
+
+test('administrator account settings is a real view instead of a toast-only placeholder', () => {
+  assert.match(source, /settings:\s*settingsView/)
+  assert.doesNotMatch(source, /function settingsView\(\)\s*\{\s*return "";/)
+  assert.match(source, /state\.view\s*=\s*"settings"[\s\S]*layout\(\)/)
+})
+
+test('admin shell exposes global operations search and queue urgency badges', () => {
+  assert.match(source, /data-global-search-toggle/)
+  assert.match(source, /function globalSearchView\(/)
+  assert.match(source, /data-global-search-input/)
+  assert.match(source, /data-nav-badge/)
+  assert.match(source, /function navigationBadge\(/)
+  assert.match(source, /event\.metaKey \|\| event\.ctrlKey[\s\S]*event\.key\.toLowerCase\(\) === "k"/)
+})
+
+test('card operations toolbar inputs opt into the shared control contract', () => {
+  assert.match(source, /querySelectorAll\("\[data-preview-search\], \[data-preview-filter\], #issuance-search, \[data-issuance-filter\]"\)/)
+  assert.match(source, /control\.classList\.add\("ops-control"\)/)
+})
+
+test('large admin catalogs expose real pagination state instead of decorative page numbers', () => {
+  assert.match(source, /cardPage:\s*1/)
+  assert.match(source, /cardPackPage:\s*1/)
+  assert.match(source, /issuancePage:\s*1/)
+  assert.match(source, /fanPassPage:\s*1/)
+  assert.match(source, /function tablePagination\(/)
+  assert.match(source, /api\(`\/admin\/card-packs\?\$\{cardPackParams\}`\)/)
+  assert.match(source, /async function loadCardPacks\(renderAfter = true\)/)
+  assert.match(source, /api\(`\/admin\/cards\?\$\{params\}`\)/)
+  assert.match(source, /async function loadCards\(renderAfter = true\)/)
+  assert.doesNotMatch(source, /\["\.review-list-panel \.card-table", "cardPage"\]/)
+  assert.doesNotMatch(source, /\["\.production-issuance-page \.table", "issuancePage"\]/)
+  assert.match(source, /\["\.fan-pass-table", "fanPassPage"\]/)
+  assert.match(source, /pageSize:\s*"10"/)
+  assert.match(source, /cardPagination\?\.pageSize \?\? 10|pageSize: 10/)
+})
+
+test('admin activity labels explain delivery and support events in Korean', () => {
+  assert.match(source, /"notification_delivery\.retried":\s*"알림 전달을 재시도했습니다"/)
+  assert.match(source, /"support_ticket\.status_changed":\s*"고객센터 문의 상태가 변경되었습니다"/)
+})
+
+test('paged card lists keep a complete catalog for dependent operating forms', () => {
+  assert.match(source, /cardCatalog:\s*\[\]/)
+  assert.match(source, /function cardCatalogItems\(\)/)
+  assert.match(source, /async function loadCardCatalog\(\)/)
+  assert.match(source, /api\("\/admin\/cards\?page=1&pageSize=100"\)/)
+  assert.match(source, /Array\.from\(\{ length: totalPages - 1 \}/)
+  assert.match(source, /const cardOptions = cardCatalogItems\(\)\.map/)
+  assert.match(source, /const publishedCards = cardCatalogItems\(\)\.filter/)
+  assert.match(source, /await loadCardCatalog\(\)/)
+})
+
+test('global operations search includes cards outside the visible table page', () => {
+  assert.match(source, /function globalSearchRecords\(\)[\s\S]*cardCatalogItems\(\)\.forEach/)
+  assert.match(source, /운영자가 현재 불러온 데이터 범위에서 검색합니다/)
+})
+
+test('issuance filters use the shared admin select interaction contract', () => {
+  assert.match(source, /issuance-status-filter[\s\S]*dataFilter:\s*"status"/)
+  assert.match(source, /issuance-type-filter[\s\S]*dataFilter:\s*"type"/)
+  assert.match(source, /issuance-period-filter[\s\S]*dataFilter:\s*"period"/)
+  assert.match(source, /control\.dataset\.issuanceFilter[\s\S]*state\.issuancePage\s*=\s*1[\s\S]*layout\(\)/)
+})
+
+test('drop scheduling controls keep the shared operating form treatment', () => {
+  assert.match(source, /id="drop-form"[^>]*class="toolbar"[\s\S]*input class="search ops-control"/)
+  assert.match(source, /id="drop-form"[^>]*class="toolbar"[\s\S]*id: "drop-artist"/)
+  assert.match(source, /id="drop-form"[^>]*class="toolbar"[\s\S]*type="datetime-local"/)
+  assert.match(source, /id="drop-form"[^>]*data-card-id=[\s\S]*input class="ops-control" name="startsAt"/)
+  assert.match(source, /id="drop-form"[^>]*data-card-id=[\s\S]*id: "drop-link-artist"/)
 })
 
 test('compact desktop and tablet breakpoints collapse navigation and partner directory', () => {
@@ -122,6 +283,13 @@ test('form custom selects preserve a hidden form value and do not collapse label
   assert.match(source, /hiddenValue\.value = option\.dataset\.value/)
 })
 
+test('shared custom selects expose keyboard navigation and combobox state', () => {
+  assert.match(source, /admin-select-trigger.*keydown/s)
+  assert.match(source, /ArrowDown|ArrowUp/)
+  assert.match(source, /Home|End/)
+  assert.match(source, /aria-expanded/)
+})
+
 test('drop connection and code forms use the reusable form select with client-side empty-state feedback', () => {
   assert.match(source, /id: "drop-link-drop", name: "dropId"/)
   assert.match(source, /id: "batch-card", name: "cardId"/)
@@ -162,11 +330,11 @@ test('card review rows open details from the whole row without double-triggering
   assert.match(source, /event\.preventDefault\(\)/)
   assert.match(source, /event\.target\.closest\('button, a, input, select, textarea, label, \[role="button"\]'\)/)
   assert.match(source, /event\.stopPropagation\(\)/)
-  assert.match(source, /class="icon-button review-card"/, 'keeps the existing more button in the management cell')
+  assert.match(source, /data-card-action-menu/, 'keeps the more-actions menu in the management cell')
 })
 
 test('card review row activation helper handles row keyboard mouse and nested controls', () => {
-  const { activateReviewRow, activateReviewButton } = reviewRowHarness()
+  const { activateReviewRow, activateReviewButton, state } = reviewRowHarness()
   const calls = []
   const opener = (id) => calls.push(id)
   const row = { dataset: { reviewRowId: 'card-1' } }
@@ -185,6 +353,7 @@ test('card review row activation helper handles row keyboard mouse and nested co
   activateReviewButton({ stopPropagation: () => { stopped += 1 } }, 'card-6', opener)
   assert.deepEqual(calls, ['card-1', 'card-2', 'card-3', 'card-6'])
   assert.equal(stopped, 1)
+  assert.equal(state.cardActionMenuId, null)
 })
 
 test('commercial review workspace keeps a dense master-detail layout at laptop widths', () => {

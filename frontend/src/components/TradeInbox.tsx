@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { ApiError, getTradeProposals, respondToTradeProposal, resolveApiUrl, type TradeProposalDetail } from '../api/client'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { ApiError, getTradeProposals, reportFan, respondToTradeProposal, resolveApiUrl, type TradeProposalDetail } from '../api/client'
 import { DetailTopBar } from './DetailTopBar'
 
 type Box = 'received' | 'sent'
@@ -24,6 +24,11 @@ export function TradeInbox({ onBack, onFindFans }: Props) {
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState('')
+  const [reportOpen, setReportOpen] = useState(false)
+  const [reportReason, setReportReason] = useState('거래 관련 문제')
+  const [reportBody, setReportBody] = useState('')
+  const [reportMessage, setReportMessage] = useState('')
+  const [reportPending, setReportPending] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -58,6 +63,23 @@ export function TradeInbox({ onBack, onFindFans }: Props) {
     }
   }
 
+  const submitReport = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const body = reportBody.trim()
+    if (!selected || body.length < 2 || reportPending) return
+    setReportPending(true)
+    setReportMessage('')
+    try {
+      await reportFan({ targetType: 'trade', targetId: selected.id, reason: reportReason, body })
+      setReportMessage('거래 신고가 접수되었어요. 운영팀이 확인할게요.')
+      setReportBody('')
+    } catch {
+      setReportMessage('신고를 접수하지 못했어요. 잠시 후 다시 시도해 주세요.')
+    } finally {
+      setReportPending(false)
+    }
+  }
+
   const peerName = (trade: TradeProposalDetail) => box === 'received'
     ? trade.proposer.nickname ?? '팬'
     : trade.recipient.nickname ?? '팬'
@@ -82,6 +104,8 @@ export function TradeInbox({ onBack, onFindFans }: Props) {
           <TradeCardGroup title={box === 'received' ? '상대가 제안한 카드' : '내가 제안한 카드'} cards={selected.offeredCards} />
           <TradeCardGroup title={box === 'received' ? '상대가 요청한 내 카드' : '내가 요청한 카드'} cards={selected.requestedCards} empty="요청한 카드 없이 제안했어요." />
           <p className="trade-expiry">응답 기한 {new Date(selected.expiresAt).toLocaleString('ko-KR')}</p>
+          <button type="button" className="trade-report-trigger" aria-expanded={reportOpen} onClick={() => { setReportOpen(open => !open); setReportMessage('') }}>안전 및 거래 신고</button>
+          {reportOpen && <form className="trade-report-panel" onSubmit={submitReport}><label>신고 사유<select value={reportReason} onChange={event => setReportReason(event.target.value)}><option>거래 관련 문제</option><option>사칭 또는 도용</option><option>부적절한 제안</option><option>기타 운영 문제</option></select></label><label>상황 설명<textarea value={reportBody} onChange={event => setReportBody(event.target.value)} minLength={2} maxLength={4000} placeholder="상황을 설명해 주세요." required /></label><button type="submit" disabled={reportPending || reportBody.trim().length < 2}>{reportPending ? '접수 중…' : '신고하기'}</button>{reportMessage && <p role="status">{reportMessage}</p>}</form>}
           {selected.status === 'pending' && <div className="trade-detail-actions">
             {box === 'received' ? <><button type="button" className="secondary" disabled={processing} onClick={() => void act('reject')}>거절</button><button type="button" disabled={processing} onClick={() => void act('accept')}>{processing ? '처리 중...' : '거래 수락'}</button></> : <button type="button" className="secondary" disabled={processing} onClick={() => void act('cancel')}>{processing ? '처리 중...' : '제안 취소'}</button>}
           </div>}

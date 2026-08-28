@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, case, delete, desc, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
+from app.db.session import begin_contention_safe_transaction
 from app.dependencies import DbSession, FanUser, OptionalCurrentUser
 from app.download_signing import download_url, verify_download_token
 from app.errors import AppError
@@ -29,6 +30,7 @@ from app.models import (
     CollectionBenefitClaim,
     CollectionCampaign,
     CollectionGoal,
+    ConsentRecord,
     Drop,
     EngagementEvent,
     Event,
@@ -66,6 +68,7 @@ from app.rate_limit import enforce_rate_limit
 from app.schemas import (
     AccountDeletionRequest,
     CollectionGoalCreate,
+    ConsentRecordCreate,
     NotificationPreferencesUpdate,
     PointChargeRequest,
     PointExchangeRequest,
@@ -109,6 +112,45 @@ from app.tasks import enqueue_engagement_event
 router = APIRouter(prefix="/api", tags=["fan"])
 
 
+def consent_record_data(record: ConsentRecord) -> dict:
+    return {
+        "id": record.id,
+        "policyKey": record.policy_key,
+        "policyVersion": record.policy_version,
+        "granted": record.granted,
+        "source": record.source,
+        "createdAt": record.created_at.isoformat(),
+    }
+
+
+@router.get("/me/privacy/consents")
+async def list_consent_history(user: FanUser, session: DbSession) -> dict:
+    records = (
+        await session.scalars(
+            select(ConsentRecord)
+            .where(ConsentRecord.user_id == user.id)
+            .order_by(ConsentRecord.created_at, ConsentRecord.id)
+        )
+    ).all()
+    return {"ok": True, "data": {"items": [consent_record_data(record) for record in records]}}
+
+
+@router.post("/me/privacy/consents", status_code=status.HTTP_201_CREATED)
+async def record_consent(payload: ConsentRecordCreate, user: FanUser, session: DbSession) -> dict:
+    record = ConsentRecord(
+        id=f"consent_{uuid4().hex}",
+        user_id=user.id,
+        policy_key=payload.policy_key,
+        policy_version=payload.policy_version,
+        granted=payload.granted,
+        source=payload.source,
+        created_at=datetime.now(UTC),
+    )
+    session.add(record)
+    await session.commit()
+    return {"ok": True, "data": consent_record_data(record)}
+
+
 @router.get("/me/privacy/export")
 async def export_personal_data(user: FanUser, session: DbSession) -> dict:
     """Return the fan's portable data without credentials or payment secrets."""
@@ -134,6 +176,13 @@ async def export_personal_data(user: FanUser, session: DbSession) -> dict:
             select(Notification)
             .where(Notification.user_id == user.id)
             .order_by(Notification.created_at)
+        )
+    ).all()
+    consents = (
+        await session.scalars(
+            select(ConsentRecord)
+            .where(ConsentRecord.user_id == user.id)
+            .order_by(ConsentRecord.created_at, ConsentRecord.id)
         )
     ).all()
     ledger = (
@@ -208,6 +257,7 @@ async def export_personal_data(user: FanUser, session: DbSession) -> dict:
                 }
                 for notification in notifications
             ],
+            "consents": [consent_record_data(record) for record in consents],
         },
     }
 
@@ -547,6 +597,7 @@ async def refund_shop_order(
     user_id = user.id
     if session.in_transaction():
         await session.rollback()
+    await begin_contention_safe_transaction(session)
     async with session.begin():
         existing_transaction = await session.scalar(
             select(PointTransaction).where(
@@ -959,7 +1010,12 @@ async def remove_wishlist(card_id: str, user: FanUser, session: DbSession) -> di
     return {"ok": True, "data": {"cardId": card_id, "saved": False}}
 
 
-async def _collection_goal_data(goal: CollectionGoal, user: FanUser, session: DbSession) -> dict:
+async def _collection_goal_data(
+    goal: CollectionGoal,
+    user: FanUser,
+    session: DbSession,
+    background_tasks: BackgroundTasks | None = None,
+) -> dict:
     pack = await session.get(CardPack, goal.pack_id)
     if pack is None:
         raise AppError(404, "CARD_PACK_NOT_FOUND", "카드팩을 찾을 수 없습니다.")
@@ -986,6 +1042,21 @@ async def _collection_goal_data(goal: CollectionGoal, user: FanUser, session: Db
     completion_rate = min(100, round(owned_count / target_count * 100)) if target_count else 0
     if completion_rate == 100 and goal.completed_at is None:
         goal.completed_at = datetime.now(UTC)
+        completion_event = await record_engagement_event(
+            session,
+            user_id=user.id,
+            kind="collection_goal_completed",
+            source_type="collection_goal",
+            source_id=goal.id,
+            payload={
+                "collectionGoalId": goal.id,
+                "packId": pack.id,
+                "artistId": pack.artist_id,
+                "organizationId": pack.organization_id,
+            },
+        )
+        if background_tasks is not None:
+            enqueue_engagement_event(completion_event.id, background_tasks)
         await notify_user_once(
             session,
             user_id=user.id,
@@ -1010,7 +1081,9 @@ async def _collection_goal_data(goal: CollectionGoal, user: FanUser, session: Db
 
 
 @router.get("/me/collection-goals")
-async def collection_goals(user: FanUser, session: DbSession) -> dict:
+async def collection_goals(
+    user: FanUser, session: DbSession, background_tasks: BackgroundTasks
+) -> dict:
     goals = (
         await session.scalars(
             select(CollectionGoal)
@@ -1018,7 +1091,7 @@ async def collection_goals(user: FanUser, session: DbSession) -> dict:
             .order_by(CollectionGoal.created_at.desc(), CollectionGoal.id.desc())
         )
     ).all()
-    items = [await _collection_goal_data(goal, user, session) for goal in goals]
+    items = [await _collection_goal_data(goal, user, session, background_tasks) for goal in goals]
     # Completion is derived during this read and may enqueue a notification
     # after SQLAlchemy autoflushes the new rows. Persist both explicitly.
     await session.commit()
@@ -1027,7 +1100,10 @@ async def collection_goals(user: FanUser, session: DbSession) -> dict:
 
 @router.post("/me/collection-goals", status_code=status.HTTP_201_CREATED)
 async def create_collection_goal(
-    payload: CollectionGoalCreate, user: FanUser, session: DbSession
+    payload: CollectionGoalCreate,
+    user: FanUser,
+    session: DbSession,
+    background_tasks: BackgroundTasks,
 ) -> dict:
     pack = await session.scalar(
         select(CardPack).where(CardPack.id == payload.pack_id, CardPack.status == "published")
@@ -1064,7 +1140,7 @@ async def create_collection_goal(
         goal.target_count = target_count
         goal.completed_at = None
     await session.flush()
-    data = await _collection_goal_data(goal, user, session)
+    data = await _collection_goal_data(goal, user, session, background_tasks)
     await session.commit()
     return {"ok": True, "data": data}
 
@@ -1150,11 +1226,13 @@ async def open_card_pack(
     background_tasks: BackgroundTasks,
     user: FanUser,
     session: DbSession,
+    response: Response,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict:
     user_id = user.id
     if session.in_transaction():
         await session.rollback()
+    await begin_contention_safe_transaction(session)
     async with session.begin():
         pack = await session.scalar(
             select(CardPack)
@@ -1187,6 +1265,7 @@ async def open_card_pack(
                 .with_for_update()
             )
             if existing and existing.user_card_id:
+                response.status_code = status.HTTP_200_OK
                 existing_card = await session.get(UserCard, existing.user_card_id)
                 existing_link = await session.scalar(
                     select(CardPackCard).where(
@@ -1258,7 +1337,12 @@ async def open_card_pack(
             source_id=opening.id,
             acquisition_source="card_pack",
             drop_id=locked_card.drop_id,
-            metadata={"packId": pack.id, "issuanceCode": issuance_code},
+            metadata={
+                "packId": pack.id,
+                "issuanceCode": issuance_code,
+                "probabilityVersion": pack.version,
+                "probability": selected_link.probability,
+            },
         )
         opening.user_card_id = user_card.id
         session.add(opening)
@@ -2366,6 +2450,15 @@ async def card_detail(user_card_id: str, user: FanUser, session: DbSession) -> d
     if not row:
         raise AppError(404, "USER_CARD_NOT_FOUND", "카드를 찾을 수 없습니다.")
     uc, card, artist, member, drop = row
+    grant_event = await session.scalar(
+        select(CardOwnershipLedger)
+        .where(
+            CardOwnershipLedger.user_card_id == uc.id,
+            CardOwnershipLedger.action == "grant",
+        )
+        .order_by(CardOwnershipLedger.created_at.desc(), CardOwnershipLedger.id.desc())
+    )
+    acquisition_metadata = grant_event.metadata_json if grant_event else {}
     approved_effect = await session.scalar(
         select(CardEffectVersion)
         .where(CardEffectVersion.card_id == card.id, CardEffectVersion.status == "approved")
@@ -2427,6 +2520,8 @@ async def card_detail(user_card_id: str, user: FanUser, session: DbSession) -> d
             "serialNumber": uc.serial_number,
             "acquiredAt": uc.acquired_at.isoformat(),
             "acquisitionSource": uc.acquisition_source,
+            "probabilityVersion": acquisition_metadata.get("probabilityVersion"),
+            "acquisitionProbability": acquisition_metadata.get("probability"),
             "card": {
                 "id": card.id,
                 "name": card.name,
@@ -2753,6 +2848,8 @@ async def _support_ticket_data(session: DbSession, ticket: SupportTicket) -> dic
         "id": ticket.id,
         "category": ticket.category,
         "subject": ticket.subject,
+        "targetType": ticket.target_type,
+        "targetId": ticket.target_id,
         "status": ticket.status,
         "assignedAdminId": ticket.assigned_admin_id,
         "createdAt": ticket.created_at.isoformat(),
@@ -2832,6 +2929,8 @@ async def create_report(payload: ReportCreate, user: FanUser, session: DbSession
         user_id=user.id,
         category="report",
         subject=f"신고: {payload.reason}",
+        target_type=payload.target_type,
+        target_id=payload.target_id,
         status="open",
     )
     message = SupportMessage(

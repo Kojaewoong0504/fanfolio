@@ -412,6 +412,15 @@ export type FanHomeResponse = {
 
 export type NotificationPreferences = { emailEnabled: boolean }
 
+export type ConsentRecord = {
+  id: string
+  policyKey: 'terms' | 'privacy' | 'marketing'
+  policyVersion: string
+  granted: boolean
+  source: 'signup' | 'settings' | 'onboarding'
+  createdAt: string
+}
+
 export type NotificationItem = {
   id: string
   kind: string
@@ -737,7 +746,9 @@ export type UserCardDetail = {
   userCardId: string
   serialNumber: number
   acquiredAt: string
-  acquisitionSource: string
+  acquisitionSource: string | null
+  probabilityVersion?: string | null
+  acquisitionProbability?: number | null
   drop: { name: string } | null
   redeemCode: { code: string } | null
   futureBenefitPreview: string | null
@@ -850,6 +861,21 @@ export async function apiFetch<T>(path: string, init?: RequestInit, allowRefresh
 export async function exportPersonalData(): Promise<Record<string, unknown>> {
   const result = await apiFetch<{ ok: true; data: Record<string, unknown> }>('/me/privacy/export')
   return result.data
+}
+
+export function getConsentHistory(): Promise<{ ok: true; data: { items: ConsentRecord[] } }> {
+  return apiFetch<{ ok: true; data: { items: ConsentRecord[] } }>('/me/privacy/consents')
+}
+
+export function recordConsent(
+  policyKey: ConsentRecord['policyKey'],
+  policyVersion: string,
+  granted = true,
+): Promise<{ ok: true; data: ConsentRecord }> {
+  return apiFetch<{ ok: true; data: ConsentRecord }>('/me/privacy/consents', {
+    method: 'POST',
+    body: JSON.stringify({ policyKey, policyVersion, granted, source: 'settings' }),
+  })
 }
 
 export async function deleteFanAccount(confirmation: string): Promise<void> {
@@ -1134,6 +1160,17 @@ export function followFan(userId: string): Promise<{ ok: true, data: { following
 
 export function unfollowFan(userId: string): Promise<{ ok: true, data: { followingUserId: string; following: boolean } }> {
   return apiFetch<{ ok: true, data: { followingUserId: string; following: boolean } }>(`/me/follows/${encodeURIComponent(userId)}`, { method: 'DELETE' })
+}
+
+export function blockFan(userId: string): Promise<{ ok: true; data: { blockedUserId: string; blocked: boolean } }> {
+  return apiFetch<{ ok: true; data: { blockedUserId: string; blocked: boolean } }>(`/me/blocks/${encodeURIComponent(userId)}`, { method: 'POST' })
+}
+
+export function reportFan(input: { targetType: 'user' | 'trade' | 'card' | 'event'; targetId: string; reason: string; body: string }): Promise<{ ok: true; data: { id: string; status: string } }> {
+  return apiFetch<{ ok: true; data: { id: string; status: string } }>('/me/reports', {
+    method: 'POST',
+    body: JSON.stringify({ targetType: input.targetType, targetId: input.targetId, reason: input.reason, body: input.body }),
+  })
 }
 
 export function updateCollectionVisibility(publicEnabled: boolean): Promise<{ ok: true, data: { public: boolean } }> {
