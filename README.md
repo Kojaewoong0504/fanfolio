@@ -219,10 +219,19 @@ open http://localhost:8025
 이 저장소는 세 개의 프론트 앱을 하나의 Git 저장소에서 관리합니다. Vercel 프로젝트를 세 개
 만들고 프로젝트별 `Root Directory`만 다르게 지정하면 됩니다.
 
+배포 후 실제 인증 계약은 `scripts/hosted-auth-smoke.sh`로 확인합니다. 이 검사는 팬·관리자·
+아티스트 계정으로 로그인한 뒤 각 앱의 프로필/관리자 컨텍스트/성장 API를 읽기 전용으로
+확인하며, 브라우저 세션이나 테스트 계정을 자동으로 만들지 않습니다. 로컬에서 직접 실행할
+때는 `FAN_EMAIL`, `FAN_PASSWORD`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ARTIST_USERNAME`,
+`ARTIST_PASSWORD`를 환경변수로 주입하고, CI의 수동 `hosted-auth-smoke` 작업에서는 같은 값을
+GitHub Actions Secret으로 등록합니다. 자격값이 없으면 기본 실행은 `DEFERRED`(종료 코드 2),
+CI는 `HOSTED_SMOKE_REQUIRED=1`로 실패 처리하므로 운영 인증 검증을 통과한 것으로 오인하지
+않습니다.
+
 | Vercel 프로젝트 | Root Directory | 용도 |
 | --- | --- | --- |
 | fanfolio-fan | `frontend` | 팬 앱 |
-| fanfolio-admin | `admin_app` | 관리자 웹 |
+| fanfolio-admin-one | `admin_app` | 관리자 웹 |
 | fanfolio-studio | `builder_app` | 아티스트 카드 스튜디오 |
 
 `frontend`는 `Vite` preset과 `npm run build`를 사용하고 Output Directory는 `dist`로 설정합니다.
@@ -233,6 +242,25 @@ FastAPI는 Vercel 프론트 프로젝트와 분리된 API 서버로 배포합니
 `/api` 요청은 각 앱의 `vercel.json`을 통해 FastAPI로 프록시됩니다. 백엔드의
 `FRONTEND_URL`, `FRONTEND_ORIGINS`, `OAUTH_FRONTEND_CALLBACK_URL`에는 실제 팬 앱 도메인을
 등록합니다. 운영 OAuth Callback도 각 provider 콘솔에 HTTPS 주소로 등록해야 합니다.
+
+배포 후에는 Compose 기반 로컬 통합 테스트와 별도로 실제 호스팅 경로를 읽기 전용으로 확인합니다.
+기본 도메인은 현재 Fanfolio Render/Vercel 프로젝트를 사용하며, 포크나 스테이징은 환경 변수로
+덮어쓸 수 있습니다. 이 점검은 로그인·콘텐츠 변경을 수행하지 않고 API health/readiness와 세 앱의
+루트 및 `/api` 프록시 응답만 확인합니다.
+
+```bash
+./scripts/hosted-preflight.sh
+# 예: 스테이징 점검
+API_URL=https://api.example.com FAN_URL=https://fan.example.com \
+ADMIN_URL=https://admin.example.com STUDIO_URL=https://studio.example.com \
+./scripts/hosted-preflight.sh
+```
+
+Render 콜드 스타트로 응답이 늦을 수 있어 기본적으로 요청당 90초까지 기다리고 한 번 재시도합니다.
+필요하면 `CURL_MAX_TIME`과 `CURL_RETRIES` 환경 변수로 조정할 수 있습니다.
+
+GitHub Actions의 `Fanfolio CI`를 `workflow_dispatch`로 실행하면 같은 읽기 전용
+Render/Vercel 배포 점검을 `hosted-preflight` job으로 실행할 수 있습니다.
 
 브랜치마다 바뀌는 Vercel 프리뷰 주소를 안전하게 허용하려면 Render에 프로젝트와 팀 도메인을
 분리해 등록합니다. 원시 정규식을 직접 받지 않고 아래 값으로 제한된 허용 규칙을 생성합니다.
