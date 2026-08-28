@@ -967,7 +967,10 @@ function detailsStage() {
 
 function fanPreviewStage() {
   state.editor.previewOpened = true
-  persistDraft()
+  const activeCard = state.cards.find((item) => item.id === state.cardId)
+  const editable = !activeCard || cardEditorStage(activeCard) === 'design'
+  if (editable) persistDraft()
+  else clearDraft()
   const canOfferDeviceMotion =
     window.isSecureContext === true && typeof window.DeviceOrientationEvent !== 'undefined'
   const motionStatus =

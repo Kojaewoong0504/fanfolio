@@ -186,12 +186,16 @@ test('read-only cards never become restorable or persistable editor drafts', asy
   const restoreBody = source.match(/function restoreDraftForUser\(userId, cards = \[\]\) \{([\s\S]*?)\n\}/)?.[1] || ''
   const openCardBody = source.match(/async function openCard\(cardId\) \{([\s\S]*?)\n\}/)?.[1] || ''
   const editorViewBody = source.match(/function editorView\(\) \{([\s\S]*?)\n\}/)?.[1] || ''
+  const fanPreviewBody = source.match(/function fanPreviewStage\(\) \{([\s\S]*?)\n\}/)?.[1] || ''
 
   assert.match(restoreBody, /cardEditorStage\(card\) === 'design'/)
   assert.match(restoreBody, /localStorage\.removeItem\(draftStorageKey\(userId\)\)/)
   assert.match(openCardBody, /if \(state\.stage === 'design'\) persistDraft\(\)/)
   assert.match(openCardBody, /else clearDraft\(\)/)
   assert.match(editorViewBody, /state\.stage === 'design' \? `.*초안 저장/s)
+  assert.match(fanPreviewBody, /cardEditorStage\(activeCard\) === 'design'/)
+  assert.match(fanPreviewBody, /if \(editable\) persistDraft\(\)/)
+  assert.match(fanPreviewBody, /else clearDraft\(\)/)
 })
 
 test('collaboration comment mutations ignore duplicate submissions while busy', async () => {
