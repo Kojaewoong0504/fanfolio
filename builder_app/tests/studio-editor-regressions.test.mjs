@@ -185,11 +185,13 @@ test('read-only cards never become restorable or persistable editor drafts', asy
   const source = await readFile(appUrl, 'utf8')
   const restoreBody = source.match(/function restoreDraftForUser\(userId, cards = \[\]\) \{([\s\S]*?)\n\}/)?.[1] || ''
   const openCardBody = source.match(/async function openCard\(cardId\) \{([\s\S]*?)\n\}/)?.[1] || ''
+  const editorViewBody = source.match(/function editorView\(\) \{([\s\S]*?)\n\}/)?.[1] || ''
 
   assert.match(restoreBody, /cardEditorStage\(card\) === 'design'/)
   assert.match(restoreBody, /localStorage\.removeItem\(draftStorageKey\(userId\)\)/)
   assert.match(openCardBody, /if \(state\.stage === 'design'\) persistDraft\(\)/)
   assert.match(openCardBody, /else clearDraft\(\)/)
+  assert.match(editorViewBody, /state\.stage === 'design' \? `.*초안 저장/s)
 })
 
 test('bootstrap surfaces a data-load failure after a restored session', async () => {

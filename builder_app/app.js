@@ -1061,8 +1061,7 @@ function editorView() {
     review: reviewStage,
   }[state.stage]?.() || designStage()
   const activeCard = state.cards.find((item) => item.id === state.cardId)
-  const cardIsUnderReview = activeCard?.releaseStatus && !['draft', 'changes_requested'].includes(activeCard.releaseStatus)
-  return `<section class="editor-view"><div class="editor-title-row"><div><button type="button" class="back-link" data-action="exit-editor">${icon('arrow_back')} 내 카드</button><h2>${esc(state.form.name || '새 특별 카드')}</h2>${activeCard ? releaseStatusBanner(activeCard, { compact: true }) : ''}</div><div>${!cardIsUnderReview ? `<button type="button" class="secondary-button" data-action="save-draft" ${state.busy ? 'disabled' : ''}>${icon('save')} ${state.busy ? '저장 중' : '초안 저장'}</button>` : ''}${state.stage === 'design' ? `<button type="button" class="primary-button" data-action="go-details">카드 정보 입력 ${icon('arrow_forward')}</button>` : ''}</div></div>${editorProgress()}${stageContent}</section>`
+  return `<section class="editor-view"><div class="editor-title-row"><div><button type="button" class="back-link" data-action="exit-editor">${icon('arrow_back')} 내 카드</button><h2>${esc(state.form.name || '새 특별 카드')}</h2>${activeCard ? releaseStatusBanner(activeCard, { compact: true }) : ''}</div><div>${state.stage === 'design' ? `<button type="button" class="secondary-button" data-action="save-draft" ${state.busy ? 'disabled' : ''}>${icon('save')} ${state.busy ? '저장 중' : '초안 저장'}</button><button type="button" class="primary-button" data-action="go-details">카드 정보 입력 ${icon('arrow_forward')}</button>` : ''}</div></div>${editorProgress()}${stageContent}</section>`
 }
 
 function cardsView() {
