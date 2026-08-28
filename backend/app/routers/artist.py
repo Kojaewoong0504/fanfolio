@@ -426,6 +426,14 @@ async def effect_version_or_404(
     return version
 
 
+def ensure_card_editable(card: Card) -> None:
+    if card.status not in {"draft", "changes_requested"} or card.release_status not in {
+        "draft",
+        "changes_requested",
+    }:
+        raise AppError(409, "INVALID_CARD_STATUS", "현재 상태에서는 카드를 수정할 수 없습니다.")
+
+
 def effect_version_data(version: CardEffectVersion) -> dict:
     return {
         "id": version.id,
@@ -461,6 +469,7 @@ async def create_effect_version(
     session: DbSession,
 ) -> dict:
     card = await owned_card(card_id, user, session)
+    ensure_card_editable(card)
     config = validate_effect_config(payload.design_config)
     await validate_design_assets(config, user, session)
     latest = await session.scalar(
@@ -487,6 +496,8 @@ async def update_effect_version(
     user: ArtistUser,
     session: DbSession,
 ) -> dict:
+    card = await owned_card(card_id, user, session)
+    ensure_card_editable(card)
     version = await effect_version_or_404(card_id, version_id, user, session)
     if version.status not in {"draft", "rejected"}:
         raise AppError(
@@ -506,6 +517,8 @@ async def update_effect_version(
 async def submit_effect_version_review(
     card_id: str, version_id: str, user: ArtistUser, session: DbSession
 ) -> dict:
+    card = await owned_card(card_id, user, session)
+    ensure_card_editable(card)
     version = await effect_version_or_404(card_id, version_id, user, session)
     if version.status not in {"draft", "rejected"}:
         raise AppError(

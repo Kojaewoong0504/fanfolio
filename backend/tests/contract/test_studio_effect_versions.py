@@ -88,6 +88,31 @@ def test_artist_effect_version_normalizes_legacy_studio_preset_names(
     assert version["designConfig"]["front"]["preset"] == "hologram"
 
 
+def test_artist_cannot_mutate_effect_versions_for_a_released_card(
+    app: FastAPI, actors: dict[str, TestClient], seeded: dict
+) -> None:
+    card = create_studio_card(actors["artist"], seeded)
+
+    async def release_card() -> None:
+        async with SessionLocal() as session:
+            persisted_card = await session.get(Card, card["id"])
+            assert persisted_card is not None
+            persisted_card.status = "published"
+            persisted_card.release_status = "published"
+            await session.commit()
+
+    asyncio.run(release_card())
+
+    assert_error(
+        actors["artist"].post(
+            f"/api/artist/cards/{card['id']}/effect-versions",
+            json={"designConfig": {"front": {"preset": "glow"}}},
+        ),
+        409,
+        "INVALID_CARD_STATUS",
+    )
+
+
 def test_effect_config_rejects_back_lenticular_and_unsafe_asset_references(
     app: FastAPI, actors: dict[str, TestClient], seeded: dict
 ) -> None:
