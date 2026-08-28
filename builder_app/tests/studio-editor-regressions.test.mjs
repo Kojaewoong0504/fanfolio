@@ -194,6 +194,19 @@ test('read-only cards never become restorable or persistable editor drafts', asy
   assert.match(editorViewBody, /state\.stage === 'design' \? `.*초안 저장/s)
 })
 
+test('collaboration comment mutations ignore duplicate submissions while busy', async () => {
+  const source = await readFile(appUrl, 'utf8')
+  const createBody = source.match(/async function createCollaborationComment\(form\) \{([\s\S]*?)\n\}/)?.[1] || ''
+  const resolveBody = source.match(/async function resolveCollaborationComment\(commentId\) \{([\s\S]*?)\n\}/)?.[1] || ''
+
+  assert.match(createBody, /if \(!state\.cardId \|\| state\.busy\) return/)
+  assert.match(resolveBody, /if \(!state\.cardId \|\| state\.busy\) return/)
+  assert.match(createBody, /state\.busy = true/)
+  assert.match(resolveBody, /state\.busy = true/)
+  assert.match(createBody, /finally \{[\s\S]*state\.busy = false/)
+  assert.match(resolveBody, /finally \{[\s\S]*state\.busy = false/)
+})
+
 test('bootstrap surfaces a data-load failure after a restored session', async () => {
   const source = await readFile(appUrl, 'utf8')
   const bootstrapBody = source.match(/async function bootstrap\(\) \{([\s\S]*?)\n\}/)?.[1] || ''

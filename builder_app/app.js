@@ -2088,9 +2088,11 @@ async function loadCollaborationComments(cardId, renderAfter = true) {
 }
 
 async function createCollaborationComment(form) {
-  if (!state.cardId) return
+  if (!state.cardId || state.busy) return
   const values = Object.fromEntries(new FormData(form).entries())
   state.collaborationCommentError = ''
+  state.busy = true
+  render()
   try {
     await api(`/artist/cards/${encodeURIComponent(state.cardId)}/comments`, {
       method: 'POST',
@@ -2100,12 +2102,15 @@ async function createCollaborationComment(form) {
     await loadCollaborationComments(state.cardId, false)
   } catch (error) {
     state.collaborationCommentError = error.message
+  } finally {
+    state.busy = false
   }
   render()
 }
 
 async function resolveCollaborationComment(commentId) {
-  if (!state.cardId) return
+  if (!state.cardId || state.busy) return
+  state.busy = true
   try {
     await api(`/artist/cards/${encodeURIComponent(state.cardId)}/comments/${encodeURIComponent(commentId)}`, {
       method: 'PATCH',
@@ -2114,6 +2119,8 @@ async function resolveCollaborationComment(commentId) {
     await loadCollaborationComments(state.cardId, false)
   } catch (error) {
     state.collaborationCommentError = error.message
+  } finally {
+    state.busy = false
   }
   render()
 }
