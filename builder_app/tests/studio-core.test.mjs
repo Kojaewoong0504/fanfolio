@@ -5,6 +5,9 @@ import { readFile } from 'node:fs/promises'
 import {
   buildCardPayload,
   buildDesignConfig,
+  cardDraftErrors,
+  cardEditorStage,
+  normalizeCatalogSelection,
   navigationState,
   normalizeCardEffects,
   normalizeCreativeLayer,
@@ -207,6 +210,76 @@ test('summarizes cards requiring work without mutating the source list', () => {
 test('keeps studio home separate from the card creation flow', () => {
   assert.deepEqual(navigationState('home'), { view: 'home', step: 0 })
   assert.deepEqual(navigationState('create'), { view: 'create', step: 1 })
+})
+
+test('opens released cards in the read-only release status stage', () => {
+  assert.equal(cardEditorStage({ status: 'draft', releaseStatus: 'draft' }), 'design')
+  assert.equal(cardEditorStage({ status: 'draft', releaseStatus: 'changes_requested' }), 'design')
+  assert.equal(cardEditorStage({ status: 'pending_review', releaseStatus: 'pending_partner_review' }), 'review')
+  assert.equal(cardEditorStage({ status: 'published', releaseStatus: 'published' }), 'review')
+})
+
+test('returns actionable errors before saving an incomplete card draft', () => {
+  assert.deepEqual(cardDraftErrors({ form: {}, editor: {} }), [
+    '카드 이름을 입력해주세요.',
+    '시즌명을 입력해주세요.',
+    '카드 템플릿을 선택해주세요.',
+    '아티스트와 멤버를 선택해주세요.',
+    '카드 앞면 이미지를 추가해주세요.',
+    '발행 수량을 1장 이상 입력해주세요.',
+  ])
+  assert.deepEqual(
+    cardDraftErrors({
+      form: {
+        name: 'Aurora',
+        seasonName: '2026 SUMMER',
+        templateId: 'template_signature_v1',
+        artistId: 'artist_dreamscape',
+        memberId: 'member_rina',
+        imageAssetId: 'asset_image',
+        issueLimit: 300,
+      },
+      editor: {},
+    }),
+    [],
+  )
+  assert.deepEqual(
+    cardDraftErrors({
+      form: {
+        name: 'Aurora',
+        seasonName: '2026 SUMMER',
+        templateId: 'template_signature_v1',
+        artistId: 'artist_dreamscape',
+        memberId: 'member_rina',
+        issueLimit: 300,
+      },
+      editor: { imageSrc: 'data:image/png;base64,preview' },
+    }),
+    [],
+  )
+})
+
+test('repairs stale catalog selections from a recovered draft', () => {
+  assert.deepEqual(
+    normalizeCatalogSelection(
+      { artistId: 'missing-artist', memberId: 'missing-member' },
+      {
+        artists: [{ id: 'artist_dreamscape' }],
+        members: [
+          { id: 'member_rina', artistId: 'artist_dreamscape' },
+          { id: 'member_yuna', artistId: 'artist_dreamscape' },
+        ],
+      },
+    ),
+    { artistId: 'artist_dreamscape', memberId: 'member_rina' },
+  )
+  assert.deepEqual(
+    normalizeCatalogSelection(
+      { artistId: 'artist_dreamscape', memberId: 'wrong-member' },
+      { artists: [{ id: 'artist_dreamscape' }], members: [] },
+    ),
+    { artistId: 'artist_dreamscape', memberId: null },
+  )
 })
 
 test('serializes voice, motion and hologram settings into the shared design contract', () => {

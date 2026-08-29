@@ -13,6 +13,8 @@ from app.models import (
     AchievementDefinition,
     AchievementProgress,
     Card,
+    CardPack,
+    CardPackCard,
     Drop,
     EngagementEvent,
     FanLevel,
@@ -28,6 +30,7 @@ from app.models import (
     ProfileEquipment,
     RewardCatalog,
     RewardGrant,
+    RewardGrantCardPackEntitlement,
     ShopOrder,
     UserCard,
     XpLedger,
@@ -564,6 +567,100 @@ def test_fan_can_claim_unlocked_pass_tier_once(
     fan_pass = assert_success(actors["fan"].get("/api/me/pass"))
     assert fan_pass["seasons"][0]["tiers"][0]["claimed"] is True
     assert fan_pass["seasons"][0]["tiers"][0]["claimable"] is False
+
+
+def test_claiming_card_pack_pass_reward_creates_openable_entitlement(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    async def seed_card_pack_pass() -> None:
+        async with SessionLocal() as session:
+            pack = CardPack(
+                id="pack_pass_claim",
+                artist_id="artist_nova3",
+                name="Pass Claim Pack",
+                version="v1.0",
+                status="published",
+            )
+            reward = RewardCatalog(
+                id="reward_pass_card_pack",
+                artist_id="artist_nova3",
+                reward_type="card_pack",
+                name="Pass Claim Pack Reward",
+                metadata_={"cardPackId": pack.id},
+                status="published",
+            )
+            season = PassSeason(
+                id="pass_card_pack_season",
+                artist_id="artist_nova3",
+                title="Card Pack Pass",
+                starts_at=now() - timedelta(days=1),
+                ends_at=now() + timedelta(days=1),
+                status="published",
+            )
+            tier = PassTier(
+                id="pass_card_pack_tier",
+                season_id=season.id,
+                tier=1,
+                required_xp=1,
+                reward_id=reward.id,
+            )
+            event = EngagementEvent(
+                id="evt_pass_card_pack_xp",
+                user_id="fan",
+                kind="card_collected",
+                source_type="user_card",
+                source_id="seeded_pass_card",
+                payload={"artistId": "artist_nova3"},
+                status="processed",
+                processed_at=now(),
+            )
+            session.add_all(
+                [
+                    pack,
+                    CardPackCard(
+                        id="pack_pass_claim_card",
+                        pack_id=pack.id,
+                        card_id=seeded["ids"]["publishedCardId"],
+                        position=1,
+                        probability=100,
+                    ),
+                    reward,
+                    season,
+                    tier,
+                    event,
+                    XpLedger(
+                        id="xp_pass_card_pack",
+                        user_id="fan",
+                        event_id=event.id,
+                        rule_key="card_collected",
+                        amount=1,
+                    ),
+                ]
+            )
+            await session.commit()
+
+    asyncio.run(seed_card_pack_pass())
+    claimed = assert_success(actors["fan"].post("/api/me/pass-tiers/pass_card_pack_tier/claim"))
+    assert claimed["rewardGrant"]["type"] == "card_pack"
+    assert claimed["cardPackEntitlement"]["packId"] == "pack_pass_claim"
+
+    async def load_entitlement() -> RewardGrantCardPackEntitlement | None:
+        async with SessionLocal() as session:
+            return await session.scalar(
+                select(RewardGrantCardPackEntitlement).where(
+                    RewardGrantCardPackEntitlement.reward_grant_id == claimed["rewardGrant"]["id"]
+                )
+            )
+
+    entitlement = asyncio.run(load_entitlement())
+    assert entitlement is not None
+    assert entitlement.status == "available"
+
+    opened = assert_success(actors["fan"].post("/api/me/card-packs/pack_pass_claim/open"), 201)
+    assert opened["packId"] == "pack_pass_claim"
+    entitlement = asyncio.run(load_entitlement())
+    assert entitlement is not None
+    assert entitlement.status == "opened"
 
 
 def test_global_progression_includes_grants_from_global_pass_events(

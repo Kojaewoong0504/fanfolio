@@ -2660,13 +2660,22 @@ async def create_admin_reward(
     organization_id, artist_id = await require_engagement_scope(
         session, context, payload.organization_id, payload.artist_id
     )
+    metadata = dict(payload.metadata or {})
+    if payload.reward_type == "card_pack":
+        card_pack_id = str(metadata.get("cardPackId") or "").strip()
+        pack = await session.get(CardPack, card_pack_id) if card_pack_id else None
+        if pack is None or pack.status != "published":
+            raise AppError(409, "CARD_PACK_NOT_PUBLISHED", "공개된 카드팩을 선택해 주세요.")
+        if artist_id is not None and pack.artist_id != artist_id:
+            raise AppError(404, "RESOURCE_NOT_FOUND", "현재 운영 범위의 카드팩을 찾을 수 없습니다.")
+        metadata["cardPackId"] = pack.id
     reward = RewardCatalog(
         id=f"reward_{uuid4().hex[:12]}",
         organization_id=organization_id,
         artist_id=artist_id,
         reward_type=payload.reward_type,
         name=payload.name,
-        metadata_=payload.metadata,
+        metadata_=metadata,
         # Rewards do not have a separate review transition. They become
         # fan-facing catalog entries when an authorized admin registers them.
         status="published",

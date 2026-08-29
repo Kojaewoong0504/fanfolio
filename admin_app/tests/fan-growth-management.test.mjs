@@ -147,7 +147,8 @@ test('season level pass workspace matches the approved sidecar management design
 test('season level pass drawer anchors its footer inside the drawer', () => {
   assert.match(css, /\.fan-pass-drawer\s*\{[^}]*position:\s*relative/)
   assert.match(css, /\.fan-pass-editor-form\s*\{[^}]*position:\s*relative/)
-  assert.match(css, /\.fan-pass-editor-form\s*>\s*\.drawer-footer\s*\{[^}]*position:\s*absolute/)
+  assert.match(css, /\.fan-pass-editor-form\s*\{[^}]*overflow-y:\s*auto/)
+  assert.match(css, /\.fan-pass-editor-form\s*>\s*\.drawer-footer\s*\{[^}]*position:\s*sticky/)
 })
 
 test('fan growth management styles stay responsive without horizontal overflow', () => {
@@ -156,6 +157,13 @@ test('fan growth management styles stay responsive without horizontal overflow',
   assertMatches(css, /pass-tier-list/, 'styles the pass tier list')
   assertMatches(css, /overflow-wrap:\s*anywhere/, 'long Korean labels can wrap inside narrow panels')
   assertMatches(css, /@media\s*\(max-width:\s*767px\)[\s\S]*fan-growth-grid/, 'fan growth view has a mobile breakpoint')
+})
+
+test('fan pass tier rows keep XP and reward controls readable in a narrow drawer', () => {
+  assert.match(css, /\.fan-pass-editor-form \.pass-tier-row\s*\{[^}]*grid-template-columns:\s*24px minmax\(0, 1fr\) minmax\(0, 1fr\) 28px/s)
+  assert.match(css, /\.fan-pass-editor-form \.pass-tier-row > \.field:nth-of-type\(2\)\s*\{[^}]*grid-column:\s*2\s*\/\s*3/s)
+  assert.match(css, /\.fan-pass-editor-form \.pass-tier-row > \.field:nth-of-type\(3\)\s*\{[^}]*grid-column:\s*3\s*\/\s*4/s)
+  assert.match(css, /@media\s*\(max-width:\s*767px\)[\s\S]*\.fan-pass-editor-form \.pass-tier-row\s*\{[\s\S]*grid-template-columns:\s*24px minmax\(0, 1fr\) 28px/s)
 })
 
 test('fan pass editor offers reusable 15 and 30 level season presets', () => {
@@ -182,6 +190,7 @@ test('mission editor exposes collection completion as a processable engagement e
   assert.match(source, /컬렉션 완성/)
 })
 
-test('reward editor explains that points and card packs are mission or shop benefits', () => {
-  assert.match(source, /포인트·카드팩은 미션 보상 또는 상점 상품에서 운영합니다/)
+test('reward editor explains the supported point and card-pack reward paths', () => {
+  assert.match(source, /카드팩은 공개된 카드팩을 팬 패스 수령 보상으로 지급합니다/)
+  assert.match(source, /value: "card_pack"/)
 })

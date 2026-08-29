@@ -1387,11 +1387,15 @@ function rewardDrawer() {
   ];
   const imagePreset = reward.metadata?.imagePreset || "ticket";
   const imageSource = rewardImageSource(reward);
+  const cardPackOptions = state.cardPacks
+    .filter((pack) => pack.status === "published")
+    .map((pack) => ({ value: pack.id, label: `${pack.name} · ${pack.version || "버전 미설정"}` }));
   const rewardTypes = [
     { value: "badge", label: "뱃지" },
     { value: "title", label: "칭호" },
     { value: "profile_frame", label: "프로필 프레임" },
     { value: "digital_bonus", label: "디지털 특전" },
+    { value: "card_pack", label: "카드팩" },
   ];
   return `${drawerHeader("", "보상 만들기", "업적과 레벨 패스에서 팬에게 지급할 보상을 등록합니다.")}<form class="drawer-body form reward-editor-form" id="reward-form">
     <section class="reward-image-section"><h3>보상 이미지</h3><div class="reward-image-picker"><div class="reward-image-preview"><img id="reward-image-preview" src="${escapeHtml(imageSource)}" alt="선택한 보상 이미지 미리보기" /></div><div class="reward-image-actions"><button class="primary" id="reward-image-upload-button" type="button">${icon("upload")} 이미지 업로드</button><button class="secondary" id="reward-media-library-button" type="button" aria-controls="reward-image-presets">${icon("collections")} 기본 이미지 선택</button><small>직접 업로드하거나 아래 기본 이미지 4종에서 선택<br />권장 512 × 512px · PNG, JPG, WEBP</small><input id="reward-image-file" type="file" accept="image/png,image/jpeg,image/webp" hidden /></div></div>
@@ -1399,7 +1403,8 @@ function rewardDrawer() {
       <div class="reward-image-presets" id="reward-image-presets" role="list" aria-label="보상 이미지 라이브러리">${rewardImagePresets.map((preset) => `<button class="reward-image-preset ${imagePreset === preset.id && !state.rewardImagePreviewUrl ? "selected" : ""}" type="button" data-reward-image-preset="${preset.id}" aria-label="${escapeHtml(preset.label)}"><img src="${preset.src}" alt="" />${imagePreset === preset.id && !state.rewardImagePreviewUrl ? `<span>${icon("check")}</span>` : ""}</button>`).join("")}</div>
     </section>
     <label class="field"><span>보상 이름</span><input name="name" value="${escapeHtml(reward.name || "")}" placeholder="예: NOVA 첫 수집가" required /></label>
-    <label class="field"><span>보상 종류</span>${adminSelect({ id: "reward-type", name: "rewardType", value: reward.rewardType || "badge", label: "보상 종류", className: "form-select", options: rewardTypes })}<small class="field-help">포인트·카드팩은 미션 보상 또는 상점 상품에서 운영합니다.</small></label>
+    <label class="field"><span>보상 종류</span>${adminSelect({ id: "reward-type", name: "rewardType", value: reward.rewardType || "badge", label: "보상 종류", className: "form-select", options: rewardTypes })}<small class="field-help">카드팩은 공개된 카드팩을 팬 패스 수령 보상으로 지급합니다.</small></label>
+    <label class="field"><span>카드팩 보상</span>${adminSelect({ id: "reward-card-pack", name: "cardPackId", value: reward.metadata?.cardPackId || "", label: "공개 카드팩", className: "form-select", options: [{ value: "", label: cardPackOptions.length ? "카드팩 선택" : "공개 카드팩 없음" }, ...cardPackOptions] })}<small class="field-help">보상 종류가 카드팩일 때만 사용되며, 공개된 카드팩만 선택할 수 있습니다.</small></label>
     ${isRoot() ? `<label class="field"><span>조직</span>${adminSelect({ id: "reward-organization", name: "organizationId", value: reward.organizationId || "", label: "조직", className: "form-select", options: organizationScopeOptions })}<small>아티스트 범위 보상은 해당 조직과 함께 지정해야 합니다.</small></label>` : `<input name="organizationId" type="hidden" value="${escapeHtml(reward.organizationId || state.adminContext?.organizationId || "")}" />`}
     <label class="field"><span>아티스트</span>${adminSelect({ id: "reward-artist", name: "artistId", value: reward.artistId || "", label: "아티스트", className: "form-select", options: artistScopeOptions })}</label>
     <label class="field"><span>표시 라벨</span><input name="label" value="${escapeHtml(reward.metadata?.label || "")}" placeholder="팬 프로필에 표시할 라벨" /></label>
@@ -2128,20 +2133,38 @@ async function loadCardThumbnails(cards) {
   await Promise.all(cards.map(async (card) => {
     if (!card.sourceImageUrl || state.cardThumbnailUrls[card.id]) return;
     try {
-      const response = await fetch(`${API_BASE}${card.sourceImageUrl.replace(/^\/api/, "")}`, {
-        credentials: "include",
-        headers: {
-          "X-Fanfolio-Client": "admin",
-          ...(ACCESS_TOKEN ? { Authorization: `Bearer ${ACCESS_TOKEN}` } : {}),
-        },
-      });
-      if (!response.ok) return;
-      state.cardThumbnailUrls[card.id] = URL.createObjectURL(await response.blob());
+      state.cardThumbnailUrls[card.id] = await loadAdminImageBlobUrl(card.sourceImageUrl);
     } catch {
       // A missing thumbnail must not prevent the card table from rendering.
     }
   }));
-  if (state.authenticated && state.view === "cards") layout();
+  if (state.authenticated && (state.view === "cards" || state.view === "events" || state.drawer === "event")) layout();
+}
+
+async function loadAdminImageBlobUrl(url) {
+  let response = await fetch(resolveAdminAssetUrl(url), {
+    credentials: "include",
+    headers: {
+      "X-Fanfolio-Client": "admin",
+      ...(ACCESS_TOKEN ? { Authorization: `Bearer ${ACCESS_TOKEN}` } : {}),
+    },
+  });
+  if (response.status === 401) {
+    await refreshAccessToken();
+    response = await fetch(resolveAdminAssetUrl(url), {
+      credentials: "include",
+      headers: {
+        "X-Fanfolio-Client": "admin",
+        ...(ACCESS_TOKEN ? { Authorization: `Bearer ${ACCESS_TOKEN}` } : {}),
+      },
+    });
+  }
+  if (!response.ok) throw new Error(`IMAGE ${response.status}`);
+  return URL.createObjectURL(await response.blob());
+}
+
+async function loadUploadedAssetPreview(assetId) {
+  return loadAdminImageBlobUrl(`/assets/${encodeURIComponent(assetId)}/content`);
 }
 function cardBackImageAssetId(card) {
   return card?.backImageAssetId || card?.designConfig?.back?.backImageAssetId || card?.designConfig?.back?.imageAssetId || null;
@@ -2325,7 +2348,7 @@ function eventRelatedCardOptions(event) {
   const selected = new Set(event.relatedCardIds || []);
   const cards = cardCatalogItems().filter((card) => card.status === "published");
   if (!cards.length) return '<small class="field-help">연결 가능한 공개 카드가 없습니다.</small>';
-  return `<div class="event-related-card-options">${cards.map((card) => `<label class="event-card-option"><input type="checkbox" name="relatedCardIds" value="${escapeHtml(card.id)}" ${selected.has(card.id) ? "checked" : ""} /><span class="event-card-check" aria-hidden="true">${icon("check")}</span><span class="event-card-thumb" aria-hidden="true">${icon("style")}</span><span class="event-card-copy"><strong>${escapeHtml(card.name || card.id)}</strong><small>${escapeHtml(card.memberName || "공개 카드")}</small></span><span class="event-card-order">${selected.has(card.id) ? "선택됨" : "연결"}</span></label>`).join("")}</div>`;
+  return `<div class="event-related-card-options">${cards.map((card) => `<label class="event-card-option"><input type="checkbox" name="relatedCardIds" value="${escapeHtml(card.id)}" ${selected.has(card.id) ? "checked" : ""} /><span class="event-card-check" aria-hidden="true">${icon("check")}</span><span class="event-card-thumb" aria-hidden="true">${state.cardThumbnailUrls[card.id] ? `<img src="${escapeHtml(state.cardThumbnailUrls[card.id])}" alt="" />` : icon("style")}</span><span class="event-card-copy"><strong>${escapeHtml(card.name || card.id)}</strong><small>${escapeHtml(card.memberName || "공개 카드")}</small></span><span class="event-card-order">${selected.has(card.id) ? "선택됨" : "연결"}</span></label>`).join("")}</div>`;
 }
 
 function eventsView() {
@@ -2338,7 +2361,7 @@ function eventsView() {
   const deepLinkedEditor = isEventDeepLink() && can("events:write") && !state.eventEditorOpen
     ? `<section class="panel event-editor-fallback" aria-label="이벤트 등록">${eventDrawer()}</section>`
     : "";
-  return `<div class="page-heading"><div><p class="eyebrow">EDITORIAL OPERATIONS</p><h2>이벤트 관리</h2><p>팬앱 홈과 이벤트 페이지에 노출할 콘텐츠를 등록하고 공개 일정을 관리합니다.</p></div>${can("events:write") ? `<a class="primary" id="open-event-drawer" href="?view=events&drawer=event" aria-haspopup="dialog">${icon("add")} 이벤트 등록</a>` : ""}</div>${deepLinkedEditor}<div class="event-workspace"><section class="panel event-list-panel"><div class="panel-heading"><div><p class="eyebrow">EVENT QUEUE</p><h3>이벤트 목록</h3></div><span>${state.eventPagination.total || state.events.length}개 항목</span></div><div class="toolbar compact-toolbar"><label class="search-field grow">${icon("search")}<input id="event-search" placeholder="이벤트명, 설명 검색" value="${escapeHtml(state.eventQuery)}" /></label>${adminSelect({ id: "event-status-filter", value: state.eventStatus, label: "이벤트 상태", className: "filter-select event-status-filter", options: status })}${adminSelect({ id: "event-type-filter", value: state.eventType, label: "이벤트 유형", className: "filter-select event-type-filter", options: type })}${adminSelect({ id: "event-artist-filter", value: state.eventArtist, label: "아티스트", className: "filter-select event-artist-filter", options: artists })}</div><div class="table-wrap"><table class="table responsive-table event-table"><thead><tr><th>이벤트</th><th>유형</th><th>시작일</th><th>상태</th><th><span class="sr-only">관리</span></th></tr></thead><tbody>${rows}</tbody></table></div>${eventPagination()}</section>${detail}</div>`;
+  return `<div class="page-heading"><div><p class="eyebrow">EDITORIAL OPERATIONS</p><h2>이벤트 관리</h2><p>팬앱 홈과 이벤트 페이지에 노출할 콘텐츠를 등록하고 공개 일정을 관리합니다.</p></div>${can("events:write") ? `<button class="primary" id="open-event-drawer" data-open-drawer="event" type="button" aria-haspopup="dialog">${icon("add")} 이벤트 등록</button>` : ""}</div>${deepLinkedEditor}<div class="event-workspace"><section class="panel event-list-panel"><div class="panel-heading"><div><p class="eyebrow">EVENT QUEUE</p><h3>이벤트 목록</h3></div><span>${state.eventPagination.total || state.events.length}개 항목</span></div><div class="toolbar compact-toolbar"><label class="search-field grow">${icon("search")}<input id="event-search" placeholder="이벤트명, 설명 검색" value="${escapeHtml(state.eventQuery)}" /></label>${adminSelect({ id: "event-status-filter", value: state.eventStatus, label: "이벤트 상태", className: "filter-select event-status-filter", options: status })}${adminSelect({ id: "event-type-filter", value: state.eventType, label: "이벤트 유형", className: "filter-select event-type-filter", options: type })}${adminSelect({ id: "event-artist-filter", value: state.eventArtist, label: "아티스트", className: "filter-select event-artist-filter", options: artists })}</div><div class="table-wrap"><table class="table responsive-table event-table"><thead><tr><th>이벤트</th><th>유형</th><th>시작일</th><th>상태</th><th><span class="sr-only">관리</span></th></tr></thead><tbody>${rows}</tbody></table></div>${eventPagination()}</section>${detail}</div>`;
 }
 
 function eventTypeIcon(type) { return ({ comment: "chat_bubble", card_drop: "style", card: "style", fan_mission: "workspace_premium", external: "open_in_new" })[type] || "campaign"; }
@@ -2403,25 +2426,7 @@ async function loadEventHeroPreview() {
     const heroUrl = image.dataset.heroUrl;
     if (!heroUrl) return;
     try {
-      let response = await fetch(resolveAdminAssetUrl(heroUrl), {
-        credentials: "include",
-        headers: {
-          "X-Fanfolio-Client": "admin",
-          ...(ACCESS_TOKEN ? { Authorization: `Bearer ${ACCESS_TOKEN}` } : {}),
-        },
-      });
-      if (response.status === 401) {
-        await refreshAccessToken();
-        response = await fetch(resolveAdminAssetUrl(heroUrl), {
-          credentials: "include",
-          headers: {
-            "X-Fanfolio-Client": "admin",
-            ...(ACCESS_TOKEN ? { Authorization: `Bearer ${ACCESS_TOKEN}` } : {}),
-          },
-        });
-      }
-      if (!response.ok) throw new Error(`HERO ${response.status}`);
-      image.src = URL.createObjectURL(await response.blob());
+      image.src = await loadAdminImageBlobUrl(heroUrl);
     } catch {
       const fallback = document.createElement("div");
       fallback.className = image.closest(".event-upload-thumbnail") ? "event-upload-image-fallback" : "event-preview-fallback";
@@ -5378,6 +5383,9 @@ async function saveReward(event) {
           color: "violet",
           imagePreset: imageAssetId ? null : String(data.get("imagePreset") || "ticket"),
           imageAssetId,
+          ...(data.get("rewardType") === "card_pack" && data.get("cardPackId")
+            ? { cardPackId: String(data.get("cardPackId")) }
+            : {}),
         },
       }),
     });
@@ -6176,7 +6184,14 @@ function bind() {
     const name = document.querySelector("#event-banner-file-name");
     if (file && name) name.textContent = file.name;
     if (!file) return;
-    try { event.currentTarget.form.elements.heroAssetId.value = await uploadAsset(file, "event_banner"); toast("이벤트 배너를 업로드했습니다."); } catch { event.currentTarget.value = ""; toast("이벤트 배너 업로드에 실패했습니다."); }
+    try {
+      const assetId = await uploadAsset(file, "event_banner");
+      event.currentTarget.form.elements.heroAssetId.value = assetId;
+      const previewUrl = await loadUploadedAssetPreview(assetId);
+      const thumbnail = event.currentTarget.form.querySelector(".event-upload-thumbnail");
+      if (thumbnail) thumbnail.innerHTML = `<img data-event-hero src="${escapeHtml(previewUrl)}" alt="현재 이벤트 배너" />`;
+      toast("이벤트 배너를 업로드했습니다.");
+    } catch { event.currentTarget.value = ""; toast("이벤트 배너 업로드에 실패했습니다."); }
   });
   document.querySelector('#event-form [data-select-id="event-type"] .admin-select-value')?.addEventListener("change", (event) => {
     const field = document.querySelector("#event-connection-field"); if (!field) return;

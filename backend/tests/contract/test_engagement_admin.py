@@ -9,6 +9,8 @@ from app.models import (
     AchievementDefinition,
     Artist,
     Card,
+    CardPack,
+    CardPackCard,
     Drop,
     EngagementEvent,
     Organization,
@@ -901,6 +903,7 @@ def test_root_scoped_artist_achievement_rejects_other_organization_reward(
                     ),
                 ]
             )
+
             await session.commit()
 
     asyncio.run(seed_rewards())
@@ -942,6 +945,51 @@ def test_root_scoped_artist_achievement_rejects_other_organization_reward(
     )
     assert global_draft["organizationId"] is None
     assert global_draft["rewardIds"] == ["reward_global_title"]
+
+
+def test_admin_can_create_card_pack_reward_for_published_pack(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    async def seed_pack() -> None:
+        async with SessionLocal() as session:
+            pack = CardPack(
+                id="pack_pass_reward",
+                artist_id="artist_nova3",
+                name="Pass Reward Pack",
+                version="v1.0",
+                status="published",
+            )
+            session.add(pack)
+            session.add(
+                CardPackCard(
+                    id="pack_pass_reward_card",
+                    pack_id=pack.id,
+                    card_id=seeded["ids"]["publishedCardId"],
+                    position=1,
+                    probability=100,
+                )
+            )
+            await session.commit()
+
+    asyncio.run(seed_pack())
+    organization, _ = create_partner(
+        actors["admin"], slug="card-pack-reward-scope", email="card-pack-reward-scope@starwave.com"
+    )
+    created = assert_success(
+        actors["admin"].post(
+            "/api/admin/engagement/rewards",
+            json={
+                "name": "패스 카드팩 보상",
+                "rewardType": "card_pack",
+                "organizationId": organization["id"],
+                "artistId": "artist_nova3",
+                "metadata": {"cardPackId": "pack_pass_reward"},
+            },
+        ),
+        201,
+    )
+    assert created["rewardType"] == "card_pack"
+    assert created["metadata"]["cardPackId"] == "pack_pass_reward"
 
 
 def test_company_admin_artist_achievement_rejects_other_artist_reward(

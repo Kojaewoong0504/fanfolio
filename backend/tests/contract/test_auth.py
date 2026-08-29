@@ -399,6 +399,65 @@ def test_admin_can_issue_an_artist_login_and_artist_can_change_the_temporary_pas
     assert restored.status_code == 200, restored.text
 
 
+def test_development_startup_bootstraps_a_stable_local_artist_studio_login(
+    client: TestClient, monkeypatch: Any
+) -> None:
+    from app.core.config import Settings
+
+    assert client.post("/api/test/reset").status_code == 204
+    local_settings = Settings(
+        app_env="development",
+        database_url=get_settings().database_url,
+        auto_create_schema=False,
+        local_artist_studio_username="local-artist-studio",
+        local_artist_studio_password="local-artist-password-2026",
+    )
+    monkeypatch.setattr("app.main.get_settings", lambda: local_settings)
+    monkeypatch.setattr("app.services.get_settings", lambda: local_settings)
+
+    with TestClient(client.app):
+        login = client.post(
+            "/api/auth/artist/login",
+            json={
+                "username": "local-artist-studio",
+                "password": "local-artist-password-2026",
+            },
+        )
+
+    assert login.status_code == 200, login.text
+    assert login.json()["data"]["mustChangePassword"] is False
+
+
+def test_development_startup_bootstraps_a_stable_local_admin_login(
+    client: TestClient, monkeypatch: Any
+) -> None:
+    from app.core.config import Settings
+
+    assert client.post("/api/test/reset").status_code == 204
+    local_settings = Settings(
+        app_env="development",
+        database_url=get_settings().database_url,
+        auto_create_schema=False,
+        local_admin_email="local-admin@example.com",
+        local_admin_password="local-admin-password-2026",
+    )
+    monkeypatch.setattr("app.main.get_settings", lambda: local_settings)
+    monkeypatch.setattr("app.services.get_settings", lambda: local_settings)
+
+    with TestClient(client.app):
+        login = client.post(
+            "/api/auth/admin/login",
+            json={
+                "email": "local-admin@example.com",
+                "password": "local-admin-password-2026",
+            },
+        )
+
+    assert login.status_code == 200, login.text
+    assert login.json()["data"]["user"]["role"] == "admin"
+    assert login.json()["data"]["mustChangePassword"] is False
+
+
 def test_admin_can_list_artist_accounts_without_exposing_passwords(
     actors: dict[str, TestClient],
 ) -> None:

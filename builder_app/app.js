@@ -1,7 +1,10 @@
 import {
   buildCardPayload,
+  cardDraftErrors,
+  cardEditorStage,
   navigationState,
   normalizeCardEffects,
+  normalizeCatalogSelection,
   normalizeCreativeLayer,
   responsiveStudioMode,
   reviewReadiness,
@@ -16,7 +19,7 @@ const localApiQuery = isLocalHost
 const API_BASE = isLocalHost
   ? localApiQuery ||
     localStorage.getItem('fanfolio_api_base') ||
-    'http://localhost:8000/api'
+    `http://${window.location.hostname}:8000/api`
   : '/api'
 
 const DRAFT_KEY = 'fanfolio_artist_special_card_draft_v2'
@@ -222,16 +225,22 @@ function initialEditor() {
   }
 }
 
-function readDraft() {
+function draftStorageKey(userId = state.profile?.id) {
+  if (!userId) return ''
+  return `${DRAFT_KEY}:${userId}`
+}
+
+function readDraft(userId) {
+  const key = draftStorageKey(userId)
+  if (!key) return null
   try {
-    const parsed = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null')
+    const parsed = JSON.parse(localStorage.getItem(key) || 'null')
     return parsed && typeof parsed === 'object' ? parsed : null
   } catch {
     return null
   }
 }
 
-const savedDraft = readDraft()
 const savedSidebarPreference = localStorage.getItem(SIDEBAR_KEY)
 const initialViewportMode = responsiveStudioMode(window.innerWidth)
 const state = {
@@ -245,12 +254,12 @@ const state = {
   catalog: { items: [], artists: [], members: [], backTemplates: [] },
   insights: null,
   profile: null,
-  cardId: savedDraft?.cardId || null,
-  effectVersionId: savedDraft?.effectVersionId || null,
-  editingCardId: savedDraft?.editingCardId || null,
-  selectedRecipe: savedDraft?.selectedRecipe || 'voice',
-  form: { ...initialForm(), ...(savedDraft?.form || {}) },
-  editor: { ...initialEditor(), ...(savedDraft?.editor || {}) },
+  cardId: null,
+  effectVersionId: null,
+  editingCardId: null,
+  selectedRecipe: 'voice',
+  form: initialForm(),
+  editor: initialEditor(),
   viewportMode: initialViewportMode,
   sidebarCollapsed:
     savedSidebarPreference === null
@@ -291,10 +300,13 @@ function absoluteApiUrl(path) {
 function normalizedMediaType(type, kind) {
   if (kind === 'voice' && type.startsWith('audio/webm')) return 'audio/webm'
   if (kind === 'voice' && type.startsWith('audio/mp4')) return 'audio/mp4'
+  if (kind === 'voice' && type === 'audio/x-wav') return 'audio/wav'
   return type
 }
 
 function persistDraft() {
+  const key = draftStorageKey()
+  if (!key) return
   const editor = Object.fromEntries(
     Object.entries(state.editor).filter(
       ([key, value]) =>
@@ -308,7 +320,7 @@ function persistDraft() {
   }))
   try {
     localStorage.setItem(
-      DRAFT_KEY,
+      key,
       JSON.stringify({
         cardId: state.cardId,
         editingCardId: state.editingCardId,
@@ -322,8 +334,29 @@ function persistDraft() {
   }
 }
 
-function clearDraft() {
+function clearDraft(userId = state.profile?.id) {
+  const key = draftStorageKey(userId)
+  if (key) localStorage.removeItem(key)
   localStorage.removeItem(DRAFT_KEY)
+}
+
+function restoreDraftForUser(userId, cards = []) {
+  const draft = readDraft(userId)
+  localStorage.removeItem(DRAFT_KEY)
+  if (!draft) return
+  const card = draft.cardId ? cards.find((item) => item.id === draft.cardId) : null
+  const cardExists = Boolean(card && cardEditorStage(card) === 'design')
+  if (draft.cardId && card && !cardExists) {
+    localStorage.removeItem(draftStorageKey(userId))
+    return
+  }
+  state.cardId = cardExists ? draft.cardId : null
+  state.editingCardId = cardExists ? draft.editingCardId || draft.cardId : null
+  state.effectVersionId = draft.effectVersionId || null
+  state.selectedRecipe = draft.selectedRecipe || 'voice'
+  state.form = { ...initialForm(), ...(draft.form || {}) }
+  state.editor = { ...initialEditor(), ...(draft.editor || {}) }
+  state.saveStatus = 'saved'
 }
 
 async function refreshAccessToken() {
@@ -815,7 +848,11 @@ function stickerInspector() {
 }
 
 function voiceInspector() {
+  const voiceRequirement = state.editor.voiceEnabled && !state.editor.voiceSrc
+    ? `<div class="media-requirement" role="status">${icon('info')}<span><strong>검수 제출 전 음성 파일이 필요해요.</strong><small>파일을 업로드하거나 브라우저에서 녹음해 주세요.</small></span></div>`
+    : ''
   return `<div class="feature-toggle"><span>${icon('graphic_eq')}<span><strong>보이스 카드</strong><small>재생은 팬이 직접 선택해요.</small></span></span><button type="button" class="switch ${state.editor.voiceEnabled ? 'on' : ''}" data-action="toggle-voice" aria-pressed="${state.editor.voiceEnabled}" aria-label="보이스 카드 켜기"></button></div>
+  ${voiceRequirement}
   <div class="voice-recorder ${state.recording ? 'recording' : ''}">
     <span class="record-orb">${icon(state.recording ? 'mic' : 'mic_none')}</span>
     <div><strong>${state.recording ? '보이스를 녹음하고 있어요' : state.editor.voiceName || '브라우저에서 바로 녹음'}</strong><small>${state.recording ? '완료되면 정지 버튼을 눌러 주세요.' : '마이크 권한은 녹음하는 동안에만 사용됩니다.'}</small></div>
@@ -828,7 +865,11 @@ function voiceInspector() {
 }
 
 function motionInspector() {
+  const videoRequirement = state.editor.videoEnabled && !state.editor.videoSrc
+    ? `<div class="media-requirement" role="status">${icon('info')}<span><strong>검수 제출 전 모션 영상이 필요해요.</strong><small>MP4 또는 WebM 영상을 추가해 주세요.</small></span></div>`
+    : ''
   return `<div class="feature-toggle"><span>${icon('movie')}<span><strong>모션 카드</strong><small>짧은 영상 레이어를 연결해요.</small></span></span><button type="button" class="switch ${state.editor.videoEnabled ? 'on' : ''}" data-action="toggle-motion" aria-pressed="${state.editor.videoEnabled}" aria-label="모션 카드 켜기"></button></div>
+  ${videoRequirement}
   ${uploadBox('video', 'video/mp4,video/webm', '모션 영상 업로드', 'MP4, WebM · 15초 이하 권장')}
   ${state.editor.videoSrc ? `<div class="video-preview"><video src="${esc(state.editor.videoSrc)}" muted loop controls playsinline preload="metadata"></video><div><strong>${esc(state.editor.videoName || '모션 영상')}</strong><button type="button" class="text-button danger" data-action="remove-video">삭제</button></div></div>` : `<div class="media-empty tall">${icon('video_library')}<span>영상을 올리면 카드 화면에서 바로 확인할 수 있어요.</span></div>`}
   <label class="check-row"><input type="checkbox" data-editor="videoLoop" ${state.editor.videoLoop ? 'checked' : ''} /><span><strong>반복 재생</strong><small>팬이 영상을 연 뒤 자연스럽게 반복합니다.</small></span></label>
@@ -885,7 +926,9 @@ function editorProgress() {
     ['review', '4', '검수 요청'],
   ]
   const current = stages.findIndex(([value]) => value === state.stage)
-  return `<nav class="editor-progress" aria-label="카드 제작 단계">${stages.map(([value, number, label], index) => `<button type="button" data-editor-stage="${value}" class="${index === current ? 'active' : index < current ? 'complete' : ''}"><span>${index < current ? icon('check') : number}</span><strong>${label}</strong></button>${index < stages.length - 1 ? '<i></i>' : ''}`).join('')}</nav>`
+  const currentCard = state.cards.find((card) => card.id === state.cardId)
+  const designLocked = Boolean(currentCard && cardEditorStage(currentCard) !== 'design')
+  return `<nav class="editor-progress" aria-label="카드 제작 단계">${stages.map(([value, number, label], index) => `<button type="button" data-editor-stage="${value}" class="${index === current ? 'active' : index < current ? 'complete' : ''}" ${value === 'design' && designLocked ? 'disabled aria-disabled="true"' : ''}><span>${index < current ? icon('check') : number}</span><strong>${label}</strong></button>${index < stages.length - 1 ? '<i></i>' : ''}`).join('')}</nav>`
 }
 
 function designStage() {
@@ -935,7 +978,10 @@ function detailsStage() {
 
 function fanPreviewStage() {
   state.editor.previewOpened = true
-  persistDraft()
+  const activeCard = state.cards.find((item) => item.id === state.cardId)
+  const editable = !activeCard || cardEditorStage(activeCard) === 'design'
+  if (editable) persistDraft()
+  else clearDraft()
   const canOfferDeviceMotion =
     window.isSecureContext === true && typeof window.DeviceOrientationEvent !== 'undefined'
   const motionStatus =
@@ -1008,10 +1054,25 @@ function reviewStage() {
   const readinessItems = Object.values(readiness.items)
   const completedReadinessCount = readinessItems.filter((item) => item.status !== 'missing').length
   const totalReadinessCount = Object.values(readiness.items).length
+  const readinessTarget = {
+    image: 'photo',
+    handwriting: 'handwriting',
+    voice: 'voice',
+    video: 'motion',
+    lenticular: 'lenticular',
+  }
   return `<section class="review-stage">
     <div class="review-card-preview"><span class="page-kicker">FINAL CHECK</span><h2>운영팀에 보내기 전 마지막 확인</h2><p>필수 항목이 모두 준비되면 검수 요청을 보낼 수 있어요.</p>${cardVisual()}<div class="review-summary"><strong>${esc(state.form.name)}</strong><span>${esc(state.form.seasonName)} · ${esc(state.form.rarity)} · ${Number(state.form.issueLimit).toLocaleString('ko-KR')}장</span></div></div>
     <div class="review-panel"><div class="review-panel-heading"><div><span>REVIEW READINESS</span><h3>${readiness.ready ? '검수 준비가 완료됐어요.' : '추가로 준비할 항목이 있어요.'}</h3></div><span class="readiness-score ${readiness.ready ? 'ready' : ''}">${completedReadinessCount}/${totalReadinessCount}</span></div>
-      <div class="readiness-list">${Object.entries(readiness.items).map(([key, item]) => `<div class="readiness-row ${item.status}"><span>${icon(item.status === 'missing' ? 'error' : item.status === 'optional' ? 'remove_circle' : 'check_circle')}<strong>${readinessLabels[key]}</strong></span><small>${item.label}</small></div>`).join('')}</div>
+      <div class="readiness-list">${Object.entries(readiness.items).map(([key, item]) => {
+        const target = readinessTarget[key]
+        const actionable = item.status === 'missing' && (target || ['catalog', 'issueLimit', 'preview'].includes(key))
+        const tag = actionable ? 'button' : 'div'
+        const attributes = actionable
+          ? ` type="button" data-readiness-key="${esc(key)}" aria-label="${esc(readinessLabels[key])} 수정"`
+          : ''
+        return `<${tag} class="readiness-row ${item.status}${actionable ? ' actionable' : ''}"${attributes}><span>${icon(item.status === 'missing' ? 'error' : item.status === 'optional' ? 'remove_circle' : 'check_circle')}<strong>${readinessLabels[key]}</strong></span><small>${item.label}</small></${tag}>`
+      }).join('')}</div>
       ${releaseStatus === 'changes_requested' ? releaseStatusBanner(currentCard) : ''}
       <label class="review-note">운영팀에 전달할 메모<textarea data-review-note maxlength="500" rows="4" placeholder="공개 희망일, 미디어 확인 포인트 등을 적어 주세요.">${esc(state.reviewNote)}</textarea><small>${state.reviewNote.length}/500</small></label>
       ${state.reviewError ? `<p class="review-error" role="alert">${esc(state.reviewError)}</p>` : ''}
@@ -1029,8 +1090,7 @@ function editorView() {
     review: reviewStage,
   }[state.stage]?.() || designStage()
   const activeCard = state.cards.find((item) => item.id === state.cardId)
-  const cardIsUnderReview = activeCard?.releaseStatus && !['draft', 'changes_requested'].includes(activeCard.releaseStatus)
-  return `<section class="editor-view"><div class="editor-title-row"><div><button type="button" class="back-link" data-action="exit-editor">${icon('arrow_back')} 내 카드</button><h2>${esc(state.form.name || '새 특별 카드')}</h2>${activeCard ? releaseStatusBanner(activeCard, { compact: true }) : ''}</div><div>${!cardIsUnderReview ? `<button type="button" class="secondary-button" data-action="save-draft" ${state.busy ? 'disabled' : ''}>${icon('save')} ${state.busy ? '저장 중' : '초안 저장'}</button>` : ''}${state.stage === 'design' ? `<button type="button" class="primary-button" data-action="go-details">카드 정보 입력 ${icon('arrow_forward')}</button>` : ''}</div></div>${editorProgress()}${stageContent}</section>`
+  return `<section class="editor-view"><div class="editor-title-row"><div><button type="button" class="back-link" data-action="exit-editor">${icon('arrow_back')} 내 카드</button><h2>${esc(state.form.name || '새 특별 카드')}</h2>${activeCard ? releaseStatusBanner(activeCard, { compact: true }) : ''}</div><div>${state.stage === 'design' ? `<button type="button" class="secondary-button" data-action="save-draft" ${state.busy ? 'disabled' : ''}>${icon('save')} ${state.busy ? '저장 중' : '초안 저장'}</button><button type="button" class="primary-button" data-action="go-details">카드 정보 입력 ${icon('arrow_forward')}</button>` : ''}</div></div>${editorProgress()}${stageContent}</section>`
 }
 
 function cardsView() {
@@ -1107,6 +1167,11 @@ function markDirty() {
     window.clearTimeout(autosaveTimer)
     autosaveTimer = window.setTimeout(() => saveDraft({ quiet: true }), 1200)
   }
+}
+
+function cancelAutosave() {
+  window.clearTimeout(autosaveTimer)
+  autosaveTimer = null
 }
 
 function setRecipe(recipeId) {
@@ -1214,6 +1279,8 @@ async function changePassword(formElement) {
 }
 
 async function logoutArtist() {
+  cancelAutosave()
+  const userId = state.profile?.id
   try {
     await api('/auth/logout', { method: 'POST' })
   } catch {
@@ -1225,7 +1292,7 @@ async function logoutArtist() {
   state.profile = null
   state.deviceMotionStatus = 'idle'
   state.deviceMotionEnabled = false
-  clearDraft()
+  clearDraft(userId)
   render()
 }
 
@@ -1243,15 +1310,11 @@ async function loadStudioData() {
   state.catalog = catalog.data
   state.profile = profile.data
   state.insights = insights.data
+  restoreDraftForUser(state.profile.id, state.cards)
   state.authenticated = true
-  if (!state.form.artistId && state.catalog.artists?.[0]) {
-    state.form.artistId = state.catalog.artists[0].id
-  }
-  if (!state.form.memberId && state.form.artistId) {
-    state.form.memberId = state.catalog.members.find(
-      (member) => member.artistId === state.form.artistId,
-    )?.id || null
-  }
+  const selection = normalizeCatalogSelection(state.form, state.catalog)
+  state.form.artistId = selection.artistId
+  state.form.memberId = selection.memberId
 }
 
 async function loadInsights() {
@@ -1355,6 +1418,8 @@ async function saveDraft({ quiet = false, nextStage = null } = {}) {
   state.saveStatus = 'saving'
   if (!quiet) render()
   try {
+    const draftErrors = cardDraftErrors({ form: state.form, editor: state.editor })
+    if (draftErrors.length) throw new Error(draftErrors.join(' '))
     await ensureAsset('image')
     if (state.editor.voiceEnabled && state.editor.voiceSrc) await ensureAsset('voice')
     if (state.editor.videoEnabled && state.editor.videoSrc) await ensureAsset('video')
@@ -1452,7 +1517,7 @@ async function openCard(cardId) {
   state.cardId = card.id
   state.editingCardId = card.id
   state.reviewNote = card.reviewNote || ''
-  state.stage = 'design'
+  state.stage = cardEditorStage(card)
   state.view = 'editor'
   state.saveStatus = 'saved'
   render()
@@ -1508,7 +1573,8 @@ async function openCard(cardId) {
       })
     }
   }
-  persistDraft()
+  if (state.stage === 'design') persistDraft()
+  else clearDraft()
   render()
 }
 
@@ -1539,6 +1605,21 @@ function replaceObjectUrl(key, file) {
 
 async function handleUpload(kind, file) {
   if (!file) return
+  const uploadRules = {
+    image: { types: ['image/png', 'image/jpeg', 'image/webp'], label: 'JPG, PNG 또는 WebP 이미지' },
+    handwriting: { types: ['image/png', 'image/jpeg', 'image/webp'], label: 'JPG, PNG 또는 WebP 이미지' },
+    lenticular: { types: ['image/png', 'image/jpeg', 'image/webp'], label: 'JPG, PNG 또는 WebP 이미지' },
+    sticker: { types: ['image/png', 'image/webp'], label: 'PNG 또는 WebP 이미지' },
+    voice: { types: ['audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-wav', 'audio/webm'], label: 'MP3, M4A, WAV 또는 WebM 음성' },
+    video: { types: ['video/mp4', 'video/webm'], label: 'MP4 또는 WebM 영상' },
+  }
+  const rule = uploadRules[kind]
+  if (rule && file.type && !rule.types.includes(file.type)) {
+    throw new Error(`${rule.label}만 업로드할 수 있어요.`)
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    throw new Error('업로드 파일은 10MB 이하만 사용할 수 있어요.')
+  }
   if (kind === 'sticker') {
     const src = await fileToDataUrl(file)
     upsertCreativeLayer('sticker', {
@@ -1993,6 +2074,7 @@ async function pollBackgroundRemoval(jobId) {
 }
 
 async function submitReview() {
+  if (state.busy) return
   state.reviewError = ''
   const card = await saveDraft({ quiet: true })
   if (!card) {
@@ -2050,9 +2132,11 @@ async function loadCollaborationComments(cardId, renderAfter = true) {
 }
 
 async function createCollaborationComment(form) {
-  if (!state.cardId) return
+  if (!state.cardId || state.busy) return
   const values = Object.fromEntries(new FormData(form).entries())
   state.collaborationCommentError = ''
+  state.busy = true
+  render()
   try {
     await api(`/artist/cards/${encodeURIComponent(state.cardId)}/comments`, {
       method: 'POST',
@@ -2062,12 +2146,15 @@ async function createCollaborationComment(form) {
     await loadCollaborationComments(state.cardId, false)
   } catch (error) {
     state.collaborationCommentError = error.message
+  } finally {
+    state.busy = false
   }
   render()
 }
 
 async function resolveCollaborationComment(commentId) {
-  if (!state.cardId) return
+  if (!state.cardId || state.busy) return
+  state.busy = true
   try {
     await api(`/artist/cards/${encodeURIComponent(state.cardId)}/comments/${encodeURIComponent(commentId)}`, {
       method: 'PATCH',
@@ -2076,17 +2163,24 @@ async function resolveCollaborationComment(commentId) {
     await loadCollaborationComments(state.cardId, false)
   } catch (error) {
     state.collaborationCommentError = error.message
+  } finally {
+    state.busy = false
   }
   render()
 }
 
 async function saveProfile(formElement) {
   const form = new FormData(formElement)
+  const nickname = form.get('nickname')?.toString().trim()
+  if (!nickname) {
+    notify('표시 이름을 입력해주세요.', 'error')
+    return
+  }
   try {
     const result = await api('/artist/profile', {
       method: 'PATCH',
       body: JSON.stringify({
-        nickname: form.get('nickname')?.toString().trim(),
+        nickname,
         emailEnabled: form.get('emailEnabled') === 'on',
       }),
     })
@@ -2174,6 +2268,28 @@ app.addEventListener('click', async (event) => {
     navigate(nav.dataset.nav)
     return
   }
+  const readinessAction = event.target.closest('[data-readiness-key]')
+  if (readinessAction) {
+    const key = readinessAction.dataset.readinessKey
+    if (['catalog', 'issueLimit'].includes(key)) {
+      state.stage = 'details'
+    } else if (key === 'preview') {
+      state.stage = 'preview'
+    } else {
+      state.stage = 'design'
+      state.editor.tool = {
+        image: 'photo',
+        handwriting: 'handwriting',
+        voice: 'voice',
+        video: 'motion',
+        lenticular: 'lenticular',
+      }[key] || 'photo'
+      state.editor.side = 'front'
+      state.editor.inspectorOpen = true
+    }
+    render()
+    return
+  }
   const recipe = event.target.closest('[data-recipe]')
   if (recipe) {
     setRecipe(recipe.dataset.recipe)
@@ -2212,6 +2328,11 @@ app.addEventListener('click', async (event) => {
   const stage = event.target.closest('[data-editor-stage]')
   if (stage) {
     const target = stage.dataset.editorStage
+    const currentCard = state.cards.find((card) => card.id === state.cardId)
+    if (target === 'design' && currentCard && cardEditorStage(currentCard) !== 'design') {
+      notify('공개된 카드는 디자인을 다시 수정할 수 없습니다.', 'error')
+      return
+    }
     if (target === 'preview' && !state.cardId) {
       const saved = await saveDraft({ quiet: true })
       if (!saved) {
@@ -2587,12 +2708,17 @@ window.addEventListener('resize', () => {
 
 async function bootstrap() {
   render()
+  let restoredSession = false
   try {
     await refreshAccessToken()
+    restoredSession = true
     await loadStudioData()
   } catch {
     ACCESS_TOKEN = ''
     state.authenticated = false
+    if (restoredSession) {
+      state.loginError = '스튜디오 데이터를 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.'
+    }
   } finally {
     state.loading = false
     render()

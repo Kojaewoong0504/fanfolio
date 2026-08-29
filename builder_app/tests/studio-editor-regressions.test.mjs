@@ -3,6 +3,13 @@ import assert from 'node:assert/strict'
 import { access, readFile } from 'node:fs/promises'
 import vm from 'node:vm'
 
+const appSource = await readFile(new URL('../app.js', import.meta.url), 'utf8')
+
+test('local studio API follows the current loopback hostname', () => {
+  assert.match(appSource, /`http:\/\/\$\{window\.location\.hostname\}:8000\/api`/)
+  assert.doesNotMatch(appSource, /'http:\/\/localhost:8000\/api'/)
+})
+
 const appUrl = new URL('../app.js', import.meta.url)
 const cssUrl = new URL('../styles.css', import.meta.url)
 
@@ -145,6 +152,106 @@ test('review progress stays visible from partner review through fan release', as
   assert.match(source, /function releaseStatusBanner\(/)
   assert.match(source, /담당 운영자에게 알림이 전달됐어요/)
   assert.match(css, /\.release-status-banner/)
+})
+
+test('review submission ignores a second click while the first request is active', async () => {
+  const source = await readFile(appUrl, 'utf8')
+  const submitReviewBody = source.match(/async function submitReview\(\) \{([\s\S]*?)\n\}/)?.[1] || ''
+
+  assert.match(submitReviewBody, /^\s*if \(state\.busy\) return\s*\n/)
+})
+
+test('artist logout cancels pending autosave work before clearing the session', async () => {
+  const source = await readFile(appUrl, 'utf8')
+  const logoutBody = source.match(/async function logoutArtist\(\) \{([\s\S]*?)\n\}/)?.[1] || ''
+
+  assert.match(logoutBody, /^\s*cancelAutosave\(\)\s*\n/)
+  assert.match(logoutBody, /const userId = state\.profile\?\.id/)
+  assert.match(logoutBody, /clearDraft\(userId\)/)
+})
+
+test('artist drafts are scoped to the authenticated artist', async () => {
+  const source = await readFile(appUrl, 'utf8')
+
+  assert.match(source, /function draftStorageKey\(userId = state\.profile\?\.id\) \{[\s\S]*?return `\$\{DRAFT_KEY\}:\$\{userId\}`/)
+  assert.match(source, /function persistDraft\(\) \{[\s\S]*?const key = draftStorageKey\(\)[\s\S]*?if \(!key\) return/)
+  assert.doesNotMatch(source, /const savedDraft = readDraft\(\)/)
+  assert.match(source, /restoreDraftForUser\(state\.profile\.id, state\.cards\)/)
+  assert.match(source, /normalizeCatalogSelection\(state\.form, state\.catalog\)/)
+})
+
+test('card save validates required fields before calling the API', async () => {
+  const source = await readFile(appUrl, 'utf8')
+  const saveDraftBody = source.match(/async function saveDraft\(\{[\s\S]*?\n\}/)?.[0] || ''
+
+  assert.match(saveDraftBody, /cardDraftErrors\(\{ form: state\.form, editor: state\.editor \}\)/)
+  assert.match(saveDraftBody, /throw new Error\(draftErrors\.join\(' '\)\)/)
+})
+
+test('review readiness makes missing requirements actionable', async () => {
+  const source = await readFile(appUrl, 'utf8')
+
+  assert.match(source, /data-readiness-key=\"\$\{esc\(key\)\}\"/)
+  assert.match(source, /const readinessTarget = \{[\s\S]*voice: 'voice'/)
+  assert.match(source, /state\.stage = 'design'/)
+  assert.match(source, /state\.editor\.tool = \{[\s\S]*voice: 'voice'/)
+})
+
+test('read-only cards never become restorable or persistable editor drafts', async () => {
+  const source = await readFile(appUrl, 'utf8')
+  const restoreBody = source.match(/function restoreDraftForUser\(userId, cards = \[\]\) \{([\s\S]*?)\n\}/)?.[1] || ''
+  const openCardBody = source.match(/async function openCard\(cardId\) \{([\s\S]*?)\n\}/)?.[1] || ''
+  const editorViewBody = source.match(/function editorView\(\) \{([\s\S]*?)\n\}/)?.[1] || ''
+  const fanPreviewBody = source.match(/function fanPreviewStage\(\) \{([\s\S]*?)\n\}/)?.[1] || ''
+
+  assert.match(restoreBody, /cardEditorStage\(card\) === 'design'/)
+  assert.match(restoreBody, /localStorage\.removeItem\(draftStorageKey\(userId\)\)/)
+  assert.match(openCardBody, /if \(state\.stage === 'design'\) persistDraft\(\)/)
+  assert.match(openCardBody, /else clearDraft\(\)/)
+  assert.match(editorViewBody, /state\.stage === 'design' \? `.*초안 저장/s)
+  assert.match(fanPreviewBody, /cardEditorStage\(activeCard\) === 'design'/)
+  assert.match(fanPreviewBody, /if \(editable\) persistDraft\(\)/)
+  assert.match(fanPreviewBody, /else clearDraft\(\)/)
+})
+
+test('read-only cards cannot re-enter the design stage from progress navigation', async () => {
+  const source = await readFile(appUrl, 'utf8')
+  const progress = source.match(/function editorProgress\(\) \{([\s\S]*?)\n\}/)?.[1] || ''
+  const clickHandler = source.match(/app\.addEventListener\('click',[\s\S]*?\n\}\)/)?.[0] || ''
+
+  assert.match(progress, /cardEditorStage\(currentCard\) !== 'design'/)
+  assert.match(clickHandler, /target === 'design'[\s\S]*?cardEditorStage\(currentCard\) !== 'design'/)
+  assert.match(clickHandler, /공개된 카드는 디자인을 다시 수정할 수 없습니다\./)
+})
+
+test('collaboration comment mutations ignore duplicate submissions while busy', async () => {
+  const source = await readFile(appUrl, 'utf8')
+  const createBody = source.match(/async function createCollaborationComment\(form\) \{([\s\S]*?)\n\}/)?.[1] || ''
+  const resolveBody = source.match(/async function resolveCollaborationComment\(commentId\) \{([\s\S]*?)\n\}/)?.[1] || ''
+
+  assert.match(createBody, /if \(!state\.cardId \|\| state\.busy\) return/)
+  assert.match(resolveBody, /if \(!state\.cardId \|\| state\.busy\) return/)
+  assert.match(createBody, /state\.busy = true/)
+  assert.match(resolveBody, /state\.busy = true/)
+  assert.match(createBody, /finally \{[\s\S]*state\.busy = false/)
+  assert.match(resolveBody, /finally \{[\s\S]*state\.busy = false/)
+})
+
+test('bootstrap surfaces a data-load failure after a restored session', async () => {
+  const source = await readFile(appUrl, 'utf8')
+  const bootstrapBody = source.match(/async function bootstrap\(\) \{([\s\S]*?)\n\}/)?.[1] || ''
+
+  assert.match(bootstrapBody, /let restoredSession = false/)
+  assert.match(bootstrapBody, /restoredSession = true/)
+  assert.match(bootstrapBody, /if \(restoredSession\) \{[\s\S]*state\.loginError = /)
+})
+
+test('profile save rejects a whitespace-only display name before the API call', async () => {
+  const source = await readFile(appUrl, 'utf8')
+  const profileBody = source.match(/async function saveProfile\(formElement\) \{([\s\S]*?)\n\}/)?.[1] || ''
+
+  assert.match(profileBody, /const nickname = form\.get\('nickname'\)\?\.toString\(\)\.trim\(\)/)
+  assert.match(profileBody, /if \(!nickname\) \{[\s\S]*notify\('표시 이름을 입력해주세요\.'/)
 })
 
 test('layer color changes update the selected layer without replacing the open color input', async () => {
@@ -379,6 +486,23 @@ test('review readiness renders every dynamic item with an accurate total', async
   assert.match(source, /lenticular:\s*'렌티큘러 이미지'/)
   assert.match(source, /Object\.values\(readiness\.items\)\.length/)
   assert.doesNotMatch(source, /readiness-score[\s\S]{0,260}\/7/)
+})
+
+test('media inspectors explain enabled media requirements before review', async () => {
+  const source = await readFile(new URL('../app.js', import.meta.url), 'utf8')
+
+  assert.match(source, /const voiceRequirement = state\.editor\.voiceEnabled && !state\.editor\.voiceSrc/)
+  assert.match(source, /검수 제출 전 음성 파일이 필요해요\./)
+  assert.match(source, /const videoRequirement = state\.editor\.videoEnabled && !state\.editor\.videoSrc/)
+  assert.match(source, /검수 제출 전 모션 영상이 필요해요\./)
+})
+
+test('studio upload flow rejects unsupported media and oversized files before upload', async () => {
+  const source = await readFile(new URL('../app.js', import.meta.url), 'utf8')
+
+  assert.match(source, /const uploadRules = \{[\s\S]*?voice:/)
+  assert.match(source, /if \(rule && file\.type && !rule\.types\.includes\(file\.type\)/)
+  assert.match(source, /file\.size > 10 \* 1024 \* 1024/)
 })
 
 test('artist studio design stage uses upload-first photo workflow without permanent source library', async () => {

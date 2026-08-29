@@ -1586,6 +1586,37 @@ class RewardGrant(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class RewardGrantCardPackEntitlement(Base):
+    """One card-pack use right granted by a fan-growth reward."""
+
+    __tablename__ = "reward_grant_card_pack_entitlements"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('available', 'opened', 'revoked')",
+            name="ck_reward_grant_card_pack_entitlements_status",
+        ),
+        UniqueConstraint("reward_grant_id", name="uq_reward_grant_card_pack_entitlement_grant"),
+        Index(
+            "ix_reward_grant_card_pack_entitlements_user_pack",
+            "user_id",
+            "pack_id",
+            "status",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    reward_grant_id: Mapped[str] = mapped_column(
+        ForeignKey("reward_grants.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    pack_id: Mapped[str] = mapped_column(ForeignKey("card_packs.id", ondelete="RESTRICT"))
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="available")
+    opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
 class XpLedger(Base):
     __tablename__ = "xp_ledger"
     __table_args__ = (

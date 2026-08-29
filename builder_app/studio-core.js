@@ -264,6 +264,33 @@ export function buildCardPayload({ form = {}, editor = {} } = {}) {
   })
 }
 
+export function cardDraftErrors({ form = {}, editor = {} } = {}) {
+  const errors = []
+  if (!String(form.name || '').trim()) errors.push('카드 이름을 입력해주세요.')
+  if (!String(form.seasonName || '').trim()) errors.push('시즌명을 입력해주세요.')
+  if (!String(form.templateId || '').trim()) errors.push('카드 템플릿을 선택해주세요.')
+  if (!form.artistId || !form.memberId) errors.push('아티스트와 멤버를 선택해주세요.')
+  if (!(editor.imageAssetId || form.imageAssetId || editor.imageSrc || editor.imageFile)) {
+    errors.push('카드 앞면 이미지를 추가해주세요.')
+  }
+  if (numeric(form.issueLimit, 0) <= 0) errors.push('발행 수량을 1장 이상 입력해주세요.')
+  return errors
+}
+
+export function normalizeCatalogSelection(form = {}, catalog = {}) {
+  const artists = Array.isArray(catalog.artists) ? catalog.artists : []
+  const members = Array.isArray(catalog.members) ? catalog.members : []
+  const artistId = artists.some((artist) => artist.id === form.artistId)
+    ? form.artistId
+    : artists[0]?.id || null
+  const memberId = members.some(
+    (member) => member.id === form.memberId && member.artistId === artistId,
+  )
+    ? form.memberId
+    : members.find((member) => member.artistId === artistId)?.id || null
+  return { artistId, memberId }
+}
+
 function readinessItem(enabled, complete, optionalLabel = '사용 안 함') {
   if (!enabled) return { status: 'optional', label: optionalLabel }
   return complete
@@ -328,4 +355,9 @@ export function navigationState(destination) {
   if (destination === 'home') return { view: 'home', step: 0 }
   if (destination === 'create') return { view: 'create', step: 1 }
   return { view: destination, step: 0 }
+}
+
+export function cardEditorStage(card = {}) {
+  const releaseStatus = card.releaseStatus || card.status || 'draft'
+  return ['draft', 'changes_requested'].includes(releaseStatus) ? 'design' : 'review'
 }

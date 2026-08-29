@@ -59,6 +59,13 @@ test('admin dashboard keeps operational panels in a balanced two-column rhythm',
   assert.match(css, /\.dashboard-grid\s*>\s*\.operational-metrics-panel\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/s)
 })
 
+test('sidecar workspaces preserve readable compact cards at desktop tablet widths', () => {
+  assert.match(css, /\.fan-pass-workspace-body \.fan-pass-summary\s*\{[^}]*grid-template-columns:\s*repeat\(2/s)
+  assert.match(css, /\.workspace-sidecar-body \.fan-pass-summary \.summary-card\s*\{[^}]*min-width:\s*0/s)
+  assert.match(css, /\.event-list-panel > \.compact-toolbar > \.admin-select\.filter-select\s*\{[^}]*min-width:\s*0/s)
+  assert.match(css, /\.event-list-panel > \.compact-toolbar \.admin-select-label\s*\{[^}]*overflow:\s*hidden/s)
+})
+
 test('large admin collections expose bounded list and interaction contracts', () => {
   assert.match(source, /tablePagination\("issuancePage"/)
   assert.match(source, /data-card-action="delete"/)
