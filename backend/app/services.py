@@ -3331,6 +3331,8 @@ async def seed_core(session: AsyncSession) -> dict:
             Member(id="member_stellon_dan", artist_id="artist_stellon", name="단"),
             Member(id="member_stellon_roa", artist_id="artist_stellon", name="로아"),
             Member(id="member_stellon_siwoo", artist_id="artist_stellon", name="시우"),
+            Drop(id="drop_live", name="NOVA-3 Comeback Live Drop", status="live"),
+            Drop(id="drop_ended", status="ended"),
             Card(
                 id="card_published",
                 name="컴백 기념 사인 카드",
@@ -3354,8 +3356,6 @@ async def seed_core(session: AsyncSession) -> dict:
                 image_url="/assets/demo/dreamscape/yuna.png",
                 drop_id="drop_live",
             ),
-            Drop(id="drop_live", name="NOVA-3 Comeback Live Drop", status="live"),
-            Drop(id="drop_ended", status="ended"),
         ]
     )
     session.add(
