@@ -52,6 +52,7 @@ from app.models import (
     RefreshToken,
     RewardCatalog,
     RewardGrant,
+    RewardGrantCardPackEntitlement,
     Role,
     Session,
     ShopOrder,
@@ -1251,9 +1252,27 @@ async def open_card_pack(
             .order_by(ShopOrderEntitlement.created_at, ShopOrderEntitlement.id)
             .with_for_update()
         )
+        reward_entitlement = None
+        if entitlement is None:
+            reward_entitlement = await session.scalar(
+                select(RewardGrantCardPackEntitlement)
+                .where(
+                    RewardGrantCardPackEntitlement.user_id == user_id,
+                    RewardGrantCardPackEntitlement.pack_id == pack.id,
+                    RewardGrantCardPackEntitlement.status == "available",
+                )
+                .order_by(
+                    RewardGrantCardPackEntitlement.created_at,
+                    RewardGrantCardPackEntitlement.id,
+                )
+                .with_for_update()
+            )
         if entitlement:
             entitlement.status = "opened"
             entitlement.opened_at = datetime.now(UTC)
+        elif reward_entitlement:
+            reward_entitlement.status = "opened"
+            reward_entitlement.opened_at = datetime.now(UTC)
         if idempotency_key:
             existing = await session.scalar(
                 select(CardPackOpening)

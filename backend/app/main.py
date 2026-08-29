@@ -31,6 +31,8 @@ from app.services import (
     ensure_data_identity,
     ensure_demo_card_asset,
     ensure_demo_catalog,
+    ensure_local_admin_account,
+    ensure_local_artist_studio_account,
     repair_demo_catalog_asset_urls,
 )
 
@@ -75,6 +77,10 @@ async def lifespan(_: FastAPI):
     if settings.seed_demo_catalog:
         async with SessionLocal() as session:
             await ensure_demo_catalog(session)
+    if settings.app_env == "development":
+        async with SessionLocal() as session:
+            await ensure_local_admin_account(session)
+            await ensure_local_artist_studio_account(session)
     await _repair_demo_card_assets_if_enabled(settings)
 
     async with SessionLocal() as session:

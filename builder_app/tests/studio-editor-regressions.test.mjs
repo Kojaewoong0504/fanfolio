@@ -3,6 +3,13 @@ import assert from 'node:assert/strict'
 import { access, readFile } from 'node:fs/promises'
 import vm from 'node:vm'
 
+const appSource = await readFile(new URL('../app.js', import.meta.url), 'utf8')
+
+test('local studio API follows the current loopback hostname', () => {
+  assert.match(appSource, /`http:\/\/\$\{window\.location\.hostname\}:8000\/api`/)
+  assert.doesNotMatch(appSource, /'http:\/\/localhost:8000\/api'/)
+})
+
 const appUrl = new URL('../app.js', import.meta.url)
 const cssUrl = new URL('../styles.css', import.meta.url)
 
@@ -179,6 +186,15 @@ test('card save validates required fields before calling the API', async () => {
 
   assert.match(saveDraftBody, /cardDraftErrors\(\{ form: state\.form, editor: state\.editor \}\)/)
   assert.match(saveDraftBody, /throw new Error\(draftErrors\.join\(' '\)\)/)
+})
+
+test('review readiness makes missing requirements actionable', async () => {
+  const source = await readFile(appUrl, 'utf8')
+
+  assert.match(source, /data-readiness-key=\"\$\{esc\(key\)\}\"/)
+  assert.match(source, /const readinessTarget = \{[\s\S]*voice: 'voice'/)
+  assert.match(source, /state\.stage = 'design'/)
+  assert.match(source, /state\.editor\.tool = \{[\s\S]*voice: 'voice'/)
 })
 
 test('read-only cards never become restorable or persistable editor drafts', async () => {
@@ -470,6 +486,23 @@ test('review readiness renders every dynamic item with an accurate total', async
   assert.match(source, /lenticular:\s*'렌티큘러 이미지'/)
   assert.match(source, /Object\.values\(readiness\.items\)\.length/)
   assert.doesNotMatch(source, /readiness-score[\s\S]{0,260}\/7/)
+})
+
+test('media inspectors explain enabled media requirements before review', async () => {
+  const source = await readFile(new URL('../app.js', import.meta.url), 'utf8')
+
+  assert.match(source, /const voiceRequirement = state\.editor\.voiceEnabled && !state\.editor\.voiceSrc/)
+  assert.match(source, /검수 제출 전 음성 파일이 필요해요\./)
+  assert.match(source, /const videoRequirement = state\.editor\.videoEnabled && !state\.editor\.videoSrc/)
+  assert.match(source, /검수 제출 전 모션 영상이 필요해요\./)
+})
+
+test('studio upload flow rejects unsupported media and oversized files before upload', async () => {
+  const source = await readFile(new URL('../app.js', import.meta.url), 'utf8')
+
+  assert.match(source, /const uploadRules = \{[\s\S]*?voice:/)
+  assert.match(source, /if \(rule && file\.type && !rule\.types\.includes\(file\.type\)/)
+  assert.match(source, /file\.size > 10 \* 1024 \* 1024/)
 })
 
 test('artist studio design stage uses upload-first photo workflow without permanent source library', async () => {

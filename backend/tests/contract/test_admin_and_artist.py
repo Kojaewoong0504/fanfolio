@@ -787,6 +787,7 @@ def test_artist_can_read_and_update_studio_profile(
     profile = assert_success(artist.get("/api/artist/profile"))
     assert profile == {
         "id": "artist",
+        "username": "seed-dreamscape-studio",
         "email": "artist@example.com",
         "nickname": None,
         "role": "artist",
@@ -803,6 +804,7 @@ def test_artist_can_read_and_update_studio_profile(
     )
     assert updated == {
         "id": "artist",
+        "username": "seed-dreamscape-studio",
         "email": "artist@example.com",
         "nickname": "드림스케이프 공식",
         "role": "artist",

@@ -892,7 +892,7 @@ class RewardCatalogCreate(BaseModel):
     """A fan-facing reward that can be attached to an achievement or pass tier."""
 
     name: str = Field(min_length=1, max_length=160)
-    reward_type: Literal["title", "badge", "profile_frame", "digital_bonus"] = Field(
+    reward_type: Literal["title", "badge", "profile_frame", "digital_bonus", "card_pack"] = Field(
         alias="rewardType"
     )
     organization_id: str | None = Field(default=None, alias="organizationId")

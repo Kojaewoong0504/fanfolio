@@ -66,6 +66,7 @@ from app.models import (
     RefreshToken,
     RewardCatalog,
     RewardGrant,
+    RewardGrantCardPackEntitlement,
     Role,
     Session,
     ShopOrder,
@@ -2103,6 +2104,7 @@ async def claim_pass_tier(
     event.processed_at = now()
 
     reward_grant_data = None
+    card_pack_entitlement_data = None
     if reward_id:
         grant = await grant_reward(
             session,
@@ -2113,6 +2115,35 @@ async def claim_pass_tier(
         )
         reward = await session.get(RewardCatalog, reward_id)
         if reward is not None:
+            if reward.reward_type == "card_pack":
+                card_pack_id = str((reward.metadata_ or {}).get("cardPackId") or "").strip()
+                pack = await session.scalar(
+                    select(CardPack).where(
+                        CardPack.id == card_pack_id,
+                        CardPack.status == "published",
+                    )
+                )
+                if pack is None:
+                    raise AppError(
+                        409,
+                        "CARD_PACK_NOT_PUBLISHED",
+                        "카드팩 보상을 지금 수령할 수 없습니다.",
+                    )
+                entitlement = RewardGrantCardPackEntitlement(
+                    id=f"reward_pack_entitlement_{uuid4().hex[:12]}",
+                    reward_grant_id=grant.id,
+                    user_id=user_id,
+                    pack_id=pack.id,
+                    status="available",
+                )
+                session.add(entitlement)
+                await session.flush()
+                card_pack_entitlement_data = {
+                    "id": entitlement.id,
+                    "rewardGrantId": grant.id,
+                    "packId": pack.id,
+                    "status": entitlement.status,
+                }
             grant.claimed_at = now()
             session.add(
                 Notification(
@@ -2152,6 +2183,7 @@ async def claim_pass_tier(
         "track": track,
         "claimedAt": _datetime_data(claimed_at),
         "rewardGrant": reward_grant_data,
+        "cardPackEntitlement": card_pack_entitlement_data,
     }
 
 
@@ -2624,6 +2656,62 @@ async def ensure_demo_catalog(session: AsyncSession) -> None:
     await session.commit()
 
 
+async def ensure_local_artist_studio_account(session: AsyncSession) -> None:
+    """Keep a stable, verified artist login for local studio inspection.
+
+    This is intentionally development-only. The account is a convenience for
+    local browser verification, so hosted environments must continue using
+    the admin-issued temporary-password flow.
+    """
+    settings = get_settings()
+    if settings.is_hosted:
+        return
+    username = settings.local_artist_studio_username.strip()
+    password = settings.local_artist_studio_password
+    artist_id = settings.local_artist_studio_artist_id.strip()
+    if not username or not password or not artist_id:
+        return
+    if len(password) < 12:
+        raise ValueError("LOCAL_ARTIST_STUDIO_PASSWORD must be at least 12 characters")
+
+    await ensure_demo_catalog(session)
+    user = await session.scalar(select(User).where(User.username == username))
+    if user is None:
+        user = User(
+            id="local_artist_studio",
+            email="local-artist-studio@localhost",
+            username=username,
+            role=Role.ARTIST,
+            nickname="로컬 테스트 아티스트",
+            password_hash=hash_password(password),
+            must_change_password=False,
+        )
+        session.add(user)
+        await session.flush()
+    elif user.role != Role.ARTIST:
+        raise RuntimeError(f"LOCAL_ARTIST_STUDIO_USERNAME_ROLE_CONFLICT:{username}")
+    else:
+        user.email = "local-artist-studio@localhost"
+        user.nickname = "로컬 테스트 아티스트"
+        user.password_hash = hash_password(password)
+        user.must_change_password = False
+        user.deleted_at = None
+
+    profile = await session.get(ArtistProfile, user.id)
+    if profile is None:
+        session.add(
+            ArtistProfile(
+                user_id=user.id,
+                artist_id=artist_id,
+                verification_status="verified",
+            )
+        )
+    else:
+        profile.artist_id = artist_id
+        profile.verification_status = "verified"
+    await session.commit()
+
+
 async def repair_demo_catalog_asset_urls(session: AsyncSession) -> int:
     """Repair only known demo records that still reference source-only URLs.
 
@@ -3000,6 +3088,58 @@ async def ensure_admin_bootstrap(session: AsyncSession) -> None:
         membership.access_level = "root"
         membership.status = "active"
         membership.display_name = user.nickname or membership.display_name
+    await session.commit()
+
+
+async def ensure_local_admin_account(session: AsyncSession) -> None:
+    """Keep a stable administrator login for local browser verification only."""
+    settings = get_settings()
+    if settings.is_hosted:
+        return
+    email = settings.local_admin_email.strip().lower()
+    password = settings.local_admin_password
+    if not email or not password:
+        return
+    if len(password) < 12:
+        raise ValueError("LOCAL_ADMIN_PASSWORD must be at least 12 characters")
+
+    user = await session.scalar(select(User).where(User.email == email))
+    if user is None:
+        user = User(
+            id="local_admin",
+            email=email,
+            role=Role.ADMIN,
+            nickname="로컬 테스트 관리자",
+            password_hash=hash_password(password),
+            must_change_password=False,
+        )
+        session.add(user)
+        await session.flush()
+    elif user.role != Role.ADMIN:
+        raise RuntimeError(f"LOCAL_ADMIN_EMAIL_ROLE_CONFLICT:{email}")
+    else:
+        user.nickname = "로컬 테스트 관리자"
+        user.password_hash = hash_password(password)
+        user.must_change_password = False
+        user.deleted_at = None
+
+    membership = await session.get(AdminMembership, user.id)
+    if membership is None:
+        session.add(
+            AdminMembership(
+                user_id=user.id,
+                organization_id=None,
+                access_level="root",
+                status="active",
+                display_name=user.nickname,
+                created_by_user_id=user.id,
+            )
+        )
+    else:
+        membership.organization_id = None
+        membership.access_level = "root"
+        membership.status = "active"
+        membership.display_name = user.nickname
     await session.commit()
 
 

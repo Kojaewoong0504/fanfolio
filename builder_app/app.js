@@ -19,7 +19,7 @@ const localApiQuery = isLocalHost
 const API_BASE = isLocalHost
   ? localApiQuery ||
     localStorage.getItem('fanfolio_api_base') ||
-    'http://localhost:8000/api'
+    `http://${window.location.hostname}:8000/api`
   : '/api'
 
 const DRAFT_KEY = 'fanfolio_artist_special_card_draft_v2'
@@ -300,6 +300,7 @@ function absoluteApiUrl(path) {
 function normalizedMediaType(type, kind) {
   if (kind === 'voice' && type.startsWith('audio/webm')) return 'audio/webm'
   if (kind === 'voice' && type.startsWith('audio/mp4')) return 'audio/mp4'
+  if (kind === 'voice' && type === 'audio/x-wav') return 'audio/wav'
   return type
 }
 
@@ -847,7 +848,11 @@ function stickerInspector() {
 }
 
 function voiceInspector() {
+  const voiceRequirement = state.editor.voiceEnabled && !state.editor.voiceSrc
+    ? `<div class="media-requirement" role="status">${icon('info')}<span><strong>검수 제출 전 음성 파일이 필요해요.</strong><small>파일을 업로드하거나 브라우저에서 녹음해 주세요.</small></span></div>`
+    : ''
   return `<div class="feature-toggle"><span>${icon('graphic_eq')}<span><strong>보이스 카드</strong><small>재생은 팬이 직접 선택해요.</small></span></span><button type="button" class="switch ${state.editor.voiceEnabled ? 'on' : ''}" data-action="toggle-voice" aria-pressed="${state.editor.voiceEnabled}" aria-label="보이스 카드 켜기"></button></div>
+  ${voiceRequirement}
   <div class="voice-recorder ${state.recording ? 'recording' : ''}">
     <span class="record-orb">${icon(state.recording ? 'mic' : 'mic_none')}</span>
     <div><strong>${state.recording ? '보이스를 녹음하고 있어요' : state.editor.voiceName || '브라우저에서 바로 녹음'}</strong><small>${state.recording ? '완료되면 정지 버튼을 눌러 주세요.' : '마이크 권한은 녹음하는 동안에만 사용됩니다.'}</small></div>
@@ -860,7 +865,11 @@ function voiceInspector() {
 }
 
 function motionInspector() {
+  const videoRequirement = state.editor.videoEnabled && !state.editor.videoSrc
+    ? `<div class="media-requirement" role="status">${icon('info')}<span><strong>검수 제출 전 모션 영상이 필요해요.</strong><small>MP4 또는 WebM 영상을 추가해 주세요.</small></span></div>`
+    : ''
   return `<div class="feature-toggle"><span>${icon('movie')}<span><strong>모션 카드</strong><small>짧은 영상 레이어를 연결해요.</small></span></span><button type="button" class="switch ${state.editor.videoEnabled ? 'on' : ''}" data-action="toggle-motion" aria-pressed="${state.editor.videoEnabled}" aria-label="모션 카드 켜기"></button></div>
+  ${videoRequirement}
   ${uploadBox('video', 'video/mp4,video/webm', '모션 영상 업로드', 'MP4, WebM · 15초 이하 권장')}
   ${state.editor.videoSrc ? `<div class="video-preview"><video src="${esc(state.editor.videoSrc)}" muted loop controls playsinline preload="metadata"></video><div><strong>${esc(state.editor.videoName || '모션 영상')}</strong><button type="button" class="text-button danger" data-action="remove-video">삭제</button></div></div>` : `<div class="media-empty tall">${icon('video_library')}<span>영상을 올리면 카드 화면에서 바로 확인할 수 있어요.</span></div>`}
   <label class="check-row"><input type="checkbox" data-editor="videoLoop" ${state.editor.videoLoop ? 'checked' : ''} /><span><strong>반복 재생</strong><small>팬이 영상을 연 뒤 자연스럽게 반복합니다.</small></span></label>
@@ -1045,10 +1054,25 @@ function reviewStage() {
   const readinessItems = Object.values(readiness.items)
   const completedReadinessCount = readinessItems.filter((item) => item.status !== 'missing').length
   const totalReadinessCount = Object.values(readiness.items).length
+  const readinessTarget = {
+    image: 'photo',
+    handwriting: 'handwriting',
+    voice: 'voice',
+    video: 'motion',
+    lenticular: 'lenticular',
+  }
   return `<section class="review-stage">
     <div class="review-card-preview"><span class="page-kicker">FINAL CHECK</span><h2>운영팀에 보내기 전 마지막 확인</h2><p>필수 항목이 모두 준비되면 검수 요청을 보낼 수 있어요.</p>${cardVisual()}<div class="review-summary"><strong>${esc(state.form.name)}</strong><span>${esc(state.form.seasonName)} · ${esc(state.form.rarity)} · ${Number(state.form.issueLimit).toLocaleString('ko-KR')}장</span></div></div>
     <div class="review-panel"><div class="review-panel-heading"><div><span>REVIEW READINESS</span><h3>${readiness.ready ? '검수 준비가 완료됐어요.' : '추가로 준비할 항목이 있어요.'}</h3></div><span class="readiness-score ${readiness.ready ? 'ready' : ''}">${completedReadinessCount}/${totalReadinessCount}</span></div>
-      <div class="readiness-list">${Object.entries(readiness.items).map(([key, item]) => `<div class="readiness-row ${item.status}"><span>${icon(item.status === 'missing' ? 'error' : item.status === 'optional' ? 'remove_circle' : 'check_circle')}<strong>${readinessLabels[key]}</strong></span><small>${item.label}</small></div>`).join('')}</div>
+      <div class="readiness-list">${Object.entries(readiness.items).map(([key, item]) => {
+        const target = readinessTarget[key]
+        const actionable = item.status === 'missing' && (target || ['catalog', 'issueLimit', 'preview'].includes(key))
+        const tag = actionable ? 'button' : 'div'
+        const attributes = actionable
+          ? ` type="button" data-readiness-key="${esc(key)}" aria-label="${esc(readinessLabels[key])} 수정"`
+          : ''
+        return `<${tag} class="readiness-row ${item.status}${actionable ? ' actionable' : ''}"${attributes}><span>${icon(item.status === 'missing' ? 'error' : item.status === 'optional' ? 'remove_circle' : 'check_circle')}<strong>${readinessLabels[key]}</strong></span><small>${item.label}</small></${tag}>`
+      }).join('')}</div>
       ${releaseStatus === 'changes_requested' ? releaseStatusBanner(currentCard) : ''}
       <label class="review-note">운영팀에 전달할 메모<textarea data-review-note maxlength="500" rows="4" placeholder="공개 희망일, 미디어 확인 포인트 등을 적어 주세요.">${esc(state.reviewNote)}</textarea><small>${state.reviewNote.length}/500</small></label>
       ${state.reviewError ? `<p class="review-error" role="alert">${esc(state.reviewError)}</p>` : ''}
@@ -1581,6 +1605,21 @@ function replaceObjectUrl(key, file) {
 
 async function handleUpload(kind, file) {
   if (!file) return
+  const uploadRules = {
+    image: { types: ['image/png', 'image/jpeg', 'image/webp'], label: 'JPG, PNG 또는 WebP 이미지' },
+    handwriting: { types: ['image/png', 'image/jpeg', 'image/webp'], label: 'JPG, PNG 또는 WebP 이미지' },
+    lenticular: { types: ['image/png', 'image/jpeg', 'image/webp'], label: 'JPG, PNG 또는 WebP 이미지' },
+    sticker: { types: ['image/png', 'image/webp'], label: 'PNG 또는 WebP 이미지' },
+    voice: { types: ['audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-wav', 'audio/webm'], label: 'MP3, M4A, WAV 또는 WebM 음성' },
+    video: { types: ['video/mp4', 'video/webm'], label: 'MP4 또는 WebM 영상' },
+  }
+  const rule = uploadRules[kind]
+  if (rule && file.type && !rule.types.includes(file.type)) {
+    throw new Error(`${rule.label}만 업로드할 수 있어요.`)
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    throw new Error('업로드 파일은 10MB 이하만 사용할 수 있어요.')
+  }
   if (kind === 'sticker') {
     const src = await fileToDataUrl(file)
     upsertCreativeLayer('sticker', {
@@ -2227,6 +2266,28 @@ app.addEventListener('click', async (event) => {
   const nav = event.target.closest('[data-nav]')
   if (nav) {
     navigate(nav.dataset.nav)
+    return
+  }
+  const readinessAction = event.target.closest('[data-readiness-key]')
+  if (readinessAction) {
+    const key = readinessAction.dataset.readinessKey
+    if (['catalog', 'issueLimit'].includes(key)) {
+      state.stage = 'details'
+    } else if (key === 'preview') {
+      state.stage = 'preview'
+    } else {
+      state.stage = 'design'
+      state.editor.tool = {
+        image: 'photo',
+        handwriting: 'handwriting',
+        voice: 'voice',
+        video: 'motion',
+        lenticular: 'lenticular',
+      }[key] || 'photo'
+      state.editor.side = 'front'
+      state.editor.inspectorOpen = true
+    }
+    render()
     return
   }
   const recipe = event.target.closest('[data-recipe]')

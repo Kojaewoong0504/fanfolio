@@ -2173,6 +2173,39 @@ input[type='range'] {
   background: #fafaff;
 }
 
+.media-requirement {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid #f2c9d2;
+  border-radius: 10px;
+  color: #a93850;
+  background: #fff6f8;
+}
+
+.media-requirement > .material-symbols-rounded {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  font-size: 17px;
+}
+
+.media-requirement span {
+  display: grid;
+  gap: 3px;
+}
+
+.media-requirement strong {
+  font-size: 10px;
+}
+
+.media-requirement small {
+  color: #956274;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
 .voice-recorder .record-orb {
   width: 40px;
   height: 40px;
@@ -2919,6 +2952,30 @@ input[type='range'] {
   gap: 20px;
   padding: 0 4px;
   border-bottom: 1px solid #f0f1f6;
+}
+
+.readiness-row.actionable {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid #f0f1f6;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.readiness-row.actionable:hover,
+.readiness-row.actionable:focus-visible {
+  border-radius: 8px;
+  background: #f7f5ff;
+  outline: 2px solid rgba(93, 75, 232, 0.2);
+  outline-offset: -2px;
+}
+
+.readiness-row.actionable small::after {
+  content: ' · 수정하기';
+  color: var(--primary);
+  font-weight: 700;
 }
 
 .readiness-row > span {

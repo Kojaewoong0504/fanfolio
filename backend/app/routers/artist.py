@@ -43,6 +43,7 @@ LENTICULAR_IMAGE_CONTENT_TYPES = {"image/png", "image/jpeg", "image/webp"}
 def profile_data(user, profile: ArtistProfile | None = None) -> dict:
     return {
         "id": user.id,
+        "username": user.username,
         "email": user.email,
         "nickname": user.nickname,
         "role": user.role.value,

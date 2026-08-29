@@ -4473,6 +4473,7 @@ button.top-avatar {
 .event-related-card-options { gap: 8px; max-height: 280px; padding: 1px; }
 .event-card-option { display: grid !important; grid-template-columns: 20px 34px minmax(0, 1fr) auto !important; align-items: center; min-height: 68px; gap: 10px; padding: 10px; }
 .event-card-thumb { display: grid; place-items: center; width: 34px; height: 44px; border-radius: 7px; color: #fff; background: linear-gradient(145deg, #6758ed, #22285b); }
+.event-card-thumb img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
 .event-card-thumb .material-symbols-rounded { font-size: 16px; }
 .event-card-copy { min-width: 0; }
 .event-card-copy strong, .event-card-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -6406,6 +6407,8 @@ button.top-avatar {
 .workspace-sidecar-body > .page-content { min-width: 0; overflow: auto; }
 .workspace-sidecar-body > .workspace-sidecar { position: relative; z-index: 20; display: flex; flex-direction: column; width: auto; height: calc(100vh - 78px); min-width: 0; overflow: hidden; background: #fff; border-left: 1px solid var(--line); box-shadow: -14px 0 36px #14152a12; animation: event-sidecar-in 180ms ease-out; }
 .fan-pass-workspace-body > .page-content { padding: 26px 24px 48px; }
+.fan-pass-workspace-body .fan-pass-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.workspace-sidecar-body .fan-pass-summary .summary-card { min-width: 0; }
 .fan-pass-admin { max-width: 1120px; margin: 0 auto; }
 .fan-pass-page-heading { min-height: 74px; margin-bottom: 22px; }
 .fan-pass-page-heading h2 { font-size: 25px; }
@@ -6457,7 +6460,7 @@ button.top-avatar {
 .fan-pass-pagination > span { margin-left: auto; color: var(--muted); font-size: 10px; }
 .fan-pass-sidecar .drawer-header { flex: 0 0 auto; padding: 22px 26px 18px; }
 .fan-pass-sidecar .drawer-header h2 { font-size: 19px; }
-.fan-pass-editor-form { position: relative; display: flex !important; flex: 1 1 auto; min-height: 0; flex-direction: column; gap: 0 !important; padding: 0 26px !important; }
+.fan-pass-editor-form { position: relative; display: flex !important; flex: 1 1 auto; min-height: 0; flex-direction: column; gap: 0 !important; padding: 0 26px !important; overflow-y: auto; overscroll-behavior: contain; }
 .fan-pass-editor-form > .fan-pass-form-section { display: grid; gap: 14px; padding: 22px 0; background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; }
 .fan-pass-form-section h3, .fan-pass-section-heading h3 { margin: 0; color: var(--purple); font-size: 13px; }
 .fan-pass-section-heading { display: flex; align-items: center; justify-content: space-between; }
@@ -6470,19 +6473,19 @@ button.top-avatar {
 .fan-pass-preset-section select { min-height: 32px; }
 .field-counter { margin-left: auto; color: var(--muted); font-size: 9px; }
 .fan-pass-editor-form .pass-tier-list { gap: 10px; }
-.fan-pass-editor-form .pass-tier-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) 28px; grid-template-rows: auto auto auto auto; gap: 9px 10px; align-items: center; min-width: 0; padding: 13px; background: #fff; border: 1px solid var(--line); border-radius: 10px; }
+.fan-pass-editor-form .pass-tier-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1fr) 28px; grid-template-rows: auto auto auto; gap: 9px 10px; align-items: center; min-width: 0; padding: 13px; background: #fff; border: 1px solid var(--line); border-radius: 10px; }
 .pass-tier-handle { grid-row: 1 / -1; color: #8e92aa; }
 .pass-tier-handle .material-symbols-rounded { font-size: 18px; }
-.pass-tier-heading { display: flex; min-width: 0; grid-column: 2; grid-row: 1; align-items: center; justify-content: space-between; }
+.pass-tier-heading { display: flex; min-width: 0; grid-column: 2 / 4; grid-row: 1; align-items: center; justify-content: space-between; }
 .pass-tier-heading strong { font: 800 13px/1.2 Manrope, sans-serif; }
 .pass-tier-visibility { display: inline-flex; align-items: center; gap: 3px; color: var(--green); font-size: 9px; font-weight: 700; }
 .pass-tier-visibility .material-symbols-rounded { font-size: 12px; }
-.pass-tier-menu { grid-column: 3; grid-row: 1; width: 28px; height: 28px; }
-.fan-pass-editor-form .pass-tier-row > .field { min-width: 0; grid-column: 2 / 4; }
+.pass-tier-menu { grid-column: 4; grid-row: 1; width: 28px; height: 28px; }
+.fan-pass-editor-form .pass-tier-row > .field { min-width: 0; }
 .fan-pass-editor-form .pass-tier-row > .field { display: grid; gap: 6px; }
 .fan-pass-editor-form .pass-tier-row > .field:nth-of-type(1) { grid-row: 2; }
-.fan-pass-editor-form .pass-tier-row > .field:nth-of-type(2) { grid-row: 3; }
-.fan-pass-editor-form .pass-tier-row > .field:nth-of-type(3) { grid-row: 4; }
+.fan-pass-editor-form .pass-tier-row > .field:nth-of-type(2) { grid-column: 2 / 3; grid-row: 3; }
+.fan-pass-editor-form .pass-tier-row > .field:nth-of-type(3) { grid-column: 3 / 4; grid-row: 3; }
 .fan-pass-editor-form .pass-tier-row .admin-select,
 .fan-pass-editor-form .pass-tier-row input { width: 100%; min-width: 0; }
 .fan-pass-editor-form .pass-tier-row .field > span { white-space: nowrap; }
@@ -6492,7 +6495,7 @@ button.top-avatar {
 .fan-pass-preview-grid article > .secondary { justify-self: end; min-height: 28px; padding: 0 8px; font-size: 9px; }
 .fan-pass-preview-grid p, .fan-pass-preview-grid small { margin: 0; color: var(--muted); font-size: 9px; line-height: 1.6; }
 .fan-pass-preview-grid p b { color: var(--ink); }
-.fan-pass-editor-form > .drawer-footer { position: absolute; right: 0; bottom: 0; left: 0; z-index: 2; justify-content: flex-end; margin: 0; padding: 16px 26px; }
+.fan-pass-editor-form > .drawer-footer { position: sticky; right: auto; bottom: 0; left: auto; z-index: 2; justify-content: flex-end; flex: 0 0 auto; margin: 0 -26px; padding: 16px 26px; background: #fff; border-top: 1px solid var(--line); }
 
 @media (max-width: 1180px) {
   .workspace-sidecar-body { grid-template-columns: minmax(0, 1fr) minmax(400px, 460px); }
@@ -6515,6 +6518,19 @@ button.top-avatar {
   .event-list-panel > .compact-toolbar > .admin-select.filter-select { flex: 1 1 calc(33.333% - 6px); min-width: 0; }
   .event-list-panel > .compact-toolbar .admin-select-trigger { min-width: 0; padding-right: 7px; padding-left: 8px; }
   .event-list-panel > .compact-toolbar .admin-select-trigger span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+
+@container event-list (max-width: 420px) {
+  .event-list-panel > .compact-toolbar > .admin-select.filter-select {
+    flex-basis: 100%;
+  }
+
+  .event-list-panel > .compact-toolbar .admin-select-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 
 @container event-detail (max-width: 360px) {
@@ -7107,6 +7123,24 @@ code {
     grid-template-columns: 1fr;
   }
 
+  .fan-pass-editor-form .pass-tier-row {
+    grid-template-columns: 24px minmax(0, 1fr) 28px;
+    grid-template-rows: auto auto auto auto;
+  }
+
+  .fan-pass-editor-form .pass-tier-row .pass-tier-heading {
+    grid-column: 2;
+  }
+
+  .fan-pass-editor-form .pass-tier-row .pass-tier-menu {
+    grid-column: 3;
+  }
+
+  .fan-pass-editor-form .pass-tier-row > .field:nth-of-type(2),
+  .fan-pass-editor-form .pass-tier-row > .field:nth-of-type(3) {
+    grid-column: 2 / 4;
+  }
+
   .fan-growth-queue-item {
     align-items: stretch;
   }
@@ -7501,6 +7535,60 @@ code {
 }
 .point-package-table .point-package-schedule { margin-top: 0; }
 .point-package-table .point-package-actions { flex-wrap: nowrap; }
+
+/* Final cascade guard for the narrow fan-growth sidecar. */
+.workspace-sidecar-body.fan-pass-workspace-body .fan-pass-summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+.workspace-sidecar-body.fan-pass-workspace-body .fan-pass-summary .summary-card {
+  min-width: 0;
+  min-height: 96px;
+  padding: 12px;
+  grid-template-columns: 38px minmax(0, 1fr);
+}
+
+@media (max-width: 520px) {
+  .workspace-sidecar-body.fan-pass-workspace-body .fan-pass-summary {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Keep the master pane readable while a growth editor sidecar is open. */
+.fan-pass-workspace-body .fan-pass-summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.workspace-sidecar-body .fan-pass-summary .summary-card {
+  min-width: 0;
+}
+
+/* The sidecar has a narrower master pane than the full-page growth view. Keep
+   its metrics in a readable two-by-two grid instead of four crushed columns. */
+.workspace-sidecar-body.fan-pass-workspace-body .fan-pass-summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+.workspace-sidecar-body.fan-pass-workspace-body .fan-pass-summary .summary-card {
+  grid-template-columns: 38px minmax(0, 1fr);
+  min-height: 96px;
+  padding: 12px;
+}
+
+.workspace-sidecar-body.fan-pass-workspace-body .fan-pass-summary .summary-card > span {
+  width: 38px;
+  height: 38px;
+}
+
+.workspace-sidecar-body.fan-pass-workspace-body .fan-pass-summary .summary-card > span .material-symbols-rounded {
+  font-size: 21px;
+}
+
+@media (max-width: 1300px) {
+  .fan-pass-admin .fan-pass-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
 
 /* Final support queue density overrides. Keep list and detail independent. */
 .support-layout { align-items: start; grid-template-columns: minmax(360px, .82fr) minmax(0, 1.18fr); }

@@ -24,6 +24,15 @@ class Settings(BaseSettings):
     database_statement_cache_size: int = 100
     auto_create_schema: bool = True
     seed_demo_catalog: bool = False
+    # Local-only credentials used to inspect the artist studio without an
+    # admin password-reset round trip after every development restart.
+    local_artist_studio_username: str = "local-artist-studio"
+    local_artist_studio_password: str = "local-artist-password-2026"
+    local_artist_studio_artist_id: str = "artist_nova3"
+    # Local-only credentials used to log into the admin console during browser
+    # verification. Hosted environments continue using ADMIN_BOOTSTRAP_*.
+    local_admin_email: str = "local-admin@example.com"
+    local_admin_password: str = "local-admin-password-2026"
     repair_demo_card_assets: bool = False
     storage_dir: str = "./storage"
     storage_backend: str = "local"

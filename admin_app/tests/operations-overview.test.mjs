@@ -211,8 +211,8 @@ test("multi-value campaign and achievement controls preserve readable selection 
 });
 
 test("fan pass tier editor keeps repeated reward fields readable in the sidecar", () => {
-  assert.match(styles, /\.fan-pass-editor-form \.pass-tier-row\s*\{[^}]*grid-template-columns:\s*24px minmax\(0, 1fr\) 28px/);
-  assert.match(styles, /\.fan-pass-editor-form \.pass-tier-row > \.field:nth-of-type\(3\)\s*\{\s*grid-row:\s*4/);
+  assert.match(styles, /\.fan-pass-editor-form \.pass-tier-row\s*\{[^}]*grid-template-columns:\s*24px minmax\(0, 1fr\) minmax\(0, 1fr\) 28px/);
+  assert.match(styles, /\.fan-pass-editor-form \.pass-tier-row > \.field:nth-of-type\(3\)\s*\{[^}]*grid-column:\s*3\s*\/\s*4/);
   assert.match(styles, /\.fan-pass-editor-form \.pass-tier-row \.admin-select,[\s\S]*\.fan-pass-editor-form \.pass-tier-row input\s*\{[^}]*min-width:\s*0/);
   assert.match(styles, /\.fan-pass-editor-form \.pass-tier-row > \.field\s*\{[^}]*display:\s*grid/);
 });
