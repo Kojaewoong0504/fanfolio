@@ -3854,3 +3854,24 @@ main.discover-artist-shell.detail-screen-shell {
 .trade-report-trigger{justify-self:start;padding:0;border:0;background:transparent;color:#797e97;font-size:10px;font-weight:700;text-decoration:underline;cursor:pointer}.trade-report-panel{display:grid;gap:10px;padding:13px;border:1px solid #e3deef;border-radius:14px;background:#faf9ff}.trade-report-panel label{display:grid;gap:5px;color:#727793;font-size:10px;font-weight:700}.trade-report-panel select,.trade-report-panel textarea{width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #dfdbea;border-radius:10px;background:#fff;color:#242844;font:inherit}.trade-report-panel textarea{min-height:72px;resize:vertical}.trade-report-panel>button{min-height:36px;border:0;border-radius:10px;background:#624ce7;color:#fff;font-size:11px;font-weight:800}.trade-report-panel>button:disabled{opacity:.5}.trade-report-panel>p[role="status"]{margin:0;color:#624ce7;font-size:10px;font-weight:700}
 /* Persisted consent history stays legible inside the existing legal mobile surface. */
 .settings-consent-history{display:grid;gap:10px}.settings-consent-history>strong{font-size:15px}.settings-consent-history>p{margin:0;color:#85899c;font-size:10px;line-height:1.5}.settings-consent-history ul{display:grid;gap:7px;margin:0;padding:0;list-style:none}.settings-consent-history li{display:grid;gap:3px;padding:10px 11px;border:1px solid #e5e1f3;border-radius:11px;background:#faf9ff;color:#30334d;font-size:10px}.settings-consent-history li small{color:#898da2;font-size:9px}.settings-consent-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.settings-consent-actions button{min-height:38px;padding:8px;border:1px solid #d9d4f4;border-radius:10px;background:#fff;color:#624ce7;font-size:10px;font-weight:800;cursor:pointer}.settings-consent-actions button:focus-visible{outline:3px solid #8f80ff66;outline-offset:2px}
+
+/* On a real phone the app owns the viewport. Keep the content gutter inside
+   the canvas, but remove the desktop-style centered frame and outer gray rails. */
+@media (max-width: 600px) {
+  html, body, #root { width: 100%; min-width: 0; }
+  body { background: #fbfaff; }
+  .app-shell,
+  .login-screen,
+  .onboarding-screen,
+  .reveal-screen,
+  .registration-complete-screen,
+  .event-application-screen,
+  .notification-settings-screen {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .bottom-nav { width: 100%; }
+}

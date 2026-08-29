@@ -12,7 +12,7 @@ type RegistrationMethod = 'qr' | 'manual' | 'photo'
 type RegistrationStep = 1 | 2 | 3
 
 function isRedemptionErrorMessage(message: string): boolean {
-  return ['실패', '찾을 수', '찾지 못', '비활성화', '사용할 수', '이미 사용', '만료된', '만료되었습니다', '카메라를 사용할 수 없습니다'].some(keyword => message.includes(keyword))
+  return ['실패', '찾을 수', '찾지 못', '비활성화', '사용할 수', '이미 사용', '만료된', '만료되었습니다', '카메라를 사용할 수 없습니다', 'HTTPS 연결'].some(keyword => message.includes(keyword))
 }
 
 export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, onRedeemed: (userCardId: string) => void }) {
@@ -78,6 +78,16 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
     let cancelled = false
     const scan = async () => {
       if (!videoRef.current) return
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setMessage('이 브라우저에서는 카메라를 사용할 수 없습니다. 사진으로 QR을 읽거나 코드를 직접 입력해 주세요.')
+        setScanning(false)
+        return
+      }
+      if (!window.isSecureContext) {
+        setMessage('카메라 스캔은 HTTPS 연결에서만 사용할 수 있어요. 사진으로 QR을 읽거나 코드를 직접 입력해 주세요.')
+        setScanning(false)
+        return
+      }
       try {
         // Load the camera decoder only when the user opens the scanner. This
         // keeps login, collection, and discovery startup bundles small.
@@ -100,7 +110,7 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
         if (cancelled) controls.stop()
         else scannerControlsRef.current = controls
       } catch {
-        setMessage('카메라를 사용할 수 없습니다. 권한을 확인하거나 코드를 직접 입력해 주세요.')
+        setMessage('카메라를 사용할 수 없습니다. 권한을 확인하거나 사진으로 QR을 읽어 주세요.')
         setScanning(false)
       }
     }
@@ -299,7 +309,7 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
           </div>
           <div className="redeem-flow-scan-stage">
             <img src={qrScannerImage} alt="보라색 팬폴리오 카드 뒷면의 QR 코드를 스캔하는 예시" />
-            {scanning && <video ref={videoRef} playsInline muted aria-label="QR 코드 카메라 화면" />}
+            {scanning && <video ref={videoRef} autoPlay playsInline muted aria-label="QR 코드 카메라 화면" />}
             <span className="redeem-flow-scan-status"><i />{scanning ? '인식 중' : '스캔 준비'}</span>
           </div>
           <button type="button" className="redeem-flow-camera-start" onClick={() => setScanning(value => !value)}>{scanning ? '스캔 중지' : '카메라로 스캔 시작'}</button>
@@ -309,6 +319,7 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
             <div><RedeemIcon name="scan" /><b>프레임에 맞추기</b></div>
           </div>
           <div className="redeem-flow-or"><span>또는</span></div>
+          <button type="button" className="redeem-flow-secondary" onClick={() => { setSelectedMethod('photo'); setSource('qr'); setScanning(false); window.requestAnimationFrame(() => photoInputRef.current?.click()) }}><RedeemIcon name="photo" />사진에서 QR 읽기</button>
           <button type="button" className="redeem-flow-secondary" onClick={() => { setSelectedMethod('manual'); setSource('manual'); setScanning(false) }}><RedeemIcon name="code" />인증 코드 직접 입력</button>
           {import.meta.env.DEV && <button type="button" className="redeem-flow-demo" onClick={previewDemoCard}>샘플 카드로 3단계 미리보기</button>}
           <p className="redeem-flow-privacy">촬영 이미지는 기기에 저장되지 않아요.</p>
