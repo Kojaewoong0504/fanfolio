@@ -4,6 +4,7 @@ import test from 'node:test'
 
 const appSource = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
 const appCssSource = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
+const referenceCssSource = await readFile(new URL('../src/reference.css', import.meta.url), 'utf8')
 const redeemSource = await readFile(new URL('../src/components/QrRedeemModal.tsx', import.meta.url), 'utf8')
 const inventorySource = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
 const mediaHookSource = await readFile(new URL('../src/hooks/useAuthenticatedMedia.ts', import.meta.url), 'utf8')
@@ -18,11 +19,20 @@ test('card pack opening has loading, duplicate-submit, and failure states', () =
 })
 
 test('QR camera and image-registration failures return to a manual fallback', () => {
-  assert.match(redeemSource, /카메라를 사용할 수 없습니다\. 권한을 확인하거나 코드를 직접 입력해 주세요\./)
+  assert.match(redeemSource, /카메라를 사용할 수 없습니다\. 권한을 확인하거나 사진으로 QR을 읽어 주세요\./)
+  assert.match(redeemSource, /HTTPS 연결에서만 사용할 수 있어요/)
+  assert.match(redeemSource, /autoPlay playsInline muted/)
+  assert.match(redeemSource, /사진에서 QR 읽기/)
   assert.match(redeemSource, /사진에서 QR을 찾지 못했습니다\. 더 선명한 사진을 사용하거나 코드를 직접 입력해 주세요\./)
   assert.match(redeemSource, /setReadingImage\(true\)/)
   assert.match(redeemSource, /setReadingImage\(false\)/)
   assert.match(redeemSource, /인증 코드 입력/)
+})
+
+test('mobile fan app owns the viewport without an outer desktop frame', () => {
+  assert.match(referenceCssSource, /@media \(max-width: 600px\)/)
+  assert.match(referenceCssSource, /\.app-shell,[\s\S]*?width: 100%;[\s\S]*?max-width: none;/)
+  assert.match(referenceCssSource, /\.bottom-nav \{ width: 100%; \}/)
 })
 
 test('redeem confirmation does not claim an unverified code was already checked', () => {
