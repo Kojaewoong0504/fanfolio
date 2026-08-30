@@ -18,7 +18,7 @@ test('revealed cards use the approved four-step completion screen', () => {
 })
 
 test('random card registration hides identity before the reveal', () => {
-  assert.match(appSource, /card-reveal-mystery-generated\.png/)
+  assert.match(appSource, /card-reveal-mystery-generated\.jpg/)
   assert.match(appSource, /'reveal-mystery-card is-revealing' : 'reveal-mystery-card'/)
   assert.match(appSource, /아직 공개되지 않은 랜덤 카드/)
   assert.match(appSource, /랜덤 카드가 도착했어요/)
@@ -86,7 +86,7 @@ test('collection always exposes the card registration flow', () => {
 })
 
 test('registration visuals use the generated card asset and reference icons', () => {
-  assert.match(appSource, /card-registration-idol-generated\.png/)
+  assert.match(appSource, /card-registration-idol-generated\.jpg/)
   assert.match(appSource, /registration-complete-celebration-v2\.png/)
   assert.match(appSource, /fan-level-star-v2\.png/)
   assert.match(appSource, /className="registration-complete-level-emblem"/)
