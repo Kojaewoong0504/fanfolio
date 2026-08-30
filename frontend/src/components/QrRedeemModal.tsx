@@ -26,6 +26,7 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
   const [message, setMessage] = useState('')
   const [saving, setSaving] = useState(false)
   const [scanning, setScanning] = useState(false)
+  const [cameraError, setCameraError] = useState(false)
   const [readingImage, setReadingImage] = useState(false)
   const [isDemo, setIsDemo] = useState(false)
   const [preview, setPreview] = useState<RedemptionPreview | null>(null)
@@ -80,15 +81,23 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
       if (!videoRef.current) return
       if (!navigator.mediaDevices?.getUserMedia) {
         setMessage('이 브라우저에서는 카메라를 사용할 수 없습니다. 사진으로 QR을 읽거나 코드를 직접 입력해 주세요.')
+        setCameraError(true)
         setScanning(false)
         return
       }
       if (!window.isSecureContext) {
         setMessage('카메라 스캔은 HTTPS 연결에서만 사용할 수 있어요. 사진으로 QR을 읽거나 코드를 직접 입력해 주세요.')
+        setCameraError(true)
         setScanning(false)
         return
       }
       try {
+        // Request permission in the user-initiated scanner flow first. ZXing
+        // also opens a stream, but its rejection does not reliably preserve
+        // the browser error name needed for a useful recovery message.
+        const permissionStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } } })
+        permissionStream.getTracks().forEach(track => track.stop())
+        if (cancelled) return
         // Load the camera decoder only when the user opens the scanner. This
         // keeps login, collection, and discovery startup bundles small.
         const { BrowserQRCodeReader } = await import('@zxing/browser')
@@ -109,8 +118,16 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
         )
         if (cancelled) controls.stop()
         else scannerControlsRef.current = controls
-      } catch {
-        setMessage('카메라를 사용할 수 없습니다. 권한을 확인하거나 사진으로 QR을 읽어 주세요.')
+      } catch (error) {
+        const cameraException = error instanceof DOMException ? error.name : ''
+        if (cameraException === 'NotAllowedError' || cameraException === 'SecurityError') {
+          setMessage('카메라 권한이 꺼져 있어요. 브라우저 설정에서 카메라를 허용한 뒤 다시 시도해 주세요.')
+        } else if (cameraException === 'NotFoundError') {
+          setMessage('사용할 수 있는 카메라를 찾지 못했어요. 사진으로 QR을 읽거나 코드를 직접 입력해 주세요.')
+        } else {
+          setMessage('카메라를 사용할 수 없습니다. 권한을 확인하거나 다시 시도해 주세요.')
+        }
+        setCameraError(true)
         setScanning(false)
       }
     }
@@ -224,6 +241,7 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
     if (selectedMethod === 'qr') {
       setCode('')
       setSource('qr')
+      setCameraError(false)
       setScanning(false)
       return
     }
@@ -234,6 +252,12 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
     }
     setSource('manual')
     window.requestAnimationFrame(() => codeInputRef.current?.focus())
+  }
+
+  const startScanning = () => {
+    setMessage('')
+    setCameraError(false)
+    setScanning(true)
   }
 
   const goBack = () => {
@@ -312,7 +336,7 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
             {scanning && <video ref={videoRef} autoPlay playsInline muted aria-label="QR 코드 카메라 화면" />}
             <span className="redeem-flow-scan-status"><i />{scanning ? '인식 중' : '스캔 준비'}</span>
           </div>
-          <button type="button" className="redeem-flow-camera-start" onClick={() => setScanning(value => !value)}>{scanning ? '스캔 중지' : '카메라로 스캔 시작'}</button>
+          <button type="button" className="redeem-flow-camera-start" onClick={() => scanning ? setScanning(false) : startScanning()}>{scanning ? '스캔 중지' : cameraError ? '카메라 권한 다시 요청' : '카메라로 스캔 시작'}</button>
           <div className="redeem-flow-scan-tips" aria-label="QR 코드 촬영 팁">
             <div><RedeemIcon name="scan" /><b>밝은 곳에서</b></div>
             <div><RedeemIcon name="photo" /><b>카드를 평평하게</b></div>

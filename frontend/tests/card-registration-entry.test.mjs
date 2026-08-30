@@ -52,3 +52,9 @@ test('QR scan screen uses a generated project scanner asset', () => {
   assert.match(modalSource, /카메라로 스캔 시작/)
   assert.match(modalCss, /\.redeem-flow-scan-stage/)
 })
+
+test('QR scan explicitly requests camera permission and offers a retry path', () => {
+  assert.match(modalSource, /navigator\.mediaDevices\.getUserMedia\(/)
+  assert.match(modalSource, /NotAllowedError|SecurityError/)
+  assert.match(modalSource, /카메라 권한을 다시 요청|다시 시도/)
+})

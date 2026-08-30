@@ -3874,4 +3874,12 @@ main.discover-artist-shell.detail-screen-shell {
     box-shadow: none;
   }
   .bottom-nav { width: 100%; }
+
+  /* The registration flow used its own 430px cap, so wider phones showed
+     side rails even though the rest of the app already filled the viewport. */
+  .redeem-flow-screen {
+    width: 100%;
+    max-width: none;
+    margin-inline: 0;
+  }
 }
