@@ -31,7 +31,7 @@ import cardMinhoImage from './assets/card-minho-midnight.jpg'
 import cardJayImage from './assets/card-jay-rosegold.jpg'
 import fanWeekNightStage from './assets/fan-week-night-stage.jpg'
 import fanWeekLavenderMeet from './assets/fan-week-lavender-meet.jpg'
-import loginDreamscapeGroup from './assets/login/dreamscape-group.png'
+import loginDreamscapeGroup from './assets/login/dreamscape-group.jpg'
 import appleLoginIcon from './assets/login/apple.svg'
 import googleLoginIcon from './assets/login/google.svg'
 import kakaoLoginIcon from './assets/login/kakao.svg'
@@ -905,10 +905,6 @@ function App() {
   }, [currentUser?.favoriteArtistIds])
 
   useEffect(() => {
-    writeActiveArtistId(growthArtistId)
-  }, [growthArtistId])
-
-  useEffect(() => {
     if (!signedIn) return
     void apiFetch<{ ok: true, data: { items: CatalogArtist[] } }>('/catalog/artists')
       .then(result => setCatalogArtists(result.data.items.map(normalizeCatalogArtistImage)))
@@ -1712,7 +1708,7 @@ function App() {
         {tab === 'collection' && <Collection cards={collectionCards} collectionDataReady={collectionDataReady} favoriteArtists={catalogArtists.filter(artist => currentUser?.favoriteArtistIds.includes(artist.id))} summary={collectionSummary} benefits={collectionBenefits} rewards={inventoryProgression?.claimedRewards ?? []} loading={collectionLoading} onSelect={openCard} onRedeem={openRedeem} onDiscover={() => navigateTab('discover')} onRewards={openRewardInventory} onCards={openCardCollection} onOpenWishlist={openWishlistPicker} onClaim={claimBenefit} />}
         {tab === 'discover' && <Discover favoriteArtists={catalogArtists.filter(artist => currentUser?.favoriteArtistIds.includes(artist.id))} onFindFans={query => navigateAppPath(routeWithReturnTo(query ? `/fans?q=${encodeURIComponent(query)}` : '/fans', '/discover'))} onOpenFanProfile={userId => navigateAppPath(routeWithReturnTo(`/fans/${encodeURIComponent(userId)}`, '/discover'))} onOpenPublicCollection={userId => navigateAppPath(routeWithReturnTo(`/fans/${encodeURIComponent(userId)}/collection`, '/discover'))} onOpenEvent={event => { if (event) openEvent(event); else openEvents() }} onOpenArtist={artistId => navigateAppPath(routeWithReturnTo(`/discover/artists/${encodeURIComponent(artistId)}`, '/discover'))} onOpenPackCatalog={() => navigateAppPath(routeWithReturnTo('/discover/packs', '/discover'))} onOpenPack={packId => navigateAppPath(routeWithReturnTo(`/discover/packs/${encodeURIComponent(packId)}`, '/discover'))} onOpenCard={openCard} featuredArtist={catalogArtists.find(artist => artist.name === '드림스케이프') ?? catalogArtists[0] ?? null} featuredEvent={fanHome?.featuredEvent ?? fanHome?.upcomingEvents[0] ?? null} featuredEventLoading={fanHomeLoading} />}
         {/* Embedded surfaces stay compact; the dedicated tab uses the full progression view. */}
-        {tab === 'growth' && <FanGrowth progression={fanProgression} globalProgression={globalFanProgression} artistScopes={catalogArtists.filter(artist => currentUser?.favoriteArtistIds.includes(artist.id)).map(artist => ({ id: artist.id, name: artist.name, imageUrl: artist.name === '드림스케이프' ? loginDreamscapeGroup : artist.imageUrl }))} selectedArtistId={growthArtistId} onArtistChange={setGrowthArtistId} loading={growthLoading} error={growthError} mode="full" onRetry={refreshGrowth} onClaim={claimGrowthReward} onClaimPassTier={claimGrowthPassTier} onEquip={saveGrowthEquipment} onViewPass={openFanPassPage} onViewGlobalPass={(tierId) => openFanPassPage(tierId, 'global')} onViewMissions={openMissionPage} fanGrowthMode="full" />}
+        {tab === 'growth' && <FanGrowth progression={fanProgression} globalProgression={globalFanProgression} artistScopes={catalogArtists.filter(artist => currentUser?.favoriteArtistIds.includes(artist.id)).map(artist => ({ id: artist.id, name: artist.name, imageUrl: artist.name === '드림스케이프' ? loginDreamscapeGroup : artist.imageUrl }))} selectedArtistId={growthArtistId} onArtistChange={artistId => { writeActiveArtistId(artistId); setGrowthArtistId(artistId) }} loading={growthLoading} error={growthError} mode="full" onRetry={refreshGrowth} onClaim={claimGrowthReward} onClaimPassTier={claimGrowthPassTier} onEquip={saveGrowthEquipment} onViewPass={openFanPassPage} onViewGlobalPass={(tierId) => openFanPassPage(tierId, 'global')} onViewMissions={openMissionPage} fanGrowthMode="full" />}
         {tab === 'settings' && currentUser && <Settings user={currentUser} progression={fanProgression} onUserUpdated={setCurrentUser} onLogout={logout} onEvents={openMyApplications} onNotificationSettings={() => setShowNotificationSettings(true)} />}
       </section>}
 
@@ -2425,7 +2421,7 @@ function HomeContent({ nickname, cards, collectionDataReady, savedCards, summary
   const favoriteArtists = (eventHome?.favoriteArtists ?? []).map(normalizeCatalogArtistImage)
   const selectedHomeArtist = favoriteArtists.find(artist => artist.id === activeHomeArtistId) ?? null
   const homeVisibleEvents = activeHomeArtistId
-    ? apiHeroEvents.filter(event => event.artistId === activeHomeArtistId)
+    ? apiHeroEvents.filter(event => !event.artistId || event.artistId === activeHomeArtistId)
     : (eventHome ? apiHeroEvents : featuredEvent ? [featuredEvent] : [])
   const homeVisibleCards = activeHomeArtistId
     ? scopedHomeCards.map(toCatalogCard)

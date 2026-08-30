@@ -11,9 +11,16 @@ const fanRouterSource = await readFile(new URL('../../backend/app/routers/fan.py
 const storageSource = await readFile(new URL('../../backend/app/storage.py', import.meta.url), 'utf8')
 
 test('public fan media uses the browser cache instead of authenticated blob downloads', () => {
+  const publicMediaMatcher = clientSource.match(/export function isPublicFanMediaPath[\s\S]*?\n}/)?.[0] ?? ''
   assert.match(clientSource, /isPublicFanMediaPath/)
-  assert.match(clientSource, /(?:cards|rewards)/)
+  assert.match(publicMediaMatcher, /(?:cards|rewards)/)
+  assert.match(publicMediaMatcher, /events/)
   assert.match(imageSource, /isPublicFanMediaPath\(src\)/)
+})
+
+test('home re-entry keeps global events visible without inheriting a growth default', () => {
+  assert.doesNotMatch(appSource, /useEffect\(\(\) => \{\s*writeActiveArtistId\(growthArtistId\)\s*\}, \[growthArtistId\]\)/)
+  assert.match(appSource, /apiHeroEvents\.filter\(event => !event\.artistId \|\| event\.artistId === activeHomeArtistId\)/)
 })
 
 test('protected media requests are deduplicated and bounded', () => {
@@ -30,7 +37,7 @@ test('fan image responses advertise cacheability for immutable public assets', (
   assert.match(fanRouterSource, /cache_control=/)
 })
 
-test('private event imagery always has a local fallback when authentication is unavailable', () => {
+test('event imagery always has a local fallback when remote media is unavailable', () => {
   assert.match(appSource, /<AuthenticatedImage draggable=\{false\} src=\{slide\.event\.heroUrl\} fallback=\{dreamscapeHero\}/)
   assert.match(eventCardSource, /AuthenticatedImage src=\{event\.heroUrl\} fallback=\{dreamscapeDemoAssets\.eventHero\}/)
   assert.match(eventDetailSource, /AuthenticatedImage className="event-detail-hero" src=\{event\.heroUrl\} fallback=\{dreamscapeDemoAssets\.eventHero\}/)

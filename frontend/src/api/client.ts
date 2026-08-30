@@ -87,7 +87,7 @@ export function resolveApiUrl(path: string | null | undefined): string {
 
 /** Public fan media can be loaded as a normal image so the browser/CDN cache works. */
 export function isPublicFanMediaPath(path: string): boolean {
-  return /^\/api\/(?:cards|rewards)\/[^/]+\/image(?:\?|$)/.test(path)
+  return /^\/api\/(?:(?:cards|rewards)\/[^/]+\/image|events\/[^/]+\/hero)(?:\?|$)/.test(path)
 }
 
 export async function fetchAuthenticatedMedia(path: string, force = false): Promise<string | null> {

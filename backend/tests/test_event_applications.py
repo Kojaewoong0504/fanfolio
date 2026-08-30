@@ -32,7 +32,7 @@ def create_event_banner(actors):
     return asset["assetId"]
 
 
-def test_event_application_is_idempotent_and_exposed_in_public_detail(actors, seeded):
+def test_event_application_is_idempotent_and_exposed_in_public_detail(actors, client, seeded):
     now = datetime.now(UTC)
     starts_at = (now - timedelta(days=1)).isoformat()
     ends_at = (now + timedelta(days=1)).isoformat()
@@ -63,6 +63,8 @@ def test_event_application_is_idempotent_and_exposed_in_public_detail(actors, se
     )
     assert created.status_code == 201, created.text
     event_id = created.json()["data"]["id"]
+    hidden_hero = client.get(f"/api/events/{event_id}/hero")
+    assert hidden_hero.status_code == 404
     assert actors["admin"].post(f"/api/admin/events/{event_id}/submit").status_code == 200
     assert (
         actors["admin"]
@@ -71,6 +73,10 @@ def test_event_application_is_idempotent_and_exposed_in_public_detail(actors, se
         == 200
     )
     assert actors["admin"].post(f"/api/admin/events/{event_id}/publish").status_code == 200
+
+    public_hero = client.get(f"/api/events/{event_id}/hero")
+    assert public_hero.status_code == 200
+    assert public_hero.headers["cache-control"].startswith("public, max-age=")
 
     before = assert_success(actors["fan"].get(f"/api/events/{event_id}"))
     assert before["venue"] == "코엑스 컨퍼런스룸 (3F)"

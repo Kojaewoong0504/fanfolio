@@ -595,8 +595,13 @@ async def apply_to_event(
 
 
 @router.get("/events/{event_id}/hero")
-async def get_event_hero(event_id: str, user: FanUser, session: DbSession):
-    del user
+async def get_event_hero(event_id: str, session: DbSession) -> Response:
+    """Serve only fan-visible event art as browser-cacheable public media.
+
+    Image elements cannot attach the SPA's in-memory bearer token. Repeating
+    the event visibility check here keeps unpublished events private while
+    allowing published hero art to survive navigation in the browser cache.
+    """
     event = await session.get(Event, event_id)
     now = datetime.now(UTC)
     if (
@@ -615,7 +620,7 @@ async def get_event_hero(event_id: str, user: FanUser, session: DbSession):
         configured_asset_storage(),
         asset.storage_path,
         media_type=asset.content_type or "image/webp",
-        filename=asset.file_name,
+        cache_control="public, max-age=300, s-maxage=86400, stale-while-revalidate=604800",
     )
 
 
