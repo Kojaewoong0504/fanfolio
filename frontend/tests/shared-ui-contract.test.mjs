@@ -68,6 +68,7 @@ test('fan growth hero copy stays inside the mobile column', () => {
 })
 
 test('mobile QR registration stays within the phone viewport', () => {
+  assert.match(qrRedeemCss, /\.redeem-flow-backdrop\s*\{[\s\S]*overflow-x:\s*clip;/)
   assert.match(qrRedeemCss, /@media \(max-width: 430px\)[\s\S]*\.redeem-flow-screen\s*\{[\s\S]*box-sizing:\s*border-box;[\s\S]*width:\s*100%;[\s\S]*max-width:\s*100%;[\s\S]*overflow-x:\s*clip;/)
   assert.match(qrRedeemCss, /@media \(max-width: 430px\)[\s\S]*\.redeem-flow-screen > \.detail-topbar\s*\{[\s\S]*width:\s*100%;[\s\S]*max-width:\s*100%;[\s\S]*margin-right:\s*0;[\s\S]*margin-left:\s*0;/)
 })
