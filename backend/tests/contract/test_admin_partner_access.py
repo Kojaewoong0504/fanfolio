@@ -385,7 +385,7 @@ def test_root_can_manage_partner_organization_and_member(
         {
             "id": "artist_nova3",
             "name": "드림스케이프",
-            "imageUrl": "/assets/demo/dreamscape/group.png",
+            "imageUrl": "/assets/demo/dreamscape/group.jpg",
         }
     ]
     assert len(member["temporaryPassword"]) >= 16

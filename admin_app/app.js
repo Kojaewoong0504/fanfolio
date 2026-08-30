@@ -1828,10 +1828,10 @@ function cardPackCompositionView() {
   const total = (pack.cards || []).filter((card) => card.enabled !== false).reduce((sum, card) => sum + Number(card.probability || 0), 0);
   const editable = pack.status !== "published" && can("cards:write");
   const demoCardThumbnails = {
-    card_demo_published: "./assets/demo/dreamscape/yuna.png",
-    card_demo_harin: "./assets/demo/dreamscape/harin.png",
-    card_demo_sena: "./assets/demo/dreamscape/sena.png",
-    card_demo_rina: "./assets/demo/dreamscape/rina.png",
+    card_demo_published: "./assets/demo/dreamscape/yuna.jpg",
+    card_demo_harin: "./assets/demo/dreamscape/harin.jpg",
+    card_demo_sena: "./assets/demo/dreamscape/sena.jpg",
+    card_demo_rina: "./assets/demo/dreamscape/rina.jpg",
   };
   const selectedCompositionCard = (pack.cards || []).find((card) => card.cardId === state.selectedCompositionCardId) || pack.cards?.[0] || null;
   const compositionPreview = selectedCompositionCard ? (() => {
@@ -2143,14 +2143,14 @@ async function loadCardThumbnails(cards) {
 
 function demoCardThumbnailUrl(cardId) {
   return ({
-    card_demo_published: "./assets/demo/dreamscape/yuna.png",
-    card_demo_harin: "./assets/demo/dreamscape/harin.png",
-    card_demo_sena: "./assets/demo/dreamscape/sena.png",
-    card_demo_rina: "./assets/demo/dreamscape/rina.png",
-    local_demo_card_harin: "./assets/demo/dreamscape/harin.png",
-    local_demo_card_doyun: "./assets/demo/dreamscape/sena.png",
-    local_demo_card_minjae: "./assets/demo/dreamscape/rina.png",
-    local_demo_card_jay: "./assets/demo/dreamscape/yuna.png",
+    card_demo_published: "./assets/demo/dreamscape/yuna.jpg",
+    card_demo_harin: "./assets/demo/dreamscape/harin.jpg",
+    card_demo_sena: "./assets/demo/dreamscape/sena.jpg",
+    card_demo_rina: "./assets/demo/dreamscape/rina.jpg",
+    local_demo_card_harin: "./assets/demo/dreamscape/harin.jpg",
+    local_demo_card_doyun: "./assets/demo/dreamscape/sena.jpg",
+    local_demo_card_minjae: "./assets/demo/dreamscape/rina.jpg",
+    local_demo_card_jay: "./assets/demo/dreamscape/yuna.jpg",
   })[cardId] || "";
 }
 
@@ -5617,10 +5617,10 @@ function bind() {
       const card = state.selectedCardPack?.cards?.find((candidate) => candidate.cardId === state.selectedCompositionCardId);
       if (preview && card) {
         const thumbnailUrl = state.cardThumbnailUrls[card.cardId] || ({
-          card_demo_published: "./assets/demo/dreamscape/yuna.png",
-          card_demo_harin: "./assets/demo/dreamscape/harin.png",
-          card_demo_sena: "./assets/demo/dreamscape/sena.png",
-          card_demo_rina: "./assets/demo/dreamscape/rina.png",
+          card_demo_published: "./assets/demo/dreamscape/yuna.jpg",
+          card_demo_harin: "./assets/demo/dreamscape/harin.jpg",
+          card_demo_sena: "./assets/demo/dreamscape/sena.jpg",
+          card_demo_rina: "./assets/demo/dreamscape/rina.jpg",
         })[card.cardId] || "";
         const media = preview.querySelector(".composition-card-preview-media");
         if (media) media.replaceChildren(thumbnailUrl ? Object.assign(document.createElement("img"), { src: thumbnailUrl, alt: `${card.name} 카드 미리보기` }) : document.createTextNode("이미지 없음"));
@@ -6839,11 +6839,11 @@ function previewCardThumb(src, name) {
 
 function cardManagementPreview() {
   const cards = [
-    { name: "Nebula Ver.", member: "유나", artist: "DREAMSCAPE", rarity: "UR", src: "./assets/demo/dreamscape/yuna.png", status: "공개됨", method: "한정 특전", count: "14장", message: "이 순간이 오래도록 빛나길 바라요. 항상 고마워요, 우리 팬들! ✨" },
-    { name: "Starlight Ver.", member: "하린", artist: "DREAMSCAPE", rarity: "SR", src: "./assets/demo/dreamscape/harin.png", status: "공개됨", method: "한정 특전", count: "14장", message: "같이 만든 별빛 같은 순간을 오래 기억할게요." },
-    { name: "Midnight Ver.", member: "세나", artist: "DREAMSCAPE", rarity: "R", src: "./assets/demo/dreamscape/sena.png", status: "공개됨", method: "한정 특전", count: "14장", message: "언제나 곁에서 응원해 줘서 고마워요." },
-    { name: "Aurora Ver.", member: "리나", artist: "DREAMSCAPE", rarity: "R", src: "./assets/demo/dreamscape/rina.png", status: "검수 완료", method: "카드팩 랜덤", count: "28장", message: "새로운 계절에도 우리 함께해요." },
-    { name: "Eclipse Ver.", member: "유나", artist: "DREAMSCAPE", rarity: "N", src: "./assets/demo/dreamscape/yuna.png", status: "검수 완료", method: "카드팩 랜덤", count: "14장", message: "오늘도 좋은 하루 보내요." },
+    { name: "Nebula Ver.", member: "유나", artist: "DREAMSCAPE", rarity: "UR", src: "./assets/demo/dreamscape/yuna.jpg", status: "공개됨", method: "한정 특전", count: "14장", message: "이 순간이 오래도록 빛나길 바라요. 항상 고마워요, 우리 팬들! ✨" },
+    { name: "Starlight Ver.", member: "하린", artist: "DREAMSCAPE", rarity: "SR", src: "./assets/demo/dreamscape/harin.jpg", status: "공개됨", method: "한정 특전", count: "14장", message: "같이 만든 별빛 같은 순간을 오래 기억할게요." },
+    { name: "Midnight Ver.", member: "세나", artist: "DREAMSCAPE", rarity: "R", src: "./assets/demo/dreamscape/sena.jpg", status: "공개됨", method: "한정 특전", count: "14장", message: "언제나 곁에서 응원해 줘서 고마워요." },
+    { name: "Aurora Ver.", member: "리나", artist: "DREAMSCAPE", rarity: "R", src: "./assets/demo/dreamscape/rina.jpg", status: "검수 완료", method: "카드팩 랜덤", count: "28장", message: "새로운 계절에도 우리 함께해요." },
+    { name: "Eclipse Ver.", member: "유나", artist: "DREAMSCAPE", rarity: "N", src: "./assets/demo/dreamscape/yuna.jpg", status: "검수 완료", method: "카드팩 랜덤", count: "14장", message: "오늘도 좋은 하루 보내요." },
     { name: "Bloom Ver.", member: "하린", artist: "LUMINA", rarity: "R", src: "./assets/preview/card-stardust-backstage.jpg", status: "공개됨", method: "한정 특전", count: "20장", message: "우리의 순간이 활짝 피어나길." },
     { name: "Petal Ver.", member: "민재", artist: "LUMINA", rarity: "SR", src: "./assets/preview/card-motion-stage.jpg", status: "검수 완료", method: "카드팩 랜덤", count: "30장", message: "소중한 마음 잊지 않을게요." },
     { name: "Forest Ver.", member: "도윤", artist: "LUMINA", rarity: "N", src: "./assets/preview/card-minho-midnight.jpg", status: "검수 완료", method: "카드팩 랜덤", count: "20장", message: "늘 응원해 줘서 고마워요." },
@@ -6873,7 +6873,7 @@ function packManagementPreview() {
   const visiblePacks = packs.map((pack, index) => ({ pack, index })).filter(({ pack }) => (!query || `${pack[0]} ${pack[4]}`.toLowerCase().includes(query)) && (cardOperationsPreviewState.packArtist === "all" || pack[4] === cardOperationsPreviewState.packArtist) && (cardOperationsPreviewState.packStatus === "all" || pack[3] === cardOperationsPreviewState.packStatus));
   return `<section class="card-ops-page pack-management-preview">
     <div class="card-ops-heading"><div><nav>카드 <span>›</span> <strong>카드팩 관리</strong></nav><h2>카드팩 관리</h2><p>카드팩 이미지와 정보, 버전별 카드 구성 및 공개 확률을 관리합니다.</p></div><button class="primary" type="button" data-create-pack-version>${icon("add")} 새 버전 만들기</button></div>
-    <div class="card-ops-master-detail"><section class="panel card-ops-table-panel"><div class="card-ops-toolbar"><label class="search-field">${icon("search")}<input data-preview-search="packQuery" value="${cardOperationsPreviewState.packQuery}" placeholder="카드팩 또는 아티스트 검색" /></label>${adminSelect({ id: "preview-pack-artist", value: cardOperationsPreviewState.packArtist, label: "아티스트 필터", className: "preview-filter-control", dataPreviewFilter: "packArtist", options: [{ value: "all", label: "전체 아티스트" }, { value: "DREAMSCAPE", label: "DREAMSCAPE" }] })}${adminSelect({ id: "preview-pack-status", value: cardOperationsPreviewState.packStatus, label: "상태 필터", className: "preview-filter-control", dataPreviewFilter: "packStatus", options: [{ value: "all", label: "전체 상태" }, { value: "공개됨", label: "공개됨" }, { value: "임시 저장", label: "임시 저장" }] })}</div><div class="table-wrap"><table class="table"><thead><tr><th>카드팩</th><th>버전</th><th>포함 카드</th><th>확률 합계</th><th>공개 상태</th><th></th></tr></thead><tbody>${visiblePacks.map(({ pack, index }) => { const [name, count, total, status] = pack; const version = name === cardOperationsPreviewState.packDraftTitle ? "v1.0" : `v${3 - index}.0`; return `<tr class="${index === 0 ? "selected-preview-row" : ""}"><td><div class="pack-table-name"><img src="./assets/demo/dreamscape/card-pack.png" alt="${name} 카드팩 이미지" /><div><small>정규 1집 · DREAMSCAPE</small><strong>${name}</strong></div></div></td><td>${version}</td><td>${count}</td><td><strong>${total}</strong></td><td><span class="badge ${status === "공개됨" ? "success-badge" : "draft"}">${status}</span></td><td><button class="icon-button" type="button">${icon("chevron_right")}</button></td></tr>`; }).join("")}</tbody></table></div><footer class="preview-table-footer"><strong>총 ${visiblePacks.length}개</strong><span class="pagination-control">‹ <b>1</b> ›</span></footer></section>
+    <div class="card-ops-master-detail"><section class="panel card-ops-table-panel"><div class="card-ops-toolbar"><label class="search-field">${icon("search")}<input data-preview-search="packQuery" value="${cardOperationsPreviewState.packQuery}" placeholder="카드팩 또는 아티스트 검색" /></label>${adminSelect({ id: "preview-pack-artist", value: cardOperationsPreviewState.packArtist, label: "아티스트 필터", className: "preview-filter-control", dataPreviewFilter: "packArtist", options: [{ value: "all", label: "전체 아티스트" }, { value: "DREAMSCAPE", label: "DREAMSCAPE" }] })}${adminSelect({ id: "preview-pack-status", value: cardOperationsPreviewState.packStatus, label: "상태 필터", className: "preview-filter-control", dataPreviewFilter: "packStatus", options: [{ value: "all", label: "전체 상태" }, { value: "공개됨", label: "공개됨" }, { value: "임시 저장", label: "임시 저장" }] })}</div><div class="table-wrap"><table class="table"><thead><tr><th>카드팩</th><th>버전</th><th>포함 카드</th><th>확률 합계</th><th>공개 상태</th><th></th></tr></thead><tbody>${visiblePacks.map(({ pack, index }) => { const [name, count, total, status] = pack; const version = name === cardOperationsPreviewState.packDraftTitle ? "v1.0" : `v${3 - index}.0`; return `<tr class="${index === 0 ? "selected-preview-row" : ""}"><td><div class="pack-table-name"><img src="./assets/demo/dreamscape/card-pack.jpg" alt="${name} 카드팩 이미지" /><div><small>정규 1집 · DREAMSCAPE</small><strong>${name}</strong></div></div></td><td>${version}</td><td>${count}</td><td><strong>${total}</strong></td><td><span class="badge ${status === "공개됨" ? "success-badge" : "draft"}">${status}</span></td><td><button class="icon-button" type="button">${icon("chevron_right")}</button></td></tr>`; }).join("")}</tbody></table></div><footer class="preview-table-footer"><strong>총 ${visiblePacks.length}개</strong><span class="pagination-control">‹ <b>1</b> ›</span></footer></section>
     <aside class="panel pack-detail-preview"><div class="pack-detail-cover"><img src="./assets/preview/card-back-template.png" alt="Nebula Ver. 카드팩 이미지" /><div><small>정규 1집 · DREAMSCAPE</small><h3>Nebula Ver.</h3><span class="badge success-badge">공개됨</span></div></div><dl><div><dt>아티스트</dt><dd>DREAMSCAPE</dd></div><div><dt>포함 카드</dt><dd>14장</dd></div><div><dt>확률 합계</dt><dd>100%</dd></div><div><dt>공개 상태</dt><dd>공개됨</dd></div><div><dt>업데이트</dt><dd>2026. 8. 19. 13:20</dd></div></dl><div class="public-odds-mini"><strong>공개 확률 미리보기</strong><span><b>UR</b> 1%</span><span><b>SR</b> 9%</span><span><b>R</b> 30%</span><span><b>N</b> 60%</span></div><button class="primary" type="button" data-card-ops-view="composition">${icon("edit_square")} 카드 구성 편집</button><button class="secondary" type="button" data-open-odds-preview>${icon("public")} 확률표 공개</button></aside></div>
   </section>`;
 }

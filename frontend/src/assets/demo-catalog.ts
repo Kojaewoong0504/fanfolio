@@ -1,10 +1,10 @@
-import dreamscapeGroup from './demo/dreamscape/group.png'
-import dreamscapeYuna from './demo/dreamscape/yuna.png'
-import dreamscapeHarin from './demo/dreamscape/harin.png'
-import dreamscapeSena from './demo/dreamscape/sena.png'
-import dreamscapeRina from './demo/dreamscape/rina.png'
-import dreamscapeEventHero from './demo/dreamscape/event-hero.png'
-import dreamscapeCardPack from './demo/dreamscape/card-pack.png'
+import dreamscapeGroup from './demo/dreamscape/group.jpg'
+import dreamscapeYuna from './demo/dreamscape/yuna.jpg'
+import dreamscapeHarin from './demo/dreamscape/harin.jpg'
+import dreamscapeSena from './demo/dreamscape/sena.jpg'
+import dreamscapeRina from './demo/dreamscape/rina.jpg'
+import dreamscapeEventHero from './demo/dreamscape/event-hero.jpg'
+import dreamscapeCardPack from './demo/dreamscape/card-pack.jpg'
 
 export const dreamscapeDemoMembers = [
   { id: 'member_yuna', name: '유나', role: '리더 · 보컬', image: dreamscapeYuna },

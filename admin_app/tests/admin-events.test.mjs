@@ -165,7 +165,7 @@ test('related event cards render authenticated card thumbnails outside the card 
 
 test('related event cards keep a usable preview when a demo card has no stored asset', () => {
   assert.match(source, /function demoCardThumbnailUrl\(cardId\)/)
-  assert.match(source, /local_demo_card_harin: "\.\/assets\/demo\/dreamscape\/harin\.png"/)
+  assert.match(source, /local_demo_card_harin: "\.\/assets\/demo\/dreamscape\/harin\.jpg"/)
   assert.match(source, /state\.cardThumbnailUrls\[card\.id\] \|\| card\.sourceImageUrl \|\| card\.imageUrl \|\| demoCardThumbnailUrl\(card\.id\)/)
   assert.match(source, /thumbnailUrl\?\.startsWith\("\/assets\/"\)/)
   assert.match(source, /카드 미리보기/)

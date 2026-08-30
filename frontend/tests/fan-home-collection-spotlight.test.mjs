@@ -7,6 +7,7 @@ const appCssSource = await readFile(new URL('../src/App.css', import.meta.url), 
 const referenceCssSource = await readFile(new URL('../src/reference.css', import.meta.url), 'utf8')
 const cardVisualSource = await readFile(new URL('../src/utils/cardVisual.ts', import.meta.url), 'utf8')
 const interactiveCardSource = await readFile(new URL('../src/components/InteractiveCollectibleCard.tsx', import.meta.url), 'utf8')
+const demoCatalogSource = await readFile(new URL('../src/assets/demo-catalog.ts', import.meta.url), 'utf8')
 
 test('home foregrounds the signed-in fan collection and keeps its primary actions working', () => {
   assert.match(appSource, /`member:\$\{card\.memberName/)
@@ -226,6 +227,14 @@ test('home reference CSS uses the approved mobile density and lighter editorial 
   assert.match(referenceCssSource, /\.home-new-card-favorite[\s\S]*width:\s*20px[\s\S]*height:\s*20px/)
   assert.match(referenceCssSource, /\.home-active-event-section\s*\{\s*margin-top:\s*10px/)
   assert.match(referenceCssSource, /\.home-active-event > img[\s\S]*width:\s*84px[\s\S]*height:\s*60px/)
+})
+
+test('home demo photography uses compressed JPEG assets instead of source PNGs', () => {
+  assert.match(appSource, /fanWeekNightStage from '\.\/assets\/fan-week-night-stage\.jpg'/)
+  assert.match(appSource, /fanWeekLavenderMeet from '\.\/assets\/fan-week-lavender-meet\.jpg'/)
+  assert.match(demoCatalogSource, /demo\/dreamscape\/event-hero\.jpg/)
+  assert.match(demoCatalogSource, /demo\/dreamscape\/group\.jpg/)
+  assert.doesNotMatch(demoCatalogSource, /demo\/dreamscape\/[^']+\.png/)
 })
 
 test('home hero is a real API-backed carousel with navigable editorial banners', () => {
