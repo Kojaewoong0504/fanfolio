@@ -1496,7 +1496,7 @@ function fanPassDrawer() {
   const tierCount = Math.max(3, Math.min(maxFanPassTiers, (season.tiers || []).length || 3));
   const presetOptions = fanPassPresets.map((preset) => `<option value="${preset.id}">${preset.label}</option>`).join("");
   const tiers = Array.from({ length: tierCount }, (_, index) => {
-    const tier = (season.tiers || [])[index] || { tier: index + 1, requiredXp: "", rewardId: "", premiumRewardId: "" };
+    const tier = (season.tiers || [])[index] || { tier: index + 1, requiredXp: index * 100, rewardId: "", premiumRewardId: "" };
     return `<article class="pass-tier-row"><span class="pass-tier-handle">${icon("drag_indicator")}</span><div class="pass-tier-heading"><strong>Lv.${index + 1}</strong><span class="pass-tier-visibility">${icon("lock_open")} 공개</span></div><button class="icon-button pass-tier-menu" type="button" aria-label="Lv.${index + 1} 옵션">${icon("more_horiz")}</button><label class="field"><span>필요 경험치 (XP)</span><input name="tierXp" type="number" min="0" value="${tier.requiredXp ?? ""}" placeholder="${index * 100}" /></label><label class="field"><span>무료 보상</span>${adminSelect({ id: `pass-tier-free-${index}`, name: "tierReward", value: tier.rewardId || "", label: "무료 보상", className: "form-select", options: passRewardOptions })}</label><label class="field"><span>프리미엄 보상</span>${adminSelect({ id: `pass-tier-premium-${index}`, name: "tierPremiumReward", value: tier.premiumRewardId || "", label: "프리미엄 보상", className: "form-select", options: passRewardOptions })}</label></article>`;
   }).join("");
   const approvalAction = canApproveFanGrowth() && season.id && season.status === "pending_review"
@@ -5336,6 +5336,16 @@ async function saveFanPass(event) {
   const tierXp = data.getAll("tierXp");
   const tierReward = data.getAll("tierReward");
   const tierPremiumReward = data.getAll("tierPremiumReward");
+  const invalidTierIndex = tierXp.findIndex((xp) => {
+    const rawXp = String(xp).trim();
+    const requiredXp = Number(xp);
+    return rawXp === "" || !Number.isFinite(requiredXp) || requiredXp < 0;
+  });
+  if (invalidTierIndex >= 0) {
+    errorBox.textContent = `Lv.${invalidTierIndex + 1} 필요 경험치를 입력해 주세요.`;
+    errorBox.hidden = false;
+    return;
+  }
   const tiers = tierXp
     .map((xp, index) => ({ tier: index + 1, rawXp: String(xp).trim(), requiredXp: Number(xp), rewardId: tierReward[index] || null, premiumRewardId: tierPremiumReward[index] || null }))
     .filter((tier) => tier.rawXp !== "" && Number.isFinite(tier.requiredXp) && tier.requiredXp >= 0)
@@ -5993,7 +6003,7 @@ function bind() {
         endsAt: data.get("endsAt") || null,
         premiumEnabled: data.get("premiumEnabled") === "on",
         premiumPricePoints: data.get("premiumPricePoints") || "",
-        tiers: [...currentTiers, { tier: currentTiers.length + 1, requiredXp: "", rewardId: "", premiumRewardId: "" }],
+        tiers: [...currentTiers, { tier: currentTiers.length + 1, requiredXp: currentTiers.length * 100, rewardId: "", premiumRewardId: "" }],
       },
     };
     layout();

@@ -135,6 +135,13 @@ test('event editor renders uploaded banner assets immediately after upload', () 
   assert.match(source, /event-upload-thumbnail.*querySelector|querySelector\("\.event-upload-thumbnail"\)/s)
 })
 
+test('event banner file selection persists the asset id and replaces the thumbnail', () => {
+  assert.match(source, /const assetId = await uploadAsset\(file, "event_banner"\)/)
+  assert.match(source, /event\.currentTarget\.form\.elements\.heroAssetId\.value = assetId/)
+  assert.match(source, /event\.currentTarget\.form\.querySelector\("\.event-upload-thumbnail"\)/)
+  assert.match(source, /innerHTML = `<img data-event-hero src=/)
+})
+
 test('related event cards render authenticated card thumbnails outside the card list view', () => {
   assert.match(source, /event-card-thumb.*cardThumbnailUrls/s)
   assert.match(source, /state\.view === "events"|state\.drawer === "event"/s)

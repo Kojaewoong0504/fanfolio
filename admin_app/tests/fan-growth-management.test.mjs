@@ -180,6 +180,13 @@ test('fan pass date controls keep the submitted datetime value visible and pass 
   assert.match(source, /finally[\s\S]*disabled = false/)
 })
 
+test('fan pass tiers never silently disappear when the editor shows default milestones', () => {
+  assert.match(source, /requiredXp: index \* 100, rewardId: "", premiumRewardId: ""/)
+  assert.match(source, /requiredXp: currentTiers\.length \* 100, rewardId: "", premiumRewardId: ""/)
+  assert.match(source, /const invalidTierIndex = tierXp\.findIndex/)
+  assert.match(source, /Lv\.\$\{invalidTierIndex \+ 1\} 필요 경험치를 입력해 주세요\./)
+})
+
 test('root fan pass save rejects an artist scope without an organization', () => {
   assert.match(source, /if \(isRoot\(\) && \(\(organizationId && !artistId\) \|\| \(!organizationId && artistId\)\)\)/)
   assert.match(source, /조직과 아티스트 범위를 함께 선택/)
