@@ -3861,6 +3861,7 @@ main.discover-artist-shell.detail-screen-shell {
   html, body, #root { width: 100%; min-width: 0; }
   body { background: #fbfaff; }
   .app-shell,
+  .app-shell.detail-screen-shell,
   .login-screen,
   .onboarding-screen,
   .reveal-screen,

@@ -780,6 +780,24 @@
   .redeem-flow-confirm-card h3 { font-size: 16px; }
 }
 
+/* The base flow is capped at 430px and this component stylesheet is loaded
+   after reference.css. Remove that cap for wider phones as well, otherwise
+   the scanner/detail flow is the only route that retains side rails. */
+@media (max-width: 600px) {
+  .redeem-flow-screen {
+    box-sizing: border-box;
+    width: 100vw;
+    max-width: 100vw;
+    margin-inline: 0;
+  }
+  .redeem-flow-screen > .detail-topbar {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    margin-inline: 0;
+  }
+}
+
 @media (max-width: 360px) {
   .redeem-flow-intro h1 { font-size: 26px; }
   .redeem-flow-card-preview { width: 132px; height: 186px; margin: 20px 0 18px; }
