@@ -7,6 +7,7 @@ const css = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
 const indexCss = await readFile(new URL('../src/index.css', import.meta.url), 'utf8')
 const referenceCss = await readFile(new URL('../src/reference.css', import.meta.url), 'utf8')
 const fanGrowthReferenceCss = await readFile(new URL('../src/components/FanGrowthReference.css', import.meta.url), 'utf8')
+const qrRedeemCss = await readFile(new URL('../src/components/QrRedeemModal.css', import.meta.url), 'utf8')
 const fanPassSource = await readFile(new URL('../src/components/FanPassPage.tsx', import.meta.url), 'utf8')
 const missionSource = await readFile(new URL('../src/components/FanMissionPage.tsx', import.meta.url), 'utf8')
 const tradeInboxSource = await readFile(new URL('../src/components/TradeInbox.tsx', import.meta.url), 'utf8')
@@ -64,4 +65,9 @@ test('fan growth hero copy stays inside the mobile column', () => {
   assert.match(fanGrowthReferenceCss, /@media\(max-width:430px\)\{[\s\S]*?fan-growth-hero-copy h2\{[^}]*white-space:normal!important/)
   assert.match(fanGrowthReferenceCss, /@media\(max-width:600px\)\{[\s\S]*?fan-growth-hero-copy\{padding-left:0!important;min-width:0!important;max-width:100%!important\}/)
   assert.match(fanGrowthReferenceCss, /@media\(max-width:600px\)\{[\s\S]*?fan-growth-hero-copy h2\{[^}]*white-space:normal!important/)
+})
+
+test('mobile QR registration stays within the phone viewport', () => {
+  assert.match(qrRedeemCss, /@media \(max-width: 430px\)[\s\S]*\.redeem-flow-screen\s*\{[\s\S]*box-sizing:\s*border-box;[\s\S]*width:\s*100%;[\s\S]*max-width:\s*100%;[\s\S]*overflow-x:\s*clip;/)
+  assert.match(qrRedeemCss, /@media \(max-width: 430px\)[\s\S]*\.redeem-flow-screen > \.detail-topbar\s*\{[\s\S]*width:\s*100%;[\s\S]*max-width:\s*100%;[\s\S]*margin-right:\s*0;[\s\S]*margin-left:\s*0;/)
 })
