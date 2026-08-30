@@ -101,11 +101,13 @@ body main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-
 main.growth-shell > .app-header .header-profile-button{width:32px!important;min-width:32px!important;height:32px!important;min-height:32px!important;padding:0!important}
 main.growth-shell > .app-header .app-header-description{max-width:340px!important;font-size:11px!important;white-space:nowrap!important}
 main.growth-shell > .app-header{min-height:0!important}
+@media(min-width:431px){
 body main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-hero-copy{position:relative;padding-left:30px!important}
 body main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-hero-copy::before{position:absolute;top:108px;bottom:2px;left:0;width:1px;content:"";background:#dedcf1}
 body main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-artist-art{width:calc(100% + 30px)!important;margin-left:-30px!important}
 body main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-hero-copy h2{font-size:16px!important;white-space:nowrap!important}
 body main.app-shell.growth-shell > section.screen > .fan-growth.full.fan-growth-reference .fan-growth-hero-copy>p{font-size:10px!important;white-space:nowrap!important}
+}
 
 /* Keep the first paint intentional while authenticated growth data is pending. */
 .fan-growth.full.fan-growth-loading{display:grid!important;gap:12px!important;padding:0 0 118px!important;background:transparent!important}
