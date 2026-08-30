@@ -3902,4 +3902,32 @@ main.discover-artist-shell.detail-screen-shell {
     max-width: none;
     margin-inline: 0;
   }
+
+  /* These two detail flows keep their legacy 430px cap in the base rules.
+     On a wider phone that cap creates visible rails and makes the back
+     button look offset even though the bottom-tab routes are full width. */
+  .wishlist-picker-shell,
+  .shop-checkout-shell,
+  .wishlist-picker-footer,
+  .trade-picker-footer {
+    width: 100vw !important;
+    max-width: none !important;
+    margin-inline: 0 !important;
+  }
+
+  main.app-shell.wishlist-picker-shell,
+  main.app-shell.shop-checkout-shell,
+  main.app-shell.trade-picker-shell {
+    width: 100vw !important;
+    max-width: none !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  main.app-shell.wishlist-picker-shell .wishlist-picker-footer {
+    width: 100vw !important;
+    max-width: none !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
 }
