@@ -1,18 +1,27 @@
+import logging
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from fastapi import APIRouter, Request, Response, status
+from starlette.concurrency import run_in_threadpool
 
 from app.admin_access import load_admin_context
 from app.core.config import get_settings
 from app.dependencies import CurrentUser, DbSession
 from app.errors import AppError
+from app.image_processing import ensure_event_hero_derivative
 from app.models import Asset, Organization, Role
 from app.schemas import AssetTransformUpdate, UploadPresignRequest
-from app.storage import StorageObjectNotFound, configured_asset_storage, storage_response
+from app.storage import (
+    DIRECT_UPLOAD_STAGING_SUFFIX,
+    StorageObjectNotFound,
+    configured_asset_storage,
+    storage_response,
+)
 from app.upload_safety import scan_uploaded_content
 
 router = APIRouter(prefix="/api", tags=["assets"])
+logger = logging.getLogger(__name__)
 
 ORGANIZATION_LOGO_MAX_BYTES = 2 * 1024 * 1024
 
@@ -55,7 +64,7 @@ async def presign_upload(
     # card images are uploaded to durable object storage instead of the
     # ephemeral Render filesystem.
     if settings.storage_backend in {"s3", "supabase"}:
-        asset.storage_path = storage.asset_path(asset.id, ".bin")
+        asset.storage_path = storage.asset_path(asset.id, DIRECT_UPLOAD_STAGING_SUFFIX)
         upload_url = storage.presigned_upload_url(
             asset.id,
             content_type=payload.content_type,
@@ -87,6 +96,8 @@ async def upload_asset_content(
     asset = await session.get(Asset, asset_id)
     if not asset or asset.owner_id != user.id:
         raise AppError(404, "ASSET_NOT_FOUND", "자산을 찾을 수 없습니다.")
+    if asset.upload_completed_at:
+        raise AppError(409, "UPLOAD_ALREADY_COMPLETED", "이미 완료된 업로드입니다.")
     if asset.upload_expires_at and datetime.now(UTC) > asset.upload_expires_at.replace(tzinfo=UTC):
         raise AppError(410, "UPLOAD_URL_EXPIRED", "업로드 URL이 만료되었습니다.")
     content_length = request.headers.get("content-length")
@@ -107,7 +118,22 @@ async def upload_asset_content(
         purpose=asset.purpose,
         content=content,
     )
-    asset.storage_path = configured_asset_storage().save_bytes(asset.id, content)
+    storage = configured_asset_storage()
+    asset.storage_path = await run_in_threadpool(
+        storage.save_bytes,
+        asset.id,
+        content,
+        content_type=asset.content_type,
+    )
+    if asset.purpose == "event_banner":
+        await run_in_threadpool(
+            ensure_event_hero_derivative,
+            storage,
+            asset.id,
+            asset.storage_path,
+            content,
+            force=True,
+        )
     asset.upload_completed_at = datetime.now(UTC)
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -130,26 +156,53 @@ async def complete_asset_upload(asset_id: str, user: CurrentUser, session: DbSes
     if not asset.storage_path:
         raise AppError(409, "UPLOAD_NOT_READY", "업로드된 파일을 찾을 수 없습니다.")
     storage = configured_asset_storage()
-    if not storage.exists(asset.storage_path):
+    staging_path = asset.storage_path
+    if not await run_in_threadpool(storage.exists, staging_path):
         raise AppError(409, "UPLOAD_NOT_READY", "업로드된 파일을 찾을 수 없습니다.")
-    if storage.size_bytes(asset.storage_path) > upload_limit_bytes(asset):
-        storage.delete(asset.storage_path)
+    if await run_in_threadpool(storage.size_bytes, staging_path) > upload_limit_bytes(asset):
+        await run_in_threadpool(storage.delete, staging_path)
         asset.storage_path = None
         await session.commit()
         raise AppError(413, "UPLOAD_TOO_LARGE", "업로드 파일이 너무 큽니다.")
     try:
+        content = await run_in_threadpool(storage.read_bytes, staging_path)
         await scan_uploaded_content(
             content_type=asset.content_type,
             purpose=asset.purpose,
-            content=storage.read_bytes(asset.storage_path),
+            content=content,
         )
     except AppError:
-        storage.delete(asset.storage_path)
+        await run_in_threadpool(storage.delete, staging_path)
         asset.storage_path = None
         await session.commit()
         raise
+    except StorageObjectNotFound:
+        asset.storage_path = None
+        await session.commit()
+        raise AppError(409, "UPLOAD_NOT_READY", "업로드된 파일을 찾을 수 없습니다.")
+    canonical_path = await run_in_threadpool(
+        storage.save_bytes,
+        asset.id,
+        content,
+        content_type=asset.content_type,
+    )
+    if asset.purpose == "event_banner":
+        await run_in_threadpool(
+            ensure_event_hero_derivative,
+            storage,
+            asset.id,
+            canonical_path,
+            content,
+            force=True,
+        )
+    asset.storage_path = canonical_path
     asset.upload_completed_at = datetime.now(UTC)
     await session.commit()
+    if staging_path != canonical_path:
+        try:
+            await run_in_threadpool(storage.delete, staging_path)
+        except Exception:
+            logger.warning("direct upload staging cleanup failed for %s", asset.id, exc_info=True)
     return {"ok": True, "data": {"assetId": asset.id, "status": "ready"}}
 
 

@@ -11,6 +11,8 @@ from typing import Protocol
 from fastapi import HTTPException
 from fastapi.responses import FileResponse, Response
 
+DIRECT_UPLOAD_STAGING_SUFFIX = "-upload.bin"
+
 
 class StorageObjectNotFound(FileNotFoundError):
     """Stable signal for a missing object across storage providers."""
@@ -26,7 +28,9 @@ def _is_provider_not_found(error: Exception) -> bool:
 class AssetStorage(Protocol):
     def check_ready(self) -> None: ...
 
-    def save_bytes(self, asset_id: str, content: bytes) -> str: ...
+    def save_bytes(
+        self, asset_id: str, content: bytes, *, content_type: str | None = None
+    ) -> str: ...
 
     def asset_path(self, asset_id: str, suffix: str = "") -> str: ...
 
@@ -36,7 +40,14 @@ class AssetStorage(Protocol):
 
     def read_bytes(self, storage_path: str) -> bytes: ...
 
-    def save_derived_bytes(self, asset_id: str, suffix: str, content: bytes) -> str: ...
+    def save_derived_bytes(
+        self,
+        asset_id: str,
+        suffix: str,
+        content: bytes,
+        *,
+        content_type: str | None = None,
+    ) -> str: ...
 
     def save_preview_bytes(self, card_id: str, content: bytes) -> str: ...
 
@@ -72,7 +83,14 @@ class LocalAssetStorage:
         except FileNotFoundError as error:
             raise StorageObjectNotFound(storage_path) from error
 
-    def save_derived_bytes(self, asset_id: str, suffix: str, content: bytes) -> str:
+    def save_derived_bytes(
+        self,
+        asset_id: str,
+        suffix: str,
+        content: bytes,
+        *,
+        content_type: str | None = None,
+    ) -> str:
         path = Path(self.asset_path(asset_id, suffix))
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content)
@@ -95,7 +113,7 @@ class LocalAssetStorage:
     def presigned_upload_url(self, asset_id: str, *, content_type: str, expires_in: int) -> str:
         raise ValueError("local storage does not provide presigned URLs")
 
-    def save_bytes(self, asset_id: str, content: bytes) -> str:
+    def save_bytes(self, asset_id: str, content: bytes, *, content_type: str | None = None) -> str:
         path = Path(self.asset_path(asset_id, ".bin"))
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content)
@@ -165,9 +183,12 @@ class S3AssetStorage:
     def preview_path(self, card_id: str) -> str:
         return self._uri(f"{self.key_prefix}/previews/{card_id}.png")
 
-    def save_bytes(self, asset_id: str, content: bytes) -> str:
+    def save_bytes(self, asset_id: str, content: bytes, *, content_type: str | None = None) -> str:
         key = self._key(asset_id, ".bin")
-        self.client.put_object(Bucket=self.bucket, Key=key, Body=content)
+        options: dict[str, object] = {"Bucket": self.bucket, "Key": key, "Body": content}
+        if content_type:
+            options["ContentType"] = content_type
+        self.client.put_object(**options)
         return self._uri(key)
 
     def exists(self, storage_path: str) -> bool:
@@ -190,9 +211,19 @@ class S3AssetStorage:
             raise
         return response["Body"].read()
 
-    def save_derived_bytes(self, asset_id: str, suffix: str, content: bytes) -> str:
+    def save_derived_bytes(
+        self,
+        asset_id: str,
+        suffix: str,
+        content: bytes,
+        *,
+        content_type: str | None = None,
+    ) -> str:
         key = self._key(asset_id, suffix)
-        self.client.put_object(Bucket=self.bucket, Key=key, Body=content)
+        options: dict[str, object] = {"Bucket": self.bucket, "Key": key, "Body": content}
+        if content_type:
+            options["ContentType"] = content_type
+        self.client.put_object(**options)
         return self._uri(key)
 
     def save_preview_bytes(self, card_id: str, content: bytes) -> str:
@@ -212,7 +243,7 @@ class S3AssetStorage:
             "put_object",
             Params={
                 "Bucket": self.bucket,
-                "Key": self._key(asset_id, ".bin"),
+                "Key": self._key(asset_id, DIRECT_UPLOAD_STAGING_SUFFIX),
                 "ContentType": content_type,
             },
             ExpiresIn=expires_in,
