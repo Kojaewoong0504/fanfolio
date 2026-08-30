@@ -5,6 +5,7 @@ from uuid import uuid4
 from fastapi import APIRouter, BackgroundTasks, Query, Response, status
 from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.exc import IntegrityError
+from starlette.concurrency import run_in_threadpool
 
 from app.dependencies import CurrentAdmin, DbSession, FanUser
 from app.errors import AppError
@@ -16,6 +17,7 @@ from app.event_services import (
     validate_event_connections,
     validate_transition,
 )
+from app.image_processing import optimize_event_hero_bytes
 from app.models import (
     Artist,
     Asset,
@@ -311,7 +313,7 @@ async def _fan_data(
         else None,
         "applicationStatus": application_status,
         "applied": applied,
-        "heroUrl": f"/api/events/{event.id}/hero" if asset else None,
+        "heroUrl": f"/api/events/{event.id}/hero?asset={asset.id}" if asset else None,
         "ctaLabel": cta_label,
         "ctaTarget": target,
     }
@@ -616,10 +618,21 @@ async def get_event_hero(event_id: str, session: DbSession) -> Response:
     asset = await session.get(Asset, event.hero_asset_id)
     if asset is None or not asset.storage_path:
         raise AppError(404, "EVENT_ASSET_NOT_READY", "이벤트 이미지가 아직 준비되지 않았습니다.")
+    storage = configured_asset_storage()
+    optimized_path = storage.asset_path(asset.id, "-event-hero-v1.webp")
+    if not storage.exists(optimized_path):
+        source_content = await run_in_threadpool(storage.read_bytes, asset.storage_path)
+        optimized_content = await run_in_threadpool(optimize_event_hero_bytes, source_content)
+        await run_in_threadpool(
+            storage.save_derived_bytes,
+            asset.id,
+            "-event-hero-v1.webp",
+            optimized_content,
+        )
     return storage_response(
-        configured_asset_storage(),
-        asset.storage_path,
-        media_type=asset.content_type or "image/webp",
+        storage,
+        optimized_path,
+        media_type="image/webp",
         cache_control="public, max-age=300, s-maxage=86400, stale-while-revalidate=604800",
     )
 
