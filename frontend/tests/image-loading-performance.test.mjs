@@ -9,6 +9,7 @@ const eventCardSource = await readFile(new URL('../src/components/EventCard.tsx'
 const eventDetailSource = await readFile(new URL('../src/components/EventDetail.tsx', import.meta.url), 'utf8')
 const fanRouterSource = await readFile(new URL('../../backend/app/routers/fan.py', import.meta.url), 'utf8')
 const storageSource = await readFile(new URL('../../backend/app/storage.py', import.meta.url), 'utf8')
+const vercelSource = await readFile(new URL('../vercel.json', import.meta.url), 'utf8')
 
 test('public fan media uses the browser cache instead of authenticated blob downloads', () => {
   const publicMediaMatcher = clientSource.match(/export function isPublicFanMediaPath[\s\S]*?\n}/)?.[0] ?? ''
@@ -35,6 +36,10 @@ test('fan image responses advertise cacheability for immutable public assets', (
   assert.match(storageSource, /Cache-Control.*cache_control/)
   assert.match(fanRouterSource, /cache_control="public, max-age/)
   assert.match(fanRouterSource, /cache_control=/)
+})
+
+test('fingerprinted frontend assets are cached immutably at the edge and in the browser', () => {
+  assert.match(vercelSource, /"src": "\/assets\/\(\.\*\)"[\s\S]*?"Cache-Control": "public, max-age=31536000, immutable"/)
 })
 
 test('event imagery always has a local fallback when remote media is unavailable', () => {
