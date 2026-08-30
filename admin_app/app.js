@@ -2357,7 +2357,7 @@ function eventRelatedCardOptions(event) {
   const selected = new Set(event.relatedCardIds || []);
   const cards = cardCatalogItems().filter((card) => card.status === "published");
   if (!cards.length) return '<small class="field-help">연결 가능한 공개 카드가 없습니다.</small>';
-  return `<div class="event-related-card-options">${cards.map((card) => { const thumbnailUrl = state.cardThumbnailUrls[card.id] || card.imageUrl || demoCardThumbnailUrl(card.id); return `<label class="event-card-option"><input type="checkbox" name="relatedCardIds" value="${escapeHtml(card.id)}" ${selected.has(card.id) ? "checked" : ""} /><span class="event-card-check" aria-hidden="true">${icon("check")}</span><span class="event-card-thumb" aria-hidden="true">${thumbnailUrl ? `<img src="${escapeHtml(thumbnailUrl)}" alt="${escapeHtml(card.name || card.id)} 카드 미리보기" />` : icon("style")}</span><span class="event-card-copy"><strong>${escapeHtml(card.name || card.id)}</strong><small>${escapeHtml(card.memberName || "공개 카드")}</small></span><span class="event-card-order">${selected.has(card.id) ? "선택됨" : "연결"}</span></label>`; }).join("")}</div>`;
+  return `<div class="event-related-card-options">${cards.map((card) => { const thumbnailUrl = state.cardThumbnailUrls[card.id] || card.imageUrl || demoCardThumbnailUrl(card.id); const resolvedThumbnailUrl = state.cardThumbnailUrls[card.id] ? thumbnailUrl : resolveAdminAssetUrl(thumbnailUrl); return `<label class="event-card-option"><input type="checkbox" name="relatedCardIds" value="${escapeHtml(card.id)}" ${selected.has(card.id) ? "checked" : ""} /><span class="event-card-check" aria-hidden="true">${icon("check")}</span><span class="event-card-thumb" aria-hidden="true">${resolvedThumbnailUrl ? `<img src="${escapeHtml(resolvedThumbnailUrl)}" alt="${escapeHtml(card.name || card.id)} 카드 미리보기" />` : icon("style")}</span><span class="event-card-copy"><strong>${escapeHtml(card.name || card.id)}</strong><small>${escapeHtml(card.memberName || "공개 카드")}</small></span><span class="event-card-order">${selected.has(card.id) ? "선택됨" : "연결"}</span></label>`; }).join("")}</div>`;
 }
 
 function eventsView() {
@@ -6215,8 +6215,10 @@ function bind() {
       toast("이벤트 배너를 업로드했습니다.");
     } catch {
       event.currentTarget.value = "";
-      URL.revokeObjectURL(localPreviewUrl);
-      if (thumbnail) thumbnail.innerHTML = icon("image");
+      // Keep a usable preview when the upload request fails. Clearing the
+      // thumbnail here made a valid local selection look broken and forced
+      // operators to reopen the file picker just to retry the upload.
+      if (thumbnail) thumbnail.innerHTML = `<img data-event-hero data-local-preview src="${escapeHtml(localPreviewUrl)}" alt="선택한 이벤트 배너 미리보기" />`;
       toast("이벤트 배너 업로드에 실패했습니다.");
     }
   });
