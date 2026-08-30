@@ -140,6 +140,12 @@ test('related event cards render authenticated card thumbnails outside the card 
   assert.match(source, /state\.view === "events"|state\.drawer === "event"/s)
 })
 
+test('related event cards keep a usable preview when a demo card has no stored asset', () => {
+  assert.match(source, /function demoCardThumbnailUrl\(cardId\)/)
+  assert.match(source, /state\.cardThumbnailUrls\[card\.id\] \|\| demoCardThumbnailUrl\(card\.id\)/)
+  assert.match(source, /카드 미리보기/)
+})
+
 test('event banner upload keeps the save action recoverable after an upload failure', () => {
   assert.match(source, /finally[\s\S]*disabled = false/)
   assert.match(source, /배너 업로드 실패 원인|이벤트 배너 업로드에 실패했습니다\./)

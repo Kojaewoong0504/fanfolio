@@ -2141,6 +2141,15 @@ async function loadCardThumbnails(cards) {
   if (state.authenticated && (state.view === "cards" || state.view === "events" || state.drawer === "event")) layout();
 }
 
+function demoCardThumbnailUrl(cardId) {
+  return ({
+    card_demo_published: "./assets/demo/dreamscape/yuna.png",
+    card_demo_harin: "./assets/demo/dreamscape/harin.png",
+    card_demo_sena: "./assets/demo/dreamscape/sena.png",
+    card_demo_rina: "./assets/demo/dreamscape/rina.png",
+  })[cardId] || "";
+}
+
 async function loadAdminImageBlobUrl(url) {
   let response = await fetch(resolveAdminAssetUrl(url), {
     credentials: "include",
@@ -2348,7 +2357,7 @@ function eventRelatedCardOptions(event) {
   const selected = new Set(event.relatedCardIds || []);
   const cards = cardCatalogItems().filter((card) => card.status === "published");
   if (!cards.length) return '<small class="field-help">연결 가능한 공개 카드가 없습니다.</small>';
-  return `<div class="event-related-card-options">${cards.map((card) => `<label class="event-card-option"><input type="checkbox" name="relatedCardIds" value="${escapeHtml(card.id)}" ${selected.has(card.id) ? "checked" : ""} /><span class="event-card-check" aria-hidden="true">${icon("check")}</span><span class="event-card-thumb" aria-hidden="true">${state.cardThumbnailUrls[card.id] ? `<img src="${escapeHtml(state.cardThumbnailUrls[card.id])}" alt="" />` : icon("style")}</span><span class="event-card-copy"><strong>${escapeHtml(card.name || card.id)}</strong><small>${escapeHtml(card.memberName || "공개 카드")}</small></span><span class="event-card-order">${selected.has(card.id) ? "선택됨" : "연결"}</span></label>`).join("")}</div>`;
+  return `<div class="event-related-card-options">${cards.map((card) => { const thumbnailUrl = state.cardThumbnailUrls[card.id] || demoCardThumbnailUrl(card.id); return `<label class="event-card-option"><input type="checkbox" name="relatedCardIds" value="${escapeHtml(card.id)}" ${selected.has(card.id) ? "checked" : ""} /><span class="event-card-check" aria-hidden="true">${icon("check")}</span><span class="event-card-thumb" aria-hidden="true">${thumbnailUrl ? `<img src="${escapeHtml(thumbnailUrl)}" alt="${escapeHtml(card.name || card.id)} 카드 미리보기" />` : icon("style")}</span><span class="event-card-copy"><strong>${escapeHtml(card.name || card.id)}</strong><small>${escapeHtml(card.memberName || "공개 카드")}</small></span><span class="event-card-order">${selected.has(card.id) ? "선택됨" : "연결"}</span></label>`; }).join("")}</div>`;
 }
 
 function eventsView() {
