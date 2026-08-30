@@ -1,13 +1,30 @@
 from io import BytesIO
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 from app.storage import local_asset_storage
 
 
 def save_uploaded_bytes(storage_dir: str, asset_id: str, content: bytes) -> str:
     return local_asset_storage(storage_dir).save_bytes(asset_id, content)
+
+
+def optimize_event_hero_bytes(content: bytes) -> bytes:
+    """Bound event banners to the fan viewport and encode a compact WebP variant."""
+    with Image.open(BytesIO(content)) as source:
+        image = ImageOps.exif_transpose(source)
+        image.thumbnail((1200, 600), Image.Resampling.LANCZOS)
+        if image.mode in {"RGBA", "LA"} or "transparency" in image.info:
+            rgba = image.convert("RGBA")
+            flattened = Image.new("RGB", rgba.size, (18, 16, 54))
+            flattened.paste(rgba, mask=rgba.getchannel("A"))
+            image = flattened
+        else:
+            image = image.convert("RGB")
+        output = BytesIO()
+        image.save(output, "WEBP", quality=82, method=6)
+        return output.getvalue()
 
 
 def remove_light_background_bytes(content: bytes) -> bytes:

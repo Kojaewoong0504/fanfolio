@@ -7,7 +7,7 @@ from .conftest import assert_success
 
 
 def _event_banner_png() -> bytes:
-    image = Image.new("RGB", (320, 160), (42, 36, 112))
+    image = Image.new("RGB", (1600, 800), (42, 36, 112))
     output = BytesIO()
     image.save(output, format="PNG")
     return output.getvalue()
@@ -77,8 +77,13 @@ def test_event_application_is_idempotent_and_exposed_in_public_detail(actors, cl
     public_hero = client.get(f"/api/events/{event_id}/hero")
     assert public_hero.status_code == 200
     assert public_hero.headers["cache-control"].startswith("public, max-age=")
+    assert public_hero.headers["content-type"] == "image/webp"
+    with Image.open(BytesIO(public_hero.content)) as optimized_hero:
+        assert optimized_hero.format == "WEBP"
+        assert optimized_hero.size == (1200, 600)
 
     before = assert_success(actors["fan"].get(f"/api/events/{event_id}"))
+    assert before["heroUrl"].endswith(f"/hero?asset={event_banner_id}")
     assert before["venue"] == "코엑스 컨퍼런스룸 (3F)"
     assert before["participantCount"] == 0
     assert before["applicationStatus"] == "available"
