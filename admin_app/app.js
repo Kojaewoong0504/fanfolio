@@ -2147,6 +2147,10 @@ function demoCardThumbnailUrl(cardId) {
     card_demo_harin: "./assets/demo/dreamscape/harin.png",
     card_demo_sena: "./assets/demo/dreamscape/sena.png",
     card_demo_rina: "./assets/demo/dreamscape/rina.png",
+    local_demo_card_harin: "./assets/demo/dreamscape/harin.png",
+    local_demo_card_doyun: "./assets/demo/dreamscape/sena.png",
+    local_demo_card_minjae: "./assets/demo/dreamscape/rina.png",
+    local_demo_card_jay: "./assets/demo/dreamscape/yuna.png",
   })[cardId] || "";
 }
 
@@ -2357,7 +2361,7 @@ function eventRelatedCardOptions(event) {
   const selected = new Set(event.relatedCardIds || []);
   const cards = cardCatalogItems().filter((card) => card.status === "published");
   if (!cards.length) return '<small class="field-help">연결 가능한 공개 카드가 없습니다.</small>';
-  return `<div class="event-related-card-options">${cards.map((card) => { const thumbnailUrl = state.cardThumbnailUrls[card.id] || card.imageUrl || demoCardThumbnailUrl(card.id); const resolvedThumbnailUrl = state.cardThumbnailUrls[card.id] ? thumbnailUrl : resolveAdminAssetUrl(thumbnailUrl); return `<label class="event-card-option"><input type="checkbox" name="relatedCardIds" value="${escapeHtml(card.id)}" ${selected.has(card.id) ? "checked" : ""} /><span class="event-card-check" aria-hidden="true">${icon("check")}</span><span class="event-card-thumb" aria-hidden="true">${resolvedThumbnailUrl ? `<img src="${escapeHtml(resolvedThumbnailUrl)}" alt="${escapeHtml(card.name || card.id)} 카드 미리보기" />` : icon("style")}</span><span class="event-card-copy"><strong>${escapeHtml(card.name || card.id)}</strong><small>${escapeHtml(card.memberName || "공개 카드")}</small></span><span class="event-card-order">${selected.has(card.id) ? "선택됨" : "연결"}</span></label>`; }).join("")}</div>`;
+  return `<div class="event-related-card-options">${cards.map((card) => { const thumbnailUrl = state.cardThumbnailUrls[card.id] || card.sourceImageUrl || card.imageUrl || demoCardThumbnailUrl(card.id); const resolvedThumbnailUrl = (state.cardThumbnailUrls[card.id] || thumbnailUrl?.startsWith("/assets/") || thumbnailUrl?.startsWith("./assets/")) ? thumbnailUrl : resolveAdminAssetUrl(thumbnailUrl); return `<label class="event-card-option"><input type="checkbox" name="relatedCardIds" value="${escapeHtml(card.id)}" ${selected.has(card.id) ? "checked" : ""} /><span class="event-card-check" aria-hidden="true">${icon("check")}</span><span class="event-card-thumb" aria-hidden="true">${resolvedThumbnailUrl ? `<img src="${escapeHtml(resolvedThumbnailUrl)}" alt="${escapeHtml(card.name || card.id)} 카드 미리보기" />` : icon("style")}</span><span class="event-card-copy"><strong>${escapeHtml(card.name || card.id)}</strong><small>${escapeHtml(card.memberName || "공개 카드")}</small></span><span class="event-card-order">${selected.has(card.id) ? "선택됨" : "연결"}</span></label>`; }).join("")}</div>`;
 }
 
 function eventsView() {
