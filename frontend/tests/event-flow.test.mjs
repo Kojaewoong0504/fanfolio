@@ -123,7 +123,14 @@ test('profile image selection is part of the onboarding profile contract', () =>
 })
 
 test('empty event feeds do not render a mock event or a fake promo card', () => {
-  assert.match(app, /eventHome \? eventHome\.featuredEvent : import\.meta\.env\.DEV \? fallbackHomeEvent : null/)
+  assert.match(app, /eventHomeLoading \? null : eventHome\?\.featuredEvent \?\? null/)
+  assert.match(app, /eventHomeLoading \? \[\] : eventHome\?\.newCards\.map\(toCatalogCard\) \?\? \[\]/)
   assert.match(list, /visibleEvents\.length === 0/)
   assert.doesNotMatch(list, /드림스케이프 사인 폴라로이드 이벤트/)
+})
+
+test('home waits for API data before showing recommendations or collection empty states', () => {
+  assert.match(app, /if \(!props\.collectionDataReady \|\| props\.cards\.length > 0\)/)
+  assert.match(app, /props\.collectionDataReady && props\.cards\.length === 0 && recommendations\.length > 0/)
+  assert.match(app, /\(!collectionDataReady \|\| loading\) && !featured/)
 })
