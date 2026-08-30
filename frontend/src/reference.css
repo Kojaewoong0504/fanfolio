@@ -3876,6 +3876,25 @@ main.discover-artist-shell.detail-screen-shell {
   }
   .bottom-nav { width: 100%; }
 
+  /* Settings sub-screens are fixed overlays rather than app-shell children.
+     They need the same full phone canvas or the underlying page remains
+     visible as side rails on wider phones. */
+  .settings-info-screen,
+  .profile-edit-screen,
+  .profile-decorate-screen {
+    left: 0;
+    width: 100vw;
+    max-width: none;
+    transform: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .my-panel {
+    width: 100vw;
+    max-width: none;
+  }
+
   /* The registration flow used its own 430px cap, so wider phones showed
      side rails even though the rest of the app already filled the viewport. */
   .redeem-flow-screen {

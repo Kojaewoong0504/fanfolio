@@ -10,6 +10,8 @@ const fanGrowthReferenceCss = await readFile(new URL('../src/components/FanGrowt
 const qrRedeemCss = await readFile(new URL('../src/components/QrRedeemModal.css', import.meta.url), 'utf8')
 const fanPassSource = await readFile(new URL('../src/components/FanPassPage.tsx', import.meta.url), 'utf8')
 const fanPassCss = await readFile(new URL('../src/components/FanPassPage.css', import.meta.url), 'utf8')
+const fanCommunityCss = await readFile(new URL('../src/fan-community-reference.css', import.meta.url), 'utf8')
+const settingsSource = await readFile(new URL('../src/components/Settings.tsx', import.meta.url), 'utf8')
 const missionSource = await readFile(new URL('../src/components/FanMissionPage.tsx', import.meta.url), 'utf8')
 const tradeInboxSource = await readFile(new URL('../src/components/TradeInbox.tsx', import.meta.url), 'utf8')
 
@@ -63,6 +65,14 @@ test('mobile detail routes stay on the full viewport canvas', () => {
   assert.match(fanGrowthReferenceCss, /@media\(max-width:600px\)[\s\S]*main\.growth-shell\{width:100vw!important;max-width:100vw!important;margin-inline:0!important\}/)
   assert.match(fanPassCss, /@media \(max-width: 600px\)[\s\S]*\.app-shell\.fan-pass-shell\.detail-screen-shell\s*\{[\s\S]*width:\s*100vw;[\s\S]*max-width:\s*100vw;[\s\S]*margin-inline:\s*0;/)
   assert.match(qrRedeemCss, /@media \(max-width: 600px\)[\s\S]*\.redeem-flow-screen\s*\{[\s\S]*width:\s*100vw;[\s\S]*max-width:\s*100vw;[\s\S]*margin-inline:\s*0;/)
+  assert.match(referenceCss, /@media \(max-width: 600px\)[\s\S]*\.settings-info-screen,[\s\S]*\.profile-decorate-screen[\s\S]*width: 100vw;/)
+  assert.match(fanCommunityCss, /@media \(max-width: 600px\)[\s\S]*\.fan-social-reference,[\s\S]*\.fan-profile-reference,[\s\S]*width: 100vw;/)
+})
+
+test('profile editor replaces unavailable artist artwork with a safe fallback', () => {
+  assert.match(settingsSource, /profileAvatarFallback from '\.\.\/assets\/profile-avatar-generated\.png'/)
+  assert.match(settingsSource, /resolveApiUrl\(artist\.imageUrl\) \|\| profileAvatarFallback/)
+  assert.match(settingsSource, /event\.currentTarget\.onerror = null; event\.currentTarget\.src = profileAvatarFallback/)
 })
 
 test('fan growth hero copy stays inside the mobile column', () => {

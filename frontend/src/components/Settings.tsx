@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'r
 
 import { apiFetch, changeFanPassword, deleteFanAccount, exportPersonalData, getConsentHistory, recordConsent, resolveApiUrl, type CatalogArtist, type CatalogMember, type ConsentRecord, type CurrentUser, type FanProgression } from '../api/client'
 import profileDecorations from '../assets/profile-decorations-generated.png'
+import profileAvatarFallback from '../assets/profile-avatar-generated.png'
 import { ProfileAvatar } from './ProfileAvatar'
 
 type SettingsInfoScreen = 'language' | 'support' | 'terms' | 'privacy' | null
@@ -543,7 +544,7 @@ export function Settings({
               <div className="profile-preference-grid" aria-label="좋아하는 아티스트 여러 개 선택">
                 {filteredArtists.map(artist => {
                   const selected = profileForm.artistIds.includes(artist.id)
-                  return <button type="button" key={artist.id} className={selected ? 'profile-preference-choice is-selected' : 'profile-preference-choice'} aria-pressed={selected} onClick={() => setProfileForm(current => ({ ...current, artistIds: selected ? current.artistIds.filter(id => id !== artist.id) : [...current.artistIds, artist.id], memberIds: selected ? current.memberIds.filter(memberId => !(membersByArtist[artist.id] ?? []).some(member => member.id === memberId)) : current.memberIds }))}><img src={resolveApiUrl(artist.imageUrl)} alt="" /><span>{artist.name}</span></button>
+                  return <button type="button" key={artist.id} className={selected ? 'profile-preference-choice is-selected' : 'profile-preference-choice'} aria-pressed={selected} onClick={() => setProfileForm(current => ({ ...current, artistIds: selected ? current.artistIds.filter(id => id !== artist.id) : [...current.artistIds, artist.id], memberIds: selected ? current.memberIds.filter(memberId => !(membersByArtist[artist.id] ?? []).some(member => member.id === memberId)) : current.memberIds }))}><img src={resolveApiUrl(artist.imageUrl) || profileAvatarFallback} onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = profileAvatarFallback }} alt="" /><span>{artist.name}</span></button>
                 })}
               </div>
               <label>좋아하는 멤버 <small className="profile-preference-hint">선택사항</small></label>
