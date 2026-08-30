@@ -5,8 +5,8 @@ import '../App.css'
 import './QrRedeemModal.css'
 import { DetailTopBar } from './DetailTopBar'
 import { normalizeQrValue } from './qrUtils'
-import registrationCardImage from '../assets/card-registration-idol-generated.png'
-import qrScannerImage from '../assets/card-registration-qr-scanner-generated.png'
+import registrationCardImage from '../assets/card-registration-idol-generated.jpg'
+import qrScannerImage from '../assets/card-registration-qr-scanner-generated.jpg'
 
 type RegistrationMethod = 'qr' | 'manual' | 'photo'
 type RegistrationStep = 1 | 2 | 3

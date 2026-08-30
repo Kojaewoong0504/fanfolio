@@ -17,7 +17,7 @@ test('card registration opens as the approved first step', () => {
 })
 
 test('card registration uses the generated project asset', () => {
-  assert.match(modalSource, /card-registration-idol-generated\.png/)
+  assert.match(modalSource, /card-registration-idol-generated\.jpg/)
   assert.match(modalSource, /className="redeem-flow-card-preview"/)
 })
 
@@ -48,7 +48,7 @@ test('QR-free preview path hands off to the dedicated card reveal route', () => 
 })
 
 test('QR scan screen uses a generated project scanner asset', () => {
-  assert.match(modalSource, /card-registration-qr-scanner-generated\.png/)
+  assert.match(modalSource, /card-registration-qr-scanner-generated\.jpg/)
   assert.match(modalSource, /className="redeem-flow-scan-stage"/)
   assert.match(modalSource, /카메라로 스캔 시작/)
   assert.match(modalCss, /\.redeem-flow-scan-stage/)
