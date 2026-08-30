@@ -4,6 +4,7 @@ import test from 'node:test'
 
 const modalSource = readFileSync(new URL('../src/components/QrRedeemModal.tsx', import.meta.url), 'utf8')
 const modalCss = readFileSync(new URL('../src/components/QrRedeemModal.css', import.meta.url), 'utf8')
+const vercelConfig = readFileSync(new URL('../vercel.json', import.meta.url), 'utf8')
 
 test('card registration opens as the approved first step', () => {
   assert.match(modalSource, /className="modal redeem-modal redeem-flow-screen"/)
@@ -57,4 +58,9 @@ test('QR scan explicitly requests camera permission and offers a retry path', ()
   assert.match(modalSource, /navigator\.mediaDevices\.getUserMedia\(/)
   assert.match(modalSource, /NotAllowedError|SecurityError/)
   assert.match(modalSource, /카메라 권한을 다시 요청|다시 시도/)
+})
+
+test('hosted QR scan permits the same-origin camera permission prompt', () => {
+  assert.match(vercelConfig, /"key": "Permissions-Policy"[\s\S]*camera=\(self\)/)
+  assert.doesNotMatch(vercelConfig, /camera=\(\)/)
 })
