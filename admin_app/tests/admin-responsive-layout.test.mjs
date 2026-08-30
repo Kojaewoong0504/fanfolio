@@ -62,6 +62,8 @@ test('admin dashboard keeps operational panels in a balanced two-column rhythm',
 test('sidecar workspaces preserve readable compact cards at desktop tablet widths', () => {
   assert.match(css, /\.fan-pass-workspace-body \.fan-pass-summary\s*\{[^}]*grid-template-columns:\s*repeat\(2/s)
   assert.match(css, /\.workspace-sidecar-body \.fan-pass-summary \.summary-card\s*\{[^}]*min-width:\s*0/s)
+  assert.match(css, /\.workspace-sidecar-body\.fan-pass-workspace-body \.fan-growth-create-actions\s*\{[^}]*grid-template-columns:\s*repeat\(2/s)
+  assert.match(css, /\.workspace-sidecar-body\.fan-pass-workspace-body \.fan-growth-create-actions\s*>\s*button\s*\{[^}]*white-space:\s*nowrap/s)
   assert.match(css, /\.event-list-panel > \.compact-toolbar > \.admin-select\.filter-select\s*\{[^}]*min-width:\s*0/s)
   assert.match(css, /\.event-list-panel > \.compact-toolbar \.admin-select-label\s*\{[^}]*overflow:\s*hidden/s)
 })
