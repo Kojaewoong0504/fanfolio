@@ -67,6 +67,9 @@ test('mobile detail routes stay on the full viewport canvas', () => {
   assert.match(qrRedeemCss, /@media \(max-width: 600px\)[\s\S]*\.redeem-flow-screen\s*\{[\s\S]*width:\s*100vw;[\s\S]*max-width:\s*100vw;[\s\S]*margin-inline:\s*0;/)
   assert.match(referenceCss, /@media \(max-width: 600px\)[\s\S]*\.settings-info-screen,[\s\S]*\.profile-decorate-screen[\s\S]*width: 100vw;/)
   assert.match(fanCommunityCss, /@media \(max-width: 600px\)[\s\S]*\.fan-social-reference,[\s\S]*\.fan-profile-reference,[\s\S]*width: 100vw;/)
+  assert.match(referenceCss, /@media \(max-width: 600px\)[\s\S]*main\.app-shell\.wishlist-picker-shell,[\s\S]*width: 100vw !important;/)
+  assert.match(referenceCss, /@media \(max-width: 600px\)[\s\S]*main\.app-shell\.wishlist-picker-shell \.wishlist-picker-footer[\s\S]*width: 100vw !important;/)
+  assert.match(referenceCss, /@media \(max-width: 600px\)[\s\S]*main\.app-shell\.shop-checkout-shell,[\s\S]*width: 100vw !important;/)
 })
 
 test('profile editor replaces unavailable artist artwork with a safe fallback', () => {
