@@ -7,6 +7,7 @@ const apiBaseUrl = isDeployedFanApp ? '/api' : configuredApiBaseUrl
 const oauthApiBaseUrl = configuredApiBaseUrl.startsWith('/') ? apiBaseUrl : configuredApiBaseUrl
 const API_REQUEST_TIMEOUT_MS = 15_000
 const MEDIA_REQUEST_TIMEOUT_MS = 10_000
+const AUTH_REFRESH_TIMEOUT_MS = 5_000
 const MEDIA_CACHE_LIMIT = 64
 
 let accessToken: string | null = null
@@ -39,10 +40,13 @@ export async function unregisterPushDevice(token: string): Promise<void> {
 async function refreshAccessToken(): Promise<string | null> {
   if (refreshInFlight) return refreshInFlight
   refreshInFlight = (async () => {
+    const controller = new AbortController()
+    const timeoutId = globalThis.setTimeout(() => controller.abort(), AUTH_REFRESH_TIMEOUT_MS)
     try {
       const response = await fetch(`${apiBaseUrl}/auth/refresh`, {
         method: 'POST',
         credentials: 'include',
+        signal: controller.signal,
         headers: { 'Content-Type': 'application/json', 'X-Fanfolio-Client': 'fan' },
       })
       if (!response.ok) {
@@ -61,6 +65,7 @@ async function refreshAccessToken(): Promise<string | null> {
       clearAccessToken()
       return null
     } finally {
+      globalThis.clearTimeout(timeoutId)
       refreshInFlight = null
     }
   })()
