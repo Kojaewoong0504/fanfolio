@@ -1865,6 +1865,105 @@ button.card-collection-slot { cursor:pointer; }
   line-height: 1.8;
 }
 
+/* Keep support FAQs and privacy actions from falling back to browser chrome. */
+.settings-support-faq {
+  display: grid;
+  gap: 0;
+  padding: 0;
+}
+
+.settings-support-faq details {
+  border-bottom: 1px solid #ebe9f4;
+  background: #fff;
+}
+
+.settings-support-faq details:last-child { border-bottom: 0; }
+
+.settings-support-faq summary {
+  display: flex;
+  align-items: center;
+  min-height: 54px;
+  padding: 0 16px;
+  color: var(--fan-ink);
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+  list-style: none;
+}
+
+.settings-support-faq summary::-webkit-details-marker { display: none; }
+.settings-support-faq summary::after {
+  width: 8px;
+  height: 8px;
+  margin-left: auto;
+  border-right: 1.5px solid var(--fan-violet);
+  border-bottom: 1.5px solid var(--fan-violet);
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform .16s ease;
+  content: '';
+}
+
+.settings-support-faq details[open] summary::after {
+  transform: rotate(225deg) translate(-2px, -1px);
+}
+
+.settings-support-faq details p {
+  margin: 0;
+  padding: 0 16px 15px;
+  color: var(--fan-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.settings-privacy-actions {
+  display: grid;
+  gap: 9px;
+  padding: 16px;
+}
+
+.settings-privacy-actions > strong,
+.settings-consent-history > strong { color: var(--fan-ink); }
+
+.settings-privacy-actions > p {
+  margin: 0;
+  color: var(--fan-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.settings-privacy-actions > button,
+.settings-privacy-actions > input {
+  box-sizing: border-box;
+  min-height: 42px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.settings-privacy-actions > button {
+  padding: 9px 12px;
+  border: 1px solid #d9d4f4;
+  background: #fff;
+  color: var(--fan-violet);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.settings-privacy-actions > button:hover { background: #faf9ff; }
+.settings-privacy-actions > label { color: var(--fan-muted); font-size: 11px; font-weight: 700; }
+
+.settings-privacy-actions > input {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid #dedbef;
+  background: #fff;
+  color: var(--fan-ink);
+  outline: none;
+}
+
+.settings-privacy-actions > input:focus { border-color: var(--fan-violet); }
+.settings-privacy-actions > .settings-danger-action { border-color: #efc8d0; background: #fff8f9; color: #b94b5b; }
+.settings-privacy-actions > .settings-danger-action:hover { background: #fff0f2; }
+
 .my-panel-backdrop {
   position: fixed;
   z-index: 80;
