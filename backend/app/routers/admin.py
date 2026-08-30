@@ -3491,6 +3491,7 @@ async def cards(
             "issueLimit": card.issue_limit,
             "imageAssetId": card.image_asset_id,
             "sourceImageUrl": f"/api/admin/cards/{card.id}/image" if card.image_asset_id else None,
+            "imageUrl": card.image_url,
             "ownerArtistId": card.owner_artist_id,
             "artistId": card.artist_id,
             "memberId": card.member_id,
