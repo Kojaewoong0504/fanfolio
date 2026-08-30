@@ -7584,6 +7584,47 @@ code {
   font-size: 21px;
 }
 
+/* The growth master pane can be roughly half the viewport while its editor is
+   open. Keep action labels intact and give the compact metrics enough room to
+   read instead of letting flexbox squeeze Korean glyphs vertically. */
+.workspace-sidecar-body.fan-pass-workspace-body .fan-pass-page-heading {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 14px 16px;
+}
+
+.workspace-sidecar-body.fan-pass-workspace-body .fan-growth-create-actions {
+  display: grid;
+  flex: 0 1 320px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 280px;
+}
+
+.workspace-sidecar-body.fan-pass-workspace-body .fan-growth-create-actions > button {
+  width: 100%;
+  min-width: 0;
+  padding-inline: 10px;
+  white-space: nowrap;
+  word-break: keep-all;
+}
+
+.workspace-sidecar-body.fan-pass-workspace-body .fan-pass-summary .summary-card {
+  gap: 10px;
+  padding: 12px 10px;
+  grid-template-columns: 36px minmax(0, 1fr);
+}
+
+.workspace-sidecar-body.fan-pass-workspace-body .fan-pass-summary .summary-card > span {
+  width: 36px;
+  height: 36px;
+}
+
+.workspace-sidecar-body.fan-pass-workspace-body .fan-pass-summary .summary-card small,
+.workspace-sidecar-body.fan-pass-workspace-body .fan-pass-summary .summary-card p {
+  word-break: keep-all;
+}
+
 @media (max-width: 1300px) {
   .fan-pass-admin .fan-pass-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;

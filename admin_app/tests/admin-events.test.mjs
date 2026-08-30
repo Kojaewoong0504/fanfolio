@@ -135,9 +135,25 @@ test('event editor renders uploaded banner assets immediately after upload', () 
   assert.match(source, /event-upload-thumbnail.*querySelector|querySelector\("\.event-upload-thumbnail"\)/s)
 })
 
+test('event banner file selection persists the asset id and replaces the thumbnail', () => {
+  assert.match(source, /URL\.createObjectURL\(file\)/)
+  assert.match(source, /data-local-preview/)
+  assert.match(source, /const assetId = await uploadAsset\(file, "event_banner"\)/)
+  assert.match(source, /event\.currentTarget\.form\.elements\.heroAssetId\.value = assetId/)
+  assert.match(source, /event\.currentTarget\.form\.querySelector\("\.event-upload-thumbnail"\)/)
+  assert.match(source, /URL\.revokeObjectURL\(localPreviewUrl\)/)
+  assert.match(source, /innerHTML = `<img data-event-hero src=/)
+})
+
 test('related event cards render authenticated card thumbnails outside the card list view', () => {
   assert.match(source, /event-card-thumb.*cardThumbnailUrls/s)
   assert.match(source, /state\.view === "events"|state\.drawer === "event"/s)
+})
+
+test('related event cards keep a usable preview when a demo card has no stored asset', () => {
+  assert.match(source, /function demoCardThumbnailUrl\(cardId\)/)
+  assert.match(source, /state\.cardThumbnailUrls\[card\.id\] \|\| card\.imageUrl \|\| demoCardThumbnailUrl\(card\.id\)/)
+  assert.match(source, /카드 미리보기/)
 })
 
 test('event banner upload keeps the save action recoverable after an upload failure', () => {

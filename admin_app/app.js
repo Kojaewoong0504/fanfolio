@@ -1496,7 +1496,7 @@ function fanPassDrawer() {
   const tierCount = Math.max(3, Math.min(maxFanPassTiers, (season.tiers || []).length || 3));
   const presetOptions = fanPassPresets.map((preset) => `<option value="${preset.id}">${preset.label}</option>`).join("");
   const tiers = Array.from({ length: tierCount }, (_, index) => {
-    const tier = (season.tiers || [])[index] || { tier: index + 1, requiredXp: "", rewardId: "", premiumRewardId: "" };
+    const tier = (season.tiers || [])[index] || { tier: index + 1, requiredXp: index * 100, rewardId: "", premiumRewardId: "" };
     return `<article class="pass-tier-row"><span class="pass-tier-handle">${icon("drag_indicator")}</span><div class="pass-tier-heading"><strong>Lv.${index + 1}</strong><span class="pass-tier-visibility">${icon("lock_open")} 공개</span></div><button class="icon-button pass-tier-menu" type="button" aria-label="Lv.${index + 1} 옵션">${icon("more_horiz")}</button><label class="field"><span>필요 경험치 (XP)</span><input name="tierXp" type="number" min="0" value="${tier.requiredXp ?? ""}" placeholder="${index * 100}" /></label><label class="field"><span>무료 보상</span>${adminSelect({ id: `pass-tier-free-${index}`, name: "tierReward", value: tier.rewardId || "", label: "무료 보상", className: "form-select", options: passRewardOptions })}</label><label class="field"><span>프리미엄 보상</span>${adminSelect({ id: `pass-tier-premium-${index}`, name: "tierPremiumReward", value: tier.premiumRewardId || "", label: "프리미엄 보상", className: "form-select", options: passRewardOptions })}</label></article>`;
   }).join("");
   const approvalAction = canApproveFanGrowth() && season.id && season.status === "pending_review"
@@ -2141,6 +2141,15 @@ async function loadCardThumbnails(cards) {
   if (state.authenticated && (state.view === "cards" || state.view === "events" || state.drawer === "event")) layout();
 }
 
+function demoCardThumbnailUrl(cardId) {
+  return ({
+    card_demo_published: "./assets/demo/dreamscape/yuna.png",
+    card_demo_harin: "./assets/demo/dreamscape/harin.png",
+    card_demo_sena: "./assets/demo/dreamscape/sena.png",
+    card_demo_rina: "./assets/demo/dreamscape/rina.png",
+  })[cardId] || "";
+}
+
 async function loadAdminImageBlobUrl(url) {
   let response = await fetch(resolveAdminAssetUrl(url), {
     credentials: "include",
@@ -2348,7 +2357,7 @@ function eventRelatedCardOptions(event) {
   const selected = new Set(event.relatedCardIds || []);
   const cards = cardCatalogItems().filter((card) => card.status === "published");
   if (!cards.length) return '<small class="field-help">연결 가능한 공개 카드가 없습니다.</small>';
-  return `<div class="event-related-card-options">${cards.map((card) => `<label class="event-card-option"><input type="checkbox" name="relatedCardIds" value="${escapeHtml(card.id)}" ${selected.has(card.id) ? "checked" : ""} /><span class="event-card-check" aria-hidden="true">${icon("check")}</span><span class="event-card-thumb" aria-hidden="true">${state.cardThumbnailUrls[card.id] ? `<img src="${escapeHtml(state.cardThumbnailUrls[card.id])}" alt="" />` : icon("style")}</span><span class="event-card-copy"><strong>${escapeHtml(card.name || card.id)}</strong><small>${escapeHtml(card.memberName || "공개 카드")}</small></span><span class="event-card-order">${selected.has(card.id) ? "선택됨" : "연결"}</span></label>`).join("")}</div>`;
+  return `<div class="event-related-card-options">${cards.map((card) => { const thumbnailUrl = state.cardThumbnailUrls[card.id] || card.imageUrl || demoCardThumbnailUrl(card.id); return `<label class="event-card-option"><input type="checkbox" name="relatedCardIds" value="${escapeHtml(card.id)}" ${selected.has(card.id) ? "checked" : ""} /><span class="event-card-check" aria-hidden="true">${icon("check")}</span><span class="event-card-thumb" aria-hidden="true">${thumbnailUrl ? `<img src="${escapeHtml(thumbnailUrl)}" alt="${escapeHtml(card.name || card.id)} 카드 미리보기" />` : icon("style")}</span><span class="event-card-copy"><strong>${escapeHtml(card.name || card.id)}</strong><small>${escapeHtml(card.memberName || "공개 카드")}</small></span><span class="event-card-order">${selected.has(card.id) ? "선택됨" : "연결"}</span></label>`; }).join("")}</div>`;
 }
 
 function eventsView() {
@@ -5327,6 +5336,16 @@ async function saveFanPass(event) {
   const tierXp = data.getAll("tierXp");
   const tierReward = data.getAll("tierReward");
   const tierPremiumReward = data.getAll("tierPremiumReward");
+  const invalidTierIndex = tierXp.findIndex((xp) => {
+    const rawXp = String(xp).trim();
+    const requiredXp = Number(xp);
+    return rawXp === "" || !Number.isFinite(requiredXp) || requiredXp < 0;
+  });
+  if (invalidTierIndex >= 0) {
+    errorBox.textContent = `Lv.${invalidTierIndex + 1} 필요 경험치를 입력해 주세요.`;
+    errorBox.hidden = false;
+    return;
+  }
   const tiers = tierXp
     .map((xp, index) => ({ tier: index + 1, rawXp: String(xp).trim(), requiredXp: Number(xp), rewardId: tierReward[index] || null, premiumRewardId: tierPremiumReward[index] || null }))
     .filter((tier) => tier.rawXp !== "" && Number.isFinite(tier.requiredXp) && tier.requiredXp >= 0)
@@ -5984,7 +6003,7 @@ function bind() {
         endsAt: data.get("endsAt") || null,
         premiumEnabled: data.get("premiumEnabled") === "on",
         premiumPricePoints: data.get("premiumPricePoints") || "",
-        tiers: [...currentTiers, { tier: currentTiers.length + 1, requiredXp: "", rewardId: "", premiumRewardId: "" }],
+        tiers: [...currentTiers, { tier: currentTiers.length + 1, requiredXp: currentTiers.length * 100, rewardId: "", premiumRewardId: "" }],
       },
     };
     layout();
@@ -6184,14 +6203,22 @@ function bind() {
     const name = document.querySelector("#event-banner-file-name");
     if (file && name) name.textContent = file.name;
     if (!file) return;
+    const thumbnail = event.currentTarget.form.querySelector(".event-upload-thumbnail");
+    const localPreviewUrl = URL.createObjectURL(file);
+    if (thumbnail) thumbnail.innerHTML = `<img data-event-hero data-local-preview src="${escapeHtml(localPreviewUrl)}" alt="선택한 이벤트 배너 미리보기" />`;
     try {
       const assetId = await uploadAsset(file, "event_banner");
       event.currentTarget.form.elements.heroAssetId.value = assetId;
       const previewUrl = await loadUploadedAssetPreview(assetId);
-      const thumbnail = event.currentTarget.form.querySelector(".event-upload-thumbnail");
       if (thumbnail) thumbnail.innerHTML = `<img data-event-hero src="${escapeHtml(previewUrl)}" alt="현재 이벤트 배너" />`;
+      URL.revokeObjectURL(localPreviewUrl);
       toast("이벤트 배너를 업로드했습니다.");
-    } catch { event.currentTarget.value = ""; toast("이벤트 배너 업로드에 실패했습니다."); }
+    } catch {
+      event.currentTarget.value = "";
+      URL.revokeObjectURL(localPreviewUrl);
+      if (thumbnail) thumbnail.innerHTML = icon("image");
+      toast("이벤트 배너 업로드에 실패했습니다.");
+    }
   });
   document.querySelector('#event-form [data-select-id="event-type"] .admin-select-value')?.addEventListener("change", (event) => {
     const field = document.querySelector("#event-connection-field"); if (!field) return;
