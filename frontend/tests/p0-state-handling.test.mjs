@@ -19,7 +19,9 @@ test('card pack opening has loading, duplicate-submit, and failure states', () =
 })
 
 test('QR camera and image-registration failures return to a manual fallback', () => {
-  assert.match(redeemSource, /카메라를 사용할 수 없습니다\. 권한을 확인하거나 사진으로 QR을 읽어 주세요\./)
+  assert.match(redeemSource, /카메라 권한이 꺼져 있어요\. 브라우저 설정에서 카메라를 허용한 뒤 다시 시도해 주세요\./)
+  assert.match(redeemSource, /카메라를 사용할 수 없습니다\. 권한을 확인하거나 다시 시도해 주세요\./)
+  assert.match(redeemSource, /카메라 권한 다시 요청/)
   assert.match(redeemSource, /HTTPS 연결에서만 사용할 수 있어요/)
   assert.match(redeemSource, /autoPlay playsInline muted/)
   assert.match(redeemSource, /사진에서 QR 읽기/)

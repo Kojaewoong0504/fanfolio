@@ -50,3 +50,10 @@ test('secondary detail routes use the shared detail top bar', () => {
   assert.match(tradeInboxSource, /<DetailTopBar title="거래함" onBack=/)
   assert.match(source, /<DetailTopBar title="알림" onBack=\{onBack\}/)
 })
+
+test('mobile detail routes stay on the full viewport canvas', () => {
+  assert.match(referenceCss, /@media \(max-width: 600px\)[\s\S]*\.app-shell,[\s\S]*width:\s*100%/)
+  assert.match(referenceCss, /@media \(max-width: 600px\)[\s\S]*\.app-shell,[\s\S]*max-width:\s*none/)
+  assert.match(referenceCss, /@media \(max-width: 600px\)[\s\S]*\.bottom-nav\s*\{\s*width:\s*100%/)
+  assert.match(referenceCss, /@media \(max-width: 600px\)[\s\S]*\.redeem-flow-screen\s*\{[^}]*width:\s*100%[^}]*max-width:\s*none/s)
+})
