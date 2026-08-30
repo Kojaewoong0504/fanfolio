@@ -88,6 +88,19 @@ test('event editor uploads a banner asset and offers managed connection choices'
   assert.match(source, /event-form-body[\s\S]*<footer class="drawer-footer"/)
 })
 
+test('event editor resolves API-relative related-card thumbnails on the admin origin', () => {
+  assert.match(source, /const resolvedThumbnailUrl = state\.cardThumbnailUrls\[card\.id\] \? thumbnailUrl : resolveAdminAssetUrl\(thumbnailUrl\)/)
+  assert.match(source, /event-card-thumb[\s\S]*resolvedThumbnailUrl/)
+})
+
+test('event banner keeps the immediate local preview when upload fails', () => {
+  const handlerStart = source.indexOf('document.querySelector("#event-banner-file")')
+  const handlerEnd = source.indexOf('document.querySelector(\'#event-form [data-select-id="event-type"]', handlerStart)
+  const handler = source.slice(handlerStart, handlerEnd)
+  assert.match(handler, /data-local-preview/)
+  assert.doesNotMatch(handler, /catch \{[\s\S]*URL\.revokeObjectURL\(localPreviewUrl\)[\s\S]*data-local-preview/)
+})
+
 test('event editor captures the fields the fan application screen displays', () => {
   assert.match(source, /name="venue"/)
   assert.match(source, /name="participantLimit"/)
