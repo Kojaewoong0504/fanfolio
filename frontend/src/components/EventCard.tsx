@@ -1,6 +1,7 @@
 import type { FanEvent } from '../api/client'
 import { AuthenticatedImage } from './AuthenticatedImage'
 import { InlineIcon } from '../App'
+import { dreamscapeDemoAssets } from '../assets/demo-catalog'
 
 function eventDateParts(value: string): { month: string; day: string } {
   const date = new Date(value)
@@ -28,7 +29,7 @@ function eventDateTime(value: string): string {
 export function EventCard({ event, onOpen }: { event: FanEvent; onOpen: (event: FanEvent) => void }) {
   const date = eventDateParts(event.startsAt)
   return <button type="button" className="event-card" onClick={() => onOpen(event)} aria-label={`${event.title} 이벤트 상세 보기`}>
-    <div className="event-card-image">{event.heroUrl ? <AuthenticatedImage src={event.heroUrl} alt="" /> : <span aria-hidden="true">✦</span>}<small className={`event-status event-status-${event.status}`}>{event.status === 'active' ? '신청 중' : event.status === 'upcoming' ? '진행 예정' : '종료'}</small></div>
+    <div className="event-card-image">{event.heroUrl ? <AuthenticatedImage src={event.heroUrl} fallback={dreamscapeDemoAssets.eventHero} alt="" /> : <span aria-hidden="true">✦</span>}<small className={`event-status event-status-${event.status}`}>{event.status === 'active' ? '신청 중' : event.status === 'upcoming' ? '진행 예정' : '종료'}</small></div>
     <span className="event-card-date"><b>{date.month}</b><strong>{date.day}</strong></span>
     <span className="event-card-copy"><small className="event-type-badge">{eventTypeLabel(event)}</small><b>{event.title}</b><em>{event.artistName ?? event.summary}</em><small className="event-card-meta"><InlineIcon name="clock" />{eventDateTime(event.startsAt)}</small><small className="event-card-meta event-card-venue"><InlineIcon name="pin" />{eventVenue(event)}</small></span><span className="event-card-chevron" aria-hidden="true"><InlineIcon name="chevron" /></span>
   </button>
