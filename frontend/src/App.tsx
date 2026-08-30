@@ -1707,7 +1707,7 @@ function App() {
 
       {tab !== 'alerts' && <section className="screen">
         {collectionError && <div className="service-notice" role="alert"><span>{collectionError}</span><button onClick={() => void refreshCollection()} disabled={collectionLoading}>{collectionLoading ? '확인 중...' : '다시 시도'}</button></div>}
-        {tab === 'home' && <Home nickname={currentUser?.nickname ?? '팬'} cards={collectionCards} collectionDataReady={collectionDataReady} savedCards={savedCards} summary={collectionSummary} loading={collectionLoading} eventHome={fanHome} onSelect={openCard} onDiscover={() => navigateTab('discover')} onCollection={() => navigateTab('collection')} onRedeem={openRedeem} onEvents={openEvents} onEvent={openEvent} />}
+        {tab === 'home' && <Home nickname={currentUser?.nickname ?? '팬'} cards={collectionCards} collectionDataReady={collectionDataReady} savedCards={savedCards} summary={collectionSummary} loading={collectionLoading} eventHome={fanHome} eventHomeLoading={fanHomeLoading} onSelect={openCard} onDiscover={() => navigateTab('discover')} onCollection={() => navigateTab('collection')} onRedeem={openRedeem} onEvents={openEvents} onEvent={openEvent} />}
         {tab === 'events' && (eventId ? <EventDetail event={selectedEvent} loading={eventDetailLoading} onBack={openEvents} onApply={handleEventApply} comments={eventComments} commentsLoading={eventCommentsLoading} commentSubmitting={eventCommentSubmitting} onLoadComments={loadEventComments} onSubmitComment={handleEventComment} onOpenTarget={target => { if (target.startsWith('/events/')) { const id = decodeURIComponent(target.split('/')[1]?.split('#')[0] ?? ''); const item = fanEvents.find(event => event.id === id); if (item) openEvent(item) } else if (target.startsWith('https://')) window.open(target, '_blank', 'noopener,noreferrer') }} /> : <EventList events={fanEvents} status={fanEventStatus} loading={fanEventsLoading} error={fanEventsError} pagination={fanEventPagination} onStatusChange={handleFanEventStatusChange} onPageChange={setFanEventPage} onOpen={openEvent} />)}
         {tab === 'collection' && <Collection cards={collectionCards} collectionDataReady={collectionDataReady} favoriteArtists={catalogArtists.filter(artist => currentUser?.favoriteArtistIds.includes(artist.id))} summary={collectionSummary} benefits={collectionBenefits} rewards={inventoryProgression?.claimedRewards ?? []} loading={collectionLoading} onSelect={openCard} onRedeem={openRedeem} onDiscover={() => navigateTab('discover')} onRewards={openRewardInventory} onCards={openCardCollection} onOpenWishlist={openWishlistPicker} onClaim={claimBenefit} />}
         {tab === 'discover' && <Discover favoriteArtists={catalogArtists.filter(artist => currentUser?.favoriteArtistIds.includes(artist.id))} onFindFans={query => navigateAppPath(routeWithReturnTo(query ? `/fans?q=${encodeURIComponent(query)}` : '/fans', '/discover'))} onOpenFanProfile={userId => navigateAppPath(routeWithReturnTo(`/fans/${encodeURIComponent(userId)}`, '/discover'))} onOpenPublicCollection={userId => navigateAppPath(routeWithReturnTo(`/fans/${encodeURIComponent(userId)}/collection`, '/discover'))} onOpenEvent={event => { if (event) openEvent(event); else openEvents() }} onOpenArtist={artistId => navigateAppPath(routeWithReturnTo(`/discover/artists/${encodeURIComponent(artistId)}`, '/discover'))} onOpenPackCatalog={() => navigateAppPath(routeWithReturnTo('/discover/packs', '/discover'))} onOpenPack={packId => navigateAppPath(routeWithReturnTo(`/discover/packs/${encodeURIComponent(packId)}`, '/discover'))} onOpenCard={openCard} featuredArtist={catalogArtists.find(artist => artist.name === '드림스케이프') ?? catalogArtists[0] ?? null} featuredEvent={fanHome?.featuredEvent ?? fanHome?.upcomingEvents[0] ?? null} featuredEventLoading={fanHomeLoading} />}
@@ -2122,7 +2122,7 @@ function Onboarding({ userId, profileImageUrl, onComplete, onBack }: { userId: s
   </main>
 }
 
-type HomeProps = { nickname: string, cards: Card[], collectionDataReady: boolean, savedCards: Card[], summary: CollectionSummary, loading: boolean, eventHome: FanHomeResponse | null, onSelect: (card: Card) => void, onDiscover: () => void, onCollection: () => void, onRedeem: () => void, onEvents: () => void, onEvent: (event: FanEvent) => void }
+type HomeProps = { nickname: string, cards: Card[], collectionDataReady: boolean, savedCards: Card[], summary: CollectionSummary, loading: boolean, eventHome: FanHomeResponse | null, eventHomeLoading: boolean, onSelect: (card: Card) => void, onDiscover: () => void, onCollection: () => void, onRedeem: () => void, onEvents: () => void, onEvent: (event: FanEvent) => void }
 
 const fallbackHomeEvent: FanEvent = {
   id: 'demo-fan-week',
@@ -2196,11 +2196,6 @@ function homeHeroTitleLines(title: string): string[] {
   if (words.length < 3) return [title]
   return [words.slice(0, Math.ceil(words.length / 2)).join(' '), words.slice(Math.ceil(words.length / 2)).join(' ')]
 }
-const fallbackHomeCards: Card[] = [
-  { id: 'home-stardust-yuna', title: 'Nebula Ver.', artist: '드림스케이프', member: '유나', image: dreamscapeMemberById.member_yuna.image },
-  { id: 'home-stardust-harin', title: 'Nebula Ver.', artist: '드림스케이프', member: '하린', image: dreamscapeMemberById.member_harin.image },
-  { id: 'home-dream-moment', title: 'Nebula Ver.', artist: '드림스케이프', member: '세나', image: dreamscapeMemberById.member_sena.image },
-]
 const fallbackCollectionCards: Card[] = [
   ...dreamscapeDemoMembers.flatMap((member, index) => [
     { id: `collection-${member.id}-nebula`, title: 'Nebula Ver.', artist: '드림스케이프', member: member.name, image: member.image, rarity: (['UR', 'SR', 'R', 'N'] as const)[index] },
@@ -2397,7 +2392,7 @@ function Home(props: HomeProps) {
   const [recommendations, setRecommendations] = useState<Card[]>([])
 
   useEffect(() => {
-    if (props.cards.length > 0) {
+    if (!props.collectionDataReady || props.cards.length > 0) {
       setRecommendations([])
       return
     }
@@ -2406,23 +2401,23 @@ function Home(props: HomeProps) {
       .then(result => { if (!cancelled) setRecommendations(result.data.items.slice(0, 4).map(toCatalogCard)) })
       .catch(() => { if (!cancelled) setRecommendations([]) })
     return () => { cancelled = true }
-  }, [props.cards.length])
+  }, [props.cards.length, props.collectionDataReady])
 
-  return <><HomeContent {...props} />{props.cards.length === 0 && recommendations.length > 0 && <HomeRecommendations cards={recommendations} onSelect={props.onSelect} onDiscover={props.onDiscover} />}</>
+  return <><HomeContent {...props} />{props.collectionDataReady && props.cards.length === 0 && recommendations.length > 0 && <HomeRecommendations cards={recommendations} onSelect={props.onSelect} onDiscover={props.onDiscover} />}</>
 }
 
 function HomeRecommendations({ cards, onSelect, onDiscover }: { cards: Card[], onSelect: (card: Card) => void, onDiscover: () => void }) {
   return <section className="home-recommendations" aria-labelledby="home-recommendations-title"><div className="section-heading"><h2 id="home-recommendations-title">지금 탐색해 볼 카드</h2><button type="button" onClick={onDiscover}>전체 보기</button></div><div className="home-recommendation-row">{cards.map(card => <button type="button" className="home-recommendation-card" key={card.id} onClick={() => onSelect(card)} aria-label={`${card.title} 카드 · ${card.artist} · ${card.member}`}><img src={card.image} alt={`${card.title} 카드`} onError={event => keepCardVisual(event, card.id)} /><span><b>{card.title}</b><small>{card.artist} · {card.member}</small></span></button>)}</div></section>
 }
 
-function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome, onSelect, onDiscover, onCollection, onRedeem, onEvents, onEvent }: HomeProps) {
+function HomeContent({ nickname, cards, collectionDataReady, savedCards, summary, loading, eventHome, eventHomeLoading, onSelect, onDiscover, onCollection, onRedeem, onEvents, onEvent }: HomeProps) {
   const [activeHomeArtistId, setActiveHomeArtistId] = useState<string | null>(() => readActiveArtistId())
   const [scopedHomeCards, setScopedHomeCards] = useState<CatalogCard[]>([])
   const featured = cards[0]
   const apiHeroEvents = eventHome
     ? [eventHome.featuredEvent, ...eventHome.upcomingEvents].filter((event): event is FanEvent => Boolean(event)).filter((event, index, events) => events.findIndex(item => item.id === event.id) === index)
     : []
-  const featuredEvent = eventHome ? eventHome.featuredEvent : import.meta.env.DEV ? fallbackHomeEvent : null
+  const featuredEvent = eventHomeLoading ? null : eventHome?.featuredEvent ?? null
   const [activeHeroIndex, setActiveHeroIndex] = useState(0)
   const [heroInteractionVersion, setHeroInteractionVersion] = useState(0)
   const [artistFavorites, setArtistFavorites] = useState<Set<string>>(() => new Set(eventHome?.favoriteArtists.map(artist => artist.id) ?? []))
@@ -2434,7 +2429,7 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
     : (eventHome ? apiHeroEvents : featuredEvent ? [featuredEvent] : [])
   const homeVisibleCards = activeHomeArtistId
     ? scopedHomeCards.map(toCatalogCard)
-    : (eventHome ? eventHome.newCards.map(toCatalogCard) : import.meta.env.DEV ? fallbackHomeCards : [])
+    : (eventHomeLoading ? [] : eventHome?.newCards.map(toCatalogCard) ?? [])
   const heroEvents = homeVisibleEvents
   const heroSlides: HomeHeroSlide[] = heroEvents.map(event => ({
     event,
@@ -2443,7 +2438,7 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
     image: resolveApiUrl(event.heroUrl) || dreamscapeHero,
   }))
   const newCards = homeVisibleCards
-  const activeEvent = activeHomeArtistId ? homeVisibleEvents[0] ?? null : eventHome ? eventHome.upcomingEvents[0] ?? eventHome.featuredEvent : import.meta.env.DEV ? fallbackHomeEvent : null
+  const activeEvent = activeHomeArtistId ? homeVisibleEvents[0] ?? null : eventHomeLoading ? null : eventHome?.upcomingEvents[0] ?? eventHome?.featuredEvent ?? null
   const completionRate = Math.min(100, Math.max(0, summary.completionRate))
   useEffect(() => {
     setArtistFavorites(new Set((eventHome?.favoriteArtists ?? []).map(artist => artist.id)))
@@ -2522,7 +2517,7 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
             }
           }}
         >
-          <AuthenticatedImage draggable={false} src={slide.event.heroUrl} fallback={slide.image || dreamscapeHero} alt="" />
+          <AuthenticatedImage draggable={false} src={slide.event.heroUrl} fallback={slide.image || dreamscapeHero} alt="" loading="eager" fetchPriority="high" />
           <span className="home-event-spotlight-copy">
             <small>{slide.eyebrow}</small>
             <b>{slide.titleLines.map(line => <span key={line}>{line}</span>)}</b>
@@ -2544,7 +2539,7 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
             setActiveHeroIndex(index)
           }}
         />)}
-      </div></> : <div className="home-event-empty"><b>새로운 이벤트를 준비하고 있어요</b><span>공개된 이벤트가 있으면 이곳에서 바로 확인할 수 있어요.</span><button type="button" className="outline" onClick={onEvents}>이벤트 둘러보기</button></div>}
+      </div></> : eventHomeLoading ? <div className="home-event-loading" role="status" aria-label="홈 이벤트를 불러오는 중"><span /><span /><span /></div> : <div className="home-event-empty"><b>새로운 이벤트를 준비하고 있어요</b><span>공개된 이벤트가 있으면 이곳에서 바로 확인할 수 있어요.</span><button type="button" className="outline" onClick={onEvents}>이벤트 둘러보기</button></div>}
     </section>
     {favoriteArtists.length > 0 ? <section className="home-artist-section" aria-labelledby="home-artist-title">
       <div className="section-heading"><h2 id="home-artist-title">관심 아티스트</h2><button type="button" onClick={onDiscover}>전체 보기 <InlineIcon name="chevron" /></button></div>
@@ -2554,7 +2549,7 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
         const isFavorite = artistFavorites.has(artist.id)
         return <article className="home-artist-card" key={artist.id}>
           <button type="button" className={`home-artist-primary${activeHomeArtistId === artist.id ? ' is-selected' : ''}`} onClick={() => { const next = activeHomeArtistId === artist.id ? null : artist.id; writeActiveArtistId(next); setActiveHomeArtistId(next); setActiveHeroIndex(0) }} aria-label={`${artist.name} 아티스트 콘텐츠 보기`} aria-pressed={activeHomeArtistId === artist.id}>
-            <img className="home-artist-backdrop" src={artistImage} alt="" />
+            <img className="home-artist-backdrop" src={artistImage} alt="" loading="lazy" />
             <span className="home-artist-copy">
               <small className="home-artist-badge">관심 아티스트</small>
               <b>{artist.name} <span className="home-artist-verified" aria-label="공식 인증"><VerifiedIcon /></span></b>
@@ -2573,7 +2568,7 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
         const isFavorite = newCardFavorites.has(card.id)
         return <article className="home-new-card" key={card.id}>
           <button type="button" className="home-new-card-primary" onClick={() => onSelect(card)} aria-label={`${card.title} 카드 상세 보기`}>
-            <img src={card.image} alt="" onError={event => keepCardVisual(event, card.id)} />
+            <img src={card.image} alt="" loading="lazy" onError={event => keepCardVisual(event, card.id)} />
             <small className={`home-new-card-rarity rarity-${rarity.toLowerCase()}`}>{rarity}</small>
             <span className="home-new-card-copy"><b>{card.member}</b><em>{card.title}</em></span>
           </button>
@@ -2590,13 +2585,13 @@ function HomeContent({ nickname, cards, savedCards, summary, loading, eventHome,
     {activeEvent && <section className="home-active-event-section" aria-labelledby="home-active-event-title">
       <div className="section-heading"><h2 id="home-active-event-title">진행 중인 이벤트</h2></div>
       <button type="button" className="home-active-event" onClick={() => activeEvent.id.startsWith('demo-') ? onEvents() : onEvent(activeEvent)}>
-        <AuthenticatedImage src={activeEvent.heroUrl} fallback={dreamscapeHero} alt="" />
+        <AuthenticatedImage src={activeEvent.heroUrl} fallback={dreamscapeHero} alt="" loading="lazy" />
         <span><small className="home-active-event-status">{activeEvent.applicationStatus === 'applied' ? '참여 중' : activeEvent.status === 'upcoming' ? '곧 시작' : '참여 가능'}</small><b>{activeEvent.title}</b><em>{activeEvent.summary}</em></span>
         <strong>{activeEvent.endsAt ? `D-${Math.max(0, Math.ceil((new Date(activeEvent.endsAt).getTime() - Date.now()) / 86400000))}` : '자세히'}</strong><InlineIcon name="chevron" />
       </button>
     </section>}
-    {loading && !featured ? <div className="home-loading" role="status" aria-live="polite"><span className="loading-orbit" aria-hidden="true" /><b>컬렉션을 준비하고 있어요</b></div> : featured ? <button className="collection-spotlight" onClick={() => onSelect(featured)} aria-label={`${featured.title} 카드 상세 보기`}>
-      <img src={featured.image} alt={`${featured.title} 카드`} onError={event => keepCardVisual(event, featured.id)} />
+    {(!collectionDataReady || loading) && !featured ? <div className="home-loading" role="status" aria-live="polite"><span className="loading-orbit" aria-hidden="true" /><b>컬렉션을 준비하고 있어요</b></div> : featured ? <button className="collection-spotlight" onClick={() => onSelect(featured)} aria-label={`${featured.title} 카드 상세 보기`}>
+      <img src={featured.image} alt={`${featured.title} 카드`} loading="lazy" onError={event => keepCardVisual(event, featured.id)} />
       <span className="collection-spotlight-copy"><small>FANFOLIO COLLECTION</small><b>{featured.title}</b><em>{featured.artist} · {featured.member}</em><strong>NEW <i>·</i> MY COLLECTION</strong></span>
     </button> : <div className="home-empty"><b>첫 카드를 만나보세요</b><span>QR 또는 카드 코드로 등록하거나, 새로운 카드를 먼저 둘러보세요.</span><div className="home-empty-actions"><button type="button" className="primary" onClick={onRedeem}>카드 등록하기</button><button type="button" className="outline" onClick={onDiscover}>카드 탐색하기</button></div></div>}
 

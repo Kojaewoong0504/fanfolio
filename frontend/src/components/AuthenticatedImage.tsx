@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchAuthenticatedMedia, isPublicFanMediaPath, resolveApiUrl } from '../api/client'
 
-export function AuthenticatedImage({ src, fallback, alt, className, draggable }: { src: string | null | undefined; fallback?: string; alt: string; className?: string; draggable?: boolean }) {
+export function AuthenticatedImage({ src, fallback, alt, className, draggable, loading, fetchPriority }: { src: string | null | undefined; fallback?: string; alt: string; className?: string; draggable?: boolean; loading?: 'eager' | 'lazy'; fetchPriority?: 'high' | 'low' | 'auto' }) {
   const [resolved, setResolved] = useState(() => src && (!src.startsWith('/api/') || isPublicFanMediaPath(src)) ? resolveApiUrl(src) : fallback ?? '')
   useEffect(() => {
     let cancelled = false
@@ -17,5 +17,5 @@ export function AuthenticatedImage({ src, fallback, alt, className, draggable }:
   const handleError = () => {
     if (fallback && resolved !== resolveApiUrl(fallback)) setResolved(resolveApiUrl(fallback))
   }
-  return <img className={className} src={resolved || fallback} alt={alt} draggable={draggable} decoding="async" onError={handleError} />
+  return <img className={className} src={resolved || fallback} alt={alt} draggable={draggable} loading={loading} fetchPriority={fetchPriority} decoding="async" onError={handleError} />
 }

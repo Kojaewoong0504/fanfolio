@@ -167,9 +167,9 @@ test('home surfaces the editorial artist, new cards, and upcoming drop sections'
   assert.match(appSource, /className="home-new-cards"/)
   assert.match(appSource, /새로 공개된 카드/)
   assert.match(appSource, /className="home-active-event"/)
-  assert.match(appSource, /eventHome \? eventHome\.newCards\.map\(toCatalogCard\) : import\.meta\.env\.DEV \? fallbackHomeCards : \[\]/)
-  assert.match(appSource, /eventHome \? eventHome\.featuredEvent : import\.meta\.env\.DEV \? fallbackHomeEvent : null/)
-  assert.match(appSource, /eventHome \? eventHome\.upcomingEvents\[0\] \?\? eventHome\.featuredEvent : import\.meta\.env\.DEV \? fallbackHomeEvent : null/)
+  assert.match(appSource, /eventHomeLoading \? \[\] : eventHome\?\.newCards\.map\(toCatalogCard\) \?\? \[\]/)
+  assert.match(appSource, /eventHomeLoading \? null : eventHome\?\.featuredEvent \?\? null/)
+  assert.match(appSource, /eventHomeLoading \? null : eventHome\?\.upcomingEvents\[0\] \?\? eventHome\?\.featuredEvent \?\? null/)
   assert.match(appSource, /activeEvent\.id\.startsWith\('demo-'\) \? onEvents\(\) : onEvent\(activeEvent\)/)
 })
 
