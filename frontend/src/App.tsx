@@ -2517,7 +2517,7 @@ function HomeContent({ nickname, cards, collectionDataReady, savedCards, summary
             }
           }}
         >
-          <AuthenticatedImage draggable={false} src={slide.event.heroUrl} fallback={slide.image || dreamscapeHero} alt="" loading="eager" fetchPriority="high" />
+          <AuthenticatedImage draggable={false} src={slide.event.heroUrl} fallback={dreamscapeHero} alt="" loading="eager" fetchPriority="high" />
           <span className="home-event-spotlight-copy">
             <small>{slide.eyebrow}</small>
             <b>{slide.titleLines.map(line => <span key={line}>{line}</span>)}</b>
