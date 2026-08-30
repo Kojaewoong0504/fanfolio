@@ -6,6 +6,7 @@ const source = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8'
 const css = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
 const indexCss = await readFile(new URL('../src/index.css', import.meta.url), 'utf8')
 const referenceCss = await readFile(new URL('../src/reference.css', import.meta.url), 'utf8')
+const fanGrowthReferenceCss = await readFile(new URL('../src/components/FanGrowthReference.css', import.meta.url), 'utf8')
 const fanPassSource = await readFile(new URL('../src/components/FanPassPage.tsx', import.meta.url), 'utf8')
 const missionSource = await readFile(new URL('../src/components/FanMissionPage.tsx', import.meta.url), 'utf8')
 const tradeInboxSource = await readFile(new URL('../src/components/TradeInbox.tsx', import.meta.url), 'utf8')
@@ -56,4 +57,9 @@ test('mobile detail routes stay on the full viewport canvas', () => {
   assert.match(referenceCss, /@media \(max-width: 600px\)[\s\S]*\.app-shell,[\s\S]*max-width:\s*none/)
   assert.match(referenceCss, /@media \(max-width: 600px\)[\s\S]*\.bottom-nav\s*\{\s*width:\s*100%/)
   assert.match(referenceCss, /@media \(max-width: 600px\)[\s\S]*\.redeem-flow-screen\s*\{[^}]*width:\s*100%[^}]*max-width:\s*none/s)
+})
+
+test('fan growth hero copy stays inside the mobile column', () => {
+  assert.match(fanGrowthReferenceCss, /@media\(max-width:430px\)\{[\s\S]*?fan-growth-hero-copy \.fan-growth-artist-art\{width:100%!important;max-width:100%!important\}/)
+  assert.match(fanGrowthReferenceCss, /@media\(max-width:430px\)\{[\s\S]*?fan-growth-hero-copy h2\{[^}]*white-space:normal!important/)
 })
