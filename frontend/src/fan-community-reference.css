@@ -754,6 +754,20 @@ main.discover-shell .discover-event-entry > .discover-media-placeholder {
   object-fit: cover;
 }
 
+/* Community detail routes render as their own app roots. Their component
+   stylesheet is loaded after the shared mobile canvas rules, so reassert the
+   full-width phone contract here as well. */
+@media (max-width: 600px) {
+  .fan-social-reference,
+  .fan-profile-reference,
+  .public-collection-reference,
+  .trade-composer-reference {
+    width: 100vw;
+    max-width: 100vw;
+    margin-inline: 0;
+  }
+}
+
 /* Shared follow-state language: action is solid, completed state is calm and checked. */
 .follow-state-button {
   display: inline-flex;
