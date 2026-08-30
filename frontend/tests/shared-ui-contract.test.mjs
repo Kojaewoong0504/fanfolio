@@ -62,4 +62,6 @@ test('mobile detail routes stay on the full viewport canvas', () => {
 test('fan growth hero copy stays inside the mobile column', () => {
   assert.match(fanGrowthReferenceCss, /@media\(max-width:430px\)\{[\s\S]*?fan-growth-hero-copy \.fan-growth-artist-art\{width:100%!important;max-width:100%!important\}/)
   assert.match(fanGrowthReferenceCss, /@media\(max-width:430px\)\{[\s\S]*?fan-growth-hero-copy h2\{[^}]*white-space:normal!important/)
+  assert.match(fanGrowthReferenceCss, /@media\(max-width:600px\)\{[\s\S]*?fan-growth-hero-copy\{padding-left:0!important;min-width:0!important;max-width:100%!important\}/)
+  assert.match(fanGrowthReferenceCss, /@media\(max-width:600px\)\{[\s\S]*?fan-growth-hero-copy h2\{[^}]*white-space:normal!important/)
 })
