@@ -60,19 +60,19 @@ def test_demo_catalog_bootstrap_creates_onboarding_catalog(client) -> None:
         2,
         4,
         [
-            ("member_jei", "세나", "/assets/demo/dreamscape/sena.png"),
-            ("member_minho", "하린", "/assets/demo/dreamscape/harin.png"),
-            ("member_rina", "리나", "/assets/demo/dreamscape/rina.png"),
-            ("member_yuna", "유나", "/assets/demo/dreamscape/yuna.png"),
+            ("member_jei", "세나", "/assets/demo/dreamscape/sena.jpg"),
+            ("member_minho", "하린", "/assets/demo/dreamscape/harin.jpg"),
+            ("member_rina", "리나", "/assets/demo/dreamscape/rina.jpg"),
+            ("member_yuna", "유나", "/assets/demo/dreamscape/yuna.jpg"),
         ],
     )
 
 
 def test_bundled_demo_assets_are_served_by_api(client) -> None:
-    response = client.get("/assets/demo/dreamscape/group.png")
+    response = client.get("/assets/demo/dreamscape/group.jpg")
 
     assert response.status_code == 200
-    assert response.headers["content-type"].startswith("image/png")
+    assert response.headers["content-type"].startswith("image/jpeg")
     assert len(response.content) > 100_000
 
 

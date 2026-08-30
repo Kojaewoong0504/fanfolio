@@ -93,11 +93,11 @@ POINT_CHARGE_PACKAGES = (
 )
 
 DEMO_CATALOG_ASSET_URLS = {
-    "artist_nova3": "/assets/demo/dreamscape/group.png",
+    "artist_nova3": "/assets/demo/dreamscape/group.jpg",
     "artist_luminous": "/assets/card-yuna-lavender.jpg",
     "artist_velora": "/assets/card-minho-midnight.jpg",
     "artist_stellon": "/assets/card-jay-rosegold.jpg",
-    "local_demo_fan": "/assets/demo/dreamscape/yuna.png",
+    "local_demo_fan": "/assets/demo/dreamscape/yuna.jpg",
     "local_demo_collector": "/assets/card-yuna-lavender.jpg",
 }
 
@@ -2415,7 +2415,7 @@ async def ensure_demo_catalog(session: AsyncSession) -> None:
     environment cannot grant access or manufacture collectible inventory.
     """
     artist_rows = (
-        ("artist_nova3", "드림스케이프", "/assets/demo/dreamscape/group.png"),
+        ("artist_nova3", "드림스케이프", "/assets/demo/dreamscape/group.jpg"),
         ("artist_luminous", "루미너스", "/assets/card-yuna-lavender.jpg"),
         ("artist_velora", "벨로라", "/assets/card-minho-midnight.jpg"),
         ("artist_stellon", "스텔라온", "/assets/card-jay-rosegold.jpg"),
@@ -2444,10 +2444,10 @@ async def ensure_demo_catalog(session: AsyncSession) -> None:
         ("member_stellon_siwoo", "artist_stellon", "시우"),
     )
     member_images = {
-        "member_yuna": "/assets/demo/dreamscape/yuna.png",
-        "member_minho": "/assets/demo/dreamscape/harin.png",
-        "member_jei": "/assets/demo/dreamscape/sena.png",
-        "member_rina": "/assets/demo/dreamscape/rina.png",
+        "member_yuna": "/assets/demo/dreamscape/yuna.jpg",
+        "member_minho": "/assets/demo/dreamscape/harin.jpg",
+        "member_jei": "/assets/demo/dreamscape/sena.jpg",
+        "member_rina": "/assets/demo/dreamscape/rina.jpg",
     }
     for member_id, artist_id, name in member_rows:
         member = await session.get(Member, member_id)
@@ -2464,28 +2464,28 @@ async def ensure_demo_catalog(session: AsyncSession) -> None:
             "Nebula Yuna Ver.",
             "member_yuna",
             "UR",
-            "/assets/demo/dreamscape/yuna.png",
+            "/assets/demo/dreamscape/yuna.jpg",
         ),
         (
             "card_demo_harin",
             "Nebula Harin Ver.",
             "member_minho",
             "SR",
-            "/assets/demo/dreamscape/harin.png",
+            "/assets/demo/dreamscape/harin.jpg",
         ),
         (
             "card_demo_sena",
             "Starlight Sena Ver.",
             "member_jei",
             "R",
-            "/assets/demo/dreamscape/sena.png",
+            "/assets/demo/dreamscape/sena.jpg",
         ),
         (
             "card_demo_rina",
             "Midnight Rina Ver.",
             "member_rina",
             "N",
-            "/assets/demo/dreamscape/rina.png",
+            "/assets/demo/dreamscape/rina.jpg",
         ),
     )
     for card_id, name, member_id, rarity, image_url in card_specs:
@@ -2525,7 +2525,7 @@ async def ensure_demo_catalog(session: AsyncSession) -> None:
     pack.name = "DREAMSCAPE Nebula Ver."
     pack.season_name = "정규 1집 · DREAMSCAPE"
     pack.version = "v1.0"
-    pack.image_url = "/assets/demo/dreamscape/card-pack.png"
+    pack.image_url = "/assets/demo/dreamscape/card-pack.jpg"
     pack.description = "드림스케이프 정규 1집의 공개 카드를 확인하고 수집해보세요."
     pack.status = "published"
     pack.published_at = pack.published_at or now()
@@ -2757,7 +2757,7 @@ async def ensure_fan_community_demo(session: AsyncSession, *, password: str) -> 
             "id": "local_demo_fan",
             "email": "demo.fan@example.com",
             "nickname": "팬포리오",
-            "profile_image_url": "/assets/demo/dreamscape/yuna.png",
+            "profile_image_url": "/assets/demo/dreamscape/yuna.jpg",
             "favorite_member_ids": ["member_yuna"],
         },
         {
@@ -2790,28 +2790,28 @@ async def ensure_fan_community_demo(session: AsyncSession, *, password: str) -> 
             "name": "Nebula Harin Ver.",
             "member_id": "member_minho",
             "rarity": "UR",
-            "image_url": "/assets/demo/dreamscape/harin.png",
+            "image_url": "/assets/demo/dreamscape/harin.jpg",
         },
         {
             "id": "local_demo_card_doyun",
             "name": "Nebula Sena Ver.",
             "member_id": "member_jei",
             "rarity": "SR",
-            "image_url": "/assets/demo/dreamscape/sena.png",
+            "image_url": "/assets/demo/dreamscape/sena.jpg",
         },
         {
             "id": "local_demo_card_minjae",
             "name": "Starlight Rina Ver.",
             "member_id": "member_rina",
             "rarity": "R",
-            "image_url": "/assets/demo/dreamscape/rina.png",
+            "image_url": "/assets/demo/dreamscape/rina.jpg",
         },
         {
             "id": "local_demo_card_jay",
             "name": "Midnight Yuna Ver.",
             "member_id": "member_yuna",
             "rarity": "N",
-            "image_url": "/assets/demo/dreamscape/yuna.png",
+            "image_url": "/assets/demo/dreamscape/yuna.jpg",
         },
     )
     for spec in card_specs:
@@ -2841,7 +2841,7 @@ async def ensure_fan_community_demo(session: AsyncSession, *, password: str) -> 
     pack.name = "DREAMSCAPE Community Demo"
     pack.season_name = "정규 1집 · DREAMSCAPE"
     pack.version = "v1.0-demo"
-    pack.image_url = "/assets/demo/dreamscape/card-pack.png"
+    pack.image_url = "/assets/demo/dreamscape/card-pack.jpg"
     pack.description = "드림스케이프 정규 1집의 공개 카드를 확인하고 수집해보세요."
     pack.status = "published"
     pack.published_at = pack.published_at or now()
@@ -3301,7 +3301,7 @@ async def seed_core(session: AsyncSession) -> dict:
             Artist(
                 id="artist_nova3",
                 name="드림스케이프",
-                image_url="/assets/demo/dreamscape/group.png",
+                image_url="/assets/demo/dreamscape/group.jpg",
             ),
             Artist(
                 id="artist_luminous",
@@ -3345,7 +3345,7 @@ async def seed_core(session: AsyncSession) -> dict:
                 rarity="Special",
                 signature_text="오늘 와줘서 고마워",
                 issue_limit=500,
-                image_url="/assets/demo/dreamscape/yuna.png",
+                image_url="/assets/demo/dreamscape/yuna.jpg",
                 drop_id="drop_live",
             ),
             Card(
@@ -3353,7 +3353,7 @@ async def seed_core(session: AsyncSession) -> dict:
                 name="비공개 카드",
                 status="draft",
                 artist_id="artist_nova3",
-                image_url="/assets/demo/dreamscape/yuna.png",
+                image_url="/assets/demo/dreamscape/yuna.jpg",
                 drop_id="drop_live",
             ),
         ]
