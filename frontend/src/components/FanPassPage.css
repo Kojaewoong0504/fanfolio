@@ -9,6 +9,17 @@
   color: #111a38;
 }
 
+/* FanPassPage.css is loaded after the shared mobile canvas rules. Keep the
+   detail route on the full phone viewport when the device CSS width exceeds
+   the 430px desktop composition. */
+@media (max-width: 600px) {
+  .app-shell.fan-pass-shell.detail-screen-shell {
+    width: 100vw;
+    max-width: 100vw;
+    margin-inline: 0;
+  }
+}
+
 /* Shared detail layout owns the canvas and content gutters. */
 .fan-pass-shell > .detail-topbar { width: 100%; }
 .fan-pass-content { display: grid; align-content: start; min-height: 0; padding-bottom: 28px; }

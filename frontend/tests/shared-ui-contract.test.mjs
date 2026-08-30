@@ -9,6 +9,7 @@ const referenceCss = await readFile(new URL('../src/reference.css', import.meta.
 const fanGrowthReferenceCss = await readFile(new URL('../src/components/FanGrowthReference.css', import.meta.url), 'utf8')
 const qrRedeemCss = await readFile(new URL('../src/components/QrRedeemModal.css', import.meta.url), 'utf8')
 const fanPassSource = await readFile(new URL('../src/components/FanPassPage.tsx', import.meta.url), 'utf8')
+const fanPassCss = await readFile(new URL('../src/components/FanPassPage.css', import.meta.url), 'utf8')
 const missionSource = await readFile(new URL('../src/components/FanMissionPage.tsx', import.meta.url), 'utf8')
 const tradeInboxSource = await readFile(new URL('../src/components/TradeInbox.tsx', import.meta.url), 'utf8')
 
@@ -55,9 +56,13 @@ test('secondary detail routes use the shared detail top bar', () => {
 
 test('mobile detail routes stay on the full viewport canvas', () => {
   assert.match(referenceCss, /@media \(max-width: 600px\)[\s\S]*\.app-shell,[\s\S]*width:\s*100%/)
+  assert.match(referenceCss, /@media \(max-width: 600px\)[\s\S]*\.app-shell\.detail-screen-shell,[\s\S]*width:\s*100%/)
   assert.match(referenceCss, /@media \(max-width: 600px\)[\s\S]*\.app-shell,[\s\S]*max-width:\s*none/)
   assert.match(referenceCss, /@media \(max-width: 600px\)[\s\S]*\.bottom-nav\s*\{\s*width:\s*100%/)
   assert.match(referenceCss, /@media \(max-width: 600px\)[\s\S]*\.redeem-flow-screen\s*\{[^}]*width:\s*100%[^}]*max-width:\s*none/s)
+  assert.match(fanGrowthReferenceCss, /@media\(max-width:600px\)[\s\S]*main\.growth-shell\{width:100vw!important;max-width:100vw!important;margin-inline:0!important\}/)
+  assert.match(fanPassCss, /@media \(max-width: 600px\)[\s\S]*\.app-shell\.fan-pass-shell\.detail-screen-shell\s*\{[\s\S]*width:\s*100vw;[\s\S]*max-width:\s*100vw;[\s\S]*margin-inline:\s*0;/)
+  assert.match(qrRedeemCss, /@media \(max-width: 600px\)[\s\S]*\.redeem-flow-screen\s*\{[\s\S]*width:\s*100vw;[\s\S]*max-width:\s*100vw;[\s\S]*margin-inline:\s*0;/)
 })
 
 test('fan growth hero copy stays inside the mobile column', () => {
