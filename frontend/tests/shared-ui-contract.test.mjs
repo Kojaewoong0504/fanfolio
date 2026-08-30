@@ -78,6 +78,14 @@ test('profile editor replaces unavailable artist artwork with a safe fallback', 
   assert.match(settingsSource, /event\.currentTarget\.onerror = null; event\.currentTarget\.src = profileAvatarFallback/)
 })
 
+test('settings legal and support controls keep their product styling', () => {
+  assert.match(referenceCss, /\.settings-support-faq\s+details\s*\{[^}]*background:/s)
+  assert.match(referenceCss, /\.settings-support-faq\s+details:last-child\s*\{[^}]*border-bottom:\s*0/s)
+  assert.match(referenceCss, /\.settings-support-faq\s+summary\s*\{[^}]*list-style:\s*none/s)
+  assert.match(referenceCss, /\.settings-privacy-actions\s*>\s*button\s*\{[^}]*border:/s)
+  assert.match(referenceCss, /\.settings-privacy-actions\s*>\s*input\s*\{[^}]*width:\s*100%/s)
+})
+
 test('fan growth hero copy stays inside the mobile column', () => {
   assert.match(fanGrowthReferenceCss, /@media\(max-width:430px\)\{[\s\S]*?fan-growth-hero-copy \.fan-growth-artist-art\{width:100%!important;max-width:100%!important\}/)
   assert.match(fanGrowthReferenceCss, /@media\(max-width:430px\)\{[\s\S]*?fan-growth-hero-copy h2\{[^}]*white-space:normal!important/)
