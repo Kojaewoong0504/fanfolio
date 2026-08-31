@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     # Supabase's transaction pooler requires asyncpg's prepared-statement
     # cache to be disabled. Keep this configurable for direct Postgres too.
     database_statement_cache_size: int = 100
+    # Optional least-privilege role used by the API against PostgreSQL. Leave
+    # empty for local SQLite and installations that manage grants externally.
+    database_app_role: str = ""
+    point_reconciliation_interval_seconds: int = 300
     auto_create_schema: bool = True
     seed_demo_catalog: bool = False
     # Local-only credentials used to inspect the artist studio without an

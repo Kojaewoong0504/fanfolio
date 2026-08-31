@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
 from secrets import token_urlsafe
+from typing import Literal
 from uuid import uuid4
 
 from sqlalchemy import and_, delete, func, or_, select
@@ -1030,6 +1031,22 @@ async def reverse_points(
     session.add(ledger)
     await session.flush()
     return ledger
+
+
+async def execute_point_ledger_command(
+    session: AsyncSession,
+    *,
+    operation: Literal["earn", "spend", "reverse"],
+    **kwargs: object,
+) -> PointLedger:
+    """Keep all append-only point ledger writes behind one explicit boundary."""
+    if operation == "earn":
+        return await grant_points(session, **kwargs)  # type: ignore[arg-type]
+    if operation == "spend":
+        return await spend_points(session, **kwargs)  # type: ignore[arg-type]
+    if operation == "reverse":
+        return await reverse_points(session, **kwargs)  # type: ignore[arg-type]
+    raise AppError(422, "INVALID_POINT_OPERATION", "지원하지 않는 포인트 원장 작업입니다.")
 
 
 CARD_COLLECTION_XP = 30

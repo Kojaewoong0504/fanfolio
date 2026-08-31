@@ -1,16 +1,21 @@
 import asyncio
+import logging
 
 from celery import Celery
 from starlette.background import BackgroundTasks
 
 from app.core.config import get_settings
+from app.db.session import SessionLocal
 from app.notification_delivery import process_due_notification_deliveries
 from app.services import (
     cleanup_expired_uploads,
     process_background_removal,
     process_engagement_event,
+    reconcile_point_balances,
     retry_failed_engagement_events,
 )
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 celery_app = Celery("fanfolio", broker=settings.celery_broker_url)
@@ -33,6 +38,10 @@ celery_app.conf.update(
         "deliver-notification-outbox": {
             "task": "fanfolio.process_notification_deliveries",
             "schedule": 30,
+        },
+        "reconcile-point-balances": {
+            "task": "fanfolio.reconcile_point_balances",
+            "schedule": settings.point_reconciliation_interval_seconds,
         },
     },
 )
@@ -80,3 +89,20 @@ def process_notification_deliveries_task() -> int:
 def cleanup_expired_uploads_task() -> int:
     """Periodic worker entry point; schedule it with Celery Beat in production."""
     return asyncio.run(cleanup_expired_uploads())
+
+
+async def _reconcile_point_balances_task() -> int:
+    async with SessionLocal() as session:
+        drifts = await reconcile_point_balances(session)
+    if drifts:
+        logger.warning(
+            "point balance reconciliation found drift",
+            extra={"driftCount": len(drifts), "userIds": [item["userId"] for item in drifts]},
+        )
+    return len(drifts)
+
+
+@celery_app.task(name="fanfolio.reconcile_point_balances")
+def reconcile_point_balances_task() -> int:
+    """Check cached balances without repairing financial records automatically."""
+    return asyncio.run(_reconcile_point_balances_task())

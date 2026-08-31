@@ -111,6 +111,16 @@ def test_point_ledger_migration_installs_append_only_guard() -> None:
     assert "point_ledger" in source
 
 
+def test_point_ledger_privilege_migration_is_identifier_safe_and_least_privilege() -> None:
+    source = (
+        Path(__file__).parents[2] / "alembic/versions/0079_point_ledger_privileges.py"
+    ).read_text()
+    assert "database_app_role" in source
+    assert "GRANT SELECT, INSERT" in source
+    assert "REVOKE UPDATE, DELETE, TRUNCATE" in source
+    assert "[A-Za-z_][A-Za-z0-9_]*" in source
+
+
 def test_alembic_upgrade_creates_the_current_schema(tmp_path: Path) -> None:
     database_path = tmp_path / "migration.db"
     backend_dir = Path(__file__).parents[2]
