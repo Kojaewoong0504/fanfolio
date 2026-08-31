@@ -101,6 +101,18 @@ test('event banner keeps the immediate local preview when upload fails', () => {
   assert.doesNotMatch(handler, /catch \{[\s\S]*URL\.revokeObjectURL\(localPreviewUrl\)[\s\S]*data-local-preview/)
 })
 
+test('event banner async upload keeps stable input and form references', () => {
+  const handlerStart = source.indexOf('document.querySelector("#event-banner-file")')
+  const handlerEnd = source.indexOf('document.querySelector(\'#event-form [data-select-id="event-type"]', handlerStart)
+  const handler = source.slice(handlerStart, handlerEnd)
+  const uploadAwait = handler.indexOf('await uploadAsset')
+
+  assert.ok(uploadAwait > 0)
+  assert.match(handler, /const fileInput = event\.currentTarget/)
+  assert.match(handler, /const form = fileInput\.form/)
+  assert.doesNotMatch(handler.slice(uploadAwait), /event\.currentTarget/)
+})
+
 test('event editor captures the fields the fan application screen displays', () => {
   assert.match(source, /name="venue"/)
   assert.match(source, /name="participantLimit"/)
@@ -152,8 +164,8 @@ test('event banner file selection persists the asset id and replaces the thumbna
   assert.match(source, /URL\.createObjectURL\(file\)/)
   assert.match(source, /data-local-preview/)
   assert.match(source, /const assetId = await uploadAsset\(file, "event_banner"\)/)
-  assert.match(source, /event\.currentTarget\.form\.elements\.heroAssetId\.value = assetId/)
-  assert.match(source, /event\.currentTarget\.form\.querySelector\("\.event-upload-thumbnail"\)/)
+  assert.match(source, /form\.elements\.heroAssetId\.value = assetId/)
+  assert.match(source, /form\.querySelector\("\.event-upload-thumbnail"\)/)
   assert.match(source, /URL\.revokeObjectURL\(localPreviewUrl\)/)
   assert.match(source, /innerHTML = `<img data-event-hero src=/)
 })
