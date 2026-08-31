@@ -1347,6 +1347,101 @@ button.top-avatar {
   margin-top: 14px;
 }
 
+.dashboard-readiness-panel {
+  margin-top: 14px;
+  border: 1px solid #dedbff;
+  background: linear-gradient(135deg, #fbfaff 0%, #fff 70%);
+}
+
+.dashboard-readiness-panel .panel-heading {
+  align-items: flex-start;
+}
+
+.dashboard-readiness-panel .panel-heading p:not(.eyebrow) {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.dashboard-readiness-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.dashboard-readiness-item {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  min-width: 0;
+  min-height: 112px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.dashboard-readiness-index {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  color: var(--purple-dark);
+  font: 800 12px/1 Manrope, sans-serif;
+  border-radius: 50%;
+  background: var(--purple-soft);
+}
+
+.dashboard-readiness-item.complete .dashboard-readiness-index {
+  color: var(--green);
+  background: #e9f8f0;
+}
+
+.dashboard-readiness-item strong,
+.dashboard-readiness-item small {
+  display: block;
+}
+
+.dashboard-readiness-item strong {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.dashboard-readiness-item small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.dashboard-readiness-item button {
+  grid-column: 2;
+  justify-self: start;
+  margin-top: 7px;
+  padding: 0;
+  color: var(--purple-dark);
+  font-size: 10px;
+  font-weight: 800;
+  background: transparent;
+}
+
+.dashboard-readiness-item.pending {
+  border-color: #f0dfb4;
+  background: #fffdf7;
+}
+
+.dashboard-readiness-item.pending .dashboard-readiness-index {
+  color: var(--amber-dark, #9c6500);
+  background: #fff2d4;
+}
+
+.dashboard-readiness-item button:focus-visible {
+  outline: 2px solid var(--purple);
+  outline-offset: 3px;
+}
+
 /* The global panel rhythm is for stacked panels; grid siblings must share one row. */
 .dashboard-grid > .panel {
   margin-top: 0;
@@ -9010,6 +9105,7 @@ code {
 .row-action-menu-item .material-symbols-rounded { font-size: 16px; }
 
 @media (max-width: 1100px) {
+  .dashboard-readiness-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dashboard-grid > .action-panel,
   .dashboard-grid > .card-pack-summary,
   .dashboard-grid > .recent-activity-panel,
@@ -9018,6 +9114,7 @@ code {
   .point-package-create-grid button { grid-column: 1 / -1; }
 }
 @media (max-width: 640px) {
+  .dashboard-readiness-grid { grid-template-columns: 1fr; }
   .point-package-create-grid { grid-template-columns: 1fr; }
 }
 
