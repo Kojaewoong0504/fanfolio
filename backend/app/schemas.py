@@ -968,6 +968,26 @@ class NotificationItem(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class AnalyticsEventCreate(BaseModel):
+    event_name: Literal[
+        "product.impression",
+        "product.detail_viewed",
+        "product.engaged",
+        "conversion.started",
+        "conversion.completed",
+        "recommendation.impression",
+        "recommendation.profile_viewed",
+        "recommendation.followed",
+    ] = Field(alias="eventName")
+    artist_id: str | None = Field(default=None, alias="artistId")
+    card_id: str | None = Field(default=None, alias="cardId")
+    pack_id: str | None = Field(default=None, alias="packId")
+    source: str | None = Field(default=None, max_length=40)
+    dedupe_key: str | None = Field(default=None, alias="dedupeKey", max_length=160)
+    metadata: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class CollectionGoalCreate(BaseModel):
     pack_id: str = Field(alias="packId", min_length=1)
     target_count: int | None = Field(default=None, alias="targetCount", gt=0)

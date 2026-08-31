@@ -66,6 +66,8 @@ Fanfolio가 보장할 대상은 다음처럼 명확히 정의해야 한다.
 | 토큰 재사용 대응 | `backend/app/auth_tokens.py:165-213` | refresh token 재사용 탐지 시 같은 rotation family를 폐기한다. |
 | 운영 DB 강제 | `backend/app/core/config.py:245-260` | hosted 환경에서 PostgreSQL과 Alembic 사용을 강제한다. |
 
+2026-08-31 진행분으로 신규 소유권 이벤트에는 `previous_hash`와 `record_hash`를 기록하고, 카드 이력 API에서도 두 값을 반환한다(`backend/app/services.py:170-247`, migration `0076_ownership_ledger_hash_chain`). 기존 레거시 행은 nullable로 보존되므로, 외부 서명 체크포인트와 전체 체인 검증기는 후속 작업이다.
+
 ### 3.3 아직 부족한 보장
 
 1. **원장은 애플리케이션 관례상 append-only일 뿐 DB가 강제하지 않는다.**
@@ -182,11 +184,18 @@ score = 0.25 * 공통 아티스트·멤버
 
 ### 4.5 이 영역의 완료 기준
 
+#### 2026-08-31 진행 반영
+
+- `/api/fans/recommendations`를 추가해 서버가 `fan-v1` 알고리즘 버전, 정렬 주체, 이유 코드와 함께 추천 결과를 반환한다.
+- 기존 `/api/fans` 검색도 동일한 추천 점수·이유 메타데이터를 반환하며, 삭제된 계정은 후보에서 제외한다.
+- 이는 설명 가능한 서버 정렬 계약을 닫은 단계이며, 거절·장기 유지율·다양성 지표는 아직 후속 작업이다.
+- 추천 기본 목록의 상위 10개 노출은 `recommendation.impression`으로 기록하고, 추천 경유 팔로우는 `recommendation.followed`로 기록한다. 관리자 통계의 `recommendationQuality`에서 `fan-v1` 노출·프로필 조회·팔로우 수와 전환율을 확인할 수 있다.
+
 - `/api/fans/recommendations`가 페이지네이션, 알고리즘 버전, 이유 코드와 함께 서버 정렬 결과를 반환한다.
 - 삭제·차단·정지·고위험 계정이 후보 생성 단계에서 제외된다.
-- 노출부터 팔로우·언팔로우·차단·거래까지 attribution이 연결된다.
-- 오프라인 회귀에서 결정론·필터·다양성·콜드스타트가 검증된다.
-- 운영 대시보드에서 전환율과 안전 지표를 알고리즘 버전별로 비교한다.
+- 추천 목록 상위 10개 노출, 추천 카드 프로필 조회, 추천 경유 팔로우까지 attribution이 연결된다. 언팔로우·차단·신고·거래 전환 attribution은 후속 작업이다.
+- 서버 점수·안전 필터·fallback은 회귀 검증됐지만, 오프라인 결정론·다양성·콜드스타트 평가는 후속 작업이다.
+- 운영 통계에서 `fan-v1`의 노출·프로필 조회·팔로우와 전환율을 확인할 수 있으며, 안전 지표와 알고리즘 버전 비교 대시보드는 후속 작업이다.
 - 추천이 실패해도 안전한 기본 정렬로 fallback한다.
 
 ## 5. 결론 C — 결제·포인트 원장의 멱등성과 원자성
@@ -248,6 +257,8 @@ score = 0.25 * 공통 아티스트·멤버
 
 #### P0 — 멱등키가 최초 요청 내용과 결합되지 않는다
 
+> 2026-08-31: 주문·포인트 충전·관리자 포인트 조정의 동일 키/상이 payload 또는 resource 충돌은 `409 IDEMPOTENCY_KEY_REUSED`로 거부하도록 보강했다. 포인트 충전 환불에도 키를 필수화했다. canonical request hash와 응답 snapshot 저장은 후속 P1 작업으로 남긴다.
+
 현재 구현은 키 중복만 확인하고 최초 요청의 상품·수량·결제수단·대상과 같은지 비교하지 않는다.
 
 - 포인트 충전은 같은 키가 있으면 새 `package_id`나 `payment_method`를 검사하지 않고 과거 충전을 반환한다(`backend/app/services.py:558-566`).
@@ -260,6 +271,8 @@ Stripe도 같은 idempotency key의 재요청 파라미터가 최초 요청과 �
 **조치:** 모든 명령에 canonical request hash와 `resource_type/resource_id`를 저장한다. 같은 키·같은 hash는 최초 상태·응답을 반환하고, 같은 키·다른 hash는 `409 IDEMPOTENCY_KEY_REUSED`로 거부한다.
 
 #### P0 — 상점 주문의 Idempotency-Key가 서버에서 필수가 아니다
+
+> 2026-08-31: 상점 주문에서 `Idempotency-Key`를 필수화했다. 프론트의 주문·충전 환불 호출도 키를 전송한다.
 
 프론트는 키를 보내지만 API는 키가 없으면 새 UUID를 생성한다(`backend/app/routers/fan.py:469-479`). 네트워크 timeout 뒤 키 없이 재시도하는 다른 클라이언트는 중복 주문·차감을 만들 수 있다.
 

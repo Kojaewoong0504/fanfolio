@@ -73,6 +73,7 @@ def test_same_pack_open_idempotency_key_returns_one_owned_card(
     ledger = asyncio.run(read_ledger())
     assert len(ledger) == 1
     assert ledger[0].source_type == "card_pack_opening"
+    assert ledger[0].record_hash
 
 
 def test_redeem_code_registration_records_one_ownership_event(
@@ -101,3 +102,38 @@ def test_redeem_code_registration_records_one_ownership_event(
     assert ledger[0].action == "grant"
     assert ledger[0].source_type == "redeem_code"
     assert ledger[0].source_id == seeded["codes"]["valid"]
+    assert ledger[0].record_hash
+    assert ledger[0].previous_hash is None
+    history = assert_success(actors["fan"].get(f"/api/me/cards/{redeemed['userCardId']}/history"))
+    assert history["items"][0]["recordHash"] == ledger[0].record_hash
+
+
+def test_root_admin_can_verify_ownership_hash_chain(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    assert_success(
+        actors["fan"].post(
+            "/api/redemptions",
+            json={"code": seeded["codes"]["valid"], "source": "manual"},
+        ),
+        201,
+    )
+    result = assert_success(actors["admin"].get("/api/admin/integrity/ownership"))
+    assert result["valid"] is True
+    assert result["verified"] >= 1
+    assert result["violations"] == []
+
+
+def test_root_admin_can_verify_point_balance_reconciliation(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    charge = actors["fan"].post(
+        "/api/me/point-charges",
+        json={"packageId": "points_500", "paymentMethod": "sandbox_card"},
+        headers={"Idempotency-Key": "integrity-point-charge"},
+    )
+    assert charge.status_code == 201, charge.text
+    result = assert_success(actors["admin"].get("/api/admin/integrity/points"))
+    assert result["valid"] is True
+    assert result["checkedUsers"] >= 1
+    assert result["drifts"] == []

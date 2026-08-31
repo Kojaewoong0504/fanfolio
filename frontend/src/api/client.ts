@@ -416,6 +416,9 @@ export type FanHomeResponse = {
   newCards: CatalogCard[]
 }
 
+export type AnalyticsEventName = 'product.impression' | 'product.detail_viewed' | 'product.engaged' | 'conversion.started' | 'conversion.completed' | 'recommendation.impression' | 'recommendation.profile_viewed' | 'recommendation.followed'
+export type AnalyticsEventInput = { eventName: AnalyticsEventName; artistId?: string | null; cardId?: string | null; packId?: string | null; source?: string; dedupeKey?: string; metadata?: Record<string, string | number | boolean | null> }
+
 export type NotificationPreferences = { emailEnabled: boolean }
 
 export type ConsentRecord = {
@@ -432,6 +435,8 @@ export type NotificationItem = {
   kind: string
   title: string
   body: string | null
+  entityType?: string | null
+  entityId?: string | null
   isRead: boolean
   readAt: string | null
   createdAt: string
@@ -441,6 +446,10 @@ export type NotificationItem = {
 
 export function getFanHome(): Promise<{ ok: true; data: FanHomeResponse }> {
   return apiFetch<{ ok: true; data: FanHomeResponse }>('/home')
+}
+
+export function trackAnalyticsEvent(input: AnalyticsEventInput): Promise<{ ok: true; data: { id: string; eventName: AnalyticsEventName; replayed: boolean } }> {
+  return apiFetch<{ ok: true; data: { id: string; eventName: AnalyticsEventName; replayed: boolean } }>('/analytics/events', { method: 'POST', body: JSON.stringify(input) })
 }
 
 export function getNotificationPreferences(): Promise<{ ok: true; data: NotificationPreferences }> {
@@ -696,8 +705,10 @@ export function createPointCharge(packageId: string, paymentMethod: PointChargeR
   })
 }
 
-export function refundPointCharge(chargeId: string): Promise<{ ok: true; data: PointChargeRecord & { chargeId: string; balance: number } }> {
-  return apiFetch<{ ok: true; data: PointChargeRecord & { chargeId: string; balance: number } }>(`/me/point-charges/${encodeURIComponent(chargeId)}/refund`, { method: 'POST' })
+export function refundPointCharge(chargeId: string, idempotencyKey = crypto.randomUUID()): Promise<{ ok: true; data: PointChargeRecord & { chargeId: string; balance: number } }> {
+  return apiFetch<{ ok: true; data: PointChargeRecord & { chargeId: string; balance: number } }>(`/me/point-charges/${encodeURIComponent(chargeId)}/refund`, {
+    method: 'POST', headers: { 'Idempotency-Key': idempotencyKey },
+  })
 }
 
 export function getPointExchanges(): Promise<{ ok: true; data: { items: PointExchange[] } }> {
@@ -1130,11 +1141,21 @@ export function getPublicCollection(userId: string): Promise<{ ok: true, data: P
   return apiFetch<{ ok: true, data: PublicCollection }>(`/fans/${encodeURIComponent(userId)}/collection`)
 }
 
-export function searchFans(query = ''): Promise<{ ok: true, data: { items: FanSummary[] } }> {
+export type FanRecommendationMeta = {
+  algorithmVersion: string
+  ranking: 'server'
+  reasonCodes: string[]
+}
+
+export function searchFans(query = ''): Promise<{ ok: true, data: { items: FanSummary[]; meta: FanRecommendationMeta } }> {
   const params = new URLSearchParams()
   if (query.trim()) params.set('query', query.trim())
   const suffix = params.size > 0 ? `?${params.toString()}` : ''
-  return apiFetch<{ ok: true, data: { items: FanSummary[] } }>(`/fans${suffix}`)
+  return apiFetch<{ ok: true, data: { items: FanSummary[]; meta: FanRecommendationMeta } }>(`/fans${suffix}`)
+}
+
+export function getFanRecommendations(): Promise<{ ok: true, data: { items: FanSummary[]; meta: FanRecommendationMeta } }> {
+  return apiFetch<{ ok: true, data: { items: FanSummary[]; meta: FanRecommendationMeta } }>('/fans/recommendations')
 }
 
 export function getFanConnections(kind: 'following' | 'followers'): Promise<{ ok: true, data: { kind: typeof kind; items: FanSummary[] } }> {

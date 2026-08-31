@@ -158,6 +158,8 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
             : detail?.acquisitionSource === 'content_code'
               ? '콘텐츠 코드'
               : detail?.acquisitionSource || '콘텐츠 코드'
+  const ownershipActionLabel = (action: string) => ({ grant: '컬렉션에 추가됨', transfer: '소유권 이동', consume: '조합에 사용됨' }[action] ?? '소유권 기록')
+  const ownershipSourceLabel = (sourceType: string) => ({ redeem: '인증번호·QR 등록', card_pack: '카드팩 개봉', trade: '팬 간 거래', combination: '카드 조합', event: '이벤트 보상' }[sourceType] ?? (sourceType || '출처 확인 불가'))
 
   return <main className="app-shell card-detail-screen detail-reference-panel" aria-labelledby="card-detail-title">
       <div className="detail-topbar">
@@ -207,7 +209,7 @@ export function CardDetail({ card, isSaved, onClose, onToggleSaved, onRedeem, im
       </dl>
       {history.length > 0 && <section className="card-collection-detail-history" aria-label="카드 획득 기록">
         <div><h2>획득 기록</h2><small>이 카드의 발급·소유권 변경 기록</small></div>
-        <ol>{history.map(event => <li key={event.id}><strong>{event.action === 'grant' ? '컬렉션에 추가됨' : event.action === 'transfer' ? '소유권 이동' : event.action === 'consume' ? '조합에 사용됨' : event.action}</strong><span>{new Date(event.createdAt).toLocaleString('ko-KR')}</span></li>)}</ol>
+        <ol>{history.map(event => <li key={event.id}><strong>{ownershipActionLabel(event.action)}</strong><span>{ownershipSourceLabel(event.sourceType)} · {new Date(event.createdAt).toLocaleString('ko-KR')}</span></li>)}</ol>
       </section>}
       <p className="detail-motion-hint"><InlineIcon name="motion" />카드를 움직여 특별한 효과를 확인해보세요.</p>
       {(detail?.card.signatureText ?? card.signatureText) && <p className="detail-hint">“{detail?.card.signatureText ?? card.signatureText}”</p>}

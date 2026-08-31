@@ -13,7 +13,6 @@ from app.models import (
     Artist,
     Card,
     CardCombinationMaterial,
-    CardOwnershipLedger,
     CardPack,
     CardPackCard,
     CardVisibility,
@@ -31,8 +30,10 @@ from app.models import (
 )
 from app.schemas import CollectionVisibilityUpdate, TradeProposalCreate
 from app.services import (
+    append_ownership_ledger,
     notify_followers_of_card,
     notify_user_once,
+    record_analytics_event,
     record_audit,
     record_engagement_event,
 )
@@ -442,6 +443,14 @@ async def follow_fan(
         source_id=follow.id,
         payload={"followingUserId": user_id},
     )
+    await record_analytics_event(
+        session,
+        event_name="recommendation.followed",
+        user_id=user.id,
+        source="fan-v1",
+        dedupe_key=f"recommendation-follow:{user.id}:{user_id}",
+        metadata={"candidateUserId": user_id},
+    )
     await session.commit()
     enqueue_engagement_event(engagement_event.id, background_tasks)
     return {"ok": True, "data": {"followingUserId": user_id, "following": True}}
@@ -456,13 +465,18 @@ async def unfollow_fan(user_id: str, user: FanUser, session: DbSession) -> dict:
     return {"ok": True, "data": {"followingUserId": user_id, "following": False}}
 
 
+@router.get("/fans/recommendations")
 @router.get("/fans")
 async def search_fans(
     user: FanUser,
     session: DbSession,
     query: str = Query(default="", max_length=100),
 ) -> dict:
-    statement = select(User).where(User.role == Role.FAN, User.id != user.id)
+    statement = select(User).where(
+        User.role == Role.FAN,
+        User.id != user.id,
+        User.deleted_at.is_(None),
+    )
     normalized_query = query.strip()
     if normalized_query:
         pattern = f"%{normalized_query}%"
@@ -539,7 +553,20 @@ async def search_fans(
     ranked_items.sort(key=lambda entry: (-entry[0], entry[1], entry[2]["id"]))
     return {
         "ok": True,
-        "data": {"items": [item for _, _, item in ranked_items]},
+        "data": {
+            "items": [item for _, _, item in ranked_items],
+            "meta": {
+                "algorithmVersion": "fan-v1",
+                "ranking": "server",
+                "reasonCodes": [
+                    "shared_favorite_artist",
+                    "matching_wishlist",
+                    "tradable_cards",
+                    "recent_collection",
+                    "cold_start",
+                ],
+            },
+        },
     }
 
 
@@ -861,20 +888,18 @@ async def _accept_trade_once(
         card = user_cards[item.user_card_id]
         old_owner = card.user_id
         card.user_id = proposal.recipient_id if item.side == "offered" else proposal.proposer_id
-        session.add(
-            CardOwnershipLedger(
-                id=str(uuid4()),
-                user_card_id=card.id,
-                user_id=card.user_id,
-                card_id=card.card_id,
-                action="transfer",
-                source_type="trade",
-                source_id=f"{proposal.id}:{card.id}",
-                from_user_id=old_owner,
-                to_user_id=card.user_id,
-                metadata_json={"proposalId": proposal.id},
-                created_at=now,
-            )
+        await append_ownership_ledger(
+            session,
+            user_card_id=card.id,
+            user_id=card.user_id,
+            card_id=card.card_id,
+            action="transfer",
+            source_type="trade",
+            source_id=f"{proposal.id}:{card.id}",
+            from_user_id=old_owner,
+            to_user_id=card.user_id,
+            metadata={"proposalId": proposal.id},
+            created_at=now,
         )
         await notify_followers_of_card(session, user_card=card)
     proposal.status = "accepted"

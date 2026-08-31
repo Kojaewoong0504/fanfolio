@@ -16,6 +16,7 @@ def test_admin_operations_overview_returns_safe_queue_summary(
         "pendingTrades",
         "refundedOrders",
         "failedPointTransactions",
+        "pointBalanceDrifts",
         "unclaimedRewards",
     }
     assert isinstance(result["recentActions"], list)

@@ -231,6 +231,17 @@ def test_valid_production_settings_pass_runtime_validation() -> None:
     settings.validate_runtime()
 
 
+def test_production_settings_reject_sandbox_point_issuance() -> None:
+    settings = Settings(app_env="production", allow_sandbox_point_charges=True)
+
+    try:
+        settings.validate_runtime()
+    except ValueError as error:
+        assert "ALLOW_SANDBOX_POINT_CHARGES" in str(error)
+    else:
+        raise AssertionError("production must reject sandbox point issuance")
+
+
 def test_production_settings_require_redis_rate_limiting() -> None:
     settings = Settings(
         app_env="production",

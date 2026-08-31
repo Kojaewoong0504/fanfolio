@@ -1,6 +1,7 @@
 import asyncio
 import csv
 import json
+from collections import Counter
 from datetime import UTC, datetime, timedelta
 from io import BytesIO, StringIO
 from secrets import token_urlsafe
@@ -29,6 +30,7 @@ from app.models import (
     CardCollaborationComment,
     CardCombination,
     CardEffectVersion,
+    CardOwnershipLedger,
     CardPack,
     CardPackCard,
     CardPackOpening,
@@ -116,12 +118,14 @@ from app.schemas import (
 )
 from app.services import (
     active_review_request,
+    adjust_points,
     create_review_request,
     ensure_point_charge_packages,
     grant_points,
     notify_fans,
     notify_platform_reviewers,
     notify_user_once,
+    reconcile_point_balances,
     record_audit,
     record_engagement_event,
     record_review_decision,
@@ -129,6 +133,7 @@ from app.services import (
     reverse_points,
     spend_points,
     submit_card_for_release_review,
+    verify_ownership_chain,
 )
 from app.storage import configured_asset_storage, storage_response
 from app.tasks import enqueue_engagement_event
@@ -136,6 +141,13 @@ from app.tasks import enqueue_engagement_event
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 router.include_router(partner_router)
 LENTICULAR_IMAGE_CONTENT_TYPES = {"image/png", "image/jpeg", "image/webp"}
+
+
+def _require_approval_permission(context: AdminContext, kind: str) -> None:
+    if kind in {"refund_order", "grant_points"}:
+        context.require_action("engagement:approve_global")
+    else:
+        context.require_action("audit:read")
 
 
 def _csv_download(
@@ -718,8 +730,21 @@ async def admin_statistics(
     tracking_since = await session.scalar(
         select(func.min(AnalyticsEvent.created_at)).where(*tracking_filters)
     )
-    failed_count = current_events.count("redemption.failed")
-    funnel_base = recognized or 1
+    current_event_counts = Counter(row.event_name for row in current["analytics"])
+    failed_count = current_event_counts["redemption.failed"]
+    impression = current_event_counts["product.impression"]
+    detail_viewed = (
+        current_event_counts["product.detail_viewed"]
+        or current_event_counts["collection.card_viewed"]
+    )
+    engaged = current_event_counts["product.engaged"]
+    conversion_started = current_event_counts["conversion.started"]
+    conversion_completed = current_event_counts["conversion.completed"]
+    funnel_base = impression or recognized or 1
+    recommendation_impressions = current_event_counts["recommendation.impression"]
+    recommendation_profile_views = current_event_counts["recommendation.profile_viewed"]
+    recommendation_follows = current_event_counts["recommendation.followed"]
+    recommendation_base = recommendation_impressions or 1
     return {
         "ok": True,
         "data": {
@@ -775,6 +800,36 @@ async def admin_statistics(
             },
             "trend": trend,
             "funnel": [
+                {
+                    "key": "impression",
+                    "label": "콘텐츠 노출",
+                    "count": impression,
+                    "rate": 100.0 if impression else 0.0,
+                },
+                {
+                    "key": "detailViewed",
+                    "label": "상세 조회",
+                    "count": detail_viewed,
+                    "rate": round(detail_viewed / funnel_base * 100, 1),
+                },
+                {
+                    "key": "engaged",
+                    "label": "팔로우·저장",
+                    "count": engaged,
+                    "rate": round(engaged / funnel_base * 100, 1),
+                },
+                {
+                    "key": "conversionStarted",
+                    "label": "신청·구매 시작",
+                    "count": conversion_started,
+                    "rate": round(conversion_started / funnel_base * 100, 1),
+                },
+                {
+                    "key": "conversionCompleted",
+                    "label": "신청·구매 완료",
+                    "count": conversion_completed,
+                    "rate": round(conversion_completed / funnel_base * 100, 1),
+                },
                 {"key": "recognized", "label": "인증번호 인식", "count": recognized, "rate": 100.0},
                 {
                     "key": "registered",
@@ -789,6 +844,16 @@ async def admin_statistics(
                     "rate": round(viewed / funnel_base * 100, 1),
                 },
             ],
+            "recommendationQuality": {
+                "algorithmVersion": "fan-v1",
+                "impressions": recommendation_impressions,
+                "profileViews": recommendation_profile_views,
+                "follows": recommendation_follows,
+                "profileViewRate": round(
+                    recommendation_profile_views / recommendation_base * 100, 1
+                ),
+                "followRate": round(recommendation_follows / recommendation_base * 100, 1),
+            },
             "packPerformance": pack_performance,
             "operationHealth": {
                 "redemptionFailures": failed_count,
@@ -817,6 +882,53 @@ def notification_data(notification: Notification) -> dict:
         "entityType": notification.entity_type,
         "entityId": notification.entity_id,
         "eventKey": notification.event_key,
+    }
+
+
+@router.get("/integrity/ownership")
+async def verify_ownership_integrity(_: RootAdminUser, session: DbSession) -> dict:
+    """Verify every hashed ownership chain and report legacy boundaries."""
+    events = list(
+        await session.scalars(
+            select(CardOwnershipLedger).order_by(
+                CardOwnershipLedger.user_id,
+                CardOwnershipLedger.created_at,
+                CardOwnershipLedger.id,
+            )
+        )
+    )
+    verified = 0
+    legacy = 0
+    violations: list[str] = []
+    for user_id in sorted({event.user_id for event in events}):
+        result = verify_ownership_chain([event for event in events if event.user_id == user_id])
+        verified += int(result["verified"])
+        legacy += int(result["legacy"])
+        violations.extend(f"{user_id}:{item}" for item in result["violations"])
+    return {
+        "ok": True,
+        "data": {
+            "valid": not violations,
+            "verified": verified,
+            "legacy": legacy,
+            "violations": violations[:100],
+        },
+    }
+
+
+@router.get("/integrity/points")
+async def verify_point_balance_integrity(_: RootAdminUser, session: DbSession) -> dict:
+    drifts = await reconcile_point_balances(session)
+    checked_user_ids = set(
+        (await session.scalars(select(PointBalance.user_id).distinct())).all()
+    ) | set((await session.scalars(select(PointLedger.user_id).distinct())).all())
+    return {
+        "ok": True,
+        "data": {
+            "valid": not drifts,
+            "checkedUsers": len(checked_user_ids),
+            "drifts": drifts[:100],
+        },
     }
 
 
@@ -1509,10 +1621,10 @@ async def create_admin_approval(
 async def approve_admin_approval(
     approval_id: str, payload: ApprovalDecisionRequest, context: CurrentAdmin, session: DbSession
 ) -> dict:
-    context.require_action("audit:read")
     item = await session.get(ApprovalRequest, approval_id)
     if item is None:
         raise AppError(404, "APPROVAL_NOT_FOUND", "승인 요청을 찾을 수 없습니다.")
+    _require_approval_permission(context, item.kind)
     if item.status != "pending":
         return {"ok": True, "data": {**approval_data(item), "replayed": True}}
     if item.requested_by == context.user.id:
@@ -1545,10 +1657,10 @@ async def approve_admin_approval(
 async def reject_admin_approval(
     approval_id: str, payload: ApprovalDecisionRequest, context: CurrentAdmin, session: DbSession
 ) -> dict:
-    context.require_action("audit:read")
     item = await session.get(ApprovalRequest, approval_id)
     if item is None:
         raise AppError(404, "APPROVAL_NOT_FOUND", "승인 요청을 찾을 수 없습니다.")
+    _require_approval_permission(context, item.kind)
     if item.status != "pending":
         return {"ok": True, "data": approval_data(item), "replayed": True}
     item.status = "rejected"
@@ -2496,77 +2608,35 @@ async def adjust_fan_points(
     payload: PointAdjustmentRequest, context: CurrentAdmin, session: DbSession
 ) -> dict:
     context.require_action("engagement:points_adjust")
-    if payload.amount == 0:
-        raise AppError(422, "INVALID_POINT_AMOUNT", "조정 포인트는 0이 될 수 없습니다.")
     user = await session.get(User, payload.user_id)
     if user is None:
         raise AppError(404, "USER_NOT_FOUND", "팬을 찾을 수 없습니다.")
     idempotency_key = payload.idempotency_key or uuid4().hex
-    existing_transaction = await session.scalar(
-        select(PointTransaction).where(
-            PointTransaction.user_id == user.id,
-            PointTransaction.operation == "adjustment",
-            PointTransaction.idempotency_key == idempotency_key,
-        )
-    )
-    if existing_transaction and existing_transaction.ledger_id:
-        ledger = await session.get(PointLedger, existing_transaction.ledger_id)
-        if ledger is not None:
-            return {
-                "ok": True,
-                "data": {
-                    "userId": user.id,
-                    "amount": payload.amount,
-                    "balance": ledger.balance_after,
-                    "replayed": True,
-                },
-            }
-    source_id = f"admin_adjustment:{payload.user_id}:{idempotency_key}"
-    event = await record_engagement_event(
+    ledger, replayed = await adjust_points(
         session,
         user_id=user.id,
-        kind="points_adjusted",
-        source_type="admin_point_adjustment",
-        source_id=source_id,
-        payload={"amount": payload.amount, "reason": payload.reason},
-    )
-    if payload.amount > 0:
-        ledger = await grant_points(
-            session,
-            user_id=user.id,
-            source_event_id=event.id,
-            rule_key="admin_point_adjustment",
-            amount=payload.amount,
-            description=payload.reason,
-            metadata={"actorId": context.user.id},
-        )
-    else:
-        ledger = await spend_points(
-            session,
-            user_id=user.id,
-            source_event_id=event.id,
-            rule_key="admin_point_adjustment",
-            amount=abs(payload.amount),
-            description=payload.reason,
-            metadata={"actorId": context.user.id},
-        )
-    transaction = existing_transaction or PointTransaction(
-        id=f"point_tx_{uuid4().hex[:12]}",
-        user_id=user.id,
-        operation="adjustment",
-        idempotency_key=idempotency_key,
         amount=payload.amount,
-        status="completed",
+        reason=payload.reason,
+        actor_id=context.user.id,
+        idempotency_key=idempotency_key,
     )
-    transaction.ledger_id = ledger.id
-    session.add(transaction)
+    if replayed:
+        return {
+            "ok": True,
+            "data": {
+                "userId": user.id,
+                "amount": payload.amount,
+                "balance": ledger.balance_after,
+                "replayed": True,
+            },
+        }
     await record_audit(
         session,
         actor_user_id=context.user.id,
         action="points.adjusted",
         entity_type="user",
         entity_id=user.id,
-        details={"amount": payload.amount, "reason": payload.reason, "eventId": event.id},
+        details={"amount": payload.amount, "reason": payload.reason, "ledgerId": ledger.id},
     )
     await session.commit()
     return {
@@ -3351,6 +3421,7 @@ async def operations_overview(context: CurrentAdmin, session: DbSession) -> dict
         )
         or 0
     )
+    point_balance_drifts = len(await reconcile_point_balances(session))
     unclaimed_rewards = (
         await session.scalar(
             select(func.count())
@@ -3389,6 +3460,7 @@ async def operations_overview(context: CurrentAdmin, session: DbSession) -> dict
                 "pendingTrades": pending_trades,
                 "refundedOrders": refunded_orders,
                 "failedPointTransactions": failed_point_transactions if context.is_root else 0,
+                "pointBalanceDrifts": point_balance_drifts if context.is_root else 0,
                 "unclaimedRewards": unclaimed_rewards,
             },
             "recentActions": [

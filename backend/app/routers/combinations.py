@@ -15,13 +15,13 @@ from app.models import (
     CardCombination,
     CardCombinationMaterial,
     CardCombinationRecipe,
-    CardOwnershipLedger,
     CardPack,
     CardPackCard,
     UserCard,
 )
 from app.schemas import CardCombinationRecipeCreate, CardCombinationRequest
 from app.services import (
+    append_ownership_ledger,
     grant_user_card,
     notify_user_once,
     record_audit,
@@ -311,17 +311,15 @@ async def combine_cards(
                 card_id=material.card_id,
             )
         )
-        session.add(
-            CardOwnershipLedger(
-                id=f"ledger_{uuid4().hex[:12]}",
-                user_card_id=material.id,
-                user_id=user.id,
-                card_id=material.card_id,
-                action="consume",
-                source_type="card_combination",
-                source_id=f"{combination.id}:{material.id}",
-                metadata_json={"recipeId": recipe.id},
-            )
+        await append_ownership_ledger(
+            session,
+            user_card_id=material.id,
+            user_id=user.id,
+            card_id=material.card_id,
+            action="consume",
+            source_type="card_combination",
+            source_id=f"{combination.id}:{material.id}",
+            metadata={"recipeId": recipe.id},
         )
     result = await grant_user_card(
         session,

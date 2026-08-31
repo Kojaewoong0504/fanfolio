@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { ApiError, followFan, resolveApiUrl, searchFans, unfollowFan, type FanSummary } from '../api/client'
+import { ApiError, followFan, resolveApiUrl, searchFans, trackAnalyticsEvent, unfollowFan, type FanSummary } from '../api/client'
 import avatarFallback from '../assets/profile-avatar-generated.png'
 import { InlineIcon, VerifiedIcon } from '../App'
 import { ProfileAvatar } from './ProfileAvatar'
@@ -24,7 +24,18 @@ export function FanSocialHub({ onBack, onOpenProfile, onOpenCollection, onOpenTr
   const load = useCallback(async () => {
     if (initialItems) { setItems(initialItems); setLoading(false); return }
     setLoading(true); setError('')
-    try { const response = await searchFans(submittedQuery); setItems(response.data.items) }
+    try {
+      const response = await searchFans(submittedQuery)
+      setItems(response.data.items)
+      if (!submittedQuery) {
+        void Promise.all(response.data.items.slice(0, 10).map((fan, position) => trackAnalyticsEvent({
+          eventName: 'recommendation.impression',
+          source: response.data.meta.algorithmVersion,
+          dedupeKey: `fan-recommendation:${fan.id}`,
+          metadata: { candidateUserId: fan.id, position: position + 1 },
+        }))).catch(() => undefined)
+      }
+    }
     catch (loadError) { setItems([]); setError(loadError instanceof ApiError ? loadError.message : '팬 목록을 불러오지 못했어요.') }
     finally { setLoading(false) }
   }, [initialItems, submittedQuery])
@@ -45,6 +56,15 @@ export function FanSocialHub({ onBack, onOpenProfile, onOpenCollection, onOpenTr
     try { const result = fan.isFollowing ? await unfollowFan(fan.id) : await followFan(fan.id); setItems(current => current.map(item => item.id === fan.id ? { ...item, isFollowing: result.data.following } : item)) }
     catch (followError) { setError(followError instanceof ApiError ? followError.message : '팔로우 상태를 변경하지 못했어요.') }
   }
+  const openRecommendedProfile = (userId: string) => {
+    void trackAnalyticsEvent({
+      eventName: 'recommendation.profile_viewed',
+      source: 'fan-v1',
+      dedupeKey: `fan-recommendation-profile:${userId}`,
+      metadata: { candidateUserId: userId },
+    }).catch(() => undefined)
+    onOpenProfile(userId)
+  }
   return <main className="app-shell fan-social-shell fan-social-reference">
     <DetailTopBar title="팬 찾기" onBack={onBack} />
     <section className="fan-social-content">
@@ -61,8 +81,8 @@ export function FanSocialHub({ onBack, onOpenProfile, onOpenCollection, onOpenTr
             : filter === 'new'
               ? '최근 컬렉션에 새 카드를 추가했어요'
               : (fan.recommendationReasons?.[0] ?? `${fan.sharedFavoriteArtists.map(artist => artist.name).join(', ')}를 함께 좋아해요`)
-        return <article className="fan-social-card fan-social-card-preview" key={fan.id} tabIndex={0} aria-label={`${fan.nickname}님의 공개 프로필 보기`} onClick={event => { if ((event.target as HTMLElement).closest('button, a, input, select, textarea')) return; onOpenProfile(fan.id) }} onKeyDown={event => { if (event.target !== event.currentTarget) return; if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpenProfile(fan.id) } }}>
-        <button type="button" className="fan-social-avatar-button" onClick={() => onOpenProfile(fan.id)} aria-label={`${fan.nickname}님의 공개 프로필 보기`}><ProfileAvatar imageUrl={resolveApiUrl(fan.profileImageUrl) || avatarFallback} fallback={fan.nickname} alt={`${fan.nickname} 프로필`} /></button>
+        return <article className="fan-social-card fan-social-card-preview" key={fan.id} tabIndex={0} aria-label={`${fan.nickname}님의 공개 프로필 보기`} onClick={event => { if ((event.target as HTMLElement).closest('button, a, input, select, textarea')) return; openRecommendedProfile(fan.id) }} onKeyDown={event => { if (event.target !== event.currentTarget) return; if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openRecommendedProfile(fan.id) } }}>
+        <button type="button" className="fan-social-avatar-button" onClick={() => openRecommendedProfile(fan.id)} aria-label={`${fan.nickname}님의 공개 프로필 보기`}><ProfileAvatar imageUrl={resolveApiUrl(fan.profileImageUrl) || avatarFallback} fallback={fan.nickname} alt={`${fan.nickname} 프로필`} /></button>
         <div className="fan-social-copy"><strong>{fan.nickname} <em>LV.{level}</em></strong><span className="fan-social-tags">{fan.favoriteArtists.map((artist, artistIndex) => <i key={artist.id}>{artist.name}{artistIndex === 0 && <VerifiedIcon />}</i>)}</span></div>
         <button type="button" className={fan.isFollowing ? 'following' : ''} onClick={() => void toggleFollow(fan)}>{fan.isFollowing ? '팔로잉' : '팔로우'}</button>
         <p className="fan-social-affinity"><InlineIcon name="heart" /><mark>{note}</mark></p>

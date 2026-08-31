@@ -63,6 +63,8 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:5173"
     admin_bootstrap_email: str = ""
     admin_bootstrap_password: str = ""
+    # Sandbox point issuance is opt-in for hosted QA only and never enabled in production.
+    allow_sandbox_point_charges: bool = False
     data_protection_key: str = ""
     allow_data_bootstrap: bool = False
     mail_delivery_mode: str = "console"
@@ -214,6 +216,8 @@ class Settings(BaseSettings):
         """Fail fast when a production process would start with unsafe defaults."""
         if self.storage_backend not in {"local", "r2", "s3", "supabase"}:
             raise ValueError("STORAGE_BACKEND must be local, r2, s3, or supabase")
+        if self.app_env == "production" and self.allow_sandbox_point_charges:
+            raise ValueError("ALLOW_SANDBOX_POINT_CHARGES must be false in production")
         if self.database_statement_cache_size < 0:
             raise ValueError("DATABASE_STATEMENT_CACHE_SIZE cannot be negative")
         if self.storage_backend == "r2" and not self.object_storage_bucket:

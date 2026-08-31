@@ -75,6 +75,8 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+      - name: Enforce mobile asset performance budget
+        run: npm run perf:budget
       - run: npm audit --omit=dev --audit-level=high
 
   admin:

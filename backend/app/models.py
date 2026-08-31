@@ -1150,6 +1150,8 @@ class CardOwnershipLedger(Base):
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    previous_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    record_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
@@ -1359,6 +1361,10 @@ class PointTransaction(Base):
     operation: Mapped[str] = mapped_column(String(32), nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    resource_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    resource_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    request_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    response_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     ledger_id: Mapped[str | None] = mapped_column(
         ForeignKey("point_ledger.id", ondelete="SET NULL"), nullable=True
     )
