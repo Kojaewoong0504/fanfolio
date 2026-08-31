@@ -12,7 +12,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def _configured_role() -> str | None:
-    role = context.config.get_main_option("database_app_role", fallback="").strip()
+    role = context.config.get_main_option("database_app_role", "").strip()
     if not role:
         return None
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", role):
