@@ -33,6 +33,20 @@ def test_growth_economy_models_define_storage_contracts() -> None:
     assert models.EngagementEvent.__table__.c.attempt_count.nullable is False
 
 
+def test_point_ledger_command_boundary_rejects_unknown_operation() -> None:
+    async def scenario() -> None:
+        engine = create_async_engine("sqlite+aiosqlite://")
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            with pytest.raises(Exception, match="지원하지 않는 포인트 원장 작업"):
+                await services.execute_point_ledger_command(
+                    session,
+                    operation="invalid",  # type: ignore[arg-type]
+                )
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
 def test_growth_economy_model_defaults_persist_on_insert() -> None:
     async def scenario() -> None:
         engine = create_async_engine("sqlite+aiosqlite://")

@@ -28,6 +28,11 @@ def sync_database_url() -> str:
     return url
 
 
+def configure_application_options() -> None:
+    """Pass safe operator configuration to migrations without storing secrets."""
+    config.set_main_option("database_app_role", get_settings().database_app_role)
+
+
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
@@ -46,6 +51,7 @@ def run_migrations_offline() -> None:
     script output.
 
     """
+    configure_application_options()
     url = sync_database_url()
     context.configure(
         url=url,
@@ -65,6 +71,7 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
+    configure_application_options()
     config.set_main_option("sqlalchemy.url", sync_database_url())
     database_url = config.get_main_option("sqlalchemy.url")
     if database_url.startswith("postgresql+asyncpg://"):
