@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type FormEvent } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type FormEvent } from 'react'
 import './App.css'
 import './reference.css'
 import './fan-community-reference.css'
@@ -6,11 +6,10 @@ import { getUserCardHistory, type UserCardHistoryItem } from './api/client'
 import { ApiError, apiFetch, applyToFanEvent, claimPassTier, claimReward, clearAccessToken, combineCards, confirmFanPasswordReset, connectNotificationStream, createCollectionGoal, createPointCharge, createShopOrder, deleteCollectionGoal, followFan, getCardCombination, getCatalogCards, getCardPacks, getCardPackOdds, getCollectionGoals, getFanEvent, getFanEventComments, getFanEvents, getFanHome, getMyEventApplications, getFanPass, getFanPoints, getNotificationPreferences, getPointChargePackages, getPointCharges, getProgression, getShopProduct, getShopProducts, getShopOrders, getWishlist, oauthStartUrl, openCardPack, postFanEventComment, previewCardCombination, reconcilePassRewards, refundPointCharge, refundShopOrder, removeWishlistCard, registerPushDevice, requestFanPasswordReset, resolveApiUrl, saveWishlistCard, searchFans, setAccessToken, unfollowFan, unregisterPushDevice, updateNotificationPreferences, updateProfileEquipment, purchasePassSeason, type CardCombinationPreview, type CardCombinationRecipe, type CardCombinationResult, type CardDesignConfig, type CardPack, type CardRedemption, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionGoal, type CollectionSummary, type CurrentUser, type EventPagination, type FanEvent, type FanEventApplication, type FanEventComment, type FanEventStatus, type FanHomeResponse, type FanMission, type FanProgression, type FanSummary, type NotificationItem, type PointChargePackage, type PointChargeRecord, type ProfileEquipment, type PublicCollection as PublicCollectionData, type RewardGrant, type ShopOrder, type ShopProduct, type UserCardDetail } from './api/client'
 import { enableWebPush } from './pushNotifications'
 import { QrRedeemModal, RedeemIcon } from './components/QrRedeemModal'
-import { CardDetail } from './components/CardDetail'
 import { InteractiveCollectibleCard } from './components/InteractiveCollectibleCard'
-import { Settings } from './components/Settings'
+import { rewardArtworkUrl } from './components/FanGrowth'
 import { ProfileAvatar } from './components/ProfileAvatar'
-import { FanGrowth, rewardArtworkUrl } from './components/FanGrowth'
+import { FanGrowth } from './components/FanGrowth'
 import { FanPassPage } from './components/FanPassPage'
 import { EventDetail } from './components/EventDetail'
 import { EventList } from './components/EventList'
@@ -41,6 +40,11 @@ import mysteryCardImage from './assets/card-reveal-mystery-generated.jpg'
 import registrationCompleteCelebration from './assets/registration-complete-celebration-v2.png'
 import fanLevelStar from './assets/fan-level-star-v2.png'
 import profileDecorationsImage from './assets/profile-decorations-generated.png'
+
+const CardDetail = lazy(() => import('./components/CardDetail').then(module => ({ default: module.CardDetail })))
+const Settings = lazy(() => import('./components/Settings').then(module => ({ default: module.Settings })))
+
+const routeLoading = <div className="collection-loading" role="status">화면을 준비하고 있어요…</div>
 
 const dreamscapeHero = dreamscapeDemoAssets.hero
 const dreamscapeCardPack = dreamscapeDemoAssets.cardPack
@@ -1716,14 +1720,14 @@ function App() {
   // Card routes are full-screen destinations. Keep the detail view outside
   // the collection shell so `/cards/:id` is not rendered as a backdrop dialog.
   if (selectedCard) {
-    return <CardDetail card={selectedCard} isSaved={savedCardIds.includes(selectedCard.id)} onClose={closeCard} onToggleSaved={() => {
+    return <Suspense fallback={routeLoading}><CardDetail card={selectedCard} isSaved={savedCardIds.includes(selectedCard.id)} onClose={closeCard} onToggleSaved={() => {
       const cardId = selectedCard.id
       const alreadySaved = savedCardIds.includes(cardId)
       setSavedCards(cards => alreadySaved ? cards.filter(card => card.id !== cardId) : [...cards, selectedCard])
       void (alreadySaved ? removeWishlistCard(cardId) : saveWishlistCard(cardId)).catch(() => {
         setSavedCards(cards => alreadySaved ? [...cards, selectedCard] : cards.filter(card => card.id !== cardId))
       })
-    }} onRedeem={() => { closeCard(); openRedeem() }} imageFor={demoCardImage} onImageError={keepCardVisual} cardTypeLabel={cardTypeLabel} />
+    }} onRedeem={() => { closeCard(); openRedeem() }} imageFor={demoCardImage} onImageError={keepCardVisual} cardTypeLabel={cardTypeLabel} /></Suspense>
   }
 
   return (
@@ -1755,12 +1759,12 @@ function App() {
         {tab === 'discover' && <Discover favoriteArtists={catalogArtists.filter(artist => currentUser?.favoriteArtistIds.includes(artist.id))} onFindFans={query => navigateAppPath(routeWithReturnTo(query ? `/fans?q=${encodeURIComponent(query)}` : '/fans', '/discover'))} onOpenFanProfile={userId => navigateAppPath(routeWithReturnTo(`/fans/${encodeURIComponent(userId)}`, '/discover'))} onOpenPublicCollection={userId => navigateAppPath(routeWithReturnTo(`/fans/${encodeURIComponent(userId)}/collection`, '/discover'))} onOpenEvent={event => { if (event) openEvent(event); else openEvents() }} onOpenArtist={artistId => navigateAppPath(routeWithReturnTo(`/discover/artists/${encodeURIComponent(artistId)}`, '/discover'))} onOpenPackCatalog={() => navigateAppPath(routeWithReturnTo('/discover/packs', '/discover'))} onOpenPack={packId => navigateAppPath(routeWithReturnTo(`/discover/packs/${encodeURIComponent(packId)}`, '/discover'))} onOpenCard={openCard} featuredArtist={catalogArtists.find(artist => artist.name === '드림스케이프') ?? catalogArtists[0] ?? null} featuredEvent={fanHome?.featuredEvent ?? fanHome?.upcomingEvents[0] ?? null} featuredEventLoading={fanHomeLoading} />}
         {/* Embedded surfaces stay compact; the dedicated tab uses the full progression view. */}
         {tab === 'growth' && <FanGrowth progression={fanProgression} globalProgression={globalFanProgression} artistScopes={catalogArtists.filter(artist => currentUser?.favoriteArtistIds.includes(artist.id)).map(artist => ({ id: artist.id, name: artist.name, imageUrl: artist.name === '드림스케이프' ? loginDreamscapeGroup : artist.imageUrl }))} selectedArtistId={growthArtistId} onArtistChange={artistId => { writeActiveArtistId(artistId); setGrowthArtistId(artistId) }} loading={growthLoading} error={growthError} mode="full" onRetry={() => { void refreshGrowth() }} onClaim={claimGrowthReward} onClaimPassTier={claimGrowthPassTier} onEquip={saveGrowthEquipment} onViewPass={openFanPassPage} onViewGlobalPass={(tierId) => openFanPassPage(tierId, 'global')} onViewMissions={openMissionPage} fanGrowthMode="full" />}
-        {tab === 'settings' && currentUser && <Settings user={currentUser} progression={fanProgression} onUserUpdated={setCurrentUser} onLogout={logout} onEvents={openMyApplications} onNotificationSettings={() => setShowNotificationSettings(true)} />}
+        {tab === 'settings' && currentUser && <Suspense fallback={routeLoading}><Settings user={currentUser} progression={fanProgression} onUserUpdated={setCurrentUser} onLogout={logout} onEvents={openMyApplications} onNotificationSettings={() => setShowNotificationSettings(true)} /></Suspense>}
       </section>}
 
       {tab !== 'alerts' && <BottomNavigation active={tab} onNavigate={navigateTab} />}
 
-      {showRedeem && <QrRedeemModal onClose={closeRedeem} onRedeemed={(redemption) => { setRedemptionGrowth(redemption); closeRedeem(); void syncGrowthAfterRedemption(redemption) }} />}
+      {showRedeem && <Suspense fallback={routeLoading}><QrRedeemModal onClose={closeRedeem} onRedeemed={(redemption) => { setRedemptionGrowth(redemption); closeRedeem(); void syncGrowthAfterRedemption(redemption) }} /></Suspense>}
     </main>
   )
 }
