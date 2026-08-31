@@ -362,7 +362,13 @@ FAQ 화면은 정상인데 문의하기로 전환하면 select, input, textarea,
 | P3 접근성 | 부분 완료 | 주요 버튼·폼·상태 메시지와 이미지 fallback은 보강했지만 전체 실기기 접근성 감사는 별도 게이트다. |
 | 성능 예산 | 부분 완료 | 초기 JS는 512.25 kB에서 479.26 kB로 줄었고 라우트 청크가 분리됐다. 그러나 의존성 청크 477.54 kB와 CSS 302.59 kB가 남아 추가 분석이 필요하다. |
 
-재검증 결과는 프론트 279개, 관리자 247개, 스튜디오 71개, 백엔드 508개 테스트 통과이며 백엔드 2개 테스트는 환경 조건상 skip이다. main CI의 backend, frontend, admin, studio, integration, container, storage-integration도 모두 통과했다.
+### 성능 후속 개선 (2026-08-31)
+
+팬 레벨 화면의 고정 마일스톤 스프라이트를 PNG에서 JPEG 파생본으로 교체해 배포 자산을 약 556 kB에서 약 79 kB로 줄였다. 프론트엔드에 `perf:budget` 평가 명령을 추가해 production build 후 entry JS gzip 132 KiB, entry CSS gzip 48 KiB, 최대 이미지 500 KiB 예산과 전체 프론트 회귀 테스트를 한 번에 확인할 수 있게 했다. 현재 측정치는 entry JS gzip 129.8 KiB, entry CSS gzip 44.5 KiB, 최대 이미지 267 KiB다.
+
+초기 번들은 이미 카드 상세·설정·QR 화면을 지연 로딩하고 있으므로, 나머지 성능 예산은 의존성 청크와 CSS 분할을 별도 작업으로 추적한다. 실제 저사양 기기 네트워크 측정은 외부 실기기 검증 게이트에 남겨 둔다.
+
+ 재검증 결과는 프론트 279개, 관리자 247개, 스튜디오 71개, 백엔드 508개 테스트 통과이며 백엔드 2개 테스트는 환경 조건상 skip이다. main CI의 backend, frontend, admin, studio, integration, container, storage-integration도 모두 통과했다.
 
 따라서 이 문서의 “이번 감사에서 제한된 부분”에 적힌 외부 이메일·푸시·결제·실제 스토리지·실기기 카메라 및 신원 확인은 구현 완료로 간주하지 않는다. 이 항목들은 자격 증명, 외부 사업자, 실기기 또는 법무 정책 없이는 저장소 테스트만으로 완료를 증명할 수 없다.
 
