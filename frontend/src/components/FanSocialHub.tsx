@@ -52,7 +52,7 @@ export function FanSocialHub({ onBack, onOpenProfile, onOpenCollection, onOpenTr
     })
   }, [filter, items])
   const toggleFollow = async (fan: FanSummary) => {
-    if (initialItems) { setItems(current => current.map(item => item.id === fan.id ? { ...item, isFollowing: !item.isFollowing } : item)); return }
+    if (initialItems) { setError('미리보기에서는 팔로우 상태를 저장할 수 없어요.'); return }
     try { const result = fan.isFollowing ? await unfollowFan(fan.id) : await followFan(fan.id); setItems(current => current.map(item => item.id === fan.id ? { ...item, isFollowing: result.data.following } : item)) }
     catch (followError) { setError(followError instanceof ApiError ? followError.message : '팔로우 상태를 변경하지 못했어요.') }
   }
@@ -84,7 +84,7 @@ export function FanSocialHub({ onBack, onOpenProfile, onOpenCollection, onOpenTr
         return <article className="fan-social-card fan-social-card-preview" key={fan.id} tabIndex={0} aria-label={`${fan.nickname}님의 공개 프로필 보기`} onClick={event => { if ((event.target as HTMLElement).closest('button, a, input, select, textarea')) return; openRecommendedProfile(fan.id) }} onKeyDown={event => { if (event.target !== event.currentTarget) return; if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openRecommendedProfile(fan.id) } }}>
         <button type="button" className="fan-social-avatar-button" onClick={() => openRecommendedProfile(fan.id)} aria-label={`${fan.nickname}님의 공개 프로필 보기`}><ProfileAvatar imageUrl={resolveApiUrl(fan.profileImageUrl) || avatarFallback} fallback={fan.nickname} alt={`${fan.nickname} 프로필`} /></button>
         <div className="fan-social-copy"><strong>{fan.nickname} <em>LV.{level}</em></strong><span className="fan-social-tags">{fan.favoriteArtists.map((artist, artistIndex) => <i key={artist.id}>{artist.name}{artistIndex === 0 && <VerifiedIcon />}</i>)}</span></div>
-        <button type="button" className={fan.isFollowing ? 'following' : ''} onClick={() => void toggleFollow(fan)}>{fan.isFollowing ? '팔로잉' : '팔로우'}</button>
+        <button type="button" className={fan.isFollowing ? 'following' : ''} onClick={() => void toggleFollow(fan)} disabled={Boolean(initialItems)} aria-disabled={Boolean(initialItems)} title={initialItems ? '인증된 팬 화면에서 사용할 수 있어요' : undefined}>{fan.isFollowing ? '팔로잉' : '팔로우'}</button>
         <p className="fan-social-affinity"><InlineIcon name="heart" /><mark>{note}</mark></p>
         <div className="fan-social-stats"><button type="button" onClick={() => onOpenCollection(fan.id)}><InlineIcon name="grid" /> 공개 컬렉션 <b>{fan.ownedCount}개</b></button><button type="button" disabled={fan.tradableCount === 0} onClick={() => onOpenTrades(fan.id)}><InlineIcon name="rotate" /> 거래 가능 카드 <b>{fan.tradableCount}장</b></button></div>
         <div className="fan-social-card-previews">{fan.previewCards.map(card => <span key={card.userCardId}><img src={resolveApiUrl(card.imageUrl)} alt={`${card.name} 공개 카드 미리보기`} loading="lazy" onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = avatarFallback }} /><b>{card.rarity ?? 'N'}</b></span>)}</div>

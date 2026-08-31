@@ -108,6 +108,23 @@ class Follow(Base):
     )
 
 
+class EventLike(Base):
+    """A fan's durable like for one public event."""
+
+    __tablename__ = "event_likes"
+    __table_args__ = (
+        UniqueConstraint("user_id", "event_id", name="uq_event_likes_user_event"),
+        Index("ix_event_likes_event_created", "event_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
 class UserBlock(Base):
     """A private block relationship used to hide social surfaces."""
 
