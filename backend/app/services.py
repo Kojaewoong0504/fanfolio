@@ -744,11 +744,14 @@ async def reverse_points(
     return ledger
 
 
+CARD_COLLECTION_XP = 30
+
+
 def base_xp_for(event: EngagementEvent) -> int:
     if event.kind == "card_collected":
-        return 30
+        return CARD_COLLECTION_XP
     if event.kind == "card_revoked":
-        return -30
+        return -CARD_COLLECTION_XP
     return 0
 
 

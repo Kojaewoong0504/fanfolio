@@ -137,6 +137,7 @@ const state = {
   eventApplicantsLoading: false,
   eventApplicantsEventId: "",
   eventApplicantsModalOpen: false,
+  eventCheckInMessage: "",
   eventComments: [],
   eventCommentsLoading: false,
   eventCommentsEventId: "",
@@ -1004,6 +1005,26 @@ async function drawEventWinners(eventId, requestedWinnerCount) {
     toast(`${winnerCount}명의 당첨자를 추첨했습니다.`);
   } catch {
     toast("추첨에 실패했습니다. 신청자와 이벤트 상태를 확인해 주세요.");
+  }
+}
+
+async function checkInEventApplication(eventId) {
+  const input = document.querySelector(`[data-event-check-in-input="${CSS.escape(eventId)}"]`);
+  const token = input?.value.trim();
+  if (!token) {
+    toast("팬의 체크인 QR 패스 값을 입력해 주세요.");
+    return;
+  }
+  try {
+    const result = await api(`/admin/events/${encodeURIComponent(eventId)}/check-in`, {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    });
+    state.eventCheckInMessage = result.data.alreadyCheckedIn ? "이미 체크인된 신청입니다." : "체크인을 완료했습니다.";
+    await loadEventApplicants(eventId, false);
+    layout();
+  } catch {
+    toast("체크인에 실패했습니다. QR 패스와 행사 시간을 확인해 주세요.");
   }
 }
 
@@ -2388,7 +2409,8 @@ function eventApplicantSummary(event) {
   const submitted = applicants.filter((item) => item.status === "submitted");
   const winners = applicants.filter((item) => item.status === "winner");
   const drawControls = can("events:write") ? `<div class="event-draw-controls"><label class="event-winner-field"><span>당첨자 수</span><input class="event-winner-count" data-id="${escapeHtml(event.id)}" type="number" min="1" max="${Math.max(1, submitted.length)}" value="1" ${submitted.length ? "" : "disabled"} /><b>명</b></label><button class="primary event-draw" data-id="${escapeHtml(event.id)}" ${submitted.length ? "" : "disabled"}>추첨하기</button></div>` : "";
-  return `<section class="event-applicant-panel"><div class="event-section-heading"><div><p class="eyebrow">PARTICIPANTS</p><h4>신청자 관리</h4><p>${eventApplicantSummaryText(event, applicants, submitted, winners)}</p></div><button class="secondary event-applicants" data-id="${escapeHtml(event.id)}">${state.eventApplicantsLoading ? "불러오는 중..." : "신청자 보기"}</button></div><div class="event-draw-box"><div><strong>당첨자 추첨</strong><small>대기 중인 신청자 ${submitted.length}명 · 당첨 ${winners.length}명</small></div>${drawControls}</div><p class="event-applicant-empty">신청자 보기를 누르면 전체 신청자와 당첨 상태를 확인합니다.</p></section>`;
+  const checkInControls = can("events:write") ? `<div class="event-check-in-box"><div><strong>현장 QR 체크인</strong><small>팬 앱의 체크인 패스는 개인정보 없이 1회만 사용할 수 있습니다.</small></div><div class="event-check-in-form"><input data-event-check-in-input="${escapeHtml(event.id)}" placeholder="QR 패스 값 붙여넣기" aria-label="체크인 QR 패스" /><button class="secondary event-check-in" data-id="${escapeHtml(event.id)}">체크인</button></div>${state.eventCheckInMessage ? `<small role="status">${escapeHtml(state.eventCheckInMessage)}</small>` : ""}</div>` : "";
+  return `<section class="event-applicant-panel"><div class="event-section-heading"><div><p class="eyebrow">PARTICIPANTS</p><h4>신청자 관리</h4><p>${eventApplicantSummaryText(event, applicants, submitted, winners)}</p></div><button class="secondary event-applicants" data-id="${escapeHtml(event.id)}">${state.eventApplicantsLoading ? "불러오는 중..." : "신청자 보기"}</button></div><div class="event-draw-box"><div><strong>당첨자 추첨</strong><small>대기 중인 신청자 ${submitted.length}명 · 당첨 ${winners.length}명</small></div>${drawControls}</div>${checkInControls}<p class="event-applicant-empty">신청자 보기를 누르면 전체 신청자와 당첨 상태를 확인합니다.</p></section>`;
 }
 
 function eventApplicantSummaryText(event, applicants, submitted, winners) {
@@ -2408,7 +2430,7 @@ function eventApplicantsModal() {
   if (!state.eventApplicantsModalOpen) return "";
   const event = state.events.find((item) => item.id === state.eventApplicantsEventId) || state.selectedEvent;
   const applicants = state.eventApplicants;
-  const rows = applicants.length ? applicants.map((item) => `<li><div><strong>${escapeHtml(item.nickname || item.email || item.userId)}</strong><small>${escapeHtml(item.email || item.userId || "")}</small></div><span class="badge ${item.status === "winner" ? "success-badge" : item.status === "not_selected" ? "draft" : "violet-badge"}">${item.status === "winner" ? "당첨" : item.status === "not_selected" ? "미선정" : "신청 완료"}</span></li>`).join("") : `<li class="event-modal-empty">${state.eventApplicantsLoading ? "신청자 목록을 불러오는 중입니다." : "신청자가 없습니다."}</li>`;
+  const rows = applicants.length ? applicants.map((item) => `<li><div><strong>${escapeHtml(item.nickname || item.email || item.userId)}</strong><small>${escapeHtml(item.email || item.userId || "")}</small></div><span class="badge ${item.checkedInAt ? "success-badge" : item.status === "winner" ? "success-badge" : item.status === "not_selected" ? "draft" : "violet-badge"}">${item.checkedInAt ? "체크인 완료" : item.status === "winner" ? "당첨" : item.status === "not_selected" ? "미선정" : "신청 완료"}</span></li>`).join("") : `<li class="event-modal-empty">${state.eventApplicantsLoading ? "신청자 목록을 불러오는 중입니다." : "신청자가 없습니다."}</li>`;
   return `<div class="event-applicants-modal-backdrop" id="event-applicants-modal-backdrop"><section class="event-applicants-modal" role="dialog" aria-modal="true" aria-labelledby="event-applicants-modal-title"><header><div><p class="eyebrow">PARTICIPANTS</p><h3 id="event-applicants-modal-title">신청자 목록</h3><p>${escapeHtml(event?.title || "이벤트")} · 총 ${applicants.length}명</p></div><button class="icon-button" id="close-event-applicants" type="button" aria-label="신청자 목록 닫기">${icon("close")}</button></header><div class="event-modal-stats"><span>전체 <b>${applicants.length}</b></span><span>대기 <b>${applicants.filter((item) => item.status === "submitted").length}</b></span><span>당첨 <b>${applicants.filter((item) => item.status === "winner").length}</b></span></div><ul class="event-modal-list">${rows}</ul></section></div>`;
 }
 
@@ -6257,6 +6279,7 @@ function bind() {
     const countInput = document.querySelector(`.event-winner-count[data-id="${CSS.escape(button.dataset.id || "")}"]`);
     void drawEventWinners(button.dataset.id, countInput?.value || "1");
   }));
+  document.querySelectorAll(".event-check-in").forEach((button) => button.addEventListener("click", () => void checkInEventApplication(button.dataset.id)));
   document
     .querySelector("#drop-link-form")
     ?.addEventListener("submit", linkApprovedCardToDrop);

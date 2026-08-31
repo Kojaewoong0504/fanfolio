@@ -274,6 +274,8 @@ def test_fan_search_follow_connections_and_public_collection_summary(
     found = next(item for item in search["items"] if item["id"] == "otherFan")
     assert found["isFollowing"] is True
     assert found["followerCount"] == 1
+    assert isinstance(found["recommendationScore"], int)
+    assert found["recommendationReasons"]
 
     following = assert_success(actors["fan"].get("/api/me/follows", params={"kind": "following"}))
     assert [item["id"] for item in following["items"]] == ["otherFan"]

@@ -39,6 +39,15 @@ async def require_upload_role(user: CurrentUser, session: DbSession) -> None:
         await load_admin_context(session, user)
 
 
+async def prepare_event_banner_variant(asset: Asset, storage) -> None:
+    """Generate the public fan banner before the upload is reported ready."""
+    if asset.purpose != "event_banner" or not asset.storage_path:
+        return
+    asset.processed_storage_path = await run_in_threadpool(
+        ensure_event_hero_derivative, storage, asset.id, asset.storage_path, force=True
+    )
+
+
 @router.post("/uploads/presign", status_code=status.HTTP_201_CREATED)
 async def presign_upload(
     payload: UploadPresignRequest, user: CurrentUser, session: DbSession
@@ -126,14 +135,7 @@ async def upload_asset_content(
         content_type=asset.content_type,
     )
     if asset.purpose == "event_banner":
-        await run_in_threadpool(
-            ensure_event_hero_derivative,
-            storage,
-            asset.id,
-            asset.storage_path,
-            content,
-            force=True,
-        )
+        await prepare_event_banner_variant(asset, storage)
     asset.upload_completed_at = datetime.now(UTC)
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -187,13 +189,8 @@ async def complete_asset_upload(asset_id: str, user: CurrentUser, session: DbSes
         content_type=asset.content_type,
     )
     if asset.purpose == "event_banner":
-        await run_in_threadpool(
-            ensure_event_hero_derivative,
-            storage,
-            asset.id,
-            canonical_path,
-            content,
-            force=True,
+        asset.processed_storage_path = await run_in_threadpool(
+            ensure_event_hero_derivative, storage, asset.id, canonical_path, content, force=True
         )
     asset.storage_path = canonical_path
     asset.upload_completed_at = datetime.now(UTC)

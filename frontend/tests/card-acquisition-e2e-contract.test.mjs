@@ -24,7 +24,7 @@ test('redemption confirmation previews the card resolved by the entered code', (
 
 test('every successful acquisition refreshes collection before entering the reveal route', () => {
   assert.match(appSource, /const handleCardPackOpened[\s\S]*?refreshCollection\(\)[\s\S]*?openReveal\(userCardId\)/)
-  assert.match(appSource, /onRedeemed=\{\(id\) => \{ closeRedeem\(\); void Promise\.allSettled\(\[refreshCollection\(\), refreshGrowth\(\)\]\)\.then\(\(\) => openReveal\(id\)\) \}\}/)
+  assert.match(appSource, /onRedeemed=\{\(redemption\) => \{ setRedemptionGrowth\(redemption\); closeRedeem\(\); void syncGrowthAfterRedemption\(redemption\) \}\}/)
 })
 
 test('collection responses preserve acquisition and detail fields for the independent card route', () => {

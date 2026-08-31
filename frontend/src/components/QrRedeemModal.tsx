@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import type { IScannerControls } from '@zxing/browser'
-import { previewRedemption, redeemCard, type RedemptionPreview, type RedemptionSource } from '../api/client'
+import { previewRedemption, redeemCard, type CardRedemption, type RedemptionPreview, type RedemptionSource } from '../api/client'
 import '../App.css'
 import './QrRedeemModal.css'
 import { DetailTopBar } from './DetailTopBar'
 import { normalizeQrValue } from './qrUtils'
+import { RedeemIcon } from './RedeemIcon'
 import registrationCardImage from '../assets/card-registration-idol-generated.jpg'
 import qrScannerImage from '../assets/card-registration-qr-scanner-generated.jpg'
 
@@ -15,7 +16,7 @@ function isRedemptionErrorMessage(message: string): boolean {
   return ['실패', '찾을 수', '찾지 못', '비활성화', '사용할 수', '이미 사용', '만료된', '만료되었습니다', '카메라를 사용할 수 없습니다', 'HTTPS 연결'].some(keyword => message.includes(keyword))
 }
 
-export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, onRedeemed: (userCardId: string) => void }) {
+export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, onRedeemed: (redemption: CardRedemption) => void }) {
   const [step, setStep] = useState<RegistrationStep>(1)
   const [code, setCode] = useState('')
   // QR is the primary digital-card path. Keep manual entry behind an explicit
@@ -191,7 +192,7 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
     setMessage('')
     try {
       const result = await redeemCard(code, source)
-      onRedeemed(result.data.userCardId)
+      onRedeemed(result.data)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '카드 등록에 실패했습니다.')
     } finally { setSaving(false) }
@@ -273,12 +274,12 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
     setSource('qr')
     setIsDemo(true)
     setScanning(false)
-    onRedeemed('qa-registration-complete')
+    onRedeemed({ userCardId: 'qa-registration-complete', cardId: 'qa-card', serialNumber: 1, growthEventId: 'qa-growth', growthStatus: 'processed', awardedXp: 0 })
   }
 
   const confirmRegistration = () => {
     if (import.meta.env.DEV && isDemo) {
-      onRedeemed('qa-registration-complete')
+      onRedeemed({ userCardId: 'qa-registration-complete', cardId: 'qa-card', serialNumber: 1, growthEventId: 'qa-growth', growthStatus: 'processed', awardedXp: 0 })
       return
     }
     void redeem()
@@ -377,15 +378,4 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
       {message && <p ref={messageRef} className={messageIsError ? 'form-message error-message' : 'form-message'} role={messageIsError ? 'alert' : 'status'}>{message}</p>}
     </div>
   </div>
-}
-
-export function RedeemIcon({ name }: { name: 'scan' | 'photo' | 'code' | 'back' | 'chevron' }) {
-  const paths = {
-    scan: 'M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8M12 8v8',
-    photo: 'M4 6a2 2 0 0 1 2-2h2l1.2-1.5h5.6L16 4h2a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6ZM12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z',
-    code: 'M8 8 4 12l4 4M16 8l4 4-4 4M14 5l-4 14',
-    back: 'm15 18-6-6 6-6',
-    chevron: 'm9 18 6-6-6-6',
-  } as const
-  return <span className="redeem-method-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d={paths[name]} fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" /></svg></span>
 }

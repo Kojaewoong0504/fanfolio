@@ -42,6 +42,16 @@ def test_fan_wishlist_is_server_synced_and_idempotent(
     assert assert_success(fan.get("/api/me/wishlist"))["items"] == []
 
 
+def test_fan_can_save_a_public_unowned_card_as_a_wanted_card(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    fan = actors["fan"]
+    card_id = seeded["ids"]["publishedCardId"]
+    added = assert_success(fan.put(f"/api/me/wishlist/{card_id}"))
+    assert added == {"cardId": card_id, "saved": True}
+    assert assert_success(fan.get("/api/me/wishlist"))["items"] == [{"cardId": card_id}]
+
+
 def test_fan_collection_goal_reports_progress_and_notifies_once(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:

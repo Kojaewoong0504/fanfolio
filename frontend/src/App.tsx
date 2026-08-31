@@ -1,16 +1,15 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type FormEvent } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type FormEvent } from 'react'
 import './App.css'
 import './reference.css'
 import './fan-community-reference.css'
 import { getUserCardHistory, type UserCardHistoryItem } from './api/client'
-import { ApiError, apiFetch, applyToFanEvent, claimPassTier, claimReward, clearAccessToken, combineCards, confirmFanPasswordReset, connectNotificationStream, createCollectionGoal, createPointCharge, createShopOrder, deleteCollectionGoal, followFan, getCardCombination, getCatalogCards, getCardPacks, getCardPackOdds, getCollectionGoals, getFanEvent, getFanEventComments, getFanEvents, getFanHome, getMyEventApplications, getFanPass, getFanPoints, getNotificationPreferences, getPointChargePackages, getPointCharges, getProgression, getShopProduct, getShopProducts, getShopOrders, getWishlist, oauthStartUrl, openCardPack, postFanEventComment, previewCardCombination, reconcilePassRewards, refundPointCharge, refundShopOrder, removeWishlistCard, registerPushDevice, requestFanPasswordReset, resolveApiUrl, saveWishlistCard, searchFans, setAccessToken, unfollowFan, unregisterPushDevice, updateNotificationPreferences, updateProfileEquipment, purchasePassSeason, type CardCombinationPreview, type CardCombinationRecipe, type CardCombinationResult, type CardDesignConfig, type CardPack, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionGoal, type CollectionSummary, type CurrentUser, type EventPagination, type FanEvent, type FanEventApplication, type FanEventComment, type FanEventStatus, type FanHomeResponse, type FanMission, type FanProgression, type FanSummary, type NotificationItem, type PointChargePackage, type PointChargeRecord, type ProfileEquipment, type PublicCollection as PublicCollectionData, type RewardGrant, type ShopOrder, type ShopProduct, type UserCardDetail } from './api/client'
+import { ApiError, apiFetch, applyToFanEvent, claimPassTier, claimReward, clearAccessToken, combineCards, confirmFanPasswordReset, connectNotificationStream, createCollectionGoal, createPointCharge, createShopOrder, deleteCollectionGoal, followFan, getCardCombination, getCatalogCards, getCardPacks, getCardPackOdds, getCollectionGoals, getFanEvent, getFanEventComments, getFanEvents, getFanHome, getMyEventApplications, getFanPass, getFanPoints, getNotificationPreferences, getPointChargePackages, getPointCharges, getProgression, getShopProduct, getShopProducts, getShopOrders, getWishlist, oauthStartUrl, openCardPack, postFanEventComment, previewCardCombination, reconcilePassRewards, refundPointCharge, refundShopOrder, removeWishlistCard, registerPushDevice, requestFanPasswordReset, resolveApiUrl, saveWishlistCard, searchFans, setAccessToken, unfollowFan, unregisterPushDevice, updateNotificationPreferences, updateProfileEquipment, purchasePassSeason, type CardCombinationPreview, type CardCombinationRecipe, type CardCombinationResult, type CardDesignConfig, type CardPack, type CardRedemption, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionGoal, type CollectionSummary, type CurrentUser, type EventPagination, type FanEvent, type FanEventApplication, type FanEventComment, type FanEventStatus, type FanHomeResponse, type FanMission, type FanProgression, type FanSummary, type NotificationItem, type PointChargePackage, type PointChargeRecord, type ProfileEquipment, type PublicCollection as PublicCollectionData, type RewardGrant, type ShopOrder, type ShopProduct, type UserCardDetail } from './api/client'
 import { enableWebPush } from './pushNotifications'
-import { QrRedeemModal, RedeemIcon } from './components/QrRedeemModal'
-import { CardDetail } from './components/CardDetail'
+import { RedeemIcon } from './components/RedeemIcon'
 import { InteractiveCollectibleCard } from './components/InteractiveCollectibleCard'
-import { Settings } from './components/Settings'
+import { rewardArtworkUrl } from './components/FanGrowth'
 import { ProfileAvatar } from './components/ProfileAvatar'
-import { FanGrowth, rewardArtworkUrl } from './components/FanGrowth'
+import { FanGrowth } from './components/FanGrowth'
 import { FanPassPage } from './components/FanPassPage'
 import { EventDetail } from './components/EventDetail'
 import { EventList } from './components/EventList'
@@ -41,6 +40,12 @@ import mysteryCardImage from './assets/card-reveal-mystery-generated.jpg'
 import registrationCompleteCelebration from './assets/registration-complete-celebration-v2.png'
 import fanLevelStar from './assets/fan-level-star-v2.png'
 import profileDecorationsImage from './assets/profile-decorations-generated.png'
+
+const QrRedeemModal = lazy(() => import('./components/QrRedeemModal').then(module => ({ default: module.QrRedeemModal })))
+const CardDetail = lazy(() => import('./components/CardDetail').then(module => ({ default: module.CardDetail })))
+const Settings = lazy(() => import('./components/Settings').then(module => ({ default: module.Settings })))
+
+const routeLoading = <div className="collection-loading" role="status">화면을 준비하고 있어요…</div>
 
 const dreamscapeHero = dreamscapeDemoAssets.hero
 const dreamscapeCardPack = dreamscapeDemoAssets.cardPack
@@ -837,7 +842,10 @@ function App() {
   const [notificationActionError, setNotificationActionError] = useState('')
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [revealedCardId, setRevealedCardId] = useState<string | null>(() => revealIdFromPath(window.location.pathname))
+  const [redemptionGrowth, setRedemptionGrowth] = useState<CardRedemption | null>(null)
   const [savedCards, setSavedCards] = useState<Card[]>([])
+  const [wishlistCatalogCards, setWishlistCatalogCards] = useState<Card[]>([])
+  const [wishlistCatalogLoading, setWishlistCatalogLoading] = useState(false)
   const [fanHome, setFanHome] = useState<FanHomeResponse | null>(null)
   const [fanHomeLoading, setFanHomeLoading] = useState(true)
   const [fanEvents, setFanEvents] = useState<FanEvent[]>([])
@@ -870,6 +878,7 @@ function App() {
   const publicCollectionUserId = publicCollectionIdFromPath(pathname)
   const publicFanProfileUserId = publicFanProfileIdFromPath(pathname)
   const discoverArtistSlug = discoverArtistSlugFromPath(pathname)
+  const discoverArtistCardsSlug = discoverArtistCardsSlugFromPath(pathname)
   const discoverPackId = discoverPackIdFromPath(pathname)
   const showDiscoverPackCatalog = pathname === '/discover/packs'
   const showFanSocial = pathname === '/fans'
@@ -882,6 +891,12 @@ function App() {
   const fanSearchQuery = tradeComposerParams.get('q') ?? ''
   const requestedCollectionFilter = tradeComposerParams.get('filter') === 'tradable' ? 'tradable' : tradeComposerParams.get('filter') === 'wanted' ? 'wanted' : 'owned'
   const routeReturnPath = tradeComposerParams.get('returnTo')
+
+  useEffect(() => {
+    if (pathname.startsWith('/discover/artists/') || pathname.startsWith('/cards/') || pathname.startsWith('/reveal/')) {
+      window.scrollTo({ top: 0, behavior: 'auto' })
+    }
+  }, [pathname])
   const shouldLoadCollection = tab === 'home'
     || (tab === 'collection' && !showCardCollection)
     || Boolean(revealedCardId)
@@ -926,6 +941,20 @@ function App() {
     })
     return () => { cancelled = true }
   }, [currentUser?.id, collectionCards])
+
+  useEffect(() => {
+    if (!signedIn || !showWishlistPicker) return
+    let cancelled = false
+    setWishlistCatalogLoading(true)
+    void getCatalogCards({ sort: 'recommended' }).then(result => {
+      if (!cancelled) setWishlistCatalogCards(result.data.items.map(toCatalogCard))
+    }).catch(() => {
+      if (!cancelled) setWishlistCatalogCards([])
+    }).finally(() => {
+      if (!cancelled) setWishlistCatalogLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [showWishlistPicker, signedIn])
 
   useEffect(() => {
     document.title = !signedIn
@@ -1273,7 +1302,7 @@ function App() {
     }
   }, [clearLocalSession])
 
-  const refreshGrowth = useCallback(async () => {
+  const refreshGrowth = useCallback(async (): Promise<FanProgression | null> => {
     setGrowthLoading(true)
     setGrowthError('')
     try {
@@ -1287,13 +1316,27 @@ function App() {
         pass: pass.data,
       })
       setGlobalFanProgression(globalProgression?.data ?? (growthArtistId ? null : { ...progression.data, pass: pass.data }))
+      return progression.data
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) clearLocalSession()
       else setGrowthError('성장 정보를 불러오지 못했어요.')
+      return null
     } finally {
       setGrowthLoading(false)
     }
   }, [clearLocalSession, growthArtistId])
+
+  const syncGrowthAfterRedemption = async (redemption: CardRedemption) => {
+    const previousXp = fanProgression?.level.totalXp ?? 0
+    await refreshCollection()
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      growthRequestKeyRef.current = null
+      const progression = await refreshGrowth()
+      if (!redemption.awardedXp || !progression || progression.level.totalXp >= previousXp + redemption.awardedXp) break
+      await new Promise(resolve => window.setTimeout(resolve, 200))
+    }
+    openReveal(redemption.userCardId)
+  }
 
   const handleCardPackOpened = async (userCardId: string) => {
     await Promise.allSettled([refreshCollection(), refreshGrowth()])
@@ -1617,19 +1660,19 @@ function App() {
   }
 
   if (showFanPassPage) {
-    return <FanPassPage progression={passScope === 'global' ? globalFanProgression : fanProgression} loading={growthLoading} error={growthError} onRetry={refreshGrowth} onBack={closeFanPassPage} onClaimPassTier={claimGrowthPassTier} onPurchasePass={purchaseGrowthPass} onNavigate={navigateTab} initialTierId={passTargetTierId} isGlobal={passScope === 'global'} />
+    return <FanPassPage progression={passScope === 'global' ? globalFanProgression : fanProgression} loading={growthLoading} error={growthError} onRetry={() => { void refreshGrowth() }} onBack={closeFanPassPage} onClaimPassTier={claimGrowthPassTier} onPurchasePass={purchaseGrowthPass} onNavigate={navigateTab} initialTierId={passTargetTierId} isGlobal={passScope === 'global'} />
   }
 
   if (showMissionPage) {
-    return <FanMissionPage onBack={closeMissionPage} onClaimed={refreshGrowth} />
+    return <FanMissionPage onBack={closeMissionPage} onClaimed={() => { void refreshGrowth() }} />
   }
 
   if (showRewardInventory) {
-    return <RewardInventory progression={inventoryProgression} loading={growthLoading} error={growthError} onRetry={refreshGrowth} onBack={closeRewardInventory} onEquip={saveGrowthEquipment} onNavigate={navigateTab} />
+    return <RewardInventory progression={inventoryProgression} loading={growthLoading} error={growthError} onRetry={() => { void refreshGrowth() }} onBack={closeRewardInventory} onEquip={saveGrowthEquipment} onNavigate={navigateTab} />
   }
 
   if (showWishlistPicker) {
-    return <WishlistPicker cards={collectionDataReady ? collectionCards : []} savedCardIds={savedCardIds} loading={collectionLoading || !collectionDataReady} onBack={closeWishlistPicker} onSaved={nextIds => setSavedCards(collectionCards.filter(card => nextIds.includes(card.id)))} />
+    return <WishlistPicker cards={wishlistCatalogCards} savedCardIds={savedCardIds} loading={wishlistCatalogLoading} onBack={closeWishlistPicker} onSaved={nextIds => setSavedCards(wishlistCatalogCards.filter(card => nextIds.includes(card.id)))} />
   }
 
   if (revealedCardId) {
@@ -1637,6 +1680,7 @@ function App() {
       userCardId={revealedCardId}
       collectionSummary={collectionSummary}
       fanProgression={fanProgression}
+      growthAwardedXp={redemptionGrowth?.awardedXp ?? 0}
       onClose={closeReveal}
       onViewCollection={() => { closeReveal(); navigateTab('collection') }}
       onRegisterAnother={() => { closeReveal(); openRedeem() }}
@@ -1644,10 +1688,17 @@ function App() {
     />
   }
 
+  if (discoverArtistCardsSlug) {
+    const artist = catalogArtists.find(item => item.id === discoverArtistCardsSlug) ?? null
+    const artistReturnPath = safeAppReturnPath(routeReturnPath, `/discover/artists/${encodeURIComponent(discoverArtistCardsSlug)}`)
+    return <ArtistCardCatalog artist={artist} onBack={() => navigateAppPath(artistReturnPath)} onOpenCard={openCard} />
+  }
+
   if (discoverArtistSlug) {
     const artist = catalogArtists.find(item => item.id === discoverArtistSlug) ?? null
     const artistReturnPath = safeAppReturnPath(routeReturnPath, '/discover')
-    return <ArtistHubDetail artist={artist} onBack={() => navigateAppPath(artistReturnPath)} onOpenEvents={openEvents} onOpenEvent={event => { if (event) openEvent(event); else openEvents() }} onOpenCollection={openCardCollection} onOpenCard={openCard} />
+    if (!artist) return <ArtistHubDetail artist={null} onBack={() => navigateAppPath(artistReturnPath)} onOpenEvents={openEvents} onOpenEvent={event => { if (event) openEvent(event); else openEvents() }} onOpenCollection={() => navigateAppPath('/discover')} onOpenCard={openCard} />
+    return <ArtistHubDetail artist={artist} onBack={() => navigateAppPath(artistReturnPath)} onOpenEvents={openEvents} onOpenEvent={event => { if (event) openEvent(event); else openEvents() }} onOpenCollection={() => navigateAppPath(routeWithReturnTo(`/discover/artists/${encodeURIComponent(artist.id)}/cards`, currentRelativePath))} onOpenCard={openCard} />
   }
 
   if (showCardCollection) {
@@ -1670,14 +1721,14 @@ function App() {
   // Card routes are full-screen destinations. Keep the detail view outside
   // the collection shell so `/cards/:id` is not rendered as a backdrop dialog.
   if (selectedCard) {
-    return <CardDetail card={selectedCard} isSaved={savedCardIds.includes(selectedCard.id)} onClose={closeCard} onToggleSaved={() => {
+    return <Suspense fallback={routeLoading}><CardDetail card={selectedCard} isSaved={savedCardIds.includes(selectedCard.id)} onClose={closeCard} onToggleSaved={() => {
       const cardId = selectedCard.id
       const alreadySaved = savedCardIds.includes(cardId)
       setSavedCards(cards => alreadySaved ? cards.filter(card => card.id !== cardId) : [...cards, selectedCard])
       void (alreadySaved ? removeWishlistCard(cardId) : saveWishlistCard(cardId)).catch(() => {
         setSavedCards(cards => alreadySaved ? [...cards, selectedCard] : cards.filter(card => card.id !== cardId))
       })
-    }} onRedeem={() => { closeCard(); openRedeem() }} imageFor={demoCardImage} onImageError={keepCardVisual} cardTypeLabel={cardTypeLabel} />
+    }} onRedeem={() => { closeCard(); openRedeem() }} imageFor={demoCardImage} onImageError={keepCardVisual} cardTypeLabel={cardTypeLabel} /></Suspense>
   }
 
   return (
@@ -1708,13 +1759,13 @@ function App() {
         {tab === 'collection' && <Collection cards={collectionCards} collectionDataReady={collectionDataReady} favoriteArtists={catalogArtists.filter(artist => currentUser?.favoriteArtistIds.includes(artist.id))} summary={collectionSummary} benefits={collectionBenefits} rewards={inventoryProgression?.claimedRewards ?? []} loading={collectionLoading} onSelect={openCard} onRedeem={openRedeem} onDiscover={() => navigateTab('discover')} onRewards={openRewardInventory} onCards={openCardCollection} onOpenWishlist={openWishlistPicker} onClaim={claimBenefit} />}
         {tab === 'discover' && <Discover favoriteArtists={catalogArtists.filter(artist => currentUser?.favoriteArtistIds.includes(artist.id))} onFindFans={query => navigateAppPath(routeWithReturnTo(query ? `/fans?q=${encodeURIComponent(query)}` : '/fans', '/discover'))} onOpenFanProfile={userId => navigateAppPath(routeWithReturnTo(`/fans/${encodeURIComponent(userId)}`, '/discover'))} onOpenPublicCollection={userId => navigateAppPath(routeWithReturnTo(`/fans/${encodeURIComponent(userId)}/collection`, '/discover'))} onOpenEvent={event => { if (event) openEvent(event); else openEvents() }} onOpenArtist={artistId => navigateAppPath(routeWithReturnTo(`/discover/artists/${encodeURIComponent(artistId)}`, '/discover'))} onOpenPackCatalog={() => navigateAppPath(routeWithReturnTo('/discover/packs', '/discover'))} onOpenPack={packId => navigateAppPath(routeWithReturnTo(`/discover/packs/${encodeURIComponent(packId)}`, '/discover'))} onOpenCard={openCard} featuredArtist={catalogArtists.find(artist => artist.name === '드림스케이프') ?? catalogArtists[0] ?? null} featuredEvent={fanHome?.featuredEvent ?? fanHome?.upcomingEvents[0] ?? null} featuredEventLoading={fanHomeLoading} />}
         {/* Embedded surfaces stay compact; the dedicated tab uses the full progression view. */}
-        {tab === 'growth' && <FanGrowth progression={fanProgression} globalProgression={globalFanProgression} artistScopes={catalogArtists.filter(artist => currentUser?.favoriteArtistIds.includes(artist.id)).map(artist => ({ id: artist.id, name: artist.name, imageUrl: artist.name === '드림스케이프' ? loginDreamscapeGroup : artist.imageUrl }))} selectedArtistId={growthArtistId} onArtistChange={artistId => { writeActiveArtistId(artistId); setGrowthArtistId(artistId) }} loading={growthLoading} error={growthError} mode="full" onRetry={refreshGrowth} onClaim={claimGrowthReward} onClaimPassTier={claimGrowthPassTier} onEquip={saveGrowthEquipment} onViewPass={openFanPassPage} onViewGlobalPass={(tierId) => openFanPassPage(tierId, 'global')} onViewMissions={openMissionPage} fanGrowthMode="full" />}
-        {tab === 'settings' && currentUser && <Settings user={currentUser} progression={fanProgression} onUserUpdated={setCurrentUser} onLogout={logout} onEvents={openMyApplications} onNotificationSettings={() => setShowNotificationSettings(true)} />}
+        {tab === 'growth' && <FanGrowth progression={fanProgression} globalProgression={globalFanProgression} artistScopes={catalogArtists.filter(artist => currentUser?.favoriteArtistIds.includes(artist.id)).map(artist => ({ id: artist.id, name: artist.name, imageUrl: artist.name === '드림스케이프' ? loginDreamscapeGroup : artist.imageUrl }))} selectedArtistId={growthArtistId} onArtistChange={artistId => { writeActiveArtistId(artistId); setGrowthArtistId(artistId) }} loading={growthLoading} error={growthError} mode="full" onRetry={() => { void refreshGrowth() }} onClaim={claimGrowthReward} onClaimPassTier={claimGrowthPassTier} onEquip={saveGrowthEquipment} onViewPass={openFanPassPage} onViewGlobalPass={(tierId) => openFanPassPage(tierId, 'global')} onViewMissions={openMissionPage} fanGrowthMode="full" />}
+        {tab === 'settings' && currentUser && <Suspense fallback={routeLoading}><Settings user={currentUser} progression={fanProgression} onUserUpdated={setCurrentUser} onLogout={logout} onEvents={openMyApplications} onNotificationSettings={() => setShowNotificationSettings(true)} /></Suspense>}
       </section>}
 
       {tab !== 'alerts' && <BottomNavigation active={tab} onNavigate={navigateTab} />}
 
-      {showRedeem && <QrRedeemModal onClose={closeRedeem} onRedeemed={(id) => { closeRedeem(); void Promise.allSettled([refreshCollection(), refreshGrowth()]).then(() => openReveal(id)) }} />}
+      {showRedeem && <Suspense fallback={routeLoading}><QrRedeemModal onClose={closeRedeem} onRedeemed={(redemption) => { setRedemptionGrowth(redemption); closeRedeem(); void syncGrowthAfterRedemption(redemption) }} /></Suspense>}
     </main>
   )
 }
@@ -1764,6 +1815,11 @@ function publicFanProfileIdFromPath(pathname: string): string | null {
 
 function discoverArtistSlugFromPath(pathname: string): string | null {
   const match = pathname.match(/^\/discover\/artists\/([^/]+)$/)
+  return match ? decodeURIComponent(match[1]) : null
+}
+
+function discoverArtistCardsSlugFromPath(pathname: string): string | null {
+  const match = pathname.match(/^\/discover\/artists\/([^/]+)\/cards$/)
   return match ? decodeURIComponent(match[1]) : null
 }
 
@@ -3380,9 +3436,9 @@ function WishlistPicker({ cards, savedCardIds, loading, persist = true, onBack, 
       <div className="wishlist-picker-filters" role="tablist" aria-label="카드팩 필터">
         {packs.map(pack => <button key={pack} type="button" role="tab" aria-selected={activePack === pack} className={activePack === pack ? 'active' : ''} onClick={() => setActivePack(pack)}>{pack}</button>)}
       </div>
-      <div className="wishlist-picker-heading"><div><h2>내 컬렉션 카드</h2><span>보유한 카드만 원하는 카드로 등록할 수 있어요.</span></div><b>{selectedIds.size}장</b></div>
+      <div className="wishlist-picker-heading"><div><h2>공개 카드 탐색</h2><span>아직 보유하지 않은 카드도 원하는 카드로 등록할 수 있어요.</span></div><b>{selectedIds.size}장</b></div>
       {loading && <div className="wishlist-picker-state" role="status">카드를 불러오는 중이에요…</div>}
-      {!loading && uniqueCards.length === 0 && <div className="wishlist-picker-state"><InlineIcon name="card" /><strong>등록된 카드가 없어요</strong><span>카드를 먼저 등록하면 원하는 카드로 지정할 수 있어요.</span></div>}
+      {!loading && uniqueCards.length === 0 && <div className="wishlist-picker-state"><InlineIcon name="card" /><strong>공개된 카드가 없어요</strong><span>새 카드가 공개되면 원하는 카드로 등록할 수 있어요.</span></div>}
       {!loading && uniqueCards.length > 0 && visibleCards.length === 0 && <div className="wishlist-picker-state"><InlineIcon name="search" /><strong>검색 결과가 없어요</strong><span>다른 카드명이나 멤버명으로 검색해 보세요.</span></div>}
       {!loading && visibleCards.length > 0 && <div className="wishlist-picker-grid">{visibleCards.map((card, index) => {
         const selected = selectedIds.has(card.id)
@@ -3750,6 +3806,33 @@ function Discover({ onFindFans, onOpenFanProfile, onOpenPublicCollection, onOpen
   </section>
 }
 
+function ArtistCardCatalog({ artist, usePreviewData = false, onBack, onOpenCard }: { artist: CatalogArtist | null; usePreviewData?: boolean; onBack: () => void; onOpenCard: (card: Card) => void }) {
+  const [cards, setCards] = useState<CatalogCard[]>([])
+  const [loading, setLoading] = useState(!usePreviewData)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    if (usePreviewData || !artist) { setLoading(false); return }
+    let cancelled = false
+    setLoading(true)
+    void getCatalogCards({ artistId: artist.id, sort: 'recommended' }).then(result => {
+      if (!cancelled) setCards(result.data.items)
+    }).catch(() => {
+      if (!cancelled) setError('공개 카드를 불러오지 못했어요.')
+    }).finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [artist, usePreviewData])
+  const previewCards = dreamscapeDemoMembers.slice(0, 4).map((member, index) => ({ id: `preview-public-${member.id}`, title: 'Nebula Ver.', artist: artist?.name ?? '드림스케이프', member: member.name, image: member.image, rarity: (['UR', 'SR', 'R', 'N'] as const)[index] } satisfies Card))
+  const displayCards = usePreviewData ? previewCards : cards.map(toCatalogCard)
+  return <main className="app-shell discover-artist-shell detail-screen-shell artist-card-catalog-screen">
+    <DetailTopBar title={`${artist?.name ?? '아티스트'} 카드`} onBack={onBack} backLabel="아티스트 홈으로 돌아가기" />
+    <section className="artist-card-catalog detail-screen-content" aria-labelledby="artist-card-catalog-title">
+      <div className="section-heading"><div><span>PUBLIC CARD CATALOG</span><h2 id="artist-card-catalog-title">공개 카드</h2></div><small>{displayCards.length}장</small></div>
+      {error && <p className="hub-load-note" role="alert">{error}</p>}
+      {loading ? <p className="hub-empty" role="status">공개 카드를 불러오는 중이에요.</p> : displayCards.length > 0 ? <div className="artist-card-catalog-grid">{displayCards.map(card => <button type="button" key={card.id} className="artist-card-catalog-item" onClick={() => onOpenCard(card)}><img src={card.image} alt={`${card.member} ${card.title} 카드`} onError={event => keepCardVisual(event, `card:${card.id}`)} /><span>{card.rarity && <b>{card.rarity}</b>}<strong>{card.member}</strong><small>{card.title}</small></span></button>)}</div> : <p className="hub-empty">공개된 카드가 없어요.</p>}
+    </section>
+  </main>
+}
+
 function ArtistHubDetail({ artist, usePreviewData = false, onBack, onOpenEvents, onOpenEvent, onOpenCollection, onOpenCard }: { artist: CatalogArtist | null; usePreviewData?: boolean; onBack: () => void; onOpenEvents: () => void; onOpenEvent: (event: FanEvent | null) => void; onOpenCollection: () => void; onOpenCard: (card: Card) => void }) {
   const [activeHubTab, setActiveHubTab] = useState('home')
   const [following, setFollowing] = useState(true)
@@ -3932,13 +4015,14 @@ type RevealCardProps = {
   userCardId: string
   collectionSummary: CollectionSummary
   fanProgression: FanProgression | null
+  growthAwardedXp: number
   onClose: () => void
   onViewCollection: () => void
   onRegisterAnother: () => void
   onStart: () => void
 }
 
-function RevealCard({ userCardId, collectionSummary, fanProgression, onClose, onViewCollection, onRegisterAnother, onStart }: RevealCardProps) {
+function RevealCard({ userCardId, collectionSummary, fanProgression, growthAwardedXp, onClose, onViewCollection, onRegisterAnother, onStart }: RevealCardProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const revealTimerRef = useRef<number | null>(null)
   const isRandomReveal = import.meta.env.DEV && userCardId === 'qa-registration-complete'
@@ -4003,11 +4087,11 @@ function RevealCard({ userCardId, collectionSummary, fanProgression, onClose, on
   if (phase === 'complete' && (detail || isRandomReveal)) {
     const rarity = isRandomReveal ? 'SR' : (detail?.card.rarity?.toUpperCase() || 'SR')
     const level = fanProgression?.level.level ?? 1
-    const totalXp = fanProgression?.level.totalXp ?? 100
+    const totalXp = fanProgression?.level.totalXp ?? 0
     const nextLevelXp = fanProgression?.level.nextLevelXp ?? Math.max(100, level * 100)
     const displayOwnedCount = isRandomReveal ? Math.max(1, collectionSummary.ownedCount) : collectionSummary.ownedCount
     const displayTotalSlots = isRandomReveal ? 40 : collectionSummary.totalSlots
-    const displayXpLabel = isRandomReveal ? '100 XP 획득' : `${totalXp} XP 누적`
+    const displayXpLabel = isRandomReveal ? (growthAwardedXp > 0 ? `+${growthAwardedXp} XP 반영` : '성장 반영 중') : `${totalXp} XP 누적`
     const levelProgress = isRandomReveal ? 42 : Math.min(100, Math.max(0, (totalXp / nextLevelXp) * 100))
     const collectionProgress = Math.min(100, Math.max(0, (displayOwnedCount / displayTotalSlots) * 100))
     const artistName = isRandomReveal ? '드림스케이프' : (detail?.card.artistName ?? '드림스케이프')
@@ -4065,7 +4149,7 @@ function RevealCard({ userCardId, collectionSummary, fanProgression, onClose, on
       <div className="registration-complete-mission">
         <span><InlineIcon name="calendar" /></span>
         <b>{isFirstCollectionCard ? '첫 카드 등록하기' : '새 카드 수집하기'}</b>
-        <strong>{isFirstCollectionCard ? '+100 XP' : '완료'}</strong>
+        <strong>{isFirstCollectionCard && growthAwardedXp > 0 ? `+${growthAwardedXp} XP` : '완료'}</strong>
       </div>
 
       <section className="registration-complete-next">
@@ -4164,7 +4248,7 @@ function RevealCard({ userCardId, collectionSummary, fanProgression, onClose, on
       <div><span><InlineIcon name="grid" /></span><small>카드 번호</small><b>{serialNumber}</b></div>
       <div><span><InlineIcon name="gift" /></span><small>획득</small><b>1번째</b></div>
     </section>
-    <div className="card-reveal-bonus"><span><InlineIcon name="gift" /></span><b>{isFirstCollectionCard ? '첫 카드 등록 보너스' : '컬렉션 카드 획득'}</b><strong>{isFirstCollectionCard ? '+100 XP' : '완료'}</strong></div>
+    <div className="card-reveal-bonus"><span><InlineIcon name="gift" /></span><b>{isFirstCollectionCard ? '첫 카드 등록 성장 보상' : '컬렉션 카드 획득'}</b><strong>{isFirstCollectionCard && growthAwardedXp > 0 ? `+${growthAwardedXp} XP` : '완료'}</strong></div>
     <button type="button" className="primary card-reveal-primary" onClick={completeRegistration} disabled={!detail && !isRandomReveal}>컬렉션에 추가</button>
     <button type="button" className="card-reveal-again" onClick={() => setPhase('mystery')}>다시 확인하기</button>
   </main>

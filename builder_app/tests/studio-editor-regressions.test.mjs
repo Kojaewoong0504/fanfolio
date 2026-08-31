@@ -13,6 +13,14 @@ test('local studio API follows the current loopback hostname', () => {
 const appUrl = new URL('../app.js', import.meta.url)
 const cssUrl = new URL('../styles.css', import.meta.url)
 
+test('studio collaboration and settings controls have scoped accessible styling', async () => {
+  const css = await readFile(cssUrl, 'utf8')
+  assert.match(css, /\.card-comment-form\s+textarea[\s\S]*min-height/)
+  assert.match(css, /\.card-comment-form\s+input[\s\S]*min-height/)
+  assert.match(css, /\.card-comment-form\s+button[\s\S]*min-height/)
+  assert.match(css, /\.check-row\.settings\s+input[\s\S]*accent-color/)
+})
+
 async function loadMotionHarness(options = {}) {
   const {
     reducedMotion = false,

@@ -44,7 +44,7 @@ test('QR-free preview path hands off to the dedicated card reveal route', () => 
   assert.match(modalSource, /샘플 카드로 3단계 미리보기/)
   assert.match(modalSource, /step === 3/)
   assert.match(modalSource, /setStep\(3\)/)
-  assert.match(modalSource, /onRedeemed\('qa-registration-complete'\)/)
+  assert.match(modalSource, /onRedeemed\(\{ userCardId: 'qa-registration-complete'/)
 })
 
 test('QR scan screen uses a generated project scanner asset', () => {

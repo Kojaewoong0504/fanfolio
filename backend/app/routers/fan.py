@@ -84,6 +84,7 @@ from app.schemas import (
     SupportTicketCreate,
 )
 from app.services import (
+    CARD_COLLECTION_XP,
     claim_pass_tier,
     claim_reward_grant,
     create_point_charge,
@@ -888,7 +889,15 @@ async def create_redemption(
                 "user_id": user_id,
             },
         )
-    return {"ok": True, "data": redeemed}
+    return {
+        "ok": True,
+        "data": {
+            **redeemed,
+            "growthEventId": engagement_event_id,
+            "growthStatus": "pending",
+            "awardedXp": CARD_COLLECTION_XP,
+        },
+    }
 
 
 @router.get("/me/collection")
@@ -980,11 +989,18 @@ async def wishlist(user: FanUser, session: DbSession) -> dict:
 
 @router.put("/me/wishlist/{card_id}")
 async def add_wishlist(card_id: str, user: FanUser, session: DbSession) -> dict:
-    owned = await session.scalar(
-        select(UserCard.id).where(UserCard.user_id == user.id, UserCard.card_id == card_id)
+    card = await session.scalar(
+        select(Card)
+        .outerjoin(Drop, Card.drop_id == Drop.id)
+        .where(
+            Card.id == card_id,
+            Card.status == "published",
+            Card.is_official.is_(True),
+            catalog_release_visible(),
+        )
     )
-    if owned is None:
-        raise AppError(404, "CARD_NOT_OWNED", "보유한 카드만 관심 카드로 저장할 수 있습니다.")
+    if card is None:
+        raise AppError(404, "CARD_NOT_AVAILABLE", "공개된 카드만 관심 카드로 저장할 수 있습니다.")
     existing = await session.scalar(
         select(FanWishlistItem).where(
             FanWishlistItem.user_id == user.id, FanWishlistItem.card_id == card_id
@@ -2342,6 +2358,9 @@ async def my_event_applications(user: FanUser, session: DbSession) -> dict:
                     "applicationId": application.id,
                     "eventId": event.id,
                     "status": application.status,
+                    "checkedInAt": application.checked_in_at.isoformat()
+                    if application.checked_in_at
+                    else None,
                     "createdAt": application.created_at.isoformat(),
                     "event": {
                         "id": event.id,

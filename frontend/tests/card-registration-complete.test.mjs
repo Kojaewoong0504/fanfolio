@@ -34,8 +34,8 @@ test('card reveal is a dedicated third step before collection completion', () =>
   assert.match(appSource, /isRandomReveal \? '하린'/)
   assert.match(appSource, /isRandomReveal \? 'Nebula Ver\.'/)
   assert.match(appSource, /DS-HR-024/)
-  assert.match(appSource, /첫 카드 등록 보너스/)
-  assert.match(appSource, /\+100 XP/)
+  assert.match(appSource, /첫 카드 등록 성장 보상/)
+  assert.match(appSource, /growthAwardedXp/)
   assert.match(appSource, /컬렉션에 추가/)
   assert.match(appSource, /다시 확인하기/)
   assert.match(cssSource, /\.card-reveal-result/)
@@ -74,8 +74,8 @@ test('completion screen reports live collection and fan progression', () => {
 test('later acquisitions do not claim a first-card reward', () => {
   assert.match(appSource, /const isFirstCollectionCard = isRandomReveal \|\| collectionSummary\.ownedCount <= 1/)
   assert.match(appSource, /isFirstCollectionCard \? '첫 카드가 컬렉션에 추가됐어요!' : '카드가 컬렉션에 추가됐어요!'/)
-  assert.match(appSource, /isFirstCollectionCard \? '첫 카드 등록 보너스' : '컬렉션 카드 획득'/)
-  assert.match(appSource, /isFirstCollectionCard \? '\+100 XP' : '완료'/)
+  assert.match(appSource, /isFirstCollectionCard \? '첫 카드 등록 성장 보상' : '컬렉션 카드 획득'/)
+  assert.match(appSource, /growthAwardedXp > 0 \? `\+\$\{growthAwardedXp\} XP` : '완료'/)
   assert.match(appSource, /isFirstCollectionCard \? '첫 카드 등록하기' : '새 카드 수집하기'/)
 })
 

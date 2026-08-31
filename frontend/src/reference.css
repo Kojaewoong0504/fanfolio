@@ -58,6 +58,27 @@ main.collection-shell .collection-card-copy b { font-size:11px!important; } main
 main.collection-shell .collection-card-status { position:absolute!important; right:0!important; bottom:0!important; left:0!important; display:grid!important; min-height:24px!important; place-items:center!important; font-size:9px!important; font-weight:800!important; }
 main.collection-shell .collection-card-status.new { background:#eeeaff!important; color:#5b4cf3!important; } main.collection-shell .collection-card-status.duplicate { background:#d9faf0!important; color:#16a77d!important; }
 main.collection-shell .collection-manage-card { display:grid!important; grid-template-columns:38px 1fr 16px!important; align-items:center!important; gap:10px!important; width:100%!important; padding:11px!important; border:1px solid #e6e3f1!important; border-radius:14px!important; background:#fff!important; color:var(--fan-ink)!important; text-align:left!important; box-shadow:0 6px 16px #4e47a30b!important; cursor:pointer!important; }
+
+.settings-support-form { display: grid; gap: 9px; width: 100%; }
+.settings-support-form label { color: var(--fan-ink); font-size: 12px; font-weight: 800; }
+.settings-support-form select,
+.settings-support-form input,
+.settings-support-form textarea { width: 100%; min-width: 0; min-height: 46px; padding: 11px 13px; border: 1px solid var(--fan-line); border-radius: 12px; color: var(--fan-ink); background: #fff; font-size: 13px; outline: none; }
+.settings-support-form textarea { min-height: 132px; resize: vertical; line-height: 1.55; }
+.settings-support-form select:focus-visible,
+.settings-support-form input:focus-visible,
+.settings-support-form textarea:focus-visible { border-color: var(--fan-violet); box-shadow: 0 0 0 3px #5749ee1f; }
+.settings-support-submit { min-height: 48px; margin-top: 5px; border: 0; border-radius: 13px; color: #fff; background: var(--fan-violet); font-size: 13px; font-weight: 800; cursor: pointer; }
+.settings-support-submit:disabled { cursor: not-allowed; opacity: .48; }
+
+.artist-card-catalog { display: grid; gap: 18px; padding: var(--detail-content-start) var(--detail-content-gutter) 32px; }
+.artist-card-catalog-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.artist-card-catalog-item { position: relative; min-width: 0; overflow: hidden; padding: 0; border: 1px solid var(--fan-line); border-radius: 16px; background: #171947; color: #fff; text-align: left; cursor: pointer; }
+.artist-card-catalog-item img { display: block; width: 100%; aspect-ratio: 2 / 3; object-fit: cover; background: #25285c; }
+.artist-card-catalog-item > span { position: absolute; right: 10px; bottom: 9px; left: 10px; display: grid; gap: 2px; text-shadow: 0 1px 4px #07091f; }
+.artist-card-catalog-item b { justify-self: start; padding: 3px 6px; border-radius: 6px; background: var(--fan-violet); font-size: 9px; }
+.artist-card-catalog-item strong { font-size: 13px; }
+.artist-card-catalog-item small { font-size: 10px; }
 main.collection-shell .collection-manage-icon { display:grid!important; width:38px!important; height:38px!important; place-items:center!important; border-radius:50%!important; background:#eeebff!important; color:#5949ed!important; }
 main.collection-shell .collection-manage-icon .inline-icon { width:19px!important; height:19px!important; } main.collection-shell .collection-manage-card > span:nth-child(2) { display:grid!important; gap:3px!important; } main.collection-shell .collection-manage-card b { font-size:14px!important; } main.collection-shell .collection-manage-card small { color:#777f96!important; font-size:10px!important; }
 main.collection-shell .collection-summary-grid { display:grid!important; grid-template-columns:repeat(4,minmax(0,1fr))!important; gap:10px!important; }

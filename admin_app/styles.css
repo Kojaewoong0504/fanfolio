@@ -4410,6 +4410,11 @@ button.top-avatar {
 .event-applicant-panel > .event-section-heading { margin-bottom: 12px; }
 .event-applicant-panel p { margin: 4px 0 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
 .event-draw-box { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, auto); align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 12px; border: 1px solid #dedaff; border-radius: 11px; background: #f7f6ff; }
+.event-check-in-box { display: grid; gap: 8px; margin-top: 10px; padding: 12px; border: 1px solid #d9eadf; border-radius: 11px; background: #f5fbf7; }
+.event-check-in-box strong, .event-check-in-box small { display: block; }
+.event-check-in-box small { color: var(--muted); font-size: 9px; }
+.event-check-in-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.event-check-in-form input { min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: inherit; }
 .event-draw-box > div:first-child { min-width: 0; }
 .event-draw-box strong, .event-draw-box small { display: block; }
 .event-draw-box strong { font-size: 11px; }
