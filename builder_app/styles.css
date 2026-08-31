@@ -2919,7 +2919,10 @@ input[type='range'] {
 .comment-status { font-size: 11px; color: #6657ed; }
 .card-comment .text-button { margin-top: 7px; }
 .card-comment-form { display: grid; gap: 8px; }
-.card-comment-form textarea, .card-comment-form input { width: 100%; }
+.card-comment-form textarea, .card-comment-form input { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid #dfe1eb; border-radius: 10px; color: var(--ink); background: #fff; resize: vertical; }
+.card-comment-form textarea { min-height: 88px; line-height: 1.5; }
+.card-comment-form textarea:focus-visible, .card-comment-form input:focus-visible { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(47, 107, 234, .16); outline: none; }
+.card-comment-form button { min-height: 44px; justify-self: start; }
 
 .readiness-score {
   width: 52px;
@@ -3217,6 +3220,7 @@ input[type='range'] {
   border-radius: 11px;
   background: #f7f7fb;
 }
+.check-row.settings input { width: 18px; height: 18px; accent-color: var(--violet); }
 
 .security-list {
   display: grid;

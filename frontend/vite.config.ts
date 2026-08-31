@@ -13,4 +13,13 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    // Keep the shell fast on mobile by allowing Rolldown to split lazily
+    // loaded feature modules (QR scanning, media viewers, and detail routes).
+    rolldownOptions: {
+      output: {
+        codeSplitting: true,
+      },
+    },
+  },
 })

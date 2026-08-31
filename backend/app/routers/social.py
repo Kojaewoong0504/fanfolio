@@ -503,11 +503,43 @@ async def search_fans(
     visible_targets = [
         target for target in targets if not await _is_blocked(session, user.id, target.id)
     ]
+    ranked_items: list[tuple[int, str, dict]] = []
+    for target in visible_targets:
+        item = await _fan_data(session, target, user.id)
+        reasons: list[str] = []
+        shared_count = len(item["sharedFavoriteArtists"])
+        if shared_count:
+            names = ", ".join(artist["name"] for artist in item["sharedFavoriteArtists"][:2])
+            reasons.append(f"{names}를 함께 좋아해요")
+        if item["matchingWishlistCount"]:
+            reasons.append(f"내가 찾는 카드 {item['matchingWishlistCount']}장을 보유하고 있어요")
+        if item["tradableCount"]:
+            reasons.append(f"교환 가능한 카드가 {item['tradableCount']}장 있어요")
+        latest = item["latestCardAt"]
+        recent_bonus = 0
+        if latest:
+            try:
+                latest_at = datetime.fromisoformat(latest)
+                if latest_at.tzinfo is None:
+                    latest_at = latest_at.replace(tzinfo=UTC)
+                recent_bonus = 10 if latest_at >= datetime.now(UTC) - timedelta(days=7) else 0
+            except ValueError:
+                recent_bonus = 0
+        if not reasons and recent_bonus:
+            reasons.append("최근 컬렉션을 업데이트했어요")
+        score = (
+            shared_count * 100
+            + item["matchingWishlistCount"] * 50
+            + min(item["tradableCount"], 10) * 5
+            + recent_bonus
+        )
+        item["recommendationScore"] = score
+        item["recommendationReasons"] = reasons[:3] or ["새로운 팬을 만나보세요"]
+        ranked_items.append((score, item["nickname"], item))
+    ranked_items.sort(key=lambda entry: (-entry[0], entry[1], entry[2]["id"]))
     return {
         "ok": True,
-        "data": {
-            "items": [await _fan_data(session, target, user.id) for target in visible_targets]
-        },
+        "data": {"items": [item for _, _, item in ranked_items]},
     }
 
 

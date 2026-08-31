@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 const appSource = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
+const clientSource = await readFile(new URL('../src/api/client.ts', import.meta.url), 'utf8')
 const appCssSource = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
 const referenceCssSource = await readFile(new URL('../src/reference.css', import.meta.url), 'utf8')
 const redeemSource = await readFile(new URL('../src/components/QrRedeemModal.tsx', import.meta.url), 'utf8')
@@ -66,4 +67,11 @@ test('protected card media is loaded with the authenticated blob path before pla
   assert.match(appSource, /useAuthenticatedMedia\(videoPath, mediaRetryKey\)/)
   assert.match(mediaHookSource, /fetchAuthenticatedMedia\(path\)/)
   assert.match(mediaHookSource, /error: !url/)
+})
+
+test('card redemption exposes server-owned growth state and never promises a client-only XP amount', () => {
+  assert.match(clientSource, /growthEventId/)
+  assert.match(clientSource, /growthStatus/)
+  assert.match(clientSource, /awardedXp/)
+  assert.doesNotMatch(appSource, /100 XP 획득/)
 })

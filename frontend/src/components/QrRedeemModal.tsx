@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import type { IScannerControls } from '@zxing/browser'
-import { previewRedemption, redeemCard, type RedemptionPreview, type RedemptionSource } from '../api/client'
+import { previewRedemption, redeemCard, type CardRedemption, type RedemptionPreview, type RedemptionSource } from '../api/client'
 import '../App.css'
 import './QrRedeemModal.css'
 import { DetailTopBar } from './DetailTopBar'
@@ -15,7 +15,7 @@ function isRedemptionErrorMessage(message: string): boolean {
   return ['실패', '찾을 수', '찾지 못', '비활성화', '사용할 수', '이미 사용', '만료된', '만료되었습니다', '카메라를 사용할 수 없습니다', 'HTTPS 연결'].some(keyword => message.includes(keyword))
 }
 
-export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, onRedeemed: (userCardId: string) => void }) {
+export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, onRedeemed: (redemption: CardRedemption) => void }) {
   const [step, setStep] = useState<RegistrationStep>(1)
   const [code, setCode] = useState('')
   // QR is the primary digital-card path. Keep manual entry behind an explicit
@@ -191,7 +191,7 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
     setMessage('')
     try {
       const result = await redeemCard(code, source)
-      onRedeemed(result.data.userCardId)
+      onRedeemed(result.data)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '카드 등록에 실패했습니다.')
     } finally { setSaving(false) }
@@ -273,12 +273,12 @@ export function QrRedeemModal({ onClose, onRedeemed }: { onClose: () => void, on
     setSource('qr')
     setIsDemo(true)
     setScanning(false)
-    onRedeemed('qa-registration-complete')
+    onRedeemed({ userCardId: 'qa-registration-complete', cardId: 'qa-card', serialNumber: 1, growthEventId: 'qa-growth', growthStatus: 'processed', awardedXp: 0 })
   }
 
   const confirmRegistration = () => {
     if (import.meta.env.DEV && isDemo) {
-      onRedeemed('qa-registration-complete')
+      onRedeemed({ userCardId: 'qa-registration-complete', cardId: 'qa-card', serialNumber: 1, growthEventId: 'qa-growth', growthStatus: 'processed', awardedXp: 0 })
       return
     }
     void redeem()

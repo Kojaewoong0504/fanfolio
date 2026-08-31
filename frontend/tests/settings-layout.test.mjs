@@ -5,6 +5,7 @@ import test from 'node:test'
 const settingsSource = await readFile(new URL('../src/components/Settings.tsx', import.meta.url), 'utf8')
 const clientSource = await readFile(new URL('../src/api/client.ts', import.meta.url), 'utf8')
 const referenceCss = await readFile(new URL('../src/reference.css', import.meta.url), 'utf8')
+const appCss = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
 
 test('my page mirrors the approved profile summary and six-item menu', () => {
   assert.match(settingsSource, /className="my-profile-card"/)
@@ -71,4 +72,12 @@ test('settings does not retain a misleading placeholder panel fallback', () => {
   assert.doesNotMatch(settingsSource, /해당 메뉴의 상세 내용은 준비 중입니다\./)
   assert.match(settingsSource, /onNotificationSettings: \(\) => void/)
   assert.match(settingsSource, /onClick=\{onNotificationSettings\}/)
+})
+
+test('support form has intentional mobile-safe controls instead of browser defaults', () => {
+  const css = `${referenceCss}\n${appCss}`
+  assert.match(css, /\.settings-support-form\s*\{[\s\S]*display:\s*grid/)
+  assert.match(css, /\.settings-support-form\s+(?:select|input|textarea)/)
+  assert.match(css, /\.settings-support-submit\s*\{[\s\S]*min-height/)
+  assert.match(css, /\.settings-support-submit:disabled/)
 })

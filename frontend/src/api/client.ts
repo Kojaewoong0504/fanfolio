@@ -933,6 +933,9 @@ export type CardRedemption = {
   userCardId: string
   cardId: string
   serialNumber: number
+  growthEventId: string
+  growthStatus: 'pending' | 'processed' | 'failed' | 'dead_letter'
+  awardedXp: number
 }
 
 export type RedemptionPreview = {
@@ -1082,6 +1085,8 @@ export type FanSummary = {
   previewCards: CollectionCard[]
   matchingWishlistCount: number
   latestCardAt: string | null
+  recommendationScore?: number
+  recommendationReasons?: string[]
 }
 
 export type TradeProposal = {

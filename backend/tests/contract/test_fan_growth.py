@@ -1484,6 +1484,9 @@ def test_successful_redemption_enqueues_committed_growth_event(
     assert len(events) == 1
     assert enqueued_event_ids == [events[0].id]
     assert events[0].source_id == redeemed["userCardId"]
+    assert redeemed["growthEventId"] == events[0].id
+    assert redeemed["growthStatus"] == "pending"
+    assert redeemed["awardedXp"] == 30
 
 
 def test_successful_redemption_returns_created_when_enqueue_fails(

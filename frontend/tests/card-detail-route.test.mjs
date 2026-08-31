@@ -21,3 +21,14 @@ test('card detail exposes a report path for unsafe or incorrect card content', (
   assert.match(detailSource, /targetType: 'card'/)
   assert.match(detailSource, /신고하기/)
 })
+
+test('artist card tab opens a public catalog route instead of the owner collection', () => {
+  assert.match(appSource, /discoverArtistCardsSlugFromPath/)
+  assert.match(appSource, /\/discover\/artists\/\$\{encodeURIComponent\(artist\.id\)\}\/cards/)
+  assert.match(appSource, /ArtistCardCatalog/)
+})
+
+test('new detail routes reset scroll and keep a stable image fallback', () => {
+  assert.match(appSource, /pathname\.startsWith\('\/discover\/artists\/'\)[\s\S]*?window\.scrollTo\(\{ top: 0, behavior: 'auto' \}\)/)
+  assert.match(appSource, /onError=\{event => keepCardVisual\(/)
+})
