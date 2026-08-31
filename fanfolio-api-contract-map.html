@@ -25,7 +25,7 @@
     <div class="meta"><span class="chip">MVP · v0.2</span><span class="chip">정본: BACKEND_IMPLEMENTATION_CONTRACT.md</span><span class="chip">테스트: backend/tests/contract</span></div>
   </header>
   <main>
-    <div class="notice"><b>현재 상태:</b> 맵의 288개 HTTP 경로는 계약 테스트로 구현·검증됩니다. <code>Health → Fixture → Auth → Fan → Admin → Artist</code> 순서로 테스트를 읽으면 각 기능 경계를 따라갈 수 있습니다.</div>
+    <div class="notice"><b>현재 상태:</b> 맵의 291개 HTTP 경로는 계약 테스트로 구현·검증됩니다. <code>Health → Fixture → Auth → Fan → Admin → Artist</code> 순서로 테스트를 읽으면 각 기능 경계를 따라갈 수 있습니다.</div>
     <h2>구현 순서</h2>
     <div class="steps" id="steps"></div>
     <div class="layout">
@@ -104,6 +104,9 @@
       {stage:'Fan', role:'Fan', method:'GET', path:'/api/me/wishlist', auth:'Fan', request:null, success:'200', response:{items:[{cardId:'card_published'}]}, errors:['401 AUTH_REQUIRED'], test:'tests/contract/test_fan_collection_targets.py', note:'팬 계정에 저장한 관심 카드 목록을 서버에서 조회합니다.'},
       {stage:'Fan', role:'Fan', method:'PUT', path:'/api/me/wishlist/{card_id}', auth:'Fan', request:null, success:'200', response:{cardId:'card_published',saved:true}, errors:['401 AUTH_REQUIRED','404 CARD_NOT_OWNED'], test:'tests/contract/test_fan_collection_targets.py', note:'보유 카드의 관심 저장을 멱등적으로 처리합니다.'},
       {stage:'Fan', role:'Fan', method:'DELETE', path:'/api/me/wishlist/{card_id}', auth:'Fan', request:null, success:'200', response:{cardId:'card_published',saved:false}, errors:['401 AUTH_REQUIRED'], test:'tests/contract/test_fan_collection_targets.py', note:'관심 카드 저장을 멱등적으로 해제합니다.'},
+      {stage:'Fan', role:'Fan', method:'GET', path:'/api/me/event-likes', auth:'Fan', request:null, success:'200', response:{items:['event_published']}, errors:['401 AUTH_REQUIRED'], test:'tests/contract/test_event_likes.py', note:'팬 계정이 좋아요한 공개 이벤트 목록을 서버에서 조회합니다.'},
+      {stage:'Fan', role:'Fan', method:'PUT', path:'/api/me/event-likes/{event_id}', auth:'Fan', request:null, success:'200', response:{eventId:'event_published',liked:true}, errors:['401 AUTH_REQUIRED','404 EVENT_NOT_FOUND'], test:'tests/contract/test_event_likes.py', note:'공개 이벤트 좋아요를 멱등적으로 등록합니다.'},
+      {stage:'Fan', role:'Fan', method:'DELETE', path:'/api/me/event-likes/{event_id}', auth:'Fan', request:null, success:'200', response:{eventId:'event_published',liked:false}, errors:['401 AUTH_REQUIRED'], test:'tests/contract/test_event_likes.py', note:'이벤트 좋아요를 멱등적으로 해제합니다.'},
       {stage:'Fan', role:'Fan', method:'GET', path:'/api/me/collection-goals', auth:'Fan', request:null, success:'200', response:{items:[{id:'collection_goal_123',packId:'pack_123',ownedCount:1,completionRate:50}]}, errors:['401 AUTH_REQUIRED','404 CARD_PACK_NOT_FOUND'], test:'tests/contract/test_fan_collection_targets.py', note:'팬의 카드팩별 수집 목표와 실시간 진행률을 조회합니다.'},
       {stage:'Fan', role:'Fan', method:'POST', path:'/api/me/collection-goals', auth:'Fan', request:{packId:'pack_123',targetCount:10}, success:'201', response:{id:'collection_goal_123',packId:'pack_123',targetCount:10,ownedCount:0,completionRate:0}, errors:['401 AUTH_REQUIRED','404 CARD_PACK_NOT_FOUND','422 INVALID_COLLECTION_GOAL'], test:'tests/contract/test_fan_collection_targets.py', note:'공개 카드팩의 수집 목표를 생성하거나 기존 목표를 갱신합니다.'},
       {stage:'Fan', role:'Fan', method:'DELETE', path:'/api/me/collection-goals/{goal_id}', auth:'Fan', request:null, success:'200', response:{id:'collection_goal_123',deleted:true}, errors:['401 AUTH_REQUIRED'], test:'tests/contract/test_fan_collection_targets.py', note:'팬의 수집 목표를 멱등적으로 삭제합니다.'},

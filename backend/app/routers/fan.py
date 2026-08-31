@@ -37,6 +37,7 @@ from app.models import (
     EngagementEvent,
     Event,
     EventApplication,
+    EventLike,
     FanWishlistItem,
     Follow,
     Member,
@@ -1020,6 +1021,72 @@ async def wishlist(user: FanUser, session: DbSession) -> dict:
         )
     ).all()
     return {"ok": True, "data": {"items": [{"cardId": card_id} for card_id in card_ids]}}
+
+
+async def _public_event_for_like(event_id: str, session: DbSession) -> Event:
+    event = await session.get(Event, event_id)
+    now = datetime.now(UTC)
+    starts_at = (
+        event.starts_at.replace(tzinfo=UTC)
+        if event and event.starts_at.tzinfo is None
+        else event.starts_at
+        if event
+        else None
+    )
+    ends_at = (
+        event.ends_at.replace(tzinfo=UTC)
+        if event and event.ends_at and event.ends_at.tzinfo is None
+        else event.ends_at
+        if event
+        else None
+    )
+    if (
+        event is None
+        or event.workflow_status not in {"scheduled", "published"}
+        or starts_at > now
+        or (ends_at is not None and ends_at <= now)
+    ):
+        raise AppError(404, "EVENT_NOT_FOUND", "이벤트를 찾을 수 없습니다.")
+    return event
+
+
+@router.get("/me/event-likes")
+async def event_likes(user: FanUser, session: DbSession) -> dict:
+    event_ids = (
+        await session.scalars(
+            select(EventLike.event_id)
+            .join(Event, Event.id == EventLike.event_id)
+            .where(
+                EventLike.user_id == user.id,
+                Event.workflow_status.in_(["scheduled", "published"]),
+            )
+            .order_by(EventLike.created_at.desc(), EventLike.id.desc())
+        )
+    ).all()
+    return {"ok": True, "data": {"items": list(event_ids)}}
+
+
+@router.put("/me/event-likes/{event_id}")
+async def add_event_like(event_id: str, user: FanUser, session: DbSession) -> dict:
+    await _public_event_for_like(event_id, session)
+    existing = await session.scalar(
+        select(EventLike).where(EventLike.user_id == user.id, EventLike.event_id == event_id)
+    )
+    if existing is None:
+        session.add(
+            EventLike(id=f"event-like_{uuid4().hex[:12]}", user_id=user.id, event_id=event_id)
+        )
+        await session.commit()
+    return {"ok": True, "data": {"eventId": event_id, "liked": True}}
+
+
+@router.delete("/me/event-likes/{event_id}")
+async def remove_event_like(event_id: str, user: FanUser, session: DbSession) -> dict:
+    await session.execute(
+        delete(EventLike).where(EventLike.user_id == user.id, EventLike.event_id == event_id)
+    )
+    await session.commit()
+    return {"ok": True, "data": {"eventId": event_id, "liked": False}}
 
 
 @router.put("/me/wishlist/{card_id}")

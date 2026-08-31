@@ -42,7 +42,7 @@ function availabilityLabel(event: FanEvent): string {
   }
   return labels[event.applicationStatus ?? 'available'] ?? '신청 가능'
 }
-export function EventDetail({ event, loading, onBack, onOpenTarget, onApply, comments, commentsLoading, commentSubmitting, onLoadComments, onSubmitComment }: { event: FanEvent | null; loading: boolean; onBack: () => void; onOpenTarget: (target: string) => void; onApply?: () => void | Promise<void>; comments: FanEventComment[]; commentsLoading: boolean; commentSubmitting: boolean; onLoadComments: () => void | Promise<void>; onSubmitComment: (body: string) => void | Promise<void> }) {
+export function EventDetail({ event, loading, onBack, onOpenTarget, onApply, liked = false, onToggleLike, comments, commentsLoading, commentSubmitting, onLoadComments, onSubmitComment }: { event: FanEvent | null; loading: boolean; onBack: () => void; onOpenTarget: (target: string) => void; onApply?: () => void | Promise<void>; liked?: boolean; onToggleLike?: () => void | Promise<void>; comments: FanEventComment[]; commentsLoading: boolean; commentSubmitting: boolean; onLoadComments: () => void | Promise<void>; onSubmitComment: (body: string) => void | Promise<void> }) {
   const [commentDraft, setCommentDraft] = useState('')
   const [reportOpen, setReportOpen] = useState(false)
   const [reportReason, setReportReason] = useState('부적절하거나 잘못된 이벤트 정보')
@@ -98,7 +98,7 @@ export function EventDetail({ event, loading, onBack, onOpenTarget, onApply, com
     }
   }
   return <article className="event-detail-screen">
-    <div className="event-detail-toolbar"><button type="button" className="event-detail-tool" onClick={onBack} aria-label="이벤트 목록으로"><InlineIcon name="back" /></button><div className="event-detail-toolbar-actions"><button type="button" className="event-detail-tool" aria-label="이벤트 공유"><InlineIcon name="share" /></button><button type="button" className={`event-detail-tool${reportOpen ? ' active' : ''}`} aria-expanded={reportOpen} aria-label="이벤트 신고" onClick={() => { setReportOpen(open => !open); setReportMessage('') }}><InlineIcon name="shield" /></button></div></div>
+    <div className="event-detail-toolbar"><button type="button" className="event-detail-tool" onClick={onBack} aria-label="이벤트 목록으로"><InlineIcon name="back" /></button><div className="event-detail-toolbar-actions"><button type="button" className={`event-detail-tool${liked ? ' active' : ''}`} aria-label={liked ? '이벤트 좋아요 취소' : '이벤트 좋아요'} aria-pressed={liked} onClick={() => { void onToggleLike?.() }}><InlineIcon name="heart" /></button><button type="button" className="event-detail-tool" aria-label="이벤트 공유"><InlineIcon name="share" /></button><button type="button" className={`event-detail-tool${reportOpen ? ' active' : ''}`} aria-expanded={reportOpen} aria-label="이벤트 신고" onClick={() => { setReportOpen(open => !open); setReportMessage('') }}><InlineIcon name="shield" /></button></div></div>
     <div className="event-detail-hero-wrap">{event.heroUrl ? <AuthenticatedImage className="event-detail-hero" src={event.heroUrl} fallback={dreamscapeDemoAssets.eventHero} alt="" /> : <div className="event-detail-hero event-detail-hero-placeholder" aria-hidden="true" />}<span className="event-detail-type-badge">{typeLabel(event)}</span></div>
     <div className="event-detail-body">
       <h2>{event.title}</h2>

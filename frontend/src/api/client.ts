@@ -391,6 +391,7 @@ export type FanEvent = {
   applicationEndsAt?: string | null
   applicationStatus?: 'upcoming' | 'available' | 'full' | 'closed' | 'applied'
   applied?: boolean
+  liked?: boolean
 }
 export type EventPagination = { page: number; pageSize: number; total: number; totalPages: number }
 export type EventListResponse = { items: FanEvent[]; pagination: EventPagination }
@@ -495,6 +496,18 @@ export function getFanEvents(params: { status?: FanEventStatus | 'all'; artistId
 
 export function getFanEvent(eventId: string): Promise<{ ok: true; data: FanEvent }> {
   return apiFetch<{ ok: true; data: FanEvent }>(`/events/${encodeURIComponent(eventId)}`)
+}
+
+export function getEventLikes(): Promise<{ ok: true; data: { items: string[] } }> {
+  return apiFetch<{ ok: true; data: { items: string[] } }>('/me/event-likes')
+}
+
+export function likeEvent(eventId: string): Promise<{ ok: true; data: { eventId: string; liked: true } }> {
+  return apiFetch<{ ok: true; data: { eventId: string; liked: true } }>(`/me/event-likes/${encodeURIComponent(eventId)}`, { method: 'PUT' })
+}
+
+export function unlikeEvent(eventId: string): Promise<{ ok: true; data: { eventId: string; liked: false } }> {
+  return apiFetch<{ ok: true; data: { eventId: string; liked: false } }>(`/me/event-likes/${encodeURIComponent(eventId)}`, { method: 'DELETE' })
 }
 
 export function applyToFanEvent(eventId: string): Promise<{

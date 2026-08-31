@@ -3,7 +3,7 @@ import './App.css'
 import './reference.css'
 import './fan-community-reference.css'
 import { getUserCardHistory, type UserCardHistoryItem } from './api/client'
-import { ApiError, apiFetch, applyToFanEvent, claimPassTier, claimReward, clearAccessToken, combineCards, confirmFanPasswordReset, connectNotificationStream, createCollectionGoal, createPointCharge, createShopOrder, deleteCollectionGoal, followFan, getCardCombination, getCatalogCards, getCardPacks, getCardPackOdds, getCollectionGoals, getFanEvent, getFanEventComments, getFanEvents, getFanHome, getMyEventApplications, getFanPass, getFanPoints, getNotificationPreferences, getPointChargePackages, getPointCharges, getProgression, getShopProduct, getShopProducts, getShopOrders, getWishlist, oauthStartUrl, openCardPack, postFanEventComment, previewCardCombination, reconcilePassRewards, refundPointCharge, refundShopOrder, removeWishlistCard, registerPushDevice, requestFanPasswordReset, resolveApiUrl, saveWishlistCard, searchFans, setAccessToken, trackAnalyticsEvent, unfollowFan, unregisterPushDevice, updateNotificationPreferences, updateProfileEquipment, purchasePassSeason, type CardCombinationPreview, type CardCombinationRecipe, type CardCombinationResult, type CardDesignConfig, type CardPack, type CardRedemption, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionGoal, type CollectionSummary, type CurrentUser, type EventPagination, type FanEvent, type FanEventApplication, type FanEventComment, type FanEventStatus, type FanHomeResponse, type FanMission, type FanProgression, type FanSummary, type NotificationItem, type PointChargePackage, type PointChargeRecord, type ProfileEquipment, type PublicCollection as PublicCollectionData, type RewardGrant, type ShopOrder, type ShopProduct, type UserCardDetail } from './api/client'
+import { ApiError, apiFetch, applyToFanEvent, claimPassTier, claimReward, clearAccessToken, combineCards, confirmFanPasswordReset, connectNotificationStream, createCollectionGoal, createPointCharge, createShopOrder, deleteCollectionGoal, followFan, getCardCombination, getCatalogCards, getCardPacks, getCardPackOdds, getCollectionGoals, getEventLikes, getFanEvent, getFanEventComments, getFanEvents, getFanHome, getMyEventApplications, getFanPass, getFanPoints, getNotificationPreferences, getPointChargePackages, getPointCharges, getProgression, getShopProduct, getShopProducts, getShopOrders, getWishlist, likeEvent, oauthStartUrl, openCardPack, postFanEventComment, previewCardCombination, reconcilePassRewards, refundPointCharge, refundShopOrder, removeWishlistCard, registerPushDevice, requestFanPasswordReset, resolveApiUrl, saveWishlistCard, searchFans, setAccessToken, trackAnalyticsEvent, unfollowFan, unlikeEvent, unregisterPushDevice, updateNotificationPreferences, updateProfileEquipment, purchasePassSeason, type CardCombinationPreview, type CardCombinationRecipe, type CardCombinationResult, type CardDesignConfig, type CardPack, type CardRedemption, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionGoal, type CollectionSummary, type CurrentUser, type EventPagination, type FanEvent, type FanEventApplication, type FanEventComment, type FanEventStatus, type FanHomeResponse, type FanMission, type FanProgression, type FanSummary, type NotificationItem, type PointChargePackage, type PointChargeRecord, type ProfileEquipment, type PublicCollection as PublicCollectionData, type RewardGrant, type ShopOrder, type ShopProduct, type UserCardDetail } from './api/client'
 import { enableWebPush } from './pushNotifications'
 import { RedeemIcon } from './components/RedeemIcon'
 import { InteractiveCollectibleCard } from './components/InteractiveCollectibleCard'
@@ -844,6 +844,7 @@ function App() {
   const [revealedCardId, setRevealedCardId] = useState<string | null>(() => revealIdFromPath(window.location.pathname))
   const [redemptionGrowth, setRedemptionGrowth] = useState<CardRedemption | null>(null)
   const [savedCards, setSavedCards] = useState<Card[]>([])
+  const [eventLikeIds, setEventLikeIds] = useState<string[]>([])
   const [wishlistCatalogCards, setWishlistCatalogCards] = useState<Card[]>([])
   const [wishlistCatalogLoading, setWishlistCatalogLoading] = useState(false)
   const [fanHome, setFanHome] = useState<FanHomeResponse | null>(null)
@@ -943,6 +944,20 @@ function App() {
   }, [currentUser?.id, collectionCards])
 
   useEffect(() => {
+    if (!currentUser?.id) {
+      setEventLikeIds([])
+      return
+    }
+    let cancelled = false
+    void getEventLikes().then(result => {
+      if (!cancelled) setEventLikeIds(result.data.items)
+    }).catch(() => {
+      if (!cancelled) setEventLikeIds([])
+    })
+    return () => { cancelled = true }
+  }, [currentUser?.id])
+
+  useEffect(() => {
     if (!signedIn || !showWishlistPicker) return
     let cancelled = false
     setWishlistCatalogLoading(true)
@@ -1033,6 +1048,35 @@ function App() {
     setSelectedEvent(event)
     setEventId(event.id)
     window.history.pushState({}, '', `/events/${encodeURIComponent(event.id)}`)
+  }
+
+  const toggleEventLike = async (eventId: string) => {
+    const liked = eventLikeIds.includes(eventId)
+    const result = liked ? await unlikeEvent(eventId) : await likeEvent(eventId)
+    setEventLikeIds(current => result.data.liked ? [...new Set([...current, eventId])] : current.filter(id => id !== eventId))
+  }
+
+  const toggleArtistFavorite = async (artistId: string) => {
+    if (!currentUser) return
+    const favoriteArtistIds = currentUser.favoriteArtistIds.includes(artistId)
+      ? currentUser.favoriteArtistIds.filter(id => id !== artistId)
+      : [...currentUser.favoriteArtistIds, artistId]
+    await apiFetch('/me/profile', {
+      method: 'PATCH',
+      body: JSON.stringify({ nickname: currentUser.nickname, favoriteArtistIds, favoriteMemberIds: currentUser.favoriteMemberIds, profileImageUrl: currentUser.profileImageUrl }),
+    })
+    await refreshUser()
+  }
+
+  const toggleWishlistCard = async (card: Card) => {
+    const alreadySaved = savedCardIds.includes(card.id)
+    if (alreadySaved) {
+      await removeWishlistCard(card.id)
+      setSavedCards(current => current.filter(item => item.id !== card.id))
+    } else {
+      await saveWishlistCard(card.id)
+      setSavedCards(current => [...current, card])
+    }
   }
 
   const handleEventApply = async () => {
@@ -1754,8 +1798,8 @@ function App() {
 
       {tab !== 'alerts' && <section className="screen">
         {collectionError && <div className="service-notice" role="alert"><span>{collectionError}</span><button onClick={() => void refreshCollection()} disabled={collectionLoading}>{collectionLoading ? '확인 중...' : '다시 시도'}</button></div>}
-        {tab === 'home' && <Home nickname={currentUser?.nickname ?? '팬'} cards={collectionCards} collectionDataReady={collectionDataReady} savedCards={savedCards} summary={collectionSummary} loading={collectionLoading} eventHome={fanHome} eventHomeLoading={fanHomeLoading} onSelect={openCard} onDiscover={() => navigateTab('discover')} onCollection={() => navigateTab('collection')} onRedeem={openRedeem} onEvents={openEvents} onEvent={openEvent} />}
-        {tab === 'events' && (eventId ? <EventDetail event={selectedEvent} loading={eventDetailLoading} onBack={openEvents} onApply={handleEventApply} comments={eventComments} commentsLoading={eventCommentsLoading} commentSubmitting={eventCommentSubmitting} onLoadComments={loadEventComments} onSubmitComment={handleEventComment} onOpenTarget={target => { if (target.startsWith('/events/')) { const id = decodeURIComponent(target.split('/')[1]?.split('#')[0] ?? ''); const item = fanEvents.find(event => event.id === id); if (item) openEvent(item) } else if (target.startsWith('https://')) window.open(target, '_blank', 'noopener,noreferrer') }} /> : <EventList events={fanEvents} status={fanEventStatus} loading={fanEventsLoading} error={fanEventsError} pagination={fanEventPagination} onStatusChange={handleFanEventStatusChange} onPageChange={setFanEventPage} onOpen={openEvent} />)}
+        {tab === 'home' && <Home nickname={currentUser?.nickname ?? '팬'} cards={collectionCards} collectionDataReady={collectionDataReady} savedCards={savedCards} savedCardIds={savedCardIds} eventLikeIds={eventLikeIds} summary={collectionSummary} loading={collectionLoading} eventHome={fanHome} eventHomeLoading={fanHomeLoading} onSelect={openCard} onToggleCardSaved={toggleWishlistCard} onToggleEventLike={toggleEventLike} onToggleArtistFavorite={toggleArtistFavorite} onDiscover={() => navigateTab('discover')} onCollection={() => navigateTab('collection')} onRedeem={openRedeem} onEvents={openEvents} onEvent={openEvent} />}
+        {tab === 'events' && (eventId ? <EventDetail event={selectedEvent} loading={eventDetailLoading} onBack={openEvents} onApply={handleEventApply} liked={selectedEvent ? eventLikeIds.includes(selectedEvent.id) : false} onToggleLike={() => selectedEvent ? toggleEventLike(selectedEvent.id) : undefined} comments={eventComments} commentsLoading={eventCommentsLoading} commentSubmitting={eventCommentSubmitting} onLoadComments={loadEventComments} onSubmitComment={handleEventComment} onOpenTarget={target => { if (target.startsWith('/events/')) { const id = decodeURIComponent(target.split('/')[1]?.split('#')[0] ?? ''); const item = fanEvents.find(event => event.id === id); if (item) openEvent(item) } else if (target.startsWith('https://')) window.open(target, '_blank', 'noopener,noreferrer') }} /> : <EventList events={fanEvents} status={fanEventStatus} loading={fanEventsLoading} error={fanEventsError} pagination={fanEventPagination} onStatusChange={handleFanEventStatusChange} onPageChange={setFanEventPage} onOpen={openEvent} />)}
         {tab === 'collection' && <Collection cards={collectionCards} collectionDataReady={collectionDataReady} favoriteArtists={catalogArtists.filter(artist => currentUser?.favoriteArtistIds.includes(artist.id))} summary={collectionSummary} benefits={collectionBenefits} rewards={inventoryProgression?.claimedRewards ?? []} loading={collectionLoading} onSelect={openCard} onRedeem={openRedeem} onDiscover={() => navigateTab('discover')} onRewards={openRewardInventory} onCards={openCardCollection} onOpenWishlist={openWishlistPicker} onClaim={claimBenefit} />}
         {tab === 'discover' && <Discover favoriteArtists={catalogArtists.filter(artist => currentUser?.favoriteArtistIds.includes(artist.id))} onFindFans={query => navigateAppPath(routeWithReturnTo(query ? `/fans?q=${encodeURIComponent(query)}` : '/fans', '/discover'))} onOpenFanProfile={userId => navigateAppPath(routeWithReturnTo(`/fans/${encodeURIComponent(userId)}`, '/discover'))} onOpenPublicCollection={userId => navigateAppPath(routeWithReturnTo(`/fans/${encodeURIComponent(userId)}/collection`, '/discover'))} onOpenEvent={event => { if (event) openEvent(event); else openEvents() }} onOpenArtist={artistId => navigateAppPath(routeWithReturnTo(`/discover/artists/${encodeURIComponent(artistId)}`, '/discover'))} onOpenPackCatalog={() => navigateAppPath(routeWithReturnTo('/discover/packs', '/discover'))} onOpenPack={packId => navigateAppPath(routeWithReturnTo(`/discover/packs/${encodeURIComponent(packId)}`, '/discover'))} onOpenCard={openCard} featuredArtist={catalogArtists.find(artist => artist.name === '드림스케이프') ?? catalogArtists[0] ?? null} featuredEvent={fanHome?.featuredEvent ?? fanHome?.upcomingEvents[0] ?? null} featuredEventLoading={fanHomeLoading} />}
         {/* Embedded surfaces stay compact; the dedicated tab uses the full progression view. */}
@@ -2174,7 +2218,7 @@ function Onboarding({ userId, profileImageUrl, onComplete, onBack }: { userId: s
   </main>
 }
 
-type HomeProps = { nickname: string, cards: Card[], collectionDataReady: boolean, savedCards: Card[], summary: CollectionSummary, loading: boolean, eventHome: FanHomeResponse | null, eventHomeLoading: boolean, onSelect: (card: Card) => void, onDiscover: () => void, onCollection: () => void, onRedeem: () => void, onEvents: () => void, onEvent: (event: FanEvent) => void }
+type HomeProps = { nickname: string, cards: Card[], collectionDataReady: boolean, savedCards: Card[], savedCardIds: string[], eventLikeIds: string[], summary: CollectionSummary, loading: boolean, eventHome: FanHomeResponse | null, eventHomeLoading: boolean, onSelect: (card: Card) => void, onToggleCardSaved: (card: Card) => Promise<void>, onToggleEventLike: (eventId: string) => Promise<void>, onToggleArtistFavorite: (artistId: string) => Promise<void>, onDiscover: () => void, onCollection: () => void, onRedeem: () => void, onEvents: () => void, onEvent: (event: FanEvent) => void }
 
 const fallbackHomeEvent: FanEvent = {
   id: 'demo-fan-week',
@@ -2473,7 +2517,7 @@ function HomeRecommendations({ cards, onSelect, onDiscover }: { cards: Card[], o
   return <section className="home-recommendations" aria-labelledby="home-recommendations-title"><div className="section-heading"><h2 id="home-recommendations-title">지금 탐색해 볼 카드</h2><button type="button" onClick={onDiscover}>전체 보기</button></div><div className="home-recommendation-row">{cards.map(card => <button type="button" className="home-recommendation-card" key={card.id} onClick={() => onSelect(card)} aria-label={`${card.title} 카드 · ${card.artist} · ${card.member}`}><img src={card.image} alt={`${card.title} 카드`} onError={event => keepCardVisual(event, card.id)} /><span><b>{card.title}</b><small>{card.artist} · {card.member}</small></span></button>)}</div></section>
 }
 
-function HomeContent({ nickname, cards, collectionDataReady, savedCards, summary, loading, eventHome, eventHomeLoading, onSelect, onDiscover, onCollection, onRedeem, onEvents, onEvent }: HomeProps) {
+function HomeContent({ nickname, cards, collectionDataReady, savedCards, savedCardIds, eventLikeIds, summary, loading, eventHome, eventHomeLoading, onSelect, onToggleCardSaved, onToggleEventLike, onToggleArtistFavorite, onDiscover, onCollection, onRedeem, onEvents, onEvent }: HomeProps) {
   const [activeHomeArtistId, setActiveHomeArtistId] = useState<string | null>(() => readActiveArtistId())
   const [scopedHomeCards, setScopedHomeCards] = useState<CatalogCard[]>([])
   const featured = cards[0]
@@ -2484,7 +2528,6 @@ function HomeContent({ nickname, cards, collectionDataReady, savedCards, summary
   const [activeHeroIndex, setActiveHeroIndex] = useState(0)
   const [heroInteractionVersion, setHeroInteractionVersion] = useState(0)
   const [artistFavorites, setArtistFavorites] = useState<Set<string>>(() => new Set(eventHome?.favoriteArtists.map(artist => artist.id) ?? []))
-  const [newCardFavorites, setNewCardFavorites] = useState<Set<string>>(() => new Set())
   const favoriteArtists = (eventHome?.favoriteArtists ?? []).map(normalizeCatalogArtistImage)
   const selectedHomeArtist = favoriteArtists.find(artist => artist.id === activeHomeArtistId) ?? null
   const homeVisibleEvents = activeHomeArtistId
@@ -2544,15 +2587,6 @@ function HomeContent({ nickname, cards, collectionDataReady, savedCards, summary
   const openHeroEvent = (slide: HomeHeroSlide) => {
     onEvent(slide.event)
   }
-  const toggleNewCardFavorite = (cardId: string) => {
-    setNewCardFavorites(current => {
-      const next = new Set(current)
-      if (next.has(cardId)) next.delete(cardId)
-      else next.add(cardId)
-      return next
-    })
-  }
-
   return <div className="home-screen collection-home">
     <h1 className="home-page-title">오늘, 좋아하는 아티스트의<br /><em>새로운 순간</em></h1>
     <p className="collection-greeting"><strong>{nickname}</strong>님, 새 카드가 도착했어요</p>
@@ -2587,7 +2621,7 @@ function HomeContent({ nickname, cards, collectionDataReady, savedCards, summary
             <em>{slide.event.summary}</em>
             <strong>{slide.event.ctaLabel ?? '이벤트 보기'} <InlineIcon name="chevron" /></strong>
           </span>
-          <FavoriteControl className="home-favorite-button" />
+          <FavoriteControl className="home-favorite-button" active={eventLikeIds.includes(slide.event.id)} ariaLabel={eventLikeIds.includes(slide.event.id) ? '이벤트 좋아요 취소' : '이벤트 좋아요'} interactive onClick={() => { void onToggleEventLike(slide.event.id) }} />
         </button>)}
       </div>
       <div className="home-event-dots" aria-label="이벤트 배너 선택">
@@ -2620,7 +2654,7 @@ function HomeContent({ nickname, cards, collectionDataReady, savedCards, summary
               <span className="home-artist-members">{dreamscapeDemoMembers.slice(0, 4).map((member, index) => <img key={`${member.id}-${index}`} src={member.image} alt="" />)}</span>
             </span>
           </button>
-          <FavoriteControl className="home-artist-favorite" active={isFavorite} ariaLabel={isFavorite ? `${artist.name} 관심 해제` : `${artist.name} 관심 등록`} interactive onClick={() => setArtistFavorites(current => { const next = new Set(current); if (next.has(artist.id)) next.delete(artist.id); else next.add(artist.id); return next })} />
+          <FavoriteControl className="home-artist-favorite" active={isFavorite} ariaLabel={isFavorite ? `${artist.name} 관심 해제` : `${artist.name} 관심 등록`} interactive onClick={() => { void onToggleArtistFavorite(artist.id).then(() => setArtistFavorites(current => { const next = new Set(current); if (next.has(artist.id)) next.delete(artist.id); else next.add(artist.id); return next })) }} />
         </article>
       })}</div>
     </section> : <section className="home-artist-section home-artist-empty" aria-labelledby="home-artist-title"><div className="section-heading"><h2 id="home-artist-title">관심 아티스트</h2><button type="button" onClick={onDiscover}>아티스트 찾기 <InlineIcon name="chevron" /></button></div><p>관심 아티스트를 선택하면 맞춤 카드와 이벤트를 보여드려요.</p></section>}
@@ -2628,7 +2662,7 @@ function HomeContent({ nickname, cards, collectionDataReady, savedCards, summary
       <div className="section-heading"><h2 id="home-new-cards-title">{selectedHomeArtist ? `${selectedHomeArtist.name} 새 카드` : '새로 공개된 카드'}</h2><button type="button" onClick={onDiscover}>전체 보기 <InlineIcon name="chevron" /></button></div>
       <div className="home-new-card-row">{newCards.length > 0 ? newCards.slice(0, 3).map((card, index) => {
         const rarity = index === 0 ? 'UR' : 'SR'
-        const isFavorite = newCardFavorites.has(card.id)
+        const isFavorite = savedCardIds.includes(card.id)
         return <article className="home-new-card" key={card.id}>
           <button type="button" className="home-new-card-primary" onClick={() => onSelect(card)} aria-label={`${card.title} 카드 상세 보기`}>
             <img src={card.image} alt="" loading="lazy" onError={event => keepCardVisual(event, card.id)} />
@@ -2640,7 +2674,7 @@ function HomeContent({ nickname, cards, collectionDataReady, savedCards, summary
             active={isFavorite}
             ariaLabel={isFavorite ? `${card.member} 카드 관심 해제` : `${card.member} 카드 관심 등록`}
             interactive
-            onClick={() => toggleNewCardFavorite(card.id)}
+            onClick={() => { void onToggleCardSaved(card) }}
           />
         </article>
       }) : <div className="home-data-empty"><b>공개된 카드가 아직 없어요</b><span>새 카드가 공개되면 이곳에서 확인할 수 있어요.</span><button type="button" className="outline" onClick={onDiscover}>카드 탐색하기</button></div>}</div>
@@ -2883,6 +2917,7 @@ function RewardInventory({ progression, loading, error, onRetry, onBack, onEquip
 
 function CardCollectionDetail({ item, onBack }: { item: CardCollectionDetailItem, onBack: () => void }) {
   const [favorite, setFavorite] = useState(false)
+  const [favoritePending, setFavoritePending] = useState(false)
   const [detail, setDetail] = useState<UserCardDetail | null>(null)
   const [history, setHistory] = useState<UserCardHistoryItem[]>([])
   const [mediaError, setMediaError] = useState(false)
@@ -2909,6 +2944,27 @@ function CardCollectionDetail({ item, onBack }: { item: CardCollectionDetailItem
       .catch(() => { /* optional history must not hide the collection card */ })
     return () => { cancelled = true }
   }, [item.card.userCardId, detailAttempt])
+
+  useEffect(() => {
+    let cancelled = false
+    void getWishlist().then(result => {
+      if (!cancelled) setFavorite(result.data.items.some(entry => entry.cardId === item.card.id))
+    }).catch(() => undefined)
+    return () => { cancelled = true }
+  }, [item.card.id])
+
+  const toggleFavorite = async () => {
+    if (favoritePending) return
+    const next = !favorite
+    setFavoritePending(true)
+    try {
+      if (next) await saveWishlistCard(item.card.id)
+      else await removeWishlistCard(item.card.id)
+      setFavorite(next)
+    } finally {
+      setFavoritePending(false)
+    }
+  }
 
   const artistName = detail?.card.artistName ?? item.card.artist
   const memberName = detail?.card.memberName ?? item.card.member
@@ -2939,7 +2995,7 @@ function CardCollectionDetail({ item, onBack }: { item: CardCollectionDetailItem
       title="카드 상세"
       onBack={onBack}
       backLabel="카드 컬렉션으로 돌아가기"
-      right={<button type="button" className={`favorite-button ${favorite ? 'saved' : ''}`} aria-label={favorite ? '관심 카드에서 제거' : '관심 카드에 추가'} aria-pressed={favorite} onClick={() => setFavorite(value => !value)}><InlineIcon name="heart" /></button>}
+      right={<button type="button" className={`favorite-button ${favorite ? 'saved' : ''}`} aria-label={favorite ? '관심 카드에서 제거' : '관심 카드에 추가'} aria-pressed={favorite} disabled={favoritePending} onClick={() => { void toggleFavorite() }}><InlineIcon name="heart" /></button>}
     />
     <section className="card-collection-detail-body">
       {detailLoading && <p className="card-collection-detail-loading" role="status">카드 정보를 불러오는 중이에요…</p>}
