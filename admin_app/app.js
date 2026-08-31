@@ -775,6 +775,59 @@ function setOperationFeedback(message, tone = "success") {
   state.operationFeedback = { message, tone };
 }
 
+function dashboardReadinessView() {
+  const organizationReady = isRoot()
+    ? state.organizations.length > 0
+    : Boolean(state.adminContext?.organization?.id || state.selectedOrganization?.id);
+  const artistReady = scopedArtists().length > 0;
+  const cardCount = Number(state.metrics?.totalCards || state.cardCatalog.length || state.cards.length || 0);
+  const cardReady = cardCount > 0;
+  const exposureCount = state.drops.length + state.events.length;
+  const exposureReady = exposureCount > 0 || Number(state.metrics?.activeDrops || 0) > 0;
+  const publishedReady = Number(state.metrics?.publishedCards || 0) > 0 || state.cardPacks.some((pack) => pack.status === "published");
+  const issuanceReady = state.batches.length > 0 || Number(state.metrics?.redeemedCount || 0) > 0;
+  const approvalReady = !state.approvals.some((item) => ["pending", "requested", "submitted"].includes(String(item.status || "").toLowerCase()));
+  const items = [
+    {
+      key: "scope",
+      label: "조직·아티스트",
+      complete: organizationReady && artistReady,
+      detail: organizationReady && artistReady ? `${scopedArtists().length}팀을 운영할 수 있습니다.` : organizationReady ? "운영할 아티스트를 연결해 주세요." : "파트너와 운영 범위를 먼저 등록해 주세요.",
+      view: isRoot() ? "partners" : "artists",
+    },
+    {
+      key: "content",
+      label: "카드 콘텐츠",
+      complete: cardReady,
+      detail: cardReady ? `${cardCount.toLocaleString()}장의 카드가 등록되어 있습니다.` : "카드 초안을 등록하고 필요한 메타데이터를 채워 주세요.",
+      view: "cards",
+    },
+    {
+      key: "exposure",
+      label: "노출 일정",
+      complete: exposureReady,
+      detail: exposureReady ? "드롭 또는 이벤트 노출 일정이 연결되어 있습니다." : "드롭이나 이벤트를 만들어 공개 일정을 정해 주세요.",
+      view: "events",
+    },
+    {
+      key: "issuance",
+      label: "발급 준비",
+      complete: issuanceReady,
+      detail: issuanceReady ? "발급 배치 또는 사용 이력이 준비되어 있습니다." : "공개 카드와 라이브 드롭을 확인한 뒤 코드를 준비해 주세요.",
+      view: "batches",
+    },
+    {
+      key: "release",
+      label: "검수·공개",
+      complete: publishedReady && approvalReady,
+      detail: publishedReady && approvalReady ? "팬에게 공개할 콘텐츠가 준비되었습니다." : publishedReady ? "대기 중인 검수 요청을 처리해 주세요." : "카드 검수 후 공개 상태로 전환해 주세요.",
+      view: "approvals",
+    },
+  ];
+  const completed = items.filter((item) => item.complete).length;
+  return `<section class="panel dashboard-readiness-panel" aria-label="운영 공개 준비 체크리스트"><div class="panel-heading"><div><p class="eyebrow">RELEASE READINESS</p><h2>공개 준비 체크리스트</h2><p>현재 운영 범위에서 다음 작업과 막힌 조건을 확인합니다.</p></div><span class="panel-count">${completed}/${items.length} 완료</span></div><div class="dashboard-readiness-grid">${items.map((item, index) => `<div class="dashboard-readiness-item ${item.complete ? "complete" : "pending"}"><span class="dashboard-readiness-index">${item.complete ? icon("check") : index + 1}</span><div><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.detail)}</small></div><button type="button" data-view="${escapeHtml(item.view)}" data-readiness-action="${escapeHtml(item.view)}" aria-label="${escapeHtml(`${item.label} ${item.complete ? "확인" : "설정"}`)}">${item.complete ? "확인" : "설정"} ${icon("arrow_forward")}</button></div>`).join("")}</div></section>`;
+}
+
 function dashboardView() {
   const metrics = state.metrics;
   if (!metrics)
@@ -794,7 +847,7 @@ function dashboardView() {
   const draftPacks = state.cardPacks.length - publishedPacks;
   const packRows = state.cardPacks.slice(0, 3).map((pack) => `<li><span><strong>${escapeHtml(pack.name)}</strong><small>${escapeHtml(pack.seasonName || pack.version || "버전 미설정")}</small></span><em class="badge ${pack.status === "published" ? "success-badge" : "draft"}">${pack.status === "published" ? "공개됨" : "초안"}</em></li>`).join("");
   const packSummary = `<section class="panel card-pack-summary"><div class="panel-heading"><div><p class="eyebrow">CARD PACKS</p><h2>카드팩 연동 상태</h2></div><span class="panel-count">${state.cardPacks.length}개</span></div><div class="card-pack-summary-stats"><span><strong>${publishedPacks}</strong> 공개</span><span><strong>${draftPacks}</strong> 편집 중</span></div>${packRows ? `<ul class="card-pack-summary-list">${packRows}</ul>` : `<div class="empty">연결된 카드팩이 없습니다.</div>`}</section>`;
-  return `<div class="page-heading"><div><p class="eyebrow">TODAY</p><h2>운영 현황을 한눈에 확인하세요</h2><p>${escapeHtml(scopeDescription)}</p></div></div><div class="metrics"><article class="metric"><span class="metric-icon purple">${icon("style")}</span><div><span class="metric-label">전체 카드</span><strong class="metric-value">${metrics.totalCards}</strong><span class="metric-note">현재 범위 등록 카드</span></div></article><article class="metric"><span class="metric-icon green">${icon("public")}</span><div><span class="metric-label">공개 카드</span><strong class="metric-value">${metrics.publishedCards}</strong><span class="metric-note">팬에게 노출 중</span></div></article><article class="metric"><span class="metric-icon blue">${icon("campaign")}</span><div><span class="metric-label">진행 중 드롭</span><strong class="metric-value">${metrics.activeDrops}</strong><span class="metric-note">현재 라이브</span></div></article><article class="metric"><span class="metric-icon amber">${icon("qr_code_scanner")}</span><div><span class="metric-label">누적 발급</span><strong class="metric-value">${Number(metrics.redeemedCount).toLocaleString()}</strong><span class="metric-note">사용 완료 코드</span></div></article></div><div class="dashboard-grid"><section class="panel action-panel"><div class="panel-heading"><div><p class="eyebrow">QUICK ACTIONS</p><h2>바로 시작하기</h2></div></div><div class="quick-actions">${can("cards:write") ? `<button class="quick-action" id="open-card-drawer" type="button"><span>${icon("add_card")}</span><div><strong>새 카드 등록</strong><small>이미지와 카드 정보를 등록합니다.</small></div>${icon("arrow_forward")}</button>` : ""}${isRoot() ? `<button class="quick-action" data-view="partners" type="button"><span>${icon("domain_add")}</span><div><strong>파트너 관리</strong><small>기업 담당자와 아티스트를 배정합니다.</small></div>${icon("arrow_forward")}</button>` : ""}<button class="quick-action" data-view="artists" type="button"><span>${icon("recent_actors")}</span><div><strong>아티스트 확인</strong><small>소속과 계정 상태를 확인합니다.</small></div>${icon("arrow_forward")}</button></div></section>${packSummary}<section class="panel recent-activity-panel"><div class="panel-heading"><div><p class="eyebrow">RECENT ACTIVITY</p><h2>최근 운영 활동</h2></div><button class="text-button" data-view="audit" type="button">전체 보기 ${icon("arrow_forward")}</button></div><div class="activity-list">${activity}</div></section></div>`;
+  return `<div class="page-heading"><div><p class="eyebrow">TODAY</p><h2>운영 현황을 한눈에 확인하세요</h2><p>${escapeHtml(scopeDescription)}</p></div></div><div class="metrics"><article class="metric"><span class="metric-icon purple">${icon("style")}</span><div><span class="metric-label">전체 카드</span><strong class="metric-value">${metrics.totalCards}</strong><span class="metric-note">현재 범위 등록 카드</span></div></article><article class="metric"><span class="metric-icon green">${icon("public")}</span><div><span class="metric-label">공개 카드</span><strong class="metric-value">${metrics.publishedCards}</strong><span class="metric-note">팬에게 노출 중</span></div></article><article class="metric"><span class="metric-icon blue">${icon("campaign")}</span><div><span class="metric-label">진행 중 드롭</span><strong class="metric-value">${metrics.activeDrops}</strong><span class="metric-note">현재 라이브</span></div></article><article class="metric"><span class="metric-icon amber">${icon("qr_code_scanner")}</span><div><span class="metric-label">누적 발급</span><strong class="metric-value">${Number(metrics.redeemedCount).toLocaleString()}</strong><span class="metric-note">사용 완료 코드</span></div></article></div>${dashboardReadinessView()}<div class="dashboard-grid"><section class="panel action-panel"><div class="panel-heading"><div><p class="eyebrow">QUICK ACTIONS</p><h2>바로 시작하기</h2></div></div><div class="quick-actions">${can("cards:write") ? `<button class="quick-action" id="open-card-drawer" type="button"><span>${icon("add_card")}</span><div><strong>새 카드 등록</strong><small>이미지와 카드 정보를 등록합니다.</small></div>${icon("arrow_forward")}</button>` : ""}${isRoot() ? `<button class="quick-action" data-view="partners" type="button"><span>${icon("domain_add")}</span><div><strong>파트너 관리</strong><small>기업 담당자와 아티스트를 배정합니다.</small></div>${icon("arrow_forward")}</button>` : ""}<button class="quick-action" data-view="artists" type="button"><span>${icon("recent_actors")}</span><div><strong>아티스트 확인</strong><small>소속과 계정 상태를 확인합니다.</small></div>${icon("arrow_forward")}</button></div></section>${packSummary}<section class="panel recent-activity-panel"><div class="panel-heading"><div><p class="eyebrow">RECENT ACTIVITY</p><h2>최근 운영 활동</h2></div><button class="text-button" data-view="audit" type="button">전체 보기 ${icon("arrow_forward")}</button></div><div class="activity-list">${activity}</div></section></div>`;
 }
 function operationalMetricsView(metrics) {
   const rarity = (metrics.byRarity || [])
