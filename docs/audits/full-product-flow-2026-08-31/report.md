@@ -368,7 +368,7 @@ FAQ 화면은 정상인데 문의하기로 전환하면 select, input, textarea,
 
 초기 번들은 이미 카드 상세·설정·QR 화면을 지연 로딩하고 있으므로, 나머지 성능 예산은 의존성 청크와 CSS 분할을 별도 작업으로 추적한다. 실제 저사양 기기 네트워크 측정은 외부 실기기 검증 게이트에 남겨 둔다.
 
-재검증 결과는 프론트 279개, 관리자 247개, 스튜디오 71개, 백엔드 508개 테스트 통과이며 백엔드 2개 테스트는 환경 조건상 skip이다. main CI의 backend, frontend, admin, studio, integration, container, storage-integration도 모두 통과했다.
+ 재검증 결과는 프론트 279개, 관리자 247개, 스튜디오 71개, 백엔드 508개 테스트 통과이며 백엔드 2개 테스트는 환경 조건상 skip이다. main CI의 backend, frontend, admin, studio, integration, container, storage-integration도 모두 통과했다.
 
 따라서 이 문서의 “이번 감사에서 제한된 부분”에 적힌 외부 이메일·푸시·결제·실제 스토리지·실기기 카메라 및 신원 확인은 구현 완료로 간주하지 않는다. 이 항목들은 자격 증명, 외부 사업자, 실기기 또는 법무 정책 없이는 저장소 테스트만으로 완료를 증명할 수 없다.
 
