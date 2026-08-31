@@ -3,7 +3,7 @@ import './App.css'
 import './reference.css'
 import './fan-community-reference.css'
 import { getUserCardHistory, type UserCardHistoryItem } from './api/client'
-import { ApiError, apiFetch, applyToFanEvent, claimPassTier, claimReward, clearAccessToken, combineCards, confirmFanPasswordReset, connectNotificationStream, createCollectionGoal, createPointCharge, createShopOrder, deleteCollectionGoal, followFan, getCardCombination, getCatalogCards, getCardPacks, getCardPackOdds, getCollectionGoals, getFanEvent, getFanEventComments, getFanEvents, getFanHome, getMyEventApplications, getFanPass, getFanPoints, getNotificationPreferences, getPointChargePackages, getPointCharges, getProgression, getShopProduct, getShopProducts, getShopOrders, getWishlist, oauthStartUrl, openCardPack, postFanEventComment, previewCardCombination, reconcilePassRewards, refundPointCharge, refundShopOrder, removeWishlistCard, registerPushDevice, requestFanPasswordReset, resolveApiUrl, saveWishlistCard, searchFans, setAccessToken, unfollowFan, unregisterPushDevice, updateNotificationPreferences, updateProfileEquipment, purchasePassSeason, type CardCombinationPreview, type CardCombinationRecipe, type CardCombinationResult, type CardDesignConfig, type CardPack, type CardRedemption, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionGoal, type CollectionSummary, type CurrentUser, type EventPagination, type FanEvent, type FanEventApplication, type FanEventComment, type FanEventStatus, type FanHomeResponse, type FanMission, type FanProgression, type FanSummary, type NotificationItem, type PointChargePackage, type PointChargeRecord, type ProfileEquipment, type PublicCollection as PublicCollectionData, type RewardGrant, type ShopOrder, type ShopProduct, type UserCardDetail } from './api/client'
+import { ApiError, apiFetch, applyToFanEvent, claimPassTier, claimReward, clearAccessToken, combineCards, confirmFanPasswordReset, connectNotificationStream, createCollectionGoal, createPointCharge, createShopOrder, deleteCollectionGoal, followFan, getCardCombination, getCatalogCards, getCardPacks, getCardPackOdds, getCollectionGoals, getFanEvent, getFanEventComments, getFanEvents, getFanHome, getMyEventApplications, getFanPass, getFanPoints, getNotificationPreferences, getPointChargePackages, getPointCharges, getProgression, getShopProduct, getShopProducts, getShopOrders, getWishlist, oauthStartUrl, openCardPack, postFanEventComment, previewCardCombination, reconcilePassRewards, refundPointCharge, refundShopOrder, removeWishlistCard, registerPushDevice, requestFanPasswordReset, resolveApiUrl, saveWishlistCard, searchFans, setAccessToken, trackAnalyticsEvent, unfollowFan, unregisterPushDevice, updateNotificationPreferences, updateProfileEquipment, purchasePassSeason, type CardCombinationPreview, type CardCombinationRecipe, type CardCombinationResult, type CardDesignConfig, type CardPack, type CardRedemption, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionGoal, type CollectionSummary, type CurrentUser, type EventPagination, type FanEvent, type FanEventApplication, type FanEventComment, type FanEventStatus, type FanHomeResponse, type FanMission, type FanProgression, type FanSummary, type NotificationItem, type PointChargePackage, type PointChargeRecord, type ProfileEquipment, type PublicCollection as PublicCollectionData, type RewardGrant, type ShopOrder, type ShopProduct, type UserCardDetail } from './api/client'
 import { enableWebPush } from './pushNotifications'
 import { RedeemIcon } from './components/RedeemIcon'
 import { InteractiveCollectibleCard } from './components/InteractiveCollectibleCard'
@@ -2444,6 +2444,17 @@ function Home(props: HomeProps) {
   const [recommendations, setRecommendations] = useState<Card[]>([])
 
   useEffect(() => {
+    const event = props.eventHome?.featuredEvent
+    if (props.eventHomeLoading || !event || typeof window === 'undefined') return
+    const key = `fanfolio:analytics:impression:${event.id}`
+    if (window.sessionStorage.getItem(key)) return
+    window.sessionStorage.setItem(key, '1')
+    void trackAnalyticsEvent({ eventName: 'product.impression', artistId: event.artistId, source: 'home', dedupeKey: `home:${event.id}`, metadata: { surface: 'fan_home' } }).catch(() => {
+      window.sessionStorage.removeItem(key)
+    })
+  }, [props.eventHome, props.eventHomeLoading])
+
+  useEffect(() => {
     if (!props.collectionDataReady || props.cards.length > 0) {
       setRecommendations([])
       return
@@ -3943,7 +3954,29 @@ function notificationTimeLabel(createdAt: string): string {
 
 type NotificationDestination = Tab | 'rewardInventory' | 'fanSocial' | 'tradeInbox'
 
-function notificationDestination(kind: string): NotificationDestination | null {
+function notificationDestination(item: Pick<NotificationItem, 'kind' | 'entityType'>): NotificationDestination | null {
+  switch (item.entityType) {
+    case 'card':
+    case 'user_card':
+    case 'card_pack':
+    case 'drop':
+      return 'collection'
+    case 'event':
+    case 'event_application':
+      return 'events'
+    case 'pass_season':
+    case 'pass_tier':
+      return 'growth'
+    case 'reward_grant':
+      return 'rewardInventory'
+    case 'trade':
+      return 'tradeInbox'
+    case 'user':
+      return 'fanSocial'
+    default:
+      break
+  }
+  const kind = item.kind
   if (kind === 'card_redeemed') return 'collection'
   if (kind === 'reward_claimed') return 'rewardInventory'
   if (kind === 'card_combined' || kind === 'trade_accepted') return 'collection'
@@ -3986,7 +4019,7 @@ function Alerts({ items, error, actionError, onDismissActionError, onRetry, onRe
 
   const openNotification = (item: NotificationItem) => {
     if (!item.isRead) void onRead(item.id)
-    const destination = notificationDestination(item.kind)
+    const destination = notificationDestination(item)
     if (destination) onNavigate(destination)
   }
 
@@ -4003,7 +4036,7 @@ function Alerts({ items, error, actionError, onDismissActionError, onRetry, onRe
       {actionError && <div className="inline-retry notification-action-error" role="alert"><span>{actionError}</span><button type="button" onClick={onDismissActionError}>닫기</button></div>}
       {error ? <div className="notification-error-panel" role="alert"><span className="notification-error-icon" aria-hidden="true"><NavIcon name="alerts" /></span><div><b>알림을 불러오지 못했어요</b><p>{error}</p></div><button type="button" onClick={onRetry}>다시 시도</button></div> : <>
         <div className="alerts-reference-tabs" role="tablist" aria-label="알림 필터">{categories.map(item => <button key={item.value} role="tab" aria-selected={category === item.value} className={category === item.value ? 'active' : ''} onClick={() => setCategory(item.value)}><span>{item.label}</span>{unreadFor(item.value) > 0 && <b>{unreadFor(item.value)}</b>}</button>)}</div>
-        {groups.length > 0 ? <>{groups.map(group => <section className="notification-day" key={group.label}><h2>{group.label}</h2><div className="alert-list">{group.items.map(item => { const destination = notificationDestination(item.kind); return <button className={item.isRead ? 'alert-card read' : 'alert-card'} key={item.id} aria-label={`${item.title} 알림${item.artistName ? ` · ${item.artistName}` : ''}${destination ? ' 열기' : ''}`} onClick={() => openNotification(item)}><span className={`alert-leading-icon ${item.kind}`} aria-hidden="true"><InlineIcon name={iconName(item.kind)} /></span><span className="notification-copy"><strong>{item.title}</strong>{item.artistName && <em className="notification-artist">{item.artistName}</em>}{item.body && <span className="notification-body">{item.body}</span>}<small>{notificationTimeLabel(item.createdAt).replace(' 전', '')}</small></span>{!item.isRead && <span className="unread-dot" aria-label="읽지 않음" />}</button> })}</div></section>)}</> : <div className="empty-slot notification-empty" role="status"><span className="notification-empty-illustration"><NavIcon name="alerts" /><InlineIcon name="sparkles" /></span><b>새로운 알림이 없어요</b><small>중요한 소식이 여기에 표시돼요.</small></div>}
+        {groups.length > 0 ? <>{groups.map(group => <section className="notification-day" key={group.label}><h2>{group.label}</h2><div className="alert-list">{group.items.map(item => { const destination = notificationDestination(item); return <button className={item.isRead ? 'alert-card read' : 'alert-card'} key={item.id} aria-label={`${item.title} 알림${item.artistName ? ` · ${item.artistName}` : ''}${destination ? ' 열기' : ''}`} onClick={() => openNotification(item)}><span className={`alert-leading-icon ${item.kind}`} aria-hidden="true"><InlineIcon name={iconName(item.kind)} /></span><span className="notification-copy"><strong>{item.title}</strong>{item.artistName && <em className="notification-artist">{item.artistName}</em>}{item.body && <span className="notification-body">{item.body}</span>}<small>{notificationTimeLabel(item.createdAt).replace(' 전', '')}</small></span>{!item.isRead && <span className="unread-dot" aria-label="읽지 않음" />}</button> })}</div></section>)}</> : <div className="empty-slot notification-empty" role="status"><span className="notification-empty-illustration"><NavIcon name="alerts" /><InlineIcon name="sparkles" /></span><b>새로운 알림이 없어요</b><small>중요한 소식이 여기에 표시돼요.</small></div>}
         <button type="button" className="alerts-mark-all" onClick={() => void onReadAll()} disabled={unreadCount === 0}>모두 읽음</button>
       </>}
     </section>

@@ -41,7 +41,7 @@ from app.schemas import (
     EventReviewRequest,
     EventUpdateRequest,
 )
-from app.services import record_audit, record_engagement_event
+from app.services import record_analytics_event, record_audit, record_engagement_event
 from app.storage import StorageObjectNotFound, configured_asset_storage, storage_response
 from app.tasks import enqueue_engagement_event
 
@@ -387,6 +387,17 @@ async def get_event(event_id: str, user: FanUser, session: DbSession) -> dict:
     ):
         raise AppError(404, "EVENT_NOT_FOUND", "이벤트를 찾을 수 없습니다.")
     await reconcile_due_event_notifications(session, now=now)
+    await record_analytics_event(
+        session,
+        event_name="product.detail_viewed",
+        user_id=user.id,
+        organization_id=event.organization_id,
+        artist_id=event.artist_id,
+        source="event_detail",
+        dedupe_key=f"event-detail:{user.id}:{event.id}",
+        metadata={"surface": "fan_event"},
+    )
+    await session.commit()
     return {"ok": True, "data": await _fan_data(event, session, user_id=user.id, now=now)}
 
 
@@ -520,6 +531,16 @@ async def apply_to_event(
     data = await _fan_data(event, session, user_id=user.id, now=now)
     if data["applicationStatus"] != "available":
         raise AppError(409, "EVENT_APPLICATION_UNAVAILABLE", "현재 신청할 수 없는 이벤트입니다.")
+    await record_analytics_event(
+        session,
+        event_name="conversion.started",
+        user_id=user.id,
+        organization_id=event.organization_id,
+        artist_id=event.artist_id,
+        source="event_application",
+        dedupe_key=f"event-application-attempt:{event.id}:{user.id}",
+        metadata={"conversion": "event_application", "eventId": event.id},
+    )
     application = EventApplication(
         id=f"application_{uuid4().hex[:12]}",
         event_id=event.id,
@@ -538,6 +559,16 @@ async def apply_to_event(
             "organizationId": event.organization_id,
             "artistId": event.artist_id,
         },
+    )
+    await record_analytics_event(
+        session,
+        event_name="conversion.completed",
+        user_id=user.id,
+        organization_id=event.organization_id,
+        artist_id=event.artist_id,
+        source="event_application",
+        dedupe_key=f"event-application:{application.id}",
+        metadata={"conversion": "event_application", "eventId": event.id},
     )
     notification_key = f"event_application_submitted:{event.id}:{user.id}"
     notification = await session.scalar(

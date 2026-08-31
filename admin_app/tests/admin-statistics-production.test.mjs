@@ -23,6 +23,8 @@ test('production statistics supports period compare and scoped filters', () => {
   assert.match(source, /statisticsOrganization/)
   assert.match(source, /statisticsArtist/)
   assert.match(source, /statisticsPack/)
+  assert.match(source, /state\.statisticsArtist !== "all" \? "아티스트 전환 퍼널" : "서비스 전환 퍼널"/)
+  assert.match(source, /CONVERSION FUNNEL/)
 })
 
 test('production statistics hides comparison deltas when comparison is disabled', () => {

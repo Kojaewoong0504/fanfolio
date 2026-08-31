@@ -1057,15 +1057,57 @@ def test_point_charge_packages_credit_balance_idempotently_and_refund_to_ledger(
     assert replay["replayed"] is True
     assert assert_success(actors["fan"].get("/api/me/points"))["balance"] == starting_balance + 1000
 
+    conflict = actors["fan"].post(
+        "/api/me/point-charges",
+        json={"packageId": "points_500", "paymentMethod": "sandbox_card"},
+        headers={"Idempotency-Key": "point-charge-contract-1"},
+    )
+    assert conflict.status_code == 409, conflict.text
+    assert conflict.json()["error"]["code"] == "IDEMPOTENCY_KEY_REUSED"
+
+    missing_refund_key = actors["fan"].post(f"/api/me/point-charges/{first['chargeId']}/refund")
+    assert missing_refund_key.status_code == 422, missing_refund_key.text
+    assert missing_refund_key.json()["error"]["code"] == "IDEMPOTENCY_KEY_REQUIRED"
+
     refunded = assert_success(
-        actors["fan"].post(f"/api/me/point-charges/{first['chargeId']}/refund"),
+        actors["fan"].post(
+            f"/api/me/point-charges/{first['chargeId']}/refund",
+            headers={"Idempotency-Key": "point-charge-refund-001"},
+        ),
         201,
     )
     assert refunded["status"] == "refunded"
     assert assert_success(actors["fan"].get("/api/me/points"))["balance"] == starting_balance
 
+    refund_replay = assert_success(
+        actors["fan"].post(
+            f"/api/me/point-charges/{first['chargeId']}/refund",
+            headers={"Idempotency-Key": "point-charge-refund-001"},
+        ),
+        201,
+    )
+    assert refund_replay == refunded
+
+    second = assert_success(
+        actors["fan"].post(
+            "/api/me/point-charges",
+            json={"packageId": package["id"], "paymentMethod": "sandbox_card"},
+            headers={"Idempotency-Key": "point-charge-contract-2"},
+        ),
+        201,
+    )
+    conflict_refund = actors["fan"].post(
+        f"/api/me/point-charges/{second['chargeId']}/refund",
+        headers={"Idempotency-Key": "point-charge-refund-001"},
+    )
+    assert conflict_refund.status_code == 409, conflict_refund.text
+    assert conflict_refund.json()["error"]["code"] == "IDEMPOTENCY_KEY_REUSED"
+
     charges = assert_success(actors["fan"].get("/api/me/point-charges"))
-    assert charges["items"][0]["status"] == "refunded"
+    assert (
+        next(item for item in charges["items"] if item["id"] == first["chargeId"])["status"]
+        == "refunded"
+    )
 
 
 def test_redeeming_a_live_card_processes_xp_achievement_reward_and_notification(

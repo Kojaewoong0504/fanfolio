@@ -37,6 +37,11 @@ test('fan discovery opens a dedicated public fan profile before collection', () 
   assert.doesNotMatch(fanHubSource, /[▣◇⌕‹]/)
 })
 
+test('fan discovery attributes profile opens to the recommendation funnel', () => {
+  assert.match(fanHubSource, /recommendation\.profile_viewed/)
+  assert.match(fanHubSource, /fan-recommendation-profile:/)
+})
+
 test('fan discovery cards keep identity, affinity, stats, and card previews in separate responsive rows', () => {
   assert.match(fanHubSource, /className="fan-social-avatar-button"/)
   assert.match(fanHubSource, /className="fan-social-affinity"/)

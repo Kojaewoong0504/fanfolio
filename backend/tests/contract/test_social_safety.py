@@ -5,6 +5,36 @@ from tests.conftest import assert_error, assert_success
 from tests.contract.test_social_card_trading import seed_social_cards
 
 
+def test_fan_recommendations_expose_versioned_server_ranked_contract(
+    actors: dict[str, TestClient],
+) -> None:
+    response = assert_success(actors["fan"].get("/api/fans/recommendations"))
+    assert response["meta"]["algorithmVersion"] == "fan-v1"
+    assert response["meta"]["ranking"] == "server"
+    assert all("recommendationScore" in item for item in response["items"])
+
+
+def test_recommendation_analytics_accepts_candidate_attribution(
+    actors: dict[str, TestClient],
+) -> None:
+    response = assert_success(
+        actors["fan"].post(
+            "/api/analytics/events",
+            json={
+                "eventName": "recommendation.impression",
+                "source": "fan-v1",
+                "dedupeKey": "fan-recommendation-impression-otherFan",
+                "metadata": {"candidateUserId": "otherFan", "position": 1},
+            },
+        ),
+        201,
+    )
+    assert response["eventName"] == "recommendation.impression"
+    stats = assert_success(actors["admin"].get("/api/admin/statistics", params={"period": 7}))
+    assert stats["recommendationQuality"]["algorithmVersion"] == "fan-v1"
+    assert stats["recommendationQuality"]["impressions"] == 1
+
+
 def test_block_hides_social_surfaces_and_prevents_trades(
     app: FastAPI, actors: dict[str, TestClient]
 ) -> None:

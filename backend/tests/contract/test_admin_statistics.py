@@ -73,3 +73,46 @@ def test_statistics_tracks_failed_redemption_attempts(
 
     statistics = assert_success(root.get("/api/admin/statistics?period=7"))
     assert statistics["operationHealth"]["redemptionFailures"] >= 1
+
+
+def test_artist_funnel_accepts_idempotent_product_events(
+    actors: dict[str, TestClient],
+) -> None:
+    fan = actors["fan"]
+    root = actors["admin"]
+    events = [
+        ("product.impression", "impression-1"),
+        ("product.detail_viewed", "detail-1"),
+        ("product.engaged", "engaged-1"),
+        ("conversion.started", "conversion-1"),
+        ("conversion.completed", "completed-1"),
+    ]
+    for event_name, dedupe_key in events:
+        response = fan.post(
+            "/api/analytics/events",
+            json={
+                "eventName": event_name,
+                "artistId": "artist_nova3",
+                "dedupeKey": dedupe_key,
+                "metadata": {"surface": "artist_home"},
+            },
+        )
+        assert response.status_code == 201, response.text
+        replay = fan.post(
+            "/api/analytics/events",
+            json={
+                "eventName": event_name,
+                "artistId": "artist_nova3",
+                "dedupeKey": dedupe_key,
+            },
+        )
+        assert replay.status_code == 200, replay.text
+        assert replay.json()["data"]["replayed"] is True
+
+    statistics = assert_success(root.get("/api/admin/statistics?period=30&artistId=artist_nova3"))
+    funnel = {row["key"]: row for row in statistics["funnel"]}
+    assert funnel["impression"]["count"] == 1
+    assert funnel["detailViewed"]["count"] == 1
+    assert funnel["engaged"]["count"] == 1
+    assert funnel["conversionStarted"]["count"] == 1
+    assert funnel["conversionCompleted"]["count"] == 1
