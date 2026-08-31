@@ -2,11 +2,13 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from fastapi import APIRouter, Request, Response, status
+from starlette.concurrency import run_in_threadpool
 
 from app.admin_access import load_admin_context
 from app.core.config import get_settings
 from app.dependencies import CurrentUser, DbSession
 from app.errors import AppError
+from app.image_processing import optimize_event_hero_bytes
 from app.models import Asset, Organization, Role
 from app.schemas import AssetTransformUpdate, UploadPresignRequest
 from app.storage import StorageObjectNotFound, configured_asset_storage, storage_response
@@ -28,6 +30,24 @@ async def require_upload_role(user: CurrentUser, session: DbSession) -> None:
         raise AppError(403, "FORBIDDEN", "권한이 없습니다.")
     if user.role == Role.ADMIN:
         await load_admin_context(session, user)
+
+
+async def prepare_event_banner_variant(asset: Asset, storage) -> None:
+    """Generate the public fan banner before the upload is reported ready."""
+    if asset.purpose != "event_banner" or not asset.storage_path:
+        return
+    optimized_path = storage.asset_path(asset.id, "-event-hero-v1.webp")
+    if storage.exists(optimized_path):
+        asset.processed_storage_path = optimized_path
+        return
+    source_content = await run_in_threadpool(storage.read_bytes, asset.storage_path)
+    optimized_content = await run_in_threadpool(optimize_event_hero_bytes, source_content)
+    asset.processed_storage_path = await run_in_threadpool(
+        storage.save_derived_bytes,
+        asset.id,
+        "-event-hero-v1.webp",
+        optimized_content,
+    )
 
 
 @router.post("/uploads/presign", status_code=status.HTTP_201_CREATED)
@@ -108,6 +128,7 @@ async def upload_asset_content(
         content=content,
     )
     asset.storage_path = configured_asset_storage().save_bytes(asset.id, content)
+    await prepare_event_banner_variant(asset, configured_asset_storage())
     asset.upload_completed_at = datetime.now(UTC)
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -148,6 +169,7 @@ async def complete_asset_upload(asset_id: str, user: CurrentUser, session: DbSes
         asset.storage_path = None
         await session.commit()
         raise
+    await prepare_event_banner_variant(asset, storage)
     asset.upload_completed_at = datetime.now(UTC)
     await session.commit()
     return {"ok": True, "data": {"assetId": asset.id, "status": "ready"}}

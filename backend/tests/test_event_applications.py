@@ -3,6 +3,10 @@ from io import BytesIO
 
 from PIL import Image
 
+from app.db.session import SessionLocal
+from app.models import Asset
+from app.storage import configured_asset_storage
+
 from .conftest import assert_success
 
 
@@ -30,6 +34,21 @@ def create_event_banner(actors):
     )
     assert uploaded.status_code == 204, uploaded.text
     return asset["assetId"]
+
+
+def test_event_banner_upload_precomputes_fan_variant(actors):
+    asset_id = create_event_banner(actors)
+
+    async def read_asset():
+        async with SessionLocal() as session:
+            asset = await session.get(Asset, asset_id)
+            return asset.processed_storage_path if asset else None
+
+    import asyncio
+
+    processed_path = asyncio.run(read_asset())
+    assert processed_path == configured_asset_storage().asset_path(asset_id, "-event-hero-v1.webp")
+    assert configured_asset_storage().exists(processed_path)
 
 
 def test_event_application_is_idempotent_and_exposed_in_public_detail(actors, client, seeded):
