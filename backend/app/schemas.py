@@ -1082,8 +1082,12 @@ class UploadPresignRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     @model_validator(mode="after")
-    def organization_logo_must_be_an_image(self) -> "UploadPresignRequest":
-        if self.purpose in {"organization_logo", "reward_image"} and self.content_type not in {
+    def image_purpose_must_be_an_image(self) -> "UploadPresignRequest":
+        if self.purpose in {
+            "event_banner",
+            "organization_logo",
+            "reward_image",
+        } and self.content_type not in {
             "image/png",
             "image/jpeg",
             "image/webp",

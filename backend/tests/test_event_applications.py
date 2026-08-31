@@ -1,13 +1,14 @@
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
 
+from fastapi.testclient import TestClient
 from PIL import Image
 
 from app.db.session import SessionLocal
 from app.models import Asset
 from app.storage import configured_asset_storage
 
-from .conftest import assert_success
+from .conftest import assert_error, assert_success
 
 
 def _event_banner_png() -> bytes:
@@ -93,6 +94,8 @@ def test_event_application_is_idempotent_and_exposed_in_public_detail(actors, cl
     )
     assert actors["admin"].post(f"/api/admin/events/{event_id}/publish").status_code == 200
 
+    storage = configured_asset_storage()
+    storage.delete(storage.asset_path(event_banner_id, ".bin"))
     public_hero = client.get(f"/api/events/{event_id}/hero")
     assert public_hero.status_code == 200
     assert public_hero.headers["cache-control"].startswith("public, max-age=")
@@ -100,6 +103,31 @@ def test_event_application_is_idempotent_and_exposed_in_public_detail(actors, cl
     with Image.open(BytesIO(public_hero.content)) as optimized_hero:
         assert optimized_hero.format == "WEBP"
         assert optimized_hero.size == (1200, 600)
+    storage.save_bytes(event_banner_id, _event_banner_png())
+    derivative_path = storage.asset_path(event_banner_id, "-event-hero-v1.webp")
+    storage.delete(derivative_path)
+    fallback_hero = client.get(f"/api/events/{event_id}/hero")
+    assert fallback_hero.status_code == 200
+    assert storage.exists(derivative_path)
+    with Image.open(BytesIO(fallback_hero.content)) as fallback_image:
+        assert fallback_image.format == "WEBP"
+        assert fallback_image.size == (1200, 600)
+
+    storage.delete(storage.asset_path(event_banner_id, ".bin"))
+    storage.delete(derivative_path)
+    resilient_client = TestClient(client.app, raise_server_exceptions=False)
+    assert_error(
+        resilient_client.get(f"/api/events/{event_id}/hero"),
+        404,
+        "EVENT_ASSET_NOT_READY",
+    )
+
+    storage.save_bytes(event_banner_id, b"not an image")
+    assert_error(
+        resilient_client.get(f"/api/events/{event_id}/hero"),
+        404,
+        "EVENT_ASSET_NOT_READY",
+    )
 
     before = assert_success(actors["fan"].get(f"/api/events/{event_id}"))
     assert before["heroUrl"].endswith(f"/hero?asset={event_banner_id}")

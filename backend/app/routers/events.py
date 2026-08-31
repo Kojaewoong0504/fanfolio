@@ -18,7 +18,7 @@ from app.event_services import (
     validate_event_connections,
     validate_transition,
 )
-from app.image_processing import optimize_event_hero_bytes
+from app.image_processing import InvalidEventHeroError, ensure_event_hero_derivative
 from app.models import (
     Artist,
     Asset,
@@ -42,7 +42,7 @@ from app.schemas import (
     EventUpdateRequest,
 )
 from app.services import record_audit, record_engagement_event
-from app.storage import configured_asset_storage, storage_response
+from app.storage import StorageObjectNotFound, configured_asset_storage, storage_response
 from app.tasks import enqueue_engagement_event
 
 router = APIRouter(prefix="/api", tags=["events"])
@@ -661,21 +661,22 @@ async def get_event_hero(event_id: str, session: DbSession) -> Response:
     if asset is None or not asset.storage_path:
         raise AppError(404, "EVENT_ASSET_NOT_READY", "이벤트 이미지가 아직 준비되지 않았습니다.")
     storage = configured_asset_storage()
-    optimized_path = storage.asset_path(asset.id, "-event-hero-v1.webp")
-    if not storage.exists(optimized_path):
-        source_content = await run_in_threadpool(storage.read_bytes, asset.storage_path)
-        optimized_content = await run_in_threadpool(optimize_event_hero_bytes, source_content)
-        await run_in_threadpool(
-            storage.save_derived_bytes,
+    try:
+        optimized_path = await run_in_threadpool(
+            ensure_event_hero_derivative,
+            storage,
             asset.id,
-            "-event-hero-v1.webp",
-            optimized_content,
+            asset.storage_path,
         )
-    return storage_response(
-        storage,
-        optimized_path,
+        content = await run_in_threadpool(storage.read_bytes, optimized_path)
+    except (StorageObjectNotFound, InvalidEventHeroError):
+        raise AppError(404, "EVENT_ASSET_NOT_READY", "이벤트 이미지가 아직 준비되지 않았습니다.")
+    return Response(
+        content=content,
         media_type="image/webp",
-        cache_control="public, max-age=300, s-maxage=86400, stale-while-revalidate=604800",
+        headers={
+            "Cache-Control": "public, max-age=300, s-maxage=86400, stale-while-revalidate=604800"
+        },
     )
 
 

@@ -29,7 +29,9 @@ def test_magic_link_request_delivers_the_created_token(
     assert delivered[0][1]
 
 
-def test_fan_can_sign_up_and_log_in_with_email_and_password(client: TestClient) -> None:
+def test_fan_can_sign_up_and_log_in_with_email_and_password(
+    client: TestClient, seeded: dict[str, object]
+) -> None:
     signup = client.post(
         "/api/auth/fan/signup",
         headers={"X-Fanfolio-Client": "fan"},
@@ -58,7 +60,9 @@ def test_fan_can_sign_up_and_log_in_with_email_and_password(client: TestClient) 
     assert refreshed_data["accessToken"]
 
 
-def test_fan_password_login_rejects_invalid_credentials(client: TestClient) -> None:
+def test_fan_password_login_rejects_invalid_credentials(
+    client: TestClient, seeded: dict[str, object]
+) -> None:
     response = client.post(
         "/api/auth/fan/login",
         headers={"X-Fanfolio-Client": "fan"},

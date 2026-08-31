@@ -11,7 +11,15 @@ from typing import Any
 # The fixture API is test-only, so the test process must opt into it before
 # importing app.main (which decides whether to register that router).
 os.environ.setdefault("APP_ENV", "test")
-if "DATABASE_URL" not in os.environ:
+xdist_worker = os.environ.get("PYTEST_XDIST_WORKER")
+if xdist_worker:
+    worker_suffix = f"{os.getpid()}-{xdist_worker}"
+    test_database_path = Path(tempfile.gettempdir()) / f"fanfolio-pytest-{worker_suffix}.db"
+    os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{test_database_path}"
+    os.environ["STORAGE_DIR"] = str(
+        Path(tempfile.gettempdir()) / f"fanfolio-pytest-storage-{worker_suffix}"
+    )
+elif "DATABASE_URL" not in os.environ:
     test_database_path = Path(tempfile.gettempdir()) / f"fanfolio-pytest-{os.getpid()}.db"
     os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{test_database_path}"
 
