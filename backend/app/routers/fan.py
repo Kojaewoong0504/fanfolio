@@ -2358,6 +2358,9 @@ async def my_event_applications(user: FanUser, session: DbSession) -> dict:
                     "applicationId": application.id,
                     "eventId": event.id,
                     "status": application.status,
+                    "checkedInAt": application.checked_in_at.isoformat()
+                    if application.checked_in_at
+                    else None,
                     "createdAt": application.created_at.isoformat(),
                     "event": {
                         "id": event.id,

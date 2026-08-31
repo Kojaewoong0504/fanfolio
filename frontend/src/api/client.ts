@@ -398,6 +398,7 @@ export type FanEventApplication = {
   applicationId: string
   eventId: string
   status: string
+  checkedInAt?: string | null
   createdAt: string
   event: Pick<FanEvent, 'id' | 'title' | 'summary' | 'startsAt' | 'endsAt' | 'venue'>
 }
@@ -510,6 +511,13 @@ export function getMyEventApplications(): Promise<{
   data: { items: FanEventApplication[] }
 }> {
   return apiFetch('/me/event-applications')
+}
+
+export function getEventCheckInPass(applicationId: string): Promise<{
+  ok: true
+  data: { eventId: string; applicationId: string; token: string; expiresAt: string; checkedIn: boolean }
+}> {
+  return apiFetch(`/me/event-applications/${encodeURIComponent(applicationId)}/check-in-pass`)
 }
 
 export type CurrentUser = {

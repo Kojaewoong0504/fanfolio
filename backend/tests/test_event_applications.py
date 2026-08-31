@@ -229,3 +229,57 @@ def test_admin_can_list_applicants_and_draw_winners(actors):
     assert drawn["winnerCount"] == 1
     after = assert_success(actors["admin"].get(f"/api/admin/events/{event_id}/applications"))
     assert after["items"][0]["status"] == "winner"
+
+
+def test_event_check_in_pass_is_scoped_and_single_use(actors):
+    now = datetime.now(UTC)
+    event_banner_id = create_event_banner(actors)
+    created = actors["admin"].post(
+        "/api/admin/events",
+        json={
+            "title": "현장 체크인 이벤트",
+            "summary": "QR 체크인 테스트",
+            "heroAssetId": event_banner_id,
+            "eventType": "announcement",
+            "startsAt": (now - timedelta(hours=1)).isoformat(),
+            "endsAt": (now + timedelta(days=1)).isoformat(),
+            "applicationStartsAt": (now - timedelta(hours=1)).isoformat(),
+            "applicationEndsAt": (now + timedelta(hours=1)).isoformat(),
+        },
+    )
+    assert created.status_code == 201, created.text
+    event_id = created.json()["data"]["id"]
+    assert actors["admin"].post(f"/api/admin/events/{event_id}/submit").status_code == 200
+    assert (
+        actors["admin"]
+        .post(f"/api/admin/events/{event_id}/review", json={"decision": "approve"})
+        .status_code
+        == 200
+    )
+    assert actors["admin"].post(f"/api/admin/events/{event_id}/publish").status_code == 200
+
+    application = assert_success(actors["fan"].post(f"/api/events/{event_id}/applications"), 201)
+    pass_data = assert_success(
+        actors["fan"].get(f"/api/me/event-applications/{application['id']}/check-in-pass")
+    )
+    assert pass_data["eventId"] == event_id
+    assert pass_data["token"]
+    assert "email" not in pass_data["token"]
+
+    checked_in = assert_success(
+        actors["admin"].post(
+            f"/api/admin/events/{event_id}/check-in", json={"token": pass_data["token"]}
+        )
+    )
+    assert checked_in["checkedIn"] is True
+    assert checked_in["alreadyCheckedIn"] is False
+
+    repeated = assert_success(
+        actors["admin"].post(
+            f"/api/admin/events/{event_id}/check-in", json={"token": pass_data["token"]}
+        )
+    )
+    assert repeated["checkedIn"] is True
+    assert repeated["alreadyCheckedIn"] is True
+    applicants = assert_success(actors["admin"].get(f"/api/admin/events/{event_id}/applications"))
+    assert applicants["items"][0]["checkedInAt"]

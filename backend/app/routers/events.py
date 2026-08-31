@@ -3,12 +3,13 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Query, Response, status
-from sqlalchemy import and_, desc, func, or_, select
+from sqlalchemy import and_, desc, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from starlette.concurrency import run_in_threadpool
 
 from app.dependencies import CurrentAdmin, DbSession, FanUser
 from app.errors import AppError
+from app.event_checkin import check_in_token_hash, create_check_in_token, verify_check_in_token
 from app.event_services import (
     event_in_scope,
     public_event_status,
@@ -32,6 +33,7 @@ from app.models import (
     User,
 )
 from app.schemas import (
+    EventCheckInRequest,
     EventCommentCreateRequest,
     EventCommentReviewRequest,
     EventCreateRequest,
@@ -596,6 +598,46 @@ async def apply_to_event(
     }
 
 
+@router.get("/me/event-applications/{application_id}/check-in-pass")
+async def get_event_check_in_pass(application_id: str, user: FanUser, session: DbSession) -> dict:
+    row = await session.execute(
+        select(EventApplication, Event)
+        .join(Event, EventApplication.event_id == Event.id)
+        .where(EventApplication.id == application_id, EventApplication.user_id == user.id)
+    )
+    application, event = row.one_or_none() or (None, None)
+    if application is None or event is None:
+        raise AppError(404, "EVENT_APPLICATION_NOT_FOUND", "이벤트 신청 내역을 찾을 수 없습니다.")
+    if application.status not in {"submitted", "winner"}:
+        raise AppError(409, "EVENT_CHECKIN_UNAVAILABLE", "현재 체크인할 수 없는 신청 내역입니다.")
+    now = datetime.now(UTC)
+    event_end = _utc_datetime(event.ends_at) or now + timedelta(days=1)
+    expires_at = int((event_end + timedelta(hours=24)).timestamp())
+    token = create_check_in_token(
+        event_id=event.id, application_id=application.id, expires_at=expires_at
+    )
+    if application.check_in_token_hash is None:
+        application.check_in_token_hash = check_in_token_hash(token)
+        application.check_in_token_issued_at = now
+        await session.commit()
+    elif application.check_in_token_hash != check_in_token_hash(token):
+        raise AppError(
+            409,
+            "EVENT_CHECKIN_PASS_ROTATED",
+            "이벤트 일정이 변경되어 체크인 패스를 다시 발급할 수 없습니다.",
+        )
+    return {
+        "ok": True,
+        "data": {
+            "eventId": event.id,
+            "applicationId": application.id,
+            "token": token,
+            "expiresAt": datetime.fromtimestamp(expires_at, UTC).isoformat(),
+            "checkedIn": application.checked_in_at is not None,
+        },
+    }
+
+
 @router.get("/events/{event_id}/hero")
 async def get_event_hero(event_id: str, session: DbSession) -> Response:
     """Serve only fan-visible event art as browser-cacheable public media.
@@ -858,10 +900,96 @@ async def admin_list_event_applications(
                     "email": user.email,
                     "nickname": user.nickname,
                     "status": application.status,
+                    "checkedInAt": application.checked_in_at.isoformat()
+                    if application.checked_in_at
+                    else None,
                     "createdAt": application.created_at.isoformat(),
                 }
                 for application, user in rows
             ]
+        },
+    }
+
+
+@admin_router.post("/events/{event_id}/check-in")
+async def admin_check_in_event_application(
+    event_id: str,
+    payload: EventCheckInRequest,
+    context: CurrentAdmin,
+    session: DbSession,
+) -> dict:
+    context.require_action("events:write")
+    event = await session.get(Event, event_id)
+    if event is None or not event_in_scope(context, event):
+        raise AppError(404, "EVENT_NOT_FOUND", "이벤트를 찾을 수 없습니다.")
+    claims = verify_check_in_token(payload.token)
+    if claims.get("eventId") != event.id:
+        raise AppError(422, "EVENT_CHECKIN_WRONG_EVENT", "다른 이벤트의 체크인 패스입니다.")
+    application = await session.get(EventApplication, claims.get("applicationId"))
+    if application is None or application.event_id != event.id:
+        raise AppError(422, "EVENT_CHECKIN_INVALID", "유효하지 않은 체크인 패스입니다.")
+    if application.check_in_token_hash != check_in_token_hash(payload.token):
+        raise AppError(401, "EVENT_CHECKIN_INVALID", "유효하지 않은 체크인 패스입니다.")
+    if application.status not in {"submitted", "winner"}:
+        raise AppError(409, "EVENT_CHECKIN_UNAVAILABLE", "체크인할 수 없는 신청 상태입니다.")
+    now = datetime.now(UTC)
+    starts_at = _utc_datetime(event.starts_at)
+    ends_at = _utc_datetime(event.ends_at)
+    if starts_at and now < starts_at:
+        raise AppError(409, "EVENT_CHECKIN_NOT_OPEN", "아직 체크인 시간이 아닙니다.")
+    if ends_at and now > ends_at + timedelta(hours=24):
+        raise AppError(409, "EVENT_CHECKIN_CLOSED", "체크인 가능한 시간이 지났습니다.")
+    if application.checked_in_at is not None:
+        return {
+            "ok": True,
+            "data": {
+                "eventId": event.id,
+                "applicationId": application.id,
+                "checkedIn": True,
+                "alreadyCheckedIn": True,
+                "checkedInAt": application.checked_in_at.isoformat(),
+            },
+        }
+    result = await session.execute(
+        update(EventApplication)
+        .where(
+            EventApplication.id == application.id,
+            EventApplication.checked_in_at.is_(None),
+        )
+        .values(checked_in_at=now, checked_in_by=context.user.id, updated_at=now)
+    )
+    if result.rowcount != 1:
+        await session.rollback()
+        application = await session.get(EventApplication, application.id)
+        return {
+            "ok": True,
+            "data": {
+                "eventId": event.id,
+                "applicationId": application.id,
+                "checkedIn": True,
+                "alreadyCheckedIn": True,
+                "checkedInAt": application.checked_in_at.isoformat(),
+            },
+        }
+    await record_audit(
+        session,
+        actor_user_id=context.user.id,
+        action="event.application_checked_in",
+        entity_type="event_application",
+        entity_id=application.id,
+        organization_id=event.organization_id,
+        artist_id=event.artist_id,
+        details={"eventId": event.id},
+    )
+    await session.commit()
+    return {
+        "ok": True,
+        "data": {
+            "eventId": event.id,
+            "applicationId": application.id,
+            "checkedIn": True,
+            "alreadyCheckedIn": False,
+            "checkedInAt": now.isoformat(),
         },
     }
 

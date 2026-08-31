@@ -424,6 +424,10 @@ class EventDrawRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class EventCheckInRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=4096)
+
+
 class EventCommentCreateRequest(BaseModel):
     body: str = Field(min_length=1, max_length=500)
     model_config = ConfigDict(populate_by_name=True)
