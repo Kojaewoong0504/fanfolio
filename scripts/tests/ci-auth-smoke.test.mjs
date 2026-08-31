@@ -19,3 +19,11 @@ test("CI authenticates against its seeded test stack instead of hosted credentia
   assert.match(compose, /APP_ENV: test/)
   assert.doesNotMatch(workflow, /FAN_EMAIL:|ADMIN_EMAIL:|ARTIST_USERNAME:/)
 })
+
+test("CI parallelizes the full backend suite while keeping auth isolation explicit", () => {
+  assert.match(workflow, /\.venv\/bin\/pytest -q -n auto --dist worksteal/)
+  assert.match(
+    workflow,
+    /Verify isolated authentication contracts[\s\S]*\.venv\/bin\/pytest -q tests\/contract\/test_auth\.py/,
+  )
+})

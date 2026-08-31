@@ -17,9 +17,11 @@ class FakeS3Client:
     def __init__(self) -> None:
         self.objects: dict[tuple[str, str], bytes] = {}
         self.fail_get_with: Exception | None = None
+        self.put_requests: list[dict[str, object]] = []
 
-    def put_object(self, *, Bucket: str, Key: str, Body: bytes, **_: object) -> None:
+    def put_object(self, *, Bucket: str, Key: str, Body: bytes, **kwargs: object) -> None:
         self.objects[(Bucket, Key)] = Body
+        self.put_requests.append({"Bucket": Bucket, "Key": Key, "Body": Body, **kwargs})
 
     def list_objects_v2(self, *, Bucket: str, Prefix: str, MaxKeys: int) -> dict[str, object]:
         assert MaxKeys == 1
@@ -81,14 +83,19 @@ def test_s3_asset_storage_uses_object_keys_and_reads_objects() -> None:
     assert storage.read_bytes(path) == b"remote bytes"
     assert not storage.exists("s3://fanfolio-test/fanfolio/assets/missing.bin")
 
-    derived = storage.save_derived_bytes("asset_test", "-transparent.png", b"png bytes")
+    derived = storage.save_derived_bytes(
+        "asset_test", "-event-hero-v1.webp", b"webp bytes", content_type="image/webp"
+    )
     preview = storage.save_preview_bytes("card_test", b"preview bytes")
 
-    assert storage.read_bytes(derived) == b"png bytes"
+    assert storage.read_bytes(derived) == b"webp bytes"
     assert storage.read_bytes(preview) == b"preview bytes"
-    assert storage.presigned_upload_url(
+    assert storage.client.put_requests[-2]["ContentType"] == "image/webp"
+    presigned_url = storage.presigned_upload_url(
         "asset_next", content_type="image/png", expires_in=900
-    ).startswith("https://storage.test/")
+    )
+    assert presigned_url.startswith("https://storage.test/")
+    assert "asset_next-upload.bin" in presigned_url
 
 
 def test_s3_asset_storage_normalizes_missing_object_reads_only() -> None:

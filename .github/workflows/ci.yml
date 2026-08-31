@@ -31,7 +31,8 @@ jobs:
         with:
           version: "0.12.2"
       - run: uv sync --locked --dev
-      - run: .venv/bin/pytest -q
+      - name: Run backend tests in isolated parallel workers
+        run: .venv/bin/pytest -q -n auto --dist worksteal
       - name: Verify isolated authentication contracts
         run: .venv/bin/pytest -q tests/contract/test_auth.py
       - run: .venv/bin/ruff check app tests

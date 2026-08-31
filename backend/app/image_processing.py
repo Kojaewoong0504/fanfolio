@@ -3,7 +3,13 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
-from app.storage import local_asset_storage
+from app.storage import AssetStorage, local_asset_storage
+
+EVENT_HERO_DERIVATIVE_SUFFIX = "-event-hero-v1.webp"
+
+
+class InvalidEventHeroError(ValueError):
+    """The source bytes cannot produce a fan-facing event hero."""
 
 
 def save_uploaded_bytes(storage_dir: str, asset_id: str, content: bytes) -> str:
@@ -12,19 +18,43 @@ def save_uploaded_bytes(storage_dir: str, asset_id: str, content: bytes) -> str:
 
 def optimize_event_hero_bytes(content: bytes) -> bytes:
     """Bound event banners to the fan viewport and encode a compact WebP variant."""
-    with Image.open(BytesIO(content)) as source:
-        image = ImageOps.exif_transpose(source)
-        image.thumbnail((1200, 600), Image.Resampling.LANCZOS)
-        if image.mode in {"RGBA", "LA"} or "transparency" in image.info:
-            rgba = image.convert("RGBA")
-            flattened = Image.new("RGB", rgba.size, (18, 16, 54))
-            flattened.paste(rgba, mask=rgba.getchannel("A"))
-            image = flattened
-        else:
-            image = image.convert("RGB")
-        output = BytesIO()
-        image.save(output, "WEBP", quality=82, method=6)
-        return output.getvalue()
+    try:
+        with Image.open(BytesIO(content)) as source:
+            image = ImageOps.exif_transpose(source)
+            image.thumbnail((1200, 600), Image.Resampling.LANCZOS)
+            if image.mode in {"RGBA", "LA"} or "transparency" in image.info:
+                rgba = image.convert("RGBA")
+                flattened = Image.new("RGB", rgba.size, (18, 16, 54))
+                flattened.paste(rgba, mask=rgba.getchannel("A"))
+                image = flattened
+            else:
+                image = image.convert("RGB")
+            output = BytesIO()
+            image.save(output, "WEBP", quality=82, method=6)
+            return output.getvalue()
+    except OSError as error:
+        raise InvalidEventHeroError("event hero source is not a usable image") from error
+
+
+def ensure_event_hero_derivative(
+    storage: AssetStorage,
+    asset_id: str,
+    source_path: str,
+    source_content: bytes | None = None,
+    *,
+    force: bool = False,
+) -> str:
+    """Return a ready event hero derivative, creating it once when missing."""
+    derivative_path = storage.asset_path(asset_id, EVENT_HERO_DERIVATIVE_SUFFIX)
+    if not force and storage.exists(derivative_path):
+        return derivative_path
+    content = source_content if source_content is not None else storage.read_bytes(source_path)
+    return storage.save_derived_bytes(
+        asset_id,
+        EVENT_HERO_DERIVATIVE_SUFFIX,
+        optimize_event_hero_bytes(content),
+        content_type="image/webp",
+    )
 
 
 def remove_light_background_bytes(content: bytes) -> bytes:

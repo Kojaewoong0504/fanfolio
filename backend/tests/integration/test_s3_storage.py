@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.storage import S3AssetStorage
+from app.storage import DIRECT_UPLOAD_STAGING_SUFFIX, S3AssetStorage
 
 pytestmark = pytest.mark.skipif(
     os.getenv("FANFOLIO_S3_INTEGRATION") != "1",
@@ -60,7 +60,7 @@ def test_s3_storage_round_trip_and_presign() -> None:
             assert response.status in {200, 204}
             assert response.headers.get("Access-Control-Allow-Origin") == "http://localhost:5173"
 
-        direct_path = storage.asset_path(direct_asset_id, ".bin")
+        direct_path = storage.asset_path(direct_asset_id, DIRECT_UPLOAD_STAGING_SUFFIX)
         assert storage.exists(direct_path)
         assert storage.read_bytes(direct_path) == direct_content
     finally:
