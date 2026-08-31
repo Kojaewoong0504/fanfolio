@@ -108,6 +108,7 @@ def test_fan_can_list_and_purchase_published_shop_product(actors: dict[str, Test
     order = actors["fan"].post(
         "/api/me/shop/orders",
         json={"productId": "test_shop_product", "paymentMethod": "points"},
+        headers={"Idempotency-Key": "shop-api-order-001"},
     )
     assert order.status_code == 201, order.text
     assert order.json()["data"]["status"] == "completed"
@@ -115,3 +116,13 @@ def test_fan_can_list_and_purchase_published_shop_product(actors: dict[str, Test
     history = actors["fan"].get("/api/me/shop/orders")
     assert history.status_code == 200, history.text
     assert history.json()["data"]["items"][0]["productId"] == "test_shop_product"
+
+
+def test_shop_order_requires_idempotency_key(actors: dict[str, TestClient]) -> None:
+    _seed_sellable_product()
+    response = actors["fan"].post(
+        "/api/me/shop/orders",
+        json={"productId": "test_shop_product", "paymentMethod": "points"},
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "IDEMPOTENCY_KEY_REQUIRED"

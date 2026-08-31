@@ -1,5 +1,6 @@
 import asyncio
 import hmac
+import json
 import logging
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
@@ -154,6 +155,144 @@ def now() -> datetime:
     return datetime.now(UTC)
 
 
+def _ownership_hash_payload(
+    *,
+    ledger_id: str,
+    user_card_id: str,
+    user_id: str,
+    card_id: str,
+    action: str,
+    source_type: str,
+    source_id: str,
+    from_user_id: str | None,
+    to_user_id: str | None,
+    metadata: dict,
+    created_at: datetime,
+    previous_hash: str | None,
+) -> bytes:
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=UTC)
+    return json.dumps(
+        {
+            "id": ledger_id,
+            "userCardId": user_card_id,
+            "userId": user_id,
+            "cardId": card_id,
+            "action": action,
+            "sourceType": source_type,
+            "sourceId": source_id,
+            "fromUserId": from_user_id,
+            "toUserId": to_user_id,
+            "metadata": metadata,
+            "createdAt": created_at.isoformat(),
+            "previousHash": previous_hash,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+
+
+async def append_ownership_ledger(
+    session: AsyncSession,
+    *,
+    user_card_id: str,
+    user_id: str,
+    card_id: str,
+    action: str,
+    source_type: str,
+    source_id: str,
+    from_user_id: str | None = None,
+    to_user_id: str | None = None,
+    metadata: dict | None = None,
+    created_at: datetime | None = None,
+) -> CardOwnershipLedger:
+    """Append a tamper-evident ownership event inside the caller transaction."""
+    timestamp = created_at or now()
+    previous = await session.scalar(
+        select(CardOwnershipLedger.record_hash)
+        .where(CardOwnershipLedger.user_id == user_id)
+        .order_by(CardOwnershipLedger.created_at.desc(), CardOwnershipLedger.id.desc())
+        .limit(1)
+    )
+    ledger_id = f"ledger_{uuid4().hex[:12]}"
+    metadata_value = metadata or {}
+    record_hash = sha256(
+        _ownership_hash_payload(
+            ledger_id=ledger_id,
+            user_card_id=user_card_id,
+            user_id=user_id,
+            card_id=card_id,
+            action=action,
+            source_type=source_type,
+            source_id=source_id,
+            from_user_id=from_user_id,
+            to_user_id=to_user_id,
+            metadata=metadata_value,
+            created_at=timestamp,
+            previous_hash=previous,
+        )
+    ).hexdigest()
+    ledger = CardOwnershipLedger(
+        id=ledger_id,
+        user_card_id=user_card_id,
+        user_id=user_id,
+        card_id=card_id,
+        action=action,
+        source_type=source_type,
+        source_id=source_id,
+        from_user_id=from_user_id,
+        to_user_id=to_user_id,
+        metadata_json=metadata_value,
+        previous_hash=previous,
+        record_hash=record_hash,
+        created_at=timestamp,
+    )
+    session.add(ledger)
+    await session.flush()
+    return ledger
+
+
+def verify_ownership_chain(events: list[CardOwnershipLedger]) -> dict[str, object]:
+    """Verify hashed ownership events, tolerating legacy unhashed rows as boundaries."""
+    previous_hash: str | None = None
+    verified = 0
+    legacy = 0
+    violations: list[str] = []
+    for event in sorted(events, key=lambda item: (item.created_at, item.id)):
+        if not event.record_hash:
+            legacy += 1
+            previous_hash = None
+            continue
+        if event.previous_hash != previous_hash:
+            violations.append(f"{event.id}:previous_hash")
+        expected_hash = sha256(
+            _ownership_hash_payload(
+                ledger_id=event.id,
+                user_card_id=event.user_card_id,
+                user_id=event.user_id,
+                card_id=event.card_id,
+                action=event.action,
+                source_type=event.source_type,
+                source_id=event.source_id,
+                from_user_id=event.from_user_id,
+                to_user_id=event.to_user_id,
+                metadata=event.metadata_json or {},
+                created_at=event.created_at,
+                previous_hash=event.previous_hash,
+            )
+        ).hexdigest()
+        if event.record_hash != expected_hash:
+            violations.append(f"{event.id}:record_hash")
+        previous_hash = event.record_hash
+        verified += 1
+    return {
+        "valid": not violations,
+        "verified": verified,
+        "legacy": legacy,
+        "violations": violations,
+    }
+
+
 async def grant_user_card(
     session: AsyncSession,
     *,
@@ -205,20 +344,17 @@ async def grant_user_card(
     # combined flush can make SQLite emit the ledger insert first and violate
     # the user_cards foreign key.
     await session.flush()
-    session.add(
-        CardOwnershipLedger(
-            id=f"ledger_{uuid4().hex[:12]}",
-            user_card_id=user_card.id,
-            user_id=user_id,
-            card_id=card_id,
-            action="grant",
-            source_type=source_type,
-            source_id=source_id,
-            to_user_id=user_id,
-            metadata_json=metadata or {},
-        )
+    await append_ownership_ledger(
+        session,
+        user_card_id=user_card.id,
+        user_id=user_id,
+        card_id=card_id,
+        action="grant",
+        source_type=source_type,
+        source_id=source_id,
+        to_user_id=user_id,
+        metadata=metadata,
     )
-    await session.flush()
     await notify_followers_of_card(session, user_card=user_card)
     return user_card
 
@@ -602,6 +738,18 @@ async def create_point_charge(
         operation="charge",
         idempotency_key=idempotency_key,
         amount=package["points"],
+        resource_type="point_charge",
+        resource_id=charge.id,
+        request_hash=sha256(
+            json.dumps(
+                {
+                    "packageId": package_id,
+                    "paymentMethod": payment_method,
+                    "points": package["points"],
+                },
+                sort_keys=True,
+            ).encode()
+        ).hexdigest(),
         ledger_id=ledger.id,
         status="completed",
     )
@@ -611,8 +759,28 @@ async def create_point_charge(
 
 
 async def refund_point_charge(
-    session: AsyncSession, *, user_id: str, charge_id: str
+    session: AsyncSession, *, user_id: str, charge_id: str, idempotency_key: str
 ) -> PointCharge:
+    existing_transaction = await session.scalar(
+        select(PointTransaction).where(
+            PointTransaction.user_id == user_id,
+            PointTransaction.operation == "refund",
+            PointTransaction.idempotency_key == idempotency_key,
+        )
+    )
+    if existing_transaction:
+        if existing_transaction.resource_id != charge_id:
+            raise AppError(
+                409,
+                "IDEMPOTENCY_KEY_REUSED",
+                "동일한 환불 식별자를 다른 충전에 사용할 수 없습니다.",
+            )
+        charge = await session.scalar(
+            select(PointCharge).where(PointCharge.id == charge_id, PointCharge.user_id == user_id)
+        )
+        if charge is None:
+            raise AppError(404, "POINT_CHARGE_NOT_FOUND", "포인트 충전 내역을 찾을 수 없습니다.")
+        return charge
     charge = await session.scalar(
         select(PointCharge)
         .where(PointCharge.id == charge_id, PointCharge.user_id == user_id)
@@ -654,6 +822,19 @@ async def refund_point_charge(
     )
     charge.status = "refunded"
     charge.refunded_at = now()
+    session.add(
+        PointTransaction(
+            id=f"point_tx_{uuid4().hex[:12]}",
+            user_id=user_id,
+            operation="refund",
+            idempotency_key=idempotency_key,
+            amount=-charge.points,
+            resource_type="point_charge",
+            resource_id=charge.id,
+            request_hash=sha256(f"point_charge:{charge.id}".encode()).hexdigest(),
+            status="completed",
+        )
+    )
     await session.flush()
     return charge
 
@@ -700,6 +881,113 @@ async def spend_points(
     session.add(ledger)
     await session.flush()
     return ledger
+
+
+async def reconcile_point_balances(session: AsyncSession) -> list[dict[str, object]]:
+    """Return cached-balance drift without mutating financial state."""
+    balances = list(await session.scalars(select(PointBalance).order_by(PointBalance.user_id)))
+    balance_by_user = {item.user_id: item.balance for item in balances}
+    ledger_user_ids = set((await session.scalars(select(PointLedger.user_id).distinct())).all())
+    drifts: list[dict[str, object]] = []
+    for user_id in sorted(set(balance_by_user) | ledger_user_ids):
+        ledger_total = int(
+            await session.scalar(
+                select(func.coalesce(func.sum(PointLedger.amount), 0)).where(
+                    PointLedger.user_id == user_id
+                )
+            )
+            or 0
+        )
+        cached_balance = int(balance_by_user.get(user_id, 0))
+        if ledger_total != cached_balance:
+            drifts.append(
+                {
+                    "userId": user_id,
+                    "cachedBalance": cached_balance,
+                    "ledgerTotal": ledger_total,
+                    "difference": cached_balance - ledger_total,
+                }
+            )
+    return drifts
+
+
+async def adjust_points(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    amount: int,
+    reason: str | None,
+    actor_id: str,
+    idempotency_key: str,
+) -> tuple[PointLedger, bool]:
+    """Apply one administrator point adjustment and return (ledger, replayed)."""
+    if amount == 0:
+        raise AppError(422, "INVALID_POINT_AMOUNT", "조정 포인트는 0이 될 수 없습니다.")
+    existing = await session.scalar(
+        select(PointTransaction).where(
+            PointTransaction.user_id == user_id,
+            PointTransaction.operation == "adjustment",
+            PointTransaction.idempotency_key == idempotency_key,
+        )
+    )
+    if existing:
+        if existing.amount != amount or existing.resource_id != user_id:
+            raise AppError(
+                409,
+                "IDEMPOTENCY_KEY_REUSED",
+                "같은 멱등 키로 다른 포인트 조정을 요청할 수 없습니다.",
+            )
+        if existing.ledger_id:
+            ledger = await session.get(PointLedger, existing.ledger_id)
+            if ledger is not None:
+                return ledger, True
+    event = await record_engagement_event(
+        session,
+        user_id=user_id,
+        kind="points_adjusted",
+        source_type="admin_point_adjustment",
+        source_id=f"admin_adjustment:{user_id}:{idempotency_key}",
+        payload={"amount": amount, "reason": reason},
+    )
+    if amount > 0:
+        ledger = await grant_points(
+            session,
+            user_id=user_id,
+            source_event_id=event.id,
+            rule_key="admin_point_adjustment",
+            amount=amount,
+            description=reason,
+            metadata={"actorId": actor_id},
+        )
+    else:
+        ledger = await spend_points(
+            session,
+            user_id=user_id,
+            source_event_id=event.id,
+            rule_key="admin_point_adjustment",
+            amount=abs(amount),
+            description=reason,
+            metadata={"actorId": actor_id},
+        )
+    transaction = existing or PointTransaction(
+        id=f"point_tx_{uuid4().hex[:12]}",
+        user_id=user_id,
+        operation="adjustment",
+        idempotency_key=idempotency_key,
+        amount=amount,
+        resource_type="user",
+        resource_id=user_id,
+        request_hash=sha256(
+            json.dumps(
+                {"userId": user_id, "amount": amount, "reason": reason}, sort_keys=True
+            ).encode()
+        ).hexdigest(),
+        status="completed",
+    )
+    transaction.ledger_id = ledger.id
+    session.add(transaction)
+    await session.flush()
+    return ledger, False
 
 
 async def reverse_points(

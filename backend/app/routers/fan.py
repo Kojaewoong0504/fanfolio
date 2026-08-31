@@ -11,12 +11,14 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, case, delete, desc, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
+from app.core.config import get_settings
 from app.db.session import begin_contention_safe_transaction
 from app.dependencies import DbSession, FanUser, OptionalCurrentUser
 from app.download_signing import download_url, verify_download_token
 from app.errors import AppError
 from app.models import (
     AdminMembership,
+    AnalyticsEvent,
     Artist,
     Asset,
     AuditLog,
@@ -68,6 +70,7 @@ from app.models import (
 from app.rate_limit import enforce_rate_limit
 from app.schemas import (
     AccountDeletionRequest,
+    AnalyticsEventCreate,
     CollectionGoalCreate,
     ConsentRecordCreate,
     NotificationPreferencesUpdate,
@@ -474,9 +477,12 @@ async def create_shop_order(
     session: DbSession,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict:
+    if not idempotency_key or not idempotency_key.strip():
+        raise AppError(422, "IDEMPOTENCY_KEY_REQUIRED", "주문 요청 식별자가 필요합니다.")
+    idempotency_key = idempotency_key.strip()
     if payload.payment_method != "points":
         raise AppError(422, "SHOP_PAYMENT_METHOD_UNSUPPORTED", "현재는 포인트 결제만 지원합니다.")
-    request_key = idempotency_key or uuid4().hex
+    request_key = idempotency_key
     if idempotency_key:
         existing_order = await session.scalar(
             select(ShopOrder).where(
@@ -485,6 +491,15 @@ async def create_shop_order(
             )
         )
         if existing_order is not None:
+            if (
+                existing_order.product_id != payload.product_id
+                or existing_order.payment_method != payload.payment_method
+            ):
+                raise AppError(
+                    409,
+                    "IDEMPOTENCY_KEY_REUSED",
+                    "같은 멱등 키로 다른 주문을 요청할 수 없습니다.",
+                )
             return {
                 "ok": True,
                 "data": {
@@ -517,6 +532,16 @@ async def create_shop_order(
         )
         if (user_purchase_count or 0) >= product.per_user_limit:
             raise AppError(409, "SHOP_PRODUCT_USER_LIMIT", "1인 구매 한도를 초과했습니다.")
+    await record_analytics_event(
+        session,
+        event_name="conversion.started",
+        user_id=user.id,
+        artist_id=product.artist_id,
+        pack_id=product.card_pack_id,
+        source="shop_order",
+        dedupe_key=f"shop-order-attempt:{user.id}:{product.id}:{request_key}",
+        metadata={"conversion": "purchase", "productId": product.id},
+    )
     order = ShopOrder(
         id=f"shop_order_{uuid4().hex[:12]}",
         user_id=user.id,
@@ -537,6 +562,16 @@ async def create_shop_order(
         source_type="shop_order",
         source_id=order.id,
         payload={"productId": product.id, "points": product.price_points, "orderId": order.id},
+    )
+    await record_analytics_event(
+        session,
+        event_name="conversion.completed",
+        user_id=user.id,
+        artist_id=product.artist_id,
+        pack_id=product.card_pack_id,
+        source="shop_order",
+        dedupe_key=f"shop-order:{order.id}",
+        metadata={"conversion": "purchase", "productId": product.id},
     )
     ledger = await spend_points(
         session,
@@ -1009,6 +1044,16 @@ async def add_wishlist(card_id: str, user: FanUser, session: DbSession) -> dict:
     if existing is None:
         session.add(
             FanWishlistItem(id=f"wishlist_{uuid4().hex[:12]}", user_id=user.id, card_id=card_id)
+        )
+        await record_analytics_event(
+            session,
+            event_name="product.engaged",
+            user_id=user.id,
+            artist_id=card.artist_id,
+            card_id=card.id,
+            source="wishlist",
+            dedupe_key=f"wishlist:{user.id}:{card.id}",
+            metadata={"action": "save", "surface": "collection"},
         )
         await session.commit()
     return {"ok": True, "data": {"cardId": card_id, "saved": True}}
@@ -1483,6 +1528,8 @@ async def card_acquisition_history(user_card_id: str, user: FanUser, session: Db
                     "fromUserId": event.from_user_id,
                     "toUserId": event.to_user_id,
                     "metadata": event.metadata_json or {},
+                    "previousHash": event.previous_hash,
+                    "recordHash": event.record_hash,
                     "createdAt": event.created_at.isoformat(),
                 }
                 for event in events
@@ -1686,6 +1733,9 @@ async def point_charge_catalog(session: DbSession) -> dict:
 
 
 def _point_charge_data(charge: PointCharge) -> dict:
+    refunded_at = charge.refunded_at
+    if refunded_at and refunded_at.tzinfo is None:
+        refunded_at = refunded_at.replace(tzinfo=UTC)
     return {
         "id": charge.id,
         "packageId": charge.package_id,
@@ -1694,7 +1744,7 @@ def _point_charge_data(charge: PointCharge) -> dict:
         "priceWon": charge.price_won,
         "status": charge.status,
         "createdAt": charge.created_at.isoformat() if charge.created_at else None,
-        "refundedAt": charge.refunded_at.isoformat() if charge.refunded_at else None,
+        "refundedAt": refunded_at.isoformat() if refunded_at else None,
     }
 
 
@@ -1718,14 +1768,31 @@ async def create_fan_point_charge(
     session: DbSession,
     idempotency_key: str = Header(..., alias="Idempotency-Key"),
 ) -> dict:
+    settings = get_settings()
+    if settings.is_hosted and not settings.allow_sandbox_point_charges:
+        raise AppError(
+            403,
+            "POINT_CHARGE_SANDBOX_DISABLED",
+            "현재 환경에서는 테스트 포인트 충전을 사용할 수 없습니다.",
+        )
     key = idempotency_key.strip()
     if not key:
         raise AppError(422, "IDEMPOTENCY_KEY_REQUIRED", "충전 요청 식별자가 필요합니다.")
+    await begin_contention_safe_transaction(session)
     existing = await session.scalar(
         select(PointCharge).where(
             PointCharge.user_id == user.id, PointCharge.idempotency_key == key
         )
     )
+    if existing is not None and (
+        existing.package_id != payload.package_id
+        or existing.payment_method != payload.payment_method
+    ):
+        raise AppError(
+            409,
+            "IDEMPOTENCY_KEY_REUSED",
+            "같은 멱등 키로 다른 포인트 충전을 요청할 수 없습니다.",
+        )
     charge = await create_point_charge(
         session,
         user_id=user.id,
@@ -1750,8 +1817,17 @@ async def create_fan_point_charge(
 
 
 @router.post("/me/point-charges/{charge_id}/refund", status_code=status.HTTP_201_CREATED)
-async def refund_fan_point_charge(charge_id: str, user: FanUser, session: DbSession) -> dict:
-    charge = await refund_point_charge(session, user_id=user.id, charge_id=charge_id)
+async def refund_fan_point_charge(
+    charge_id: str,
+    user: FanUser,
+    session: DbSession,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> dict:
+    if not idempotency_key or not idempotency_key.strip():
+        raise AppError(422, "IDEMPOTENCY_KEY_REQUIRED", "환불 요청 식별자가 필요합니다.")
+    charge = await refund_point_charge(
+        session, user_id=user.id, charge_id=charge_id, idempotency_key=idempotency_key.strip()
+    )
     await session.commit()
     balance = int(
         await session.scalar(select(PointBalance.balance).where(PointBalance.user_id == user.id))
@@ -3086,6 +3162,45 @@ async def _notification_artist_ids(
         )
     return {
         notification_id: artist_id for notification_id, artist_id in result.items() if artist_id
+    }
+
+
+@router.post("/analytics/events", status_code=status.HTTP_201_CREATED)
+async def create_analytics_event(
+    payload: AnalyticsEventCreate,
+    user: FanUser,
+    session: DbSession,
+    response: Response,
+) -> dict:
+    artist = await session.get(Artist, payload.artist_id) if payload.artist_id else None
+    if payload.artist_id and artist is None:
+        raise AppError(404, "ARTIST_NOT_FOUND", "아티스트를 찾을 수 없습니다.")
+    scoped_dedupe = f"fan:{user.id}:{payload.dedupe_key}" if payload.dedupe_key else None
+    replayed = False
+    if scoped_dedupe:
+        replayed = (
+            await session.scalar(
+                select(AnalyticsEvent.id).where(AnalyticsEvent.dedupe_key == scoped_dedupe)
+            )
+        ) is not None
+    event = await record_analytics_event(
+        session,
+        event_name=payload.event_name,
+        user_id=user.id,
+        organization_id=None,
+        artist_id=payload.artist_id,
+        card_id=payload.card_id,
+        pack_id=payload.pack_id,
+        source=payload.source,
+        dedupe_key=scoped_dedupe,
+        metadata=payload.metadata,
+    )
+    await session.commit()
+    if replayed:
+        response.status_code = status.HTTP_200_OK
+    return {
+        "ok": True,
+        "data": {"id": event.id, "eventName": event.event_name, "replayed": replayed},
     }
 
 

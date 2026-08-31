@@ -1,4 +1,6 @@
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any
 
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
@@ -143,6 +145,63 @@ def test_shop_order_is_idempotent_and_refund_is_single_use(
             return order.status, int(balance or 0), entitlement.status
 
     assert asyncio.run(read_order()) == ("refunded", 2000, "revoked")
+
+
+def test_idempotency_key_rejects_changed_point_command_payload(
+    actors: dict[str, TestClient],
+) -> None:
+    payload = {
+        "userId": "fan",
+        "amount": 500,
+        "reason": "첫 지급",
+        "idempotencyKey": "conflict-economy-001",
+    }
+    assert_success(actors["admin"].post("/api/admin/engagement/points/adjustments", json=payload))
+    changed = {**payload, "amount": 700}
+    response = actors["admin"].post("/api/admin/engagement/points/adjustments", json=changed)
+    assert response.status_code == 409, response.text
+    assert response.json()["error"]["code"] == "IDEMPOTENCY_KEY_REUSED"
+
+
+def test_concurrent_point_charge_retries_create_one_charge(
+    actors: dict[str, TestClient],
+) -> None:
+    def charge() -> Any:
+        return actors["fan"].post(
+            "/api/me/point-charges",
+            json={"packageId": "points_500", "paymentMethod": "sandbox_card"},
+            headers={"Idempotency-Key": "concurrent-charge-001"},
+        )
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        responses = list(executor.map(lambda _: charge(), range(8)))
+
+    assert {response.status_code for response in responses} == {201}
+    body = [response.json()["data"] for response in responses]
+    assert len({item["chargeId"] for item in body}) == 1
+    assert sum(item["replayed"] is False for item in body) == 1
+
+
+def test_idempotency_key_rejects_changed_shop_order_resource(
+    actors: dict[str, TestClient],
+) -> None:
+    _seed_sellable_product()
+    headers = {"Idempotency-Key": "conflict-order-001"}
+    assert_success(
+        actors["fan"].post(
+            "/api/me/shop/orders",
+            json={"productId": "economy_product", "paymentMethod": "points"},
+            headers=headers,
+        ),
+        201,
+    )
+    changed = actors["fan"].post(
+        "/api/me/shop/orders",
+        json={"productId": "missing-product", "paymentMethod": "points"},
+        headers=headers,
+    )
+    assert changed.status_code == 409, changed.text
+    assert changed.json()["error"]["code"] == "IDEMPOTENCY_KEY_REUSED"
 
 
 def test_non_pg_reward_product_is_fulfilled_atomically(actors: dict[str, TestClient]) -> None:

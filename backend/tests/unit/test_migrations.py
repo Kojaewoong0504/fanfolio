@@ -103,6 +103,14 @@ def test_alembic_revision_identifiers_fit_render_version_column() -> None:
                 assert len(match.group(1)) <= 32, migration_file.name
 
 
+def test_point_ledger_migration_installs_append_only_guard() -> None:
+    source = (
+        Path(__file__).parents[2] / "alembic/versions/0078_point_ledger_append_only.py"
+    ).read_text()
+    assert "BEFORE UPDATE OR DELETE" in source
+    assert "point_ledger" in source
+
+
 def test_alembic_upgrade_creates_the_current_schema(tmp_path: Path) -> None:
     database_path = tmp_path / "migration.db"
     backend_dir = Path(__file__).parents[2]
