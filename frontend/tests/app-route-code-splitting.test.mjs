@@ -7,5 +7,6 @@ const appSource = await readFile(new URL('../src/App.tsx', import.meta.url), 'ut
 test('heavy secondary fan screens load outside the initial app bundle', () => {
   assert.match(appSource, /lazy\(\(\) => import\('\.\/components\/CardDetail'\)/)
   assert.match(appSource, /lazy\(\(\) => import\('\.\/components\/Settings'\)/)
+  assert.match(appSource, /lazy\(\(\) => import\('\.\/components\/QrRedeemModal'\)/)
   assert.match(appSource, /<Suspense fallback=/)
 })

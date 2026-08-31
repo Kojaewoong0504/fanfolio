@@ -5,7 +5,7 @@ import './fan-community-reference.css'
 import { getUserCardHistory, type UserCardHistoryItem } from './api/client'
 import { ApiError, apiFetch, applyToFanEvent, claimPassTier, claimReward, clearAccessToken, combineCards, confirmFanPasswordReset, connectNotificationStream, createCollectionGoal, createPointCharge, createShopOrder, deleteCollectionGoal, followFan, getCardCombination, getCatalogCards, getCardPacks, getCardPackOdds, getCollectionGoals, getFanEvent, getFanEventComments, getFanEvents, getFanHome, getMyEventApplications, getFanPass, getFanPoints, getNotificationPreferences, getPointChargePackages, getPointCharges, getProgression, getShopProduct, getShopProducts, getShopOrders, getWishlist, oauthStartUrl, openCardPack, postFanEventComment, previewCardCombination, reconcilePassRewards, refundPointCharge, refundShopOrder, removeWishlistCard, registerPushDevice, requestFanPasswordReset, resolveApiUrl, saveWishlistCard, searchFans, setAccessToken, unfollowFan, unregisterPushDevice, updateNotificationPreferences, updateProfileEquipment, purchasePassSeason, type CardCombinationPreview, type CardCombinationRecipe, type CardCombinationResult, type CardDesignConfig, type CardPack, type CardRedemption, type CatalogArtist, type CatalogCard, type CatalogMember, type CollectionBenefit, type CollectionCard, type CollectionGoal, type CollectionSummary, type CurrentUser, type EventPagination, type FanEvent, type FanEventApplication, type FanEventComment, type FanEventStatus, type FanHomeResponse, type FanMission, type FanProgression, type FanSummary, type NotificationItem, type PointChargePackage, type PointChargeRecord, type ProfileEquipment, type PublicCollection as PublicCollectionData, type RewardGrant, type ShopOrder, type ShopProduct, type UserCardDetail } from './api/client'
 import { enableWebPush } from './pushNotifications'
-import { QrRedeemModal, RedeemIcon } from './components/QrRedeemModal'
+import { RedeemIcon } from './components/RedeemIcon'
 import { InteractiveCollectibleCard } from './components/InteractiveCollectibleCard'
 import { rewardArtworkUrl } from './components/FanGrowth'
 import { ProfileAvatar } from './components/ProfileAvatar'
@@ -41,6 +41,7 @@ import registrationCompleteCelebration from './assets/registration-complete-cele
 import fanLevelStar from './assets/fan-level-star-v2.png'
 import profileDecorationsImage from './assets/profile-decorations-generated.png'
 
+const QrRedeemModal = lazy(() => import('./components/QrRedeemModal').then(module => ({ default: module.QrRedeemModal })))
 const CardDetail = lazy(() => import('./components/CardDetail').then(module => ({ default: module.CardDetail })))
 const Settings = lazy(() => import('./components/Settings').then(module => ({ default: module.Settings })))
 
