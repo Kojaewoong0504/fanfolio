@@ -6203,22 +6203,24 @@ function bind() {
   document.querySelector("#event-form")?.addEventListener("submit", saveEvent);
   document.querySelector(".event-upload-select")?.addEventListener("click", () => document.querySelector("#event-banner-file")?.click());
   document.querySelector("#event-banner-file")?.addEventListener("change", async (event) => {
-    const file = event.currentTarget.files?.[0];
+    const fileInput = event.currentTarget;
+    const form = fileInput.form;
+    const file = fileInput.files?.[0];
     const name = document.querySelector("#event-banner-file-name");
     if (file && name) name.textContent = file.name;
-    if (!file) return;
-    const thumbnail = event.currentTarget.form.querySelector(".event-upload-thumbnail");
+    if (!file || !form) return;
+    const thumbnail = form.querySelector(".event-upload-thumbnail");
     const localPreviewUrl = URL.createObjectURL(file);
     if (thumbnail) thumbnail.innerHTML = `<img data-event-hero data-local-preview src="${escapeHtml(localPreviewUrl)}" alt="선택한 이벤트 배너 미리보기" />`;
     try {
       const assetId = await uploadAsset(file, "event_banner");
-      event.currentTarget.form.elements.heroAssetId.value = assetId;
+      form.elements.heroAssetId.value = assetId;
       const previewUrl = await loadUploadedAssetPreview(assetId);
       if (thumbnail) thumbnail.innerHTML = `<img data-event-hero src="${escapeHtml(previewUrl)}" alt="현재 이벤트 배너" />`;
       URL.revokeObjectURL(localPreviewUrl);
       toast("이벤트 배너를 업로드했습니다.");
     } catch {
-      event.currentTarget.value = "";
+      fileInput.value = "";
       // Keep a usable preview when the upload request fails. Clearing the
       // thumbnail here made a valid local selection look broken and forced
       // operators to reopen the file picker just to retry the upload.
