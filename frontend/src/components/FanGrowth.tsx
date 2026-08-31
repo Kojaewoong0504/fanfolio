@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { resolveApiUrl, type FanProgression, type PassTierClaim, type ProfileEquipment, type RewardGrant } from '../api/client'
 import './FanGrowth.css'
 import './FanGrowthReference.css'
-import milestoneSprite from '../assets/fan-level-milestones.png'
+import milestoneSprite from '../assets/fan-level-milestones.jpg'
 import { AuthenticatedImage } from './AuthenticatedImage'
 import { FanPoints } from './FanPoints'
 
