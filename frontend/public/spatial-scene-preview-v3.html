@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Spatial Depth Camera Projection</title>
+  <style>
+    :root { font-family: Inter, Pretendard, sans-serif; color-scheme: dark; }
+    body { margin: 0; background: #090a1e; color: #f8f7ff; }
+    main { width: min(760px, calc(100% - 32px)); margin: auto; padding: 28px 0 56px; }
+    h1 { margin: 0 0 8px; font-size: clamp(25px, 5vw, 40px); }
+    p { color: #bcbad5; line-height: 1.6; }
+    .toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 20px 0; padding: 14px; border: 1px solid #40416a; border-radius: 14px; background: #14152f; }
+    button { border: 0; border-radius: 10px; padding: 12px 16px; color: white; background: #694ee9; font-weight: 800; }
+    #status { color: #9cf1ca; font-size: 12px; font-weight: 800; }
+    .stage { display: grid; place-items: center; min-height: 650px; perspective: 1100px; border-radius: 20px; background: radial-gradient(circle, #39377b, #10112d 72%); overflow: hidden; }
+    .card { position: relative; width: min(300px, 72%); aspect-ratio: 2 / 3; overflow: hidden; border-radius: 18px; transform-style: preserve-3d; transition: transform 60ms linear; filter: drop-shadow(28px 32px 22px #000b); }
+    canvas, .depth-light, .edge { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 18px; }
+    canvas { z-index: 1; }
+    .depth-light { z-index: 2; pointer-events: none; mix-blend-mode: screen; background: radial-gradient(circle at var(--lx) var(--ly), #fff9, transparent 20%), linear-gradient(115deg, transparent 36%, #fff6 49%, transparent 60%); transform: translateZ(28px); }
+    .edge { z-index: 3; pointer-events: none; border: 1px solid #fff9; box-shadow: inset 0 0 28px #fff4, 0 0 22px #765cff88; transform: translateZ(36px); }
+    .label { margin-top: 15px; color: #aaa9c8; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>카메라 투영형 Spatial Card</h1>
+    <p>카드 전체를 이동하지 않고, 깊이맵의 픽셀별 깊이값으로 가상 카메라의 시점을 재투영합니다. 밝은 깊이 영역과 어두운 배경이 서로 다른 양으로 움직입니다.</p>
+    <div class="toolbar"><button id="sensor">휴대폰 기울기 센서 사용</button><span id="status">깊이 카메라 준비 중…</span></div>
+    <div class="stage" id="stage"><div class="card" id="card"><canvas id="view" aria-label="카메라 투영형 입체 카드"></canvas><div class="depth-light"></div><div class="edge"></div></div></div>
+    <div class="label">검증 포인트: 평행 이동이 아니라 깊이별 재투영 · 원근감 있는 광원 · 카드 경계 클리핑</div>
+  </main>
+  <script>
+    const card = document.querySelector('#card');
+    const stage = document.querySelector('#stage');
+    const canvas = document.querySelector('#view');
+    const light = document.querySelector('.depth-light');
+    const status = document.querySelector('#status');
+    const gl = canvas.getContext('webgl', { antialias: true, powerPreference: 'high-performance' });
+    const image = new Image();
+    const depth = new Image();
+    const point = { x: 0, y: 0 };
+    let imageReady = false;
+    let depthReady = false;
+    const vertex = 'attribute vec2 position; varying vec2 uv; void main(){ uv=(position+1.0)*0.5; gl_Position=vec4(position,0.0,1.0); }';
+    const fragment = 'precision mediump float; varying vec2 uv; uniform sampler2D photo; uniform sampler2D depthMap; uniform vec2 camera; void main(){ float z=texture2D(depthMap,uv).r; float near=1.0-z; float focal=1.0+z*1.8; vec2 projected=uv+(camera*near*0.24)/focal; vec2 q=clamp(projected,0.002,0.998); float edge=1.0-smoothstep(0.46,0.7,length(uv-0.5)); float left=texture2D(depthMap,clamp(q+vec2(0.004,0.0),0.0,1.0)).r; float right=texture2D(depthMap,clamp(q-vec2(0.004,0.0),0.0,1.0)).r; float up=texture2D(depthMap,clamp(q+vec2(0.0,0.004),0.0,1.0)).r; float down=texture2D(depthMap,clamp(q-vec2(0.0,0.004),0.0,1.0)).r; vec3 normal=normalize(vec3(right-left,down-up,0.035)); vec3 lightDir=normalize(vec3(camera*1.2,0.8)); float shade=0.5+0.5*dot(normal,lightDir); vec3 color=texture2D(photo,q).rgb*(0.86+shade*0.22); color+=vec3(0.22,0.3,0.9)*pow(max(0.0,dot(normal,lightDir)),8.0)*edge*0.16; gl_FragColor=vec4(color,1.0); }';
+    function shader(type, source) { const item = gl.createShader(type); gl.shaderSource(item, source); gl.compileShader(item); return item; }
+    const program = gl.createProgram(); gl.attachShader(program, shader(gl.VERTEX_SHADER, vertex)); gl.attachShader(program, shader(gl.FRAGMENT_SHADER, fragment)); gl.linkProgram(program); gl.useProgram(program);
+    const buffer = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,1,1]), gl.STATIC_DRAW);
+    const position = gl.getAttribLocation(program, 'position'); gl.enableVertexAttribArray(position); gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
+    function texture() { const item = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, item); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); return item; }
+    const photoTexture = texture(); const depthTexture = texture();
+    function upload(target, source) { gl.bindTexture(gl.TEXTURE_2D, target); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source); }
+    image.onload = () => { imageReady = true; upload(photoTexture, image); draw(); };
+    depth.onload = () => { depthReady = true; upload(depthTexture, depth); draw(); };
+    image.src = '/src/assets/card-minho-midnight.jpg'; depth.src = '/spatial/card-minho-depth.svg';
+    function draw() { if (!gl || !imageReady || !depthReady) return; const rect = canvas.getBoundingClientRect(); const ratio = Math.min(devicePixelRatio || 1, 2); canvas.width = rect.width * ratio; canvas.height = rect.height * ratio; gl.viewport(0, 0, canvas.width, canvas.height); gl.uniform2f(gl.getUniformLocation(program, 'camera'), point.x, point.y); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, photoTexture); gl.uniform1i(gl.getUniformLocation(program, 'photo'), 0); gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, depthTexture); gl.uniform1i(gl.getUniformLocation(program, 'depthMap'), 1); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); card.style.transform = `rotateX(${point.y * -2.2}deg) rotateY(${point.x * 2.8}deg)`; light.style.setProperty('--lx', `${50 + point.x * 35}%`); light.style.setProperty('--ly', `${50 + point.y * 35}%`); status.textContent = 'WebGL 활성 · 픽셀별 깊이 재투영'; }
+    function setPoint(x, y) { point.x = Math.max(-1, Math.min(1, x)); point.y = Math.max(-1, Math.min(1, y)); draw(); }
+    stage.addEventListener('pointermove', event => { const rect = stage.getBoundingClientRect(); setPoint((event.clientX - rect.left) / rect.width * 2 - 1, (event.clientY - rect.top) / rect.height * 2 - 1); });
+    stage.addEventListener('pointerleave', () => setPoint(0, 0));
+    window.addEventListener('resize', draw);
+    document.querySelector('#sensor').addEventListener('click', async () => { try { if (typeof DeviceOrientationEvent?.requestPermission === 'function' && await DeviceOrientationEvent.requestPermission() !== 'granted') throw Error(); window.addEventListener('deviceorientation', event => setPoint((event.gamma || 0) / 30, ((event.beta || 0) - 30) / 30)); status.textContent = '센서 활성 · 가상 카메라 이동 중'; } catch { status.textContent = '센서 권한 거부 · 터치/마우스로 확인하세요'; } });
+  </script>
+</body>
+</html>
