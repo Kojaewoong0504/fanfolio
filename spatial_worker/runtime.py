@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from io import BytesIO
 
@@ -13,7 +14,8 @@ def build_segmentation_engine() -> SpatialWorkerEngine:
     """Load only the subject segmentation model for common photo analysis."""
     from rembg import new_session, remove
 
-    removal_session = new_session("isnet-general-use")
+    model_name = os.environ.get("SPATIAL_SEGMENTATION_MODEL", "u2netp")
+    removal_session = new_session(model_name)
 
     def segment_person(image: Image.Image) -> Image.Image:
         source = BytesIO()
@@ -25,8 +27,8 @@ def build_segmentation_engine() -> SpatialWorkerEngine:
         depth_estimator=lambda image: image.convert("L"),
         person_segmenter=segment_person,
         background_inpainter=lambda image, mask: image,
-        provider="depth-anything-v2+isnet+telea",
-        model_version="isnet-general-use",
+        provider=f"depth-anything-v2+{model_name}+telea",
+        model_version=model_name,
     )
 
 
@@ -59,6 +61,6 @@ def build_runtime_engine() -> SpatialWorkerEngine:
         depth_estimator=estimate_depth,
         person_segmenter=segmentation_engine.person_segmenter,
         background_inpainter=inpaint_background,
-        provider="depth-anything-v2+isnet+telea",
-        model_version="depth-anything-v2-small/isnet-general-use/telea-v1",
+        provider=f"depth-anything-v2+{os.environ.get('SPATIAL_SEGMENTATION_MODEL', 'u2netp')}+telea",
+        model_version=f"depth-anything-v2-small/{os.environ.get('SPATIAL_SEGMENTATION_MODEL', 'u2netp')}/telea-v1",
     )
