@@ -73,6 +73,7 @@ from app.models import (
     Session,
     ShopOrder,
     ShopProduct,
+    SpatialSceneJob,
     TradeItem,
     TradeLock,
     TradeProposal,
@@ -84,6 +85,15 @@ from app.models import (
 from app.notification_delivery import build_delivery
 from app.passwords import hash_password, verify_password
 from app.retry import decide_retry
+from app.spatial_scene import (
+    PhotoAnalysisBundle,
+    SpatialSceneProviderError,
+    configured_spatial_scene_provider,
+    image_size,
+    source_revision,
+    spatial_scene_metadata,
+    validate_photo_analysis_bundle,
+)
 from app.storage import configured_asset_storage
 
 logger = logging.getLogger(__name__)
@@ -2876,21 +2886,21 @@ async def ensure_demo_catalog(session: AsyncSession) -> None:
             "Aurora Arin Ver.",
             "member_luminous_arin",
             "SR",
-            "/assets/card-yuna-lavender.jpg",
+            "/assets/demo/dreamscape/harin.jpg",
         ),
         (
             "card_demo_luminous_ian",
             "Aurora Ian Ver.",
             "member_luminous_ian",
             "R",
-            "/assets/card-minho-midnight.jpg",
+            "/assets/demo/dreamscape/rina.jpg",
         ),
         (
             "card_demo_luminous_sena",
             "Aurora Sena Ver.",
             "member_luminous_sena",
             "N",
-            "/assets/card-jay-rosegold.jpg",
+            "/assets/demo/dreamscape/sena.jpg",
         ),
     )
     for card_id, name, member_id, rarity, image_url in luminous_card_specs:
@@ -3765,12 +3775,112 @@ async def process_background_removal(job_id: str) -> None:
             job.preview_url = job.transparent_image_url
             await session.commit()
         except Exception:
-            # Storage providers can raise provider-specific exceptions (for
-            # example botocore ClientError), so a job must be marked failed
-            # instead of being left in `processing` indefinitely.
             logger.exception("Background removal failed for job %s", job_id)
             job.status = "failed"
             await session.commit()
+
+
+async def cached_photo_analysis_mask(asset: Asset, storage) -> bytes | None:
+    if not asset.storage_path or not asset.upload_completed_at:
+        return None
+    metadata = (asset.transform or {}).get("photoAnalysis")
+    if not isinstance(metadata, dict) or metadata.get("status") != "completed":
+        return None
+    if metadata.get("sourceAssetId") != asset.id:
+        return None
+    if metadata.get("sourceRevision") != source_revision(asset.id, asset.upload_completed_at):
+        return None
+    path = metadata.get("maskStoragePath")
+    if not isinstance(path, str) or not path:
+        return None
+    try:
+        source = await asyncio.to_thread(storage.read_bytes, asset.storage_path)
+        source_size = image_size(source)
+        mask = await asyncio.to_thread(storage.read_bytes, path)
+        validate_photo_analysis_bundle(
+            PhotoAnalysisBundle(
+                mask=mask,
+                provider=str(metadata.get("provider", "")),
+                model_version=str(metadata.get("modelVersion", "")),
+                confidence=float(metadata.get("confidence", -1)),
+            ),
+            expected_size=source_size,
+        )
+    except (SpatialSceneProviderError, TypeError, ValueError):
+        return None
+    return mask
+
+
+async def process_spatial_scene(job_id: str) -> None:
+    """Run one durable spatial job; the API remains responsive while it runs."""
+    async with SessionLocal() as session:
+        job = await session.get(SpatialSceneJob, job_id)
+        if not job or job.status in {"ready", "failed", "cancelled"}:
+            return
+        asset = await session.get(Asset, job.asset_id)
+        if not asset or not asset.storage_path:
+            job.status = "failed"
+            job.error_code = "ASSET_NOT_READY"
+            await session.commit()
+            return
+        try:
+            job.status, job.phase = "running", "depth_and_mask"
+            job.attempts += 1
+            await session.commit()
+            storage = configured_asset_storage()
+            source = await asyncio.to_thread(storage.read_bytes, asset.storage_path)
+            provider = configured_spatial_scene_provider(get_settings())
+            bundle = await provider.generate(
+                source, mask=await cached_photo_analysis_mask(asset, storage)
+            )
+            job.status, job.phase = "validating", "packaging"
+            await session.commit()
+            paths = {
+                "depthStoragePath": await asyncio.to_thread(
+                    storage.save_derived_bytes,
+                    asset.id,
+                    f"-spatial-{job.id}-depth.png",
+                    bundle.depth,
+                    content_type="image/png",
+                ),
+                "maskStoragePath": await asyncio.to_thread(
+                    storage.save_derived_bytes,
+                    asset.id,
+                    f"-spatial-{job.id}-mask.png",
+                    bundle.mask,
+                    content_type="image/png",
+                ),
+                "backgroundStoragePath": await asyncio.to_thread(
+                    storage.save_derived_bytes,
+                    asset.id,
+                    f"-spatial-{job.id}-background.png",
+                    bundle.background,
+                    content_type="image/png",
+                ),
+            }
+            metadata = spatial_scene_metadata(
+                asset.id,
+                provider=bundle.provider,
+                model_version=bundle.model_version,
+                confidence=bundle.confidence,
+                source_revision=source_revision(asset.id, asset.upload_completed_at),
+                depth_storage_path=paths["depthStoragePath"],
+                mask_storage_path=paths["maskStoragePath"],
+                background_storage_path=paths["backgroundStoragePath"],
+            )
+            job.result_metadata = metadata
+            asset.transform = {**(asset.transform or {}), "spatialScene": metadata}
+            job.status, job.phase = "ready", "complete"
+            await session.commit()
+        except Exception:
+            logger.exception("Spatial scene failed for job %s", job_id)
+            job.status, job.phase, job.error_code = (
+                "failed",
+                "error",
+                "SPATIAL_SCENE_GENERATION_FAILED",
+            )
+            await session.commit()
+            return
 
 
 async def cleanup_expired_uploads() -> int:

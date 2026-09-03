@@ -26,6 +26,17 @@ logger = logging.getLogger(__name__)
 ORGANIZATION_LOGO_MAX_BYTES = 2 * 1024 * 1024
 
 
+def invalidate_source_photo_derivatives(asset: Asset) -> None:
+    if not isinstance(asset.transform, dict):
+        return
+    transform = {
+        key: value
+        for key, value in asset.transform.items()
+        if key not in {"photoAnalysis", "spatialScene"}
+    }
+    asset.transform = transform or None
+
+
 def upload_limit_bytes(asset: Asset) -> int:
     if asset.purpose == "organization_logo":
         return ORGANIZATION_LOGO_MAX_BYTES
@@ -136,6 +147,7 @@ async def upload_asset_content(
     )
     if asset.purpose == "event_banner":
         await prepare_event_banner_variant(asset, storage)
+    invalidate_source_photo_derivatives(asset)
     asset.upload_completed_at = datetime.now(UTC)
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -193,6 +205,7 @@ async def complete_asset_upload(asset_id: str, user: CurrentUser, session: DbSes
             ensure_event_hero_derivative, storage, asset.id, canonical_path, content, force=True
         )
     asset.storage_path = canonical_path
+    invalidate_source_photo_derivatives(asset)
     asset.upload_completed_at = datetime.now(UTC)
     await session.commit()
     if staging_path != canonical_path:

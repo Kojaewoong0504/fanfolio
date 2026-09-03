@@ -1985,3 +1985,32 @@ class BackgroundRemovalJob(Base):
     status: Mapped[str] = mapped_column(String, default="queued")
     transparent_image_url: Mapped[str | None] = mapped_column(String, nullable=True)
     preview_url: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class SpatialSceneJob(Base):
+    """Durable, idempotent preprocessing request for one source revision."""
+
+    __tablename__ = "spatial_scene_jobs"
+    __table_args__ = (
+        UniqueConstraint("owner_id", "idempotency_key", name="uq_spatial_scene_owner_key"),
+        Index("ix_spatial_scene_jobs_due", "status", "next_attempt_at"),
+    )
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    asset_id: Mapped[str] = mapped_column(ForeignKey("assets.id"), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String, nullable=False)
+    generation_key: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="queued")
+    phase: Mapped[str | None] = mapped_column(String, nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_code: Mapped[str | None] = mapped_column(String, nullable=True)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    result_metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )

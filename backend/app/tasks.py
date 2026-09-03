@@ -11,6 +11,7 @@ from app.services import (
     cleanup_expired_uploads,
     process_background_removal,
     process_engagement_event,
+    process_spatial_scene,
     reconcile_point_balances,
     retry_failed_engagement_events,
 )
@@ -59,6 +60,18 @@ def enqueue_background_removal(job_id: str, background_tasks: BackgroundTasks) -
         process_background_removal_task.delay(job_id)
         return
     background_tasks.add_task(process_background_removal, job_id)
+
+
+@celery_app.task(name="fanfolio.process_spatial_scene")
+def process_spatial_scene_task(job_id: str) -> None:
+    asyncio.run(process_spatial_scene(job_id))
+
+
+def enqueue_spatial_scene(job_id: str, background_tasks: BackgroundTasks) -> None:
+    if settings.task_queue_mode == "celery":
+        process_spatial_scene_task.delay(job_id)
+        return
+    background_tasks.add_task(process_spatial_scene, job_id)
 
 
 @celery_app.task(name="fanfolio.process_engagement_event")

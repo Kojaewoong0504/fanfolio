@@ -14,6 +14,7 @@ from app.db.session import SessionLocal
 from app.errors import AppError
 from app.models import Asset
 from app.routers import assets as assets_router
+from app.routers.assets import invalidate_source_photo_derivatives
 from tests.conftest import assert_error, assert_success
 
 PNG_1X1 = base64.b64decode(
@@ -78,6 +79,22 @@ def asset_upload_completed_at(asset_id: str):
             return asset.upload_completed_at
 
     return asyncio.run(load_completed_at())
+
+
+def test_source_photo_replacement_invalidates_cached_analysis_and_spatial_scene() -> None:
+    asset = Asset(
+        id="asset_replace",
+        owner_id="artist_1",
+        transform={
+            "x": 10,
+            "photoAnalysis": {"status": "completed", "maskStoragePath": "s3://private/mask.png"},
+            "spatialScene": {"status": "completed", "depthStoragePath": "s3://private/depth.png"},
+        },
+    )
+
+    invalidate_source_photo_derivatives(asset)
+
+    assert asset.transform == {"x": 10}
 
 
 def test_background_removal_can_dispatch_to_celery(monkeypatch: Any) -> None:

@@ -310,6 +310,54 @@ cd backend
 `http://localhost:8000/api/health/ready`가 `ready`를 반환하고, `http://localhost:8025`에서
 매직 링크 메일을 확인하면 데이터베이스·SMTP·작업 큐를 연결한 개발 검증이 끝납니다.
 
+### 실제 공간 카드 모델을 로컬에서 검증하기
+
+공간 카드의 실제 깊이 추정·인물 분리·배경 복원 모델은 별도 로컬 worker에서 실행합니다.
+Render나 외부 운영 인프라가 필요하지 않습니다. macOS에서는 PyTorch가 CUDA 런타임을 요구하는
+Linux ARM 컨테이너 문제를 피하기 위해 네이티브 worker 실행을 권장합니다.
+
+```bash
+./scripts/run-local-spatial-worker.sh
+```
+
+처음 실행할 때만 Python 패키지와 모델이 다운로드됩니다. worker가 실행된 뒤 다른 터미널에서
+다음처럼 상태를 확인합니다.
+
+```bash
+curl http://localhost:8080/health
+```
+
+Linux x86 또는 컨테이너 환경에서는 기존 Compose overlay도 사용할 수 있습니다.
+
+```bash
+docker compose -f docker-compose.local.yml -f docker-compose.spatial-worker.local.yml up --build -d
+curl http://localhost:8080/health
+```
+
+`curl`이 `{"status":"ok"}`를 반환하면 `backend/.env.spatial-local.example`의 값을
+`backend/.env`에 반영하고 API를 실행합니다. 기본 예시는 SQLite와 inline 작업 큐를 사용하므로
+Redis와 Celery를 별도로 띄우지 않아도 됩니다. 이 예시는 로컬 전용 설정이므로
+기존 `backend/.env`를 자동으로 덮어쓰지 않습니다.
+
+```bash
+cd backend
+.venv/bin/alembic upgrade head
+.venv/bin/uvicorn app.main:app --reload --port 8000
+```
+
+Studio에서 원본 사진을 업로드하고 `공간 장면 생성`을 누르면 API는 작업을 접수하고, Celery가
+로컬 worker의 `/generate`를 호출합니다. 첫 실행은 Torch/Transformer 모델 로딩과 모델 캐시로
+오래 걸릴 수 있으며, worker가 계속 실행 중이면 이후 요청은 모델을 다시 로드하지 않습니다.
+브라우저에서 카드를 감상할 때는 AI를 호출하지 않고 생성된 depth/mask/background 결과만 사용합니다.
+
+실행을 중지하려면 다음을 사용합니다.
+
+```bash
+# 네이티브 worker 터미널에서 Ctrl-C
+# 컨테이너 worker를 사용한 경우에만:
+docker compose -f docker-compose.local.yml -f docker-compose.spatial-worker.local.yml down
+```
+
 위 과정을 자동으로 확인하려면 루트에서 다음 명령을 실행합니다. 이 스모크 테스트는
 PostgreSQL 마이그레이션, Celery worker와 Beat의 실제 기동·스케줄 발행, Redis rate limit(6번째
 요청의 429), SMTP Mailpit 수신까지 확인합니다. 컨테이너는 기본적으로 계속 실행되므로 Mailpit에서

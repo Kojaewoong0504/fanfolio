@@ -102,6 +102,10 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_use_tls: bool = True
     task_queue_mode: str = "inline"
+    spatial_scene_provider: str = "local_fallback"
+    spatial_scene_ai_url: str = ""
+    spatial_scene_ai_token: str = ""
+    spatial_scene_ai_timeout_seconds: float = 90.0
     engagement_event_max_attempts: int = 5
     engagement_event_retry_base_seconds: int = 30
     engagement_event_retry_max_seconds: int = 3600
@@ -246,6 +250,12 @@ class Settings(BaseSettings):
             raise ValueError("UPLOAD_CLEANUP_INTERVAL_SECONDS must be positive")
         if self.push_delivery_mode not in {"console", "fcm"}:
             raise ValueError("PUSH_DELIVERY_MODE must be console or fcm")
+        if self.spatial_scene_provider not in {"local_fallback", "http"}:
+            raise ValueError("SPATIAL_SCENE_PROVIDER must be local_fallback or http")
+        if self.spatial_scene_provider == "http" and not self.spatial_scene_ai_url:
+            raise ValueError("SPATIAL_SCENE_AI_URL is required for the http provider")
+        if self.spatial_scene_ai_timeout_seconds <= 0:
+            raise ValueError("SPATIAL_SCENE_AI_TIMEOUT_SECONDS must be positive")
         if self.push_delivery_mode == "fcm":
             missing = [
                 name
@@ -318,6 +328,10 @@ class Settings(BaseSettings):
         if not self.clamav_host:
             raise ValueError("CLAMAV_HOST is required when ASSET_SCAN_MODE is clamav")
         self._validate_oauth_redirects()
+        if self.storage_backend == "local":
+            raise ValueError(
+                "STORAGE_BACKEND=local is not allowed in production; use remote object storage"
+            )
 
     def _validate_hosted_auth_secrets(self) -> None:
         if self.download_signing_secret == "dev-only-change-me":
