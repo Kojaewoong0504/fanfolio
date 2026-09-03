@@ -18,6 +18,30 @@ const collectibleSource = await readFile(
 )
 const cssSource = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
 
+const ATELIER_12_PATTERN_IDS = [
+  'aurora-wave',
+  'satin-pearl',
+  'gold-signature',
+  'spectrum-edge',
+  'constellation',
+  'glass-caustics',
+  'liquid-silver',
+  'laser-engraving',
+  'cinema-flare',
+  'blossom-depth',
+  'light-signature',
+  'diamond-cut',
+]
+
+const LEGACY_PATTERN_IDS = [
+  'aurora-wave',
+  'prism',
+  'cracked-ice',
+  'micro-star',
+  'liquid-chrome',
+  'glass-flare',
+]
+
 function sourceContainsAll(source, snippets) {
   for (const snippet of snippets) {
     assert.ok(source.includes(snippet), `Expected source to include: ${snippet}`)
@@ -67,12 +91,11 @@ async function compileTypeFixture(source) {
   }
 }
 
-test('card detail API contract exposes version 3 collectible effect types', () => {
+test('card detail contract exposes version 3 collectible effect types', () => {
   assert.match(apiSource, /export type CardMaterial = 'matte' \| 'pearl' \| 'chrome'/)
-  assert.match(
-    apiSource,
-    /export type FoilPattern =\s*\| 'aurora-wave'\s*\| 'prism'\s*\| 'cracked-ice'\s*\| 'micro-star'/,
-  )
+  for (const patternId of [...new Set([...ATELIER_12_PATTERN_IDS, ...LEGACY_PATTERN_IDS])]) {
+    assert.match(effectsSource, new RegExp(`'${patternId}'`))
+  }
   assert.match(
     apiSource,
     /export type FoilCoverage = 'full' \| 'background' \| 'frame' \| 'signature'/,
@@ -80,6 +103,19 @@ test('card detail API contract exposes version 3 collectible effect types', () =
   assert.match(apiSource, /export type CardInteraction = 'static' \| 'tilt' \| 'lenticular'/)
   assert.match(apiSource, /export type EdgeFoil = 'none' \| 'silver' \| 'gold'/)
   assert.match(apiSource, /export type SpotUv = 'none' \| 'logo' \| 'symbol' \| 'serial'/)
+})
+
+test('normalizeCardEffects accepts all atelier 12 patterns and preserves legacy pattern roundtrip', async () => {
+  const { normalizeCardEffects, ALL_FOIL_PATTERN_IDS } = await importCardEffects()
+  assert.deepEqual(ALL_FOIL_PATTERN_IDS.slice(0, 12), ATELIER_12_PATTERN_IDS)
+  assert.deepEqual(ALL_FOIL_PATTERN_IDS.slice(12), LEGACY_PATTERN_IDS.filter((id) => id !== 'aurora-wave'))
+
+  for (const patternId of [...new Set([...ATELIER_12_PATTERN_IDS, ...LEGACY_PATTERN_IDS])]) {
+    assert.equal(
+      normalizeCardEffects({ version: 3, front: { foilPattern: patternId } }).front.foilPattern,
+      patternId,
+    )
+  }
 })
 
 test('card detail API contract compiles legacy version 2 migration payloads', async () => {
@@ -402,6 +438,8 @@ test('fan collectible css replaces moving texture with reduced-motion-safe layer
     '.pattern-prism',
     '.pattern-cracked-ice',
     '.pattern-micro-star',
+    '.pattern-liquid-chrome',
+    '.pattern-glass-flare',
     '.coverage-full',
     '.coverage-background',
     '.coverage-frame',

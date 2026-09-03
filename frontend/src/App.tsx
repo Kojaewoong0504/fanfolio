@@ -22,6 +22,7 @@ import { TradeCardPicker, TradeComposer } from './components/TradeComposer'
 import { FanPublicProfile } from './components/FanPublicProfile'
 import { FanMissionPage } from './components/FanMissionPage'
 import { DetailTopBar } from './components/DetailTopBar'
+import { ProtectedCardImage } from './components/ProtectedCardImage'
 import type { Card } from './types'
 import { demoCardImage, demoMemberImage, keepCardVisual } from './utils/cardVisual'
 import { dreamscapeDemoAssets, dreamscapeDemoMembers, dreamscapeMemberById } from './assets/demo-catalog'
@@ -3511,7 +3512,7 @@ function WishlistPicker({ cards, savedCardIds, loading, persist = true, onBack, 
         const selected = selectedIds.has(card.id)
         const rarity = card.rarity ?? (index % 4 === 0 ? 'UR' : index % 3 === 0 ? 'SR' : 'R')
         return <button key={card.id} type="button" className={`wishlist-picker-card ${selected ? 'selected' : ''}`} onClick={() => toggleCard(card.id)} aria-pressed={selected} aria-label={`${card.title} ${card.member} ${selected ? '원하는 카드 선택 해제' : '원하는 카드로 선택'}`}>
-          <img src={card.image} alt={`${card.title} ${card.member}`} onError={event => keepCardVisual(event, card.id)} />
+          <ProtectedCardImage src={card.image} alt={`${card.title} ${card.member}`} onError={event => keepCardVisual(event, card.id)} />
           <span className={`wishlist-picker-rarity rarity-${rarity.toLowerCase()}`}>{rarity}</span>
           <span className="wishlist-picker-card-meta"><b>{card.member}</b><small>{card.title}</small></span>
           <span className="wishlist-picker-heart"><InlineIcon name="heart" /></span>

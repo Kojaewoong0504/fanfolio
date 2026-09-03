@@ -72,6 +72,10 @@ services:
       FIREBASE_TOKEN_URL: ${FIREBASE_TOKEN_URL:-https://oauth2.googleapis.com/token}
       FIREBASE_API_BASE_URL: ${FIREBASE_API_BASE_URL:-https://fcm.googleapis.com}
       TASK_QUEUE_MODE: ${TASK_QUEUE_MODE:?TASK_QUEUE_MODE is required}
+      SPATIAL_SCENE_PROVIDER: ${SPATIAL_SCENE_PROVIDER:-local_fallback}
+      SPATIAL_SCENE_AI_URL: ${SPATIAL_SCENE_AI_URL:-}
+      SPATIAL_SCENE_AI_TOKEN: ${SPATIAL_SCENE_AI_TOKEN:-}
+      SPATIAL_SCENE_AI_TIMEOUT_SECONDS: ${SPATIAL_SCENE_AI_TIMEOUT_SECONDS:-90}
       UPLOAD_CLEANUP_INTERVAL_SECONDS: ${UPLOAD_CLEANUP_INTERVAL_SECONDS:-900}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:?CELERY_BROKER_URL is required}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:?CELERY_RESULT_BACKEND is required}
@@ -87,6 +91,20 @@ services:
       retries: 12
     volumes:
       - fanfolio-production-storage:/var/lib/fanfolio/storage
+
+  spatial-worker:
+    profiles: ["ai"]
+    build:
+      context: .
+      dockerfile: spatial_worker/Dockerfile
+    restart: unless-stopped
+    environment:
+      SPATIAL_SCENE_WORKER_TOKEN: ${SPATIAL_SCENE_AI_TOKEN:?SPATIAL_SCENE_AI_TOKEN is required}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=3)"]
+      interval: 20s
+      timeout: 5s
+      retries: 12
 
   worker:
     build:

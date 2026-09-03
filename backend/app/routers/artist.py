@@ -1,8 +1,9 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Header, Request, Response, status
 from sqlalchemy import func, select
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import get_settings
 from app.dependencies import ArtistUser, DbSession
@@ -18,6 +19,7 @@ from app.models import (
     CardCollaborationComment,
     CardEffectVersion,
     Member,
+    SpatialSceneJob,
     User,
     UserCard,
 )
@@ -33,8 +35,21 @@ from app.schemas import (
     CardEffectVersionUpdate,
 )
 from app.services import release_card_data, submit_card_for_release_review
+from app.spatial_scene import (
+    PhotoAnalysisBundle,
+    SpatialSceneProviderError,
+    configured_photo_analysis_provider,
+    configured_spatial_scene_provider,
+    generation_key,
+    photo_analysis_metadata,
+    public_photo_analysis_metadata,
+    public_spatial_scene_metadata,
+    source_revision,
+    spatial_scene_metadata,
+    validate_photo_analysis_bundle,
+)
 from app.storage import configured_asset_storage, storage_response
-from app.tasks import enqueue_background_removal
+from app.tasks import enqueue_background_removal, enqueue_spatial_scene
 
 router = APIRouter(prefix="/api", tags=["artist"])
 LENTICULAR_IMAGE_CONTENT_TYPES = {"image/png", "image/jpeg", "image/webp"}
@@ -265,6 +280,88 @@ async def owned_asset(asset_id: str, user: ArtistUser, session: DbSession) -> As
     if not asset or asset.owner_id != user.id:
         raise AppError(404, "ASSET_NOT_FOUND", "자산을 찾을 수 없습니다.")
     return asset
+
+
+def current_source_revision(asset: Asset) -> str | None:
+    if not asset.upload_completed_at:
+        return None
+    return source_revision(asset.id, asset.upload_completed_at)
+
+
+async def valid_photo_analysis_metadata(asset: Asset) -> dict[str, object] | None:
+    revision = current_source_revision(asset)
+    if not revision:
+        return None
+    metadata = (asset.transform or {}).get("photoAnalysis")
+    if not isinstance(metadata, dict) or metadata.get("status") != "completed":
+        return None
+    if metadata.get("sourceAssetId") != asset.id or metadata.get("sourceRevision") != revision:
+        return None
+    if not metadata.get("capabilities", {}).get("subjectMask"):
+        return None
+    path = metadata.get("maskStoragePath")
+    if not isinstance(path, str) or not path:
+        return None
+    storage = configured_asset_storage()
+    if not await run_in_threadpool(storage.exists, path):
+        return None
+    try:
+        mask = await run_in_threadpool(storage.read_bytes, path)
+        validate_photo_analysis_bundle(
+            PhotoAnalysisBundle(
+                mask=mask,
+                provider=str(metadata.get("provider", "")),
+                model_version=str(metadata.get("modelVersion", "")),
+                confidence=float(metadata.get("confidence", -1)),
+            ),
+            expected_size=await run_in_threadpool(storage_image_size, asset),
+        )
+    except (SpatialSceneProviderError, TypeError, ValueError):
+        return None
+    return metadata
+
+
+def storage_image_size(asset: Asset) -> tuple[int, int]:
+    storage = configured_asset_storage()
+    path = asset.storage_path
+    if not path:
+        raise SpatialSceneProviderError("source asset is not ready")
+    from app.spatial_scene import image_size
+
+    return image_size(storage.read_bytes(path))
+
+
+async def reusable_spatial_mask_metadata(asset: Asset) -> dict[str, object] | None:
+    revision = current_source_revision(asset)
+    if not revision:
+        return None
+    metadata = (asset.transform or {}).get("spatialScene")
+    if not isinstance(metadata, dict) or metadata.get("status") != "completed":
+        return None
+    if metadata.get("sourceAssetId") != asset.id or metadata.get("sourceRevision") != revision:
+        return None
+    if metadata.get("provider") == "local_fallback":
+        return None
+    path = metadata.get("maskStoragePath")
+    if not isinstance(path, str) or not path:
+        return None
+    storage = configured_asset_storage()
+    if not await run_in_threadpool(storage.exists, path):
+        return None
+    try:
+        mask = await run_in_threadpool(storage.read_bytes, path)
+        validate_photo_analysis_bundle(
+            PhotoAnalysisBundle(
+                mask=mask,
+                provider=str(metadata.get("provider", "")),
+                model_version=str(metadata.get("modelVersion", "")),
+                confidence=float(metadata.get("confidence", -1)),
+            ),
+            expected_size=await run_in_threadpool(storage_image_size, asset),
+        )
+    except (SpatialSceneProviderError, TypeError, ValueError):
+        return None
+    return metadata
 
 
 def ensure_lenticular_image_asset(asset: Asset) -> None:
@@ -818,6 +915,244 @@ async def remove_background(
     await session.commit()
     enqueue_background_removal(job.id, background_tasks)
     return {"ok": True, "data": {"jobId": job.id, "status": job.status}}
+
+
+@router.get("/artist/assets/{asset_id}/photo-analysis")
+async def get_photo_analysis(asset_id: str, user: ArtistUser, session: DbSession) -> dict:
+    """Return cached source-photo segmentation metadata without running inference."""
+    asset = await owned_asset(asset_id, user, session)
+    metadata = await valid_photo_analysis_metadata(asset)
+    if not metadata:
+        raise AppError(404, "PHOTO_ANALYSIS_NOT_FOUND", "생성된 사진 분석이 없습니다.")
+    return {"ok": True, "data": public_photo_analysis_metadata(metadata)}
+
+
+@router.post("/artist/assets/{asset_id}/photo-analysis")
+async def analyze_photo(asset_id: str, user: ArtistUser, session: DbSession) -> dict:
+    """Create or reuse cached source-photo subject segmentation for studio masking."""
+    asset = await owned_asset(asset_id, user, session)
+    revision = current_source_revision(asset)
+    if not asset.storage_path or not revision:
+        raise AppError(409, "ASSET_NOT_READY", "먼저 이미지 업로드를 완료해 주세요.")
+    cached = await valid_photo_analysis_metadata(asset)
+    if cached:
+        return {"ok": True, "data": public_photo_analysis_metadata(cached)}
+    spatial = await reusable_spatial_mask_metadata(asset)
+    storage = configured_asset_storage()
+    if spatial:
+        metadata = photo_analysis_metadata(
+            asset.id,
+            source_revision=revision,
+            provider=str(spatial["provider"]),
+            model_version=str(spatial["modelVersion"]),
+            confidence=float(spatial["confidence"]),
+            mask_storage_path=str(spatial["maskStoragePath"]),
+        )
+        asset.transform = {**(asset.transform or {}), "photoAnalysis": metadata}
+        await session.commit()
+        return {"ok": True, "data": public_photo_analysis_metadata(metadata)}
+    source = await run_in_threadpool(storage.read_bytes, asset.storage_path)
+    try:
+        bundle = await configured_photo_analysis_provider(get_settings()).analyze(source)
+    except SpatialSceneProviderError as error:
+        raise AppError(
+            502,
+            "PHOTO_ANALYSIS_FAILED",
+            "사진 분석을 생성하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+        ) from error
+    mask_path = await run_in_threadpool(
+        storage.save_derived_bytes,
+        asset.id,
+        "-photo-analysis-mask.png",
+        bundle.mask,
+        content_type="image/png",
+    )
+    metadata = photo_analysis_metadata(
+        asset.id,
+        source_revision=revision,
+        provider=bundle.provider,
+        model_version=bundle.model_version,
+        confidence=bundle.confidence,
+        mask_storage_path=mask_path,
+    )
+    asset.transform = {**(asset.transform or {}), "photoAnalysis": metadata}
+    await session.commit()
+    return {"ok": True, "data": public_photo_analysis_metadata(metadata)}
+
+
+@router.get("/artist/assets/{asset_id}/photo-analysis-mask")
+async def photo_analysis_mask(asset_id: str, user: ArtistUser, session: DbSession) -> Response:
+    asset = await owned_asset(asset_id, user, session)
+    metadata = await valid_photo_analysis_metadata(asset)
+    if not metadata:
+        raise AppError(404, "PHOTO_ANALYSIS_MASK_NOT_FOUND", "생성된 인물 마스크가 없습니다.")
+    path = metadata.get("maskStoragePath")
+    if not isinstance(path, str):
+        raise AppError(404, "PHOTO_ANALYSIS_MASK_NOT_FOUND", "생성된 인물 마스크가 없습니다.")
+    storage = configured_asset_storage()
+    if path.startswith("s3://"):
+        content = await run_in_threadpool(storage.read_bytes, path)
+        return Response(content=content, media_type="image/png")
+    return storage_response(storage, path, media_type="image/png")
+
+
+@router.post("/artist/assets/{asset_id}/spatial-scene")
+async def generate_spatial_scene(asset_id: str, user: ArtistUser, session: DbSession) -> dict:
+    """Create and privately persist the aligned spatial scene bundle."""
+    asset = await owned_asset(asset_id, user, session)
+    if not asset.storage_path or not asset.upload_completed_at:
+        raise AppError(409, "ASSET_NOT_READY", "먼저 이미지 업로드를 완료해 주세요.")
+    storage = configured_asset_storage()
+    source = await run_in_threadpool(storage.read_bytes, asset.storage_path)
+    cached_analysis = await valid_photo_analysis_metadata(asset)
+    cached_mask = None
+    if cached_analysis and isinstance(cached_analysis.get("maskStoragePath"), str):
+        cached_mask = await run_in_threadpool(
+            storage.read_bytes, cached_analysis["maskStoragePath"]
+        )
+    try:
+        bundle = await configured_spatial_scene_provider(get_settings()).generate(
+            source, mask=cached_mask
+        )
+    except SpatialSceneProviderError as error:
+        raise AppError(
+            502,
+            "SPATIAL_SCENE_GENERATION_FAILED",
+            "입체 장면을 생성하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+        ) from error
+    depth_path = await run_in_threadpool(
+        storage.save_derived_bytes,
+        asset.id,
+        "-spatial-depth.png",
+        bundle.depth,
+        content_type="image/png",
+    )
+    mask_path = await run_in_threadpool(
+        storage.save_derived_bytes,
+        asset.id,
+        "-spatial-mask.png",
+        bundle.mask,
+        content_type="image/png",
+    )
+    background_path = await run_in_threadpool(
+        storage.save_derived_bytes,
+        asset.id,
+        "-spatial-background.png",
+        bundle.background,
+        content_type="image/png",
+    )
+    metadata = spatial_scene_metadata(
+        asset.id,
+        provider=bundle.provider,
+        model_version=bundle.model_version,
+        confidence=bundle.confidence,
+        source_revision=current_source_revision(asset),
+        depth_storage_path=depth_path,
+        mask_storage_path=mask_path,
+        background_storage_path=background_path,
+    )
+    asset.transform = {**(asset.transform or {}), "spatialScene": metadata}
+    await session.commit()
+    return {"ok": True, "data": public_spatial_scene_metadata(metadata)}
+
+
+@router.post("/artist/assets/{asset_id}/spatial-scene-jobs", status_code=status.HTTP_202_ACCEPTED)
+async def enqueue_spatial_scene_job(
+    asset_id: str,
+    payload: dict,
+    background_tasks: BackgroundTasks,
+    user: ArtistUser,
+    session: DbSession,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> dict:
+    """Accept a spatial generation request without waiting for model inference."""
+    if not idempotency_key or not idempotency_key.strip():
+        raise AppError(400, "IDEMPOTENCY_KEY_REQUIRED", "Idempotency-Key가 필요합니다.")
+    asset = await owned_asset(asset_id, user, session)
+    if not asset.storage_path or not asset.upload_completed_at:
+        raise AppError(409, "ASSET_NOT_READY", "먼저 이미지 업로드를 완료해 주세요.")
+    crop_rect = tuple(payload.get("cropRect", (0, 0, 0, 0)))
+    if len(crop_rect) != 4 or not all(isinstance(value, int) for value in crop_rect):
+        raise AppError(422, "INVALID_CROP_RECT", "cropRect는 네 개의 정수여야 합니다.")
+    source_revision = f"{asset.id}:{asset.upload_completed_at.isoformat()}"
+    motion_preset = payload.get("motionPreset", "portrait-parallax")
+    pipeline_version = payload.get("pipelineVersion", "v1")
+    if not isinstance(motion_preset, str) or not isinstance(pipeline_version, str):
+        raise AppError(422, "INVALID_SPATIAL_SCENE_OPTIONS", "공간 장면 옵션이 올바르지 않습니다.")
+    existing = await session.scalar(
+        select(SpatialSceneJob).where(
+            SpatialSceneJob.owner_id == user.id,
+            SpatialSceneJob.idempotency_key == idempotency_key,
+        )
+    )
+    if existing:
+        return {
+            "ok": True,
+            "data": {"jobId": existing.id, "status": existing.status, "reused": True},
+        }
+    job = SpatialSceneJob(
+        id=f"scene_job_{uuid4().hex[:10]}",
+        owner_id=user.id,
+        asset_id=asset.id,
+        idempotency_key=idempotency_key.strip(),
+        generation_key=generation_key(
+            source_revision=source_revision,
+            crop_rect=crop_rect,
+            motion_preset=motion_preset,
+            pipeline_version=pipeline_version,
+        ),
+    )
+    session.add(job)
+    await session.commit()
+    enqueue_spatial_scene(job.id, background_tasks)
+    return {"ok": True, "data": {"jobId": job.id, "status": job.status, "reused": False}}
+
+
+@router.get("/artist/spatial-scene-jobs/{job_id}")
+async def get_spatial_scene_job(job_id: str, user: ArtistUser, session: DbSession) -> dict:
+    job = await session.scalar(
+        select(SpatialSceneJob).where(
+            SpatialSceneJob.id == job_id, SpatialSceneJob.owner_id == user.id
+        )
+    )
+    if not job:
+        raise AppError(404, "SPATIAL_SCENE_JOB_NOT_FOUND", "공간 장면 작업을 찾을 수 없습니다.")
+    data = {"jobId": job.id, "status": job.status, "phase": job.phase, "attempts": job.attempts}
+    if job.error_code:
+        data["errorCode"] = job.error_code
+    if job.result_metadata and job.status == "ready":
+        data["scene"] = public_spatial_scene_metadata(job.result_metadata)
+    return {"ok": True, "data": data}
+
+
+@router.get("/artist/assets/{asset_id}/spatial-depth")
+async def spatial_depth(asset_id: str, user: ArtistUser, session: DbSession) -> Response:
+    asset = await owned_asset(asset_id, user, session)
+    metadata = (asset.transform or {}).get("spatialScene", {})
+    path = metadata.get("depthStoragePath")
+    if not path:
+        raise AppError(404, "SPATIAL_DEPTH_NOT_FOUND", "생성된 깊이맵이 없습니다.")
+    return storage_response(configured_asset_storage(), path, media_type="image/png")
+
+
+@router.get("/artist/assets/{asset_id}/spatial-mask")
+async def spatial_mask(asset_id: str, user: ArtistUser, session: DbSession) -> Response:
+    asset = await owned_asset(asset_id, user, session)
+    metadata = (asset.transform or {}).get("spatialScene", {})
+    path = metadata.get("maskStoragePath")
+    if not path:
+        raise AppError(404, "SPATIAL_MASK_NOT_FOUND", "생성된 인물 마스크가 없습니다.")
+    return storage_response(configured_asset_storage(), path, media_type="image/png")
+
+
+@router.get("/artist/assets/{asset_id}/spatial-background")
+async def spatial_background(asset_id: str, user: ArtistUser, session: DbSession) -> Response:
+    asset = await owned_asset(asset_id, user, session)
+    metadata = (asset.transform or {}).get("spatialScene", {})
+    path = metadata.get("backgroundStoragePath")
+    if not path:
+        raise AppError(404, "SPATIAL_BACKGROUND_NOT_FOUND", "생성된 배경 장면이 없습니다.")
+    return storage_response(configured_asset_storage(), path, media_type="image/png")
 
 
 @router.get("/background-removal-jobs/{job_id}")

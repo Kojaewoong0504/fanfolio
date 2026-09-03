@@ -1,12 +1,15 @@
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type SyntheticEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type SyntheticEvent } from 'react'
 import type { CardDesignConfig } from '../api/client'
 import { normalizeCardEffects } from '../utils/cardEffects'
 import { hasConfiguredFrontEffect } from '../utils/cardEffects'
 import { InlineIcon } from '../App'
+import { FoilSurfaceCanvas } from './FoilSurfaceCanvas'
 
 type CollectibleStyle = CSSProperties & Record<'--tilt-x' | '--tilt-y' | '--light-x' | '--light-y' | '--lenticular-reveal' | '--effect-opacity' | '--effect-angle' | '--effect-spread' | '--effect-grain', string>
+type CollectibleLayerStyle = CSSProperties
 type MotionStatus = 'idle' | 'granted' | 'denied' | 'unsupported'
 type VisibleSide = 'front' | 'back'
+type SurfacePointer = { x: number, y: number }
 
 export type InteractiveCollectibleCardProps = {
   imageUrl: string
@@ -92,6 +95,8 @@ export function InteractiveCollectibleCard({
   const [visibleSide, setVisibleSide] = useState<VisibleSide>(initialSide)
   const [motionStatus, setMotionStatus] = useState<MotionStatus>('idle')
   const [deviceMotionEnabled, setDeviceMotionEnabled] = useState(false)
+  const [surfacePointer, setSurfacePointer] = useState<SurfacePointer>({ x: 0.5, y: 0.42 })
+  const [legacySurfaceHidden, setLegacySurfaceHidden] = useState(false)
   const collectibleRef = useRef<HTMLDivElement | null>(null)
   const dragStartRef = useRef<{ pointerId: number, x: number, y: number } | null>(null)
   const previousIdentityRef = useRef<string | null>(identity)
@@ -101,6 +106,8 @@ export function InteractiveCollectibleCard({
     previousIdentityRef.current = identity
     setMotionStatus('idle')
     setDeviceMotionEnabled(false)
+    setSurfacePointer({ x: 0.5, y: 0.42 })
+    setLegacySurfaceHidden(false)
     if (collectibleRef.current) resetCollectibleVars(collectibleRef.current)
   }, [identity])
 
@@ -127,8 +134,15 @@ export function InteractiveCollectibleCard({
     '--effect-spread': `${Math.round(effects.front.effectSpread * 100)}%`,
     '--effect-grain': String(effects.front.effectGrain),
   } as CollectibleStyle
+  const legacyLayerStyle = {
+    // Without a delivered subject mask, never fake background segmentation.
+    display: legacySurfaceHidden || effects.front.foilCoverage === 'background' ? 'none' : undefined,
+  } as CollectibleLayerStyle
   const frontClassName = `fan-card-collectible front material-${effects.front.material} pattern-${effects.front.foilPattern} coverage-${effects.front.foilCoverage} interaction-${effects.front.interaction}${hasLenticular ? ' has-lenticular' : ''}${hasSurface ? ' has-surface' : ''}`
   const backClassName = `fan-card-collectible material-${effects.back.material} back edge-foil-${effects.back.edgeFoil} spot-uv-${effects.back.spotUv}`
+  const handleFoilReadyChange = useCallback((ready: boolean) => {
+    setLegacySurfaceHidden(ready)
+  }, [])
 
   const handleCollectibleMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.pointerType === 'touch' && !event.currentTarget.hasPointerCapture(event.pointerId)) {
@@ -153,6 +167,7 @@ export function InteractiveCollectibleCard({
     if (visibleSide === 'front') {
       element.style.setProperty('--light-x', `${Math.round(x * 100)}%`)
       element.style.setProperty('--light-y', `${Math.round(y * 100)}%`)
+      if (hasSurface) setSurfacePointer({ x, y })
       if (hasLenticular) element.style.setProperty('--lenticular-reveal', `${Math.round(x * 100)}%`)
     }
   }
@@ -178,6 +193,7 @@ export function InteractiveCollectibleCard({
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
     dragStartRef.current = null
     resetCollectibleVars(event.currentTarget)
+    setSurfacePointer({ x: 0.5, y: 0.42 })
   }
 
   const setLenticularReveal = (reveal: '0%' | '100%') => {
@@ -221,16 +237,18 @@ export function InteractiveCollectibleCard({
       if (visibleSide === 'front') {
         element.style.setProperty('--light-x', `${lightX}%`)
         element.style.setProperty('--light-y', `${lightY}%`)
+        if (hasSurface) setSurfacePointer({ x: lightX / 100, y: lightY / 100 })
         if (hasLenticular) element.style.setProperty('--lenticular-reveal', `${lightX}%`)
       }
     }
     window.addEventListener('deviceorientation', applyDeviceOrientation, { passive: true })
     return () => window.removeEventListener('deviceorientation', applyDeviceOrientation)
-  }, [deviceMotionEnabled, effects.front.interaction, hasLenticular, reducedEffects, visibleSide])
+  }, [deviceMotionEnabled, effects.front.interaction, hasLenticular, hasSurface, reducedEffects, visibleSide])
 
   const card = visibleSide === 'front' ? <div
     ref={collectibleRef}
     className={frontClassName}
+    data-card-asset
     style={collectibleStyle}
     role="img"
     aria-label={imageAlt}
@@ -241,12 +259,23 @@ export function InteractiveCollectibleCard({
     onPointerCancel={handleCollectibleEnd}
   >
     <div className="fan-card-art-window">
-      <img className="fan-card-photo" src={imageUrl} alt="" onError={onImageError} />
+      <img className="fan-card-photo" src={imageUrl} alt="" draggable={false} onContextMenu={event => event.preventDefault()} onDragStart={event => event.preventDefault()} onError={onImageError} />
       {hasLenticular && <img className="fan-card-lenticular" src={lenticularImageUrl ?? ''} alt="" aria-hidden="true" />}
-      {handwritingImageUrl && <img className="fan-card-handwriting-layer" src={handwritingImageUrl} alt={handwritingAlt} />}
+      {handwritingImageUrl && <img className="fan-card-handwriting-layer" src={handwritingImageUrl} alt={handwritingAlt} draggable={false} onContextMenu={event => event.preventDefault()} onDragStart={event => event.preventDefault()} />}
     </div>
-    <span className="fan-card-material" aria-hidden="true" />
-    <span className="fan-card-surface" aria-hidden="true" />
+    {hasSurface && <FoilSurfaceCanvas
+      key={identity || imageUrl}
+      pointer={surfacePointer}
+      intensity={0.2 + effects.front.intensity * 0.42}
+      spread={effects.front.effectSpread}
+      grain={effects.front.effectGrain}
+      pattern={effects.front.foilPattern}
+      material={effects.front.material}
+      coverage={effects.front.foilCoverage}
+      onReadyChange={handleFoilReadyChange}
+    />}
+    <span className="fan-card-material" aria-hidden="true" style={legacyLayerStyle} />
+    <span className="fan-card-surface" aria-hidden="true" style={legacyLayerStyle} />
     <span className="official-badge">{badgeLabel}</span>
   </div> : <div
     ref={collectibleRef}

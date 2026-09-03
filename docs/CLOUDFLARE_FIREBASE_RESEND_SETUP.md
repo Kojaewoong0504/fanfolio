@@ -57,10 +57,35 @@ VITE_FIREBASE_VAPID_KEY=<web-push-certificate-key-pair-public-key>
 ## R2 확인 순서
 
 1. R2 bucket을 만든다.
-2. R2 API Token에서 해당 bucket에만 읽기·쓰기 권한을 준다.
-3. 백엔드에 위 secret을 등록하고 `STORAGE_BACKEND=r2`로 배포한다.
-4. 관리자 카드/상품 이미지 업로드에서 presigned PUT이 성공하는지 확인한다.
-5. 업로드 완료 후 GET presigned URL과 만료 후 재발급 동작을 확인한다.
+2. bucket의 Public access를 끄고 `r2.dev` 공개 URL이나 공개 커스텀 도메인을 연결하지 않는다.
+3. R2 API Token에서 해당 bucket에만 읽기·쓰기 권한을 준다.
+4. 백엔드에 위 secret을 등록하고 `STORAGE_BACKEND=r2`로 배포한다.
+5. 관리자 카드/상품 이미지 업로드에서 presigned PUT이 성공하는지 확인한다.
+6. 업로드 완료 후 GET presigned URL과 만료 후 재발급 동작을 확인한다.
+
+운영 API는 R2 자격 증명으로 서버에서 객체를 읽고 권한을 확인한 뒤 응답한다. 브라우저에
+R2 access key·secret을 전달하지 않으며, 사용자 업로드 파일을 `backend/assets` 같은 공개
+정적 디렉터리에 저장하지 않는다. `STORAGE_BACKEND=local`은 운영 환경에서 시작 단계에
+거부된다.
+
+## 무료 단계의 자산 보호 점검표
+
+다음 항목은 코드만으로 R2 대시보드 설정을 확인할 수 없으므로 배포 전에 Cloudflare에서
+직접 확인한다.
+
+- R2 bucket이 private이고 외부 공개 URL이 비활성화되어 있다.
+- API Token이 Fanfolio 전용 bucket의 필요한 object read/write만 갖고 있다.
+- Render/Vercel 로그에 R2 secret, presigned URL, 원본 파일 경로가 출력되지 않는다.
+- 무인증 요청으로 R2 객체 URL을 직접 열면 거부된다.
+- private asset API는 소유자·관리자 권한 없이 `401` 또는 `403`을 반환한다.
+- 팬에게 공개하기로 결정한 카드·보상 이미지는 R2 URL이 아니라 `/api/cards/*/image`,
+  `/api/rewards/*/image` 같은 공개 카탈로그 API를 통해서만 노출된다.
+- 공개 카탈로그 API를 private 원본 저장소의 공개 정책으로 착각하지 않는다. 원본·개인
+  혜택 파일은 계속 서버 권한 검사와 서명된 다운로드 흐름을 사용한다.
+
+무료 단계에서는 별도 이미지 변환 상품을 추가하지 않고, 기존 서버 프록시와 업로드 시
+생성되는 파생 이미지를 사용한다. 트래픽이 커지면 CDN signed URL/Transform Rules와
+원본·파생본 분리, 만료 짧은 read URL을 다음 단계로 검토한다.
 
 ## 전달 검증
 

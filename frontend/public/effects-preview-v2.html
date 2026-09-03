@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fanfolio 카드 특수 효과 프리뷰</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, Pretendard, system-ui, sans-serif; background: #080918; color: #f7f5ff; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 50% -10%, #4240a8 0, #131535 42%, #080918 100%); }
+    main { width: min(1120px, calc(100% - 32px)); margin: 0 auto; padding: 38px 0 64px; }
+    h1 { margin: 0 0 8px; font-size: clamp(24px, 4vw, 40px); letter-spacing: -.04em; }
+    .lead { margin: 0; color: #b9b8d7; line-height: 1.6; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 14px; align-items: end; margin: 26px 0 22px; padding: 16px; border: 1px solid #3d3d69; border-radius: 16px; background: #10112dce; }
+    label { display: grid; gap: 7px; min-width: 190px; color: #d8d7f4; font-size: 13px; }
+    select, input { accent-color: #8673ff; }
+    select { padding: 10px 12px; color: white; background: #1a1b3b; border: 1px solid #55548c; border-radius: 10px; }
+    .status { margin-left: auto; color: #92f2ca; font-size: 13px; font-weight: 700; }
+    .status.fallback { color: #ffd68a; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+    .panel { padding: 14px; border: 1px solid #393a67; border-radius: 18px; background: #10112ddd; box-shadow: 0 20px 60px #02020a66; }
+    .panel h2 { margin: 2px 0 12px; font-size: 16px; }
+    .hint { min-height: 38px; margin: 12px 0 0; color: #a9a9cc; font-size: 12px; line-height: 1.5; }
+    .card { position: relative; overflow: hidden; aspect-ratio: 2 / 3; border-radius: 16px; background: #232452; box-shadow: 0 16px 28px #0008; isolation: isolate; }
+    .card img, .card canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; }
+    .card canvas { z-index: 1; }
+    .card::after { content: ''; position: absolute; inset: 0; z-index: 2; pointer-events: none; border: 1px solid #ffffff55; border-radius: inherit; box-shadow: inset 0 0 28px #ffffff22; }
+    .copy { position: absolute; inset: auto 14px 14px; z-index: 3; text-shadow: 0 2px 8px #000; }
+    .copy strong { display: block; font-size: 20px; }
+    .copy span { color: #dddafa; font-size: 12px; }
+    .badge { position: absolute; top: 12px; left: 12px; z-index: 3; padding: 5px 8px; border-radius: 999px; background: #6d4cff; font-size: 11px; font-weight: 800; }
+    .webgl-note { margin-top: 26px; padding: 14px 16px; border-radius: 14px; background: #151636; color: #c2c2df; font-size: 13px; line-height: 1.6; }
+    @media (max-width: 760px) { main { width: min(100% - 24px, 500px); padding-top: 24px; } .grid { grid-template-columns: 1fr 1fr; } .panel:first-child { grid-column: 1 / -1; } .status { width: 100%; margin-left: 0; } }
+    @media (max-width: 430px) { .grid { grid-template-columns: 1fr; } .panel:first-child { grid-column: auto; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>실제 텍스처 기반 카드 효과</h1>
+    <p class="lead">카드를 드래그해 시점을 바꾸고, 프리셋과 강도를 조절해 WebGL 효과를 직접 확인하세요.</p>
+    <div class="toolbar">
+      <label>효과 프리셋
+        <select id="preset"><option value="aurora">Aurora 회절</option><option value="prism">Prism 무지개</option><option value="stardust">Stardust 입자</option></select>
+      </label>
+      <label>효과 강도 <input id="power" type="range" min="0" max="1" value="0.78" step="0.01" /></label>
+      <div id="status" class="status">WebGL 확인 중…</div>
+    </div>
+    <section class="grid">
+      <article class="panel"><h2>기본 이미지</h2><div class="card"><img src="/shop/dreamscape-nebula-detail-hero.png" alt="실제 카드 이미지" /><div class="badge">원본</div><div class="copy"><strong>Dreamscape</strong><span>원본 텍스처</span></div></div><p class="hint">앱에서 보여지는 기본 이미지입니다.</p></article>
+      <article class="panel"><h2>WebGL 홀로그램</h2><div class="card"><canvas id="holo" aria-label="WebGL 홀로그램 카드"></canvas><div class="badge">WEBGL</div><div class="copy"><strong>Dreamscape</strong><span>움직이는 회절·광택</span></div></div><p class="hint">실제 이미지 위에 시점 기반 무지개 광택과 빛의 스윕을 합성합니다.</p></article>
+      <article class="panel"><h2>WebGL 깊이·렌티큘러</h2><div class="card"><canvas id="depth" aria-label="WebGL 깊이 렌티큘러 카드"></canvas><div class="badge">WEBGL</div><div class="copy"><strong>Dreamscape</strong><span>시점 이동·깊이감</span></div></div><p class="hint">드래그 방향에 따라 텍스처와 하이라이트가 함께 이동합니다.</p></article>
+    </section>
+    <p class="webgl-note">성능 확인: 캔버스 크기는 변경될 때만 계산하고, 페이지가 백그라운드로 가면 렌더 루프를 중지합니다. 이 페이지는 팬앱 본체에 아직 연결하지 않은 독립 프리뷰입니다.</p>
+  </main>
+  <script>
+    const imageUrl = '/shop/dreamscape-nebula-detail-hero.png';
+    const preset = document.querySelector('#preset');
+    const power = document.querySelector('#power');
+    const status = document.querySelector('#status');
+    const vertex = 'attribute vec2 p; varying vec2 v; void main(){v=(p+1.0)*0.5; gl_Position=vec4(p,0.0,1.0);}';
+    const fragment = 'precision mediump float; varying vec2 v; uniform sampler2D tex; uniform float time; uniform vec2 pointer; uniform float amount; uniform float mode; vec3 rainbow(float x){return .5+.5*cos(6.28318*(vec3(x,x+.33,x+.67)));} void main(){vec2 uv=v; vec2 shift=(pointer-.5)*.065*amount; vec2 p=uv-.5; float edge=pow(clamp(length(p)*1.6,0.0,1.0),1.5); float wave=sin((uv.x*5.0+uv.y*3.0+time*.00055+pointer.x*2.0)*6.28318)*.5+.5; float sweep=pow(max(0.0,sin((uv.x+uv.y*.55+time*.00032)*18.0)),14.0); float prism=pow(max(0.0,1.0-abs(uv.x-pointer.x)*2.2),3.0); vec4 base=texture2D(tex,clamp(uv+shift*edge,-.02+0.0,1.02)); vec3 tint=rainbow(uv.x*.7+uv.y*.35+time*.00008); float grain=sin(dot(uv+time*.00001,vec2(91.7,37.1)))*.012; float glow=mix(wave,sweep,.45); if(mode>1.5){tint=rainbow(uv.x*1.8+uv.y+time*.00018); glow=max(sweep,prism);} else if(mode>.5){tint=rainbow(uv.x*.95-uv.y*.4+time*.0001); glow=max(wave,sweep);} vec3 color=base.rgb; color+=tint*(.12*amount*edge+.17*amount*glow); color+=vec3(.95,.9,1.0)*(.2*amount*sweep); color+=grain; gl_FragColor=vec4(clamp(color,0.0,1.0),base.a);}';
+    const renderers = [];
+    let raf = 0;
+    let image;
+    function shader(gl, type, source) { const s=gl.createShader(type); gl.shaderSource(s,source); gl.compileShader(s); if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+    function createRenderer(canvas, index) {
+      const gl = canvas.getContext('webgl', { alpha:false, antialias:false, powerPreference:'high-performance' });
+      if (!gl) return null;
+      const program=gl.createProgram(); gl.attachShader(program,shader(gl,gl.VERTEX_SHADER,vertex)); gl.attachShader(program,shader(gl,gl.FRAGMENT_SHADER,fragment)); gl.linkProgram(program); if(!gl.getProgramParameter(program,gl.LINK_STATUS)) throw new Error('program link failed'); gl.useProgram(program);
+      const buffer=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,buffer); gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW); const loc=gl.getAttribLocation(program,'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
+      const texture=gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D,texture); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+      const uniforms={time:gl.getUniformLocation(program,'time'),pointer:gl.getUniformLocation(program,'pointer'),amount:gl.getUniformLocation(program,'amount'),mode:gl.getUniformLocation(program,'mode'),tex:gl.getUniformLocation(program,'tex')}; let w=0,h=0; let point={x:.5,y:.5};
+      function resize(){const r=canvas.getBoundingClientRect(), d=Math.min(window.devicePixelRatio||1,2), nw=Math.max(1,Math.round(r.width*d)), nh=Math.max(1,Math.round(r.height*d)); if(nw!==w||nh!==h){w=nw;h=nh;canvas.width=w;canvas.height=h;gl.viewport(0,0,w,h);}};
+      const observer=new ResizeObserver(resize); observer.observe(canvas); resize();
+      canvas.addEventListener('pointermove', e=>{const r=canvas.getBoundingClientRect();point.x=(e.clientX-r.left)/r.width;point.y=1-(e.clientY-r.top)/r.height;});
+      return { draw(t){resize(); gl.useProgram(program); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,texture); gl.uniform1i(uniforms.tex,0); gl.uniform1f(uniforms.time,t); gl.uniform2f(uniforms.pointer,point.x,point.y); gl.uniform1f(uniforms.amount,Number(power.value)); gl.uniform1f(uniforms.mode,index===0?0:Number(preset.value==='prism'?1:preset.value==='stardust'?2:0)); gl.drawArrays(gl.TRIANGLE_STRIP,0,4); }, upload(){gl.bindTexture(gl.TEXTURE_2D,texture); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,image);} };
+    }
+    function frame(t){if(!document.hidden){renderers.forEach(r=>r.draw(t));} raf=requestAnimationFrame(frame);}
+    function start(){if(!raf) raf=requestAnimationFrame(frame);}
+    function stop(){cancelAnimationFrame(raf);raf=0;}
+    try { image=new Image(); image.onload=()=>{const a=createRenderer(document.querySelector('#holo'),0), b=createRenderer(document.querySelector('#depth'),1); if(!a||!b) throw new Error('WebGL unavailable'); a.upload();b.upload();renderers.push(a,b);status.textContent='WebGL 렌더링 활성 · 실제 이미지 텍스처'; start();}; image.onerror=()=>{throw new Error('texture load failed')}; image.src=imageUrl; } catch(e){status.textContent='WebGL 미지원 · 기본 이미지 표시';status.classList.add('fallback');document.querySelectorAll('canvas').forEach(c=>{c.replaceWith(Object.assign(document.createElement('img'),{src:imageUrl,alt:'기본 이미지'}));});}
+    document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
+    window.addEventListener('beforeunload',stop);
+  </script>
+</body>
+</html>

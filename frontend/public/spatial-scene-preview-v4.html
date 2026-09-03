@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>AI Geometry Spatial Card</title>
+  <style>
+    :root { font-family: Inter, Pretendard, system-ui, sans-serif; color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #090a1e; color: #f8f7ff; }
+    main { width: min(760px, calc(100% - 28px)); margin: auto; padding: 24px 0 40px; }
+    h1 { margin: 0 0 8px; font-size: clamp(24px, 6vw, 36px); }
+    p { color: #b9b8d4; line-height: 1.55; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 18px 0; padding: 12px; border: 1px solid #3d3f6c; border-radius: 14px; background: #14152f; }
+    button { border: 0; border-radius: 10px; padding: 11px 14px; color: white; background: #654bea; font-weight: 800; }
+    button.secondary { background: #2a2c50; }
+    .scene-picker { display: flex; flex-wrap: wrap; gap: 8px; }
+    .scene-picker a { padding: 10px 14px; border-radius: 10px; background: #2a2c50; color: white; text-decoration: none; }
+    .scene-picker a[aria-current="page"] { background: #654bea; }
+    #provenance { font-size: 12px; }
+    button[aria-pressed="true"] { background: #654bea; box-shadow: 0 0 0 2px #a99cff66 inset; }
+    .strength { display: flex; gap: 6px; padding: 4px; border-radius: 12px; background: #202241; }
+    .strength button { padding: 8px 10px; background: transparent; font-size: 12px; }
+    #status { color: #9cf1ca; font-size: 12px; font-weight: 800; }
+    .stage { display: grid; place-items: center; min-height: 650px; border-radius: 22px; overflow: hidden; background: radial-gradient(circle at 50% 30%, #3c397e, #10112d 72%); touch-action: none; }
+    .card { position: relative; width: min(330px, 78vw); aspect-ratio: 2 / 3; overflow: hidden; border-radius: 20px; filter: drop-shadow(26px 32px 24px #000c); }
+    #scene, .light, .edge { position: absolute; inset: 0; width: 100%; height: 100%; }
+    #scene { display: block; background: #060718; }
+    .light { z-index: 2; pointer-events: none; mix-blend-mode: screen; opacity: .34; background: radial-gradient(circle at var(--lx,50%) var(--ly,50%), #fff7, transparent 18%), linear-gradient(120deg, transparent 36%, #8bdcff35 47%, #a56cff45 52%, transparent 62%); }
+    .edge { z-index: 3; pointer-events: none; border: 1px solid #ffffffa0; border-radius: inherit; box-shadow: inset 0 0 22px #fff2, 0 0 20px #765cff66; }
+    .legend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
+    .legend span { padding: 10px; border-radius: 10px; background: #151631; color: #aaa9c8; font-size: 12px; text-align: center; }
+    @media (max-width: 540px) { main { width: 100%; padding: 18px 14px 30px; } .stage { min-height: 590px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>AI Geometry Spatial Card</h1>
+    <p>원본 사진 기반 공간 렌더링 비교입니다. 두 사진에 같은 카메라와 움직임 강도를 적용합니다.</p>
+    <nav class="scene-picker" aria-label="비교할 원본 사진">
+      <a href="?scene=minho" data-scene="minho">민호 · 어두운 무대</a>
+      <a href="?scene=yuna" data-scene="yuna">유나 · 밝은 무대</a>
+    </nav>
+    <p id="provenance">기존 민호 비교 장면 · 미리 준비한 깊이와 복원 배경</p>
+    <div class="toolbar">
+      <button id="sensor">휴대폰 기울기 사용</button>
+      <button id="toggle" class="secondary">2D 원본 비교</button>
+      <div class="strength" aria-label="공간 움직임 강도">
+        <button data-strength="subtle" aria-pressed="false">약하게</button>
+        <button data-strength="balanced" aria-pressed="true">기본</button>
+        <button data-strength="strong" aria-pressed="false">강하게</button>
+      </div>
+      <span id="status">3D 메시 준비 중…</span>
+    </div>
+    <div class="stage" id="stage">
+      <div class="card" id="card">
+        <canvas id="scene" aria-label="깊이 메시 기반 입체 카드"></canvas>
+        <div class="light"></div><div class="edge"></div>
+      </div>
+    </div>
+    <div class="legend"><span>가려진 배경 복원</span><span>인물 깊이 메시</span><span>실제 투시 카메라</span></div>
+  </main>
+  <script>
+    const GRID_X = 72;
+    const GRID_Y = 108;
+    const CARD_ASPECT = 2 / 3;
+    const CAMERA_DISTANCE = 3;
+    const IDENTITY_SAFE_RELIEF = 0.052;
+    const BACKGROUND_Z = -0.20;
+    // Guard band for both camera travel and its opposite look-at target.
+    // Only the reconstructed background expands; the source portrait does not.
+    const BACKGROUND_OVERSCAN = 1.32;
+    const stage = document.querySelector('#stage');
+    const sceneCanvas = document.querySelector('#scene');
+    const status = document.querySelector('#status');
+    const light = document.querySelector('.light');
+    const point = { x: 0, y: 0 };
+    const strengths = {
+      subtle: { yaw: 2, pitch: 1.5, travel: 0.052, relief: 0.024 },
+      balanced: { yaw: 4, pitch: 3, travel: 0.105, relief: 0.038 },
+      strong: { yaw: 6, pitch: 4.5, travel: 0.158, relief: IDENTITY_SAFE_RELIEF }
+    };
+    let strengthName = 'balanced';
+    let compare2d = false;
+    let resources;
+    const previewPose = new URLSearchParams(window.location.search).get('pose');
+
+    const photo = new Image();
+    const backgroundPlate = new Image();
+    const depth = new Image();
+    const mask = new Image();
+    photo.decoding = backgroundPlate.decoding = depth.decoding = mask.decoding = 'async';
+    photo.src = '/src/assets/card-minho-midnight.jpg';
+    backgroundPlate.src = '/spatial/card-minho-background.png';
+    depth.src = '/spatial/card-minho-depth.png';
+    mask.src = '/spatial/card-minho-mask-photo-derived.png';
+    const sceneName = new URLSearchParams(window.location.search).get('scene') === 'yuna' ? 'yuna' : 'minho';
+    if (sceneName === 'yuna') {
+      photo.src = '/src/assets/card-yuna-lavender.jpg';
+      backgroundPlate.src = '/spatial/card-yuna-background.png';
+      depth.src = '/spatial/card-yuna-depth-proxy.png';
+      mask.src = '/spatial/card-yuna-mask-photo-derived.png';
+      document.querySelector('#provenance').textContent = '유나: 원본 인물 픽셀 + macOS Vision 인물 분리 + AI 복원 배경. 실루엣 깊이 프록시 사용 — 실제 단안 깊이 추론은 미적용입니다.';
+    }
+    document.querySelector(`[data-scene="${sceneName}"]`).setAttribute('aria-current', 'page');
+
+    const gl = sceneCanvas.getContext('webgl', {
+      antialias: true,
+      alpha: false,
+      premultipliedAlpha: false,
+      powerPreference: 'high-performance'
+    });
+
+    const vertexSource = `
+      attribute vec3 position;
+      attribute vec2 texCoord;
+      uniform mat4 viewProjection;
+      uniform float relief;
+      uniform float layerZ;
+      uniform float layerScale;
+      varying vec2 uv;
+      varying float surfaceDepth;
+      void main() {
+        vec3 worldPosition = vec3(position.xy * layerScale, layerZ + position.z * relief);
+        uv = texCoord;
+        surfaceDepth = position.z;
+        gl_Position = viewProjection * vec4(worldPosition, 1.0);
+      }`;
+    const fragmentSource = `
+      precision mediump float;
+      uniform sampler2D colorTexture;
+      uniform sampler2D alphaTexture;
+      uniform float useMask;
+      uniform float brightness;
+      varying vec2 uv;
+      varying float surfaceDepth;
+      void main() {
+        vec4 color = texture2D(colorTexture, uv);
+        float alpha = mix(1.0, smoothstep(0.18, 0.82, texture2D(alphaTexture, uv).r), useMask);
+        if (alpha < 0.02) discard;
+        float reliefLight = 1.0 + surfaceDepth * 0.025;
+        gl_FragColor = vec4(color.rgb * brightness * reliefLight, alpha);
+      }`;
+
+    function compile(type, source) {
+      const shader = gl.createShader(type);
+      gl.shaderSource(shader, source);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(shader));
+      return shader;
+    }
+
+    function createProgram() {
+      const program = gl.createProgram();
+      gl.attachShader(program, compile(gl.VERTEX_SHADER, vertexSource));
+      gl.attachShader(program, compile(gl.FRAGMENT_SHADER, fragmentSource));
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
+      return program;
+    }
+
+    function imagePixels(image) {
+      const canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      context.drawImage(image, 0, 0);
+      return context.getImageData(0, 0, canvas.width, canvas.height);
+    }
+
+    function sampleChannel(imageData, u, v, channel = 0) {
+      const x = Math.max(0, Math.min(imageData.width - 1, Math.round(u * (imageData.width - 1))));
+      const y = Math.max(0, Math.min(imageData.height - 1, Math.round(v * (imageData.height - 1))));
+      return imageData.data[(y * imageData.width + x) * 4 + channel] / 255;
+    }
+
+    function sampleSmoothedDepth(imageData, u, v) {
+      const radiusX = 3 / imageData.width;
+      const radiusY = 3 / imageData.height;
+      let total = 0;
+      let weight = 0;
+      for (let y = -1; y <= 1; y += 1) {
+        for (let x = -1; x <= 1; x += 1) {
+          const sampleWeight = x === 0 && y === 0 ? 4 : (x === 0 || y === 0 ? 2 : 1);
+          total += sampleChannel(imageData, u + x * radiusX, v + y * radiusY) * sampleWeight;
+          weight += sampleWeight;
+        }
+      }
+      return total / weight;
+    }
+
+    function createDepthMesh(depthPixels) {
+      const vertices = [];
+      const indices = [];
+      for (let row = 0; row <= GRID_Y; row += 1) {
+        const v = row / GRID_Y;
+        const sourceV = 1 - v;
+        for (let column = 0; column <= GRID_X; column += 1) {
+          const u = column / GRID_X;
+          const normalizedDepth = sampleSmoothedDepth(depthPixels, u, sourceV) - 0.5;
+          vertices.push((u - 0.5) * 2 * CARD_ASPECT, (v - 0.5) * 2, normalizedDepth, u, v);
+        }
+      }
+      for (let row = 0; row < GRID_Y; row += 1) {
+        for (let column = 0; column < GRID_X; column += 1) {
+          const a = row * (GRID_X + 1) + column;
+          const b = a + 1;
+          const c = a + GRID_X + 1;
+          const d = c + 1;
+          indices.push(a, b, c, b, d, c);
+        }
+      }
+      return createGeometry(new Float32Array(vertices), new Uint16Array(indices));
+    }
+
+    function createPlane() {
+      return createGeometry(
+        new Float32Array([
+          -CARD_ASPECT, -1, 0, 0, 0,
+           CARD_ASPECT, -1, 0, 1, 0,
+          -CARD_ASPECT,  1, 0, 0, 1,
+           CARD_ASPECT,  1, 0, 1, 1
+        ]),
+        new Uint16Array([0, 1, 2, 1, 3, 2])
+      );
+    }
+
+    function createGeometry(vertices, indices) {
+      const vertexBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+      const indexBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+      return { vertexBuffer, indexBuffer, indexCount: indices.length };
+    }
+
+    function makeTexture(source) {
+      const texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+      return texture;
+    }
+
+    function perspectiveMatrix(fovRadians, aspect, near, far) {
+      const f = 1 / Math.tan(fovRadians / 2);
+      const rangeInverse = 1 / (near - far);
+      return new Float32Array([
+        f / aspect, 0, 0, 0,
+        0, f, 0, 0,
+        0, 0, (near + far) * rangeInverse, -1,
+        0, 0, near * far * rangeInverse * 2, 0
+      ]);
+    }
+
+    function normalize3(vector) {
+      const length = Math.hypot(vector[0], vector[1], vector[2]) || 1;
+      return vector.map(value => value / length);
+    }
+
+    function subtract3(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
+    function cross3(a, b) { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
+    function dot3(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+
+    function lookAtMatrix(eye, target, up) {
+      const z = normalize3(subtract3(eye, target));
+      const x = normalize3(cross3(up, z));
+      const y = cross3(z, x);
+      return new Float32Array([
+        x[0], y[0], z[0], 0,
+        x[1], y[1], z[1], 0,
+        x[2], y[2], z[2], 0,
+        -dot3(x, eye), -dot3(y, eye), -dot3(z, eye), 1
+      ]);
+    }
+
+    function multiplyMatrices(a, b) {
+      const result = new Float32Array(16);
+      for (let column = 0; column < 4; column += 1) {
+        for (let row = 0; row < 4; row += 1) {
+          let value = 0;
+          for (let index = 0; index < 4; index += 1) value += a[index * 4 + row] * b[column * 4 + index];
+          result[column * 4 + row] = value;
+        }
+      }
+      return result;
+    }
+
+    function resize() {
+      const ratio = Math.min(devicePixelRatio || 1, 2);
+      const rect = sceneCanvas.getBoundingClientRect();
+      const width = Math.round(rect.width * ratio);
+      const height = Math.round(rect.height * ratio);
+      if (sceneCanvas.width !== width || sceneCanvas.height !== height) {
+        sceneCanvas.width = width;
+        sceneCanvas.height = height;
+      }
+    }
+
+    function bindGeometry(geometry) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, geometry.vertexBuffer);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, geometry.indexBuffer);
+      gl.enableVertexAttribArray(resources.locations.position);
+      gl.vertexAttribPointer(resources.locations.position, 3, gl.FLOAT, false, 20, 0);
+      gl.enableVertexAttribArray(resources.locations.texCoord);
+      gl.vertexAttribPointer(resources.locations.texCoord, 2, gl.FLOAT, false, 20, 12);
+    }
+
+    function drawLayer({ geometry, texture, alphaTexture, useMask, relief, layerZ, layerScale, brightness }) {
+      bindGeometry(geometry);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, alphaTexture);
+      gl.uniform1f(resources.locations.useMask, useMask ? 1 : 0);
+      gl.uniform1f(resources.locations.relief, relief);
+      gl.uniform1f(resources.locations.layerZ, layerZ);
+      gl.uniform1f(resources.locations.layerScale, layerScale);
+      gl.uniform1f(resources.locations.brightness, brightness);
+      gl.drawElements(gl.TRIANGLES, geometry.indexCount, gl.UNSIGNED_SHORT, 0);
+    }
+
+    function cameraMatrix(strength, centered = false) {
+      const cameraX = centered ? 0 : point.x * strength.travel;
+      const cameraY = centered ? 0 : -point.y * strength.travel * 0.75;
+      const eye = [cameraX, cameraY, CAMERA_DISTANCE];
+      const target = [-cameraX, -cameraY, 0];
+      const projection = perspectiveMatrix(2 * Math.atan(1 / CAMERA_DISTANCE), CARD_ASPECT, 0.1, 10);
+      return multiplyMatrices(projection, lookAtMatrix(eye, target, [0, 1, 0]));
+    }
+
+    function beginFrame(viewProjection) {
+      resize();
+      gl.viewport(0, 0, sceneCanvas.width, sceneCanvas.height);
+      gl.clearColor(0.02, 0.025, 0.08, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      gl.uniformMatrix4fv(resources.locations.viewProjection, false, viewProjection);
+    }
+
+    function drawOriginalPhoto() {
+      const zoom = 1;
+      beginFrame(cameraMatrix(strengths[strengthName], true));
+      drawLayer({
+        geometry: resources.plane,
+        texture: resources.photoTexture,
+        alphaTexture: resources.maskTexture,
+        useMask: false,
+        relief: 0,
+        layerZ: 0,
+        layerScale: zoom,
+        brightness: 1
+      });
+    }
+
+    function draw() {
+      if (!resources) return;
+      if (compare2d) {
+        drawOriginalPhoto();
+      } else {
+        const strength = strengths[strengthName];
+        beginFrame(cameraMatrix(strength));
+        drawLayer({
+          geometry: resources.plane,
+          texture: resources.backgroundTexture,
+          alphaTexture: resources.maskTexture,
+          useMask: false,
+          relief: 0,
+          layerZ: BACKGROUND_Z,
+          layerScale: BACKGROUND_OVERSCAN,
+          brightness: 0.84
+        });
+        drawLayer({
+          geometry: resources.foregroundMesh,
+          texture: resources.photoTexture,
+          alphaTexture: resources.maskTexture,
+          useMask: true,
+          relief: Math.min(strength.relief, IDENTITY_SAFE_RELIEF),
+          layerZ: 0.055,
+          layerScale: 1,
+          brightness: 1
+        });
+      }
+      light.style.opacity = compare2d ? '0' : '.34';
+      light.style.setProperty('--lx', `${50 + point.x * 30}%`);
+      light.style.setProperty('--ly', `${50 + point.y * 26}%`);
+      const strength = strengths[strengthName];
+      status.textContent = compare2d
+        ? '2D 원본 · 원본 프레이밍 100%'
+        : `${strengthName === 'subtle' ? '약한' : strengthName === 'strong' ? '강한' : '기본'} 움직임 · 투시 카메라 최대 ${strength.yaw}° · 얼굴 왜곡 제한`;
+    }
+
+    function setPoint(x, y) {
+      point.x = Math.max(-1, Math.min(1, x));
+      point.y = Math.max(-1, Math.min(1, y));
+      draw();
+    }
+
+    async function initialize() {
+      if (!gl) {
+        status.textContent = 'WebGL을 사용할 수 없어 3D 장면을 표시할 수 없습니다.';
+        return;
+      }
+      try {
+        await Promise.all([photo.decode(), backgroundPlate.decode(), depth.decode(), mask.decode()]);
+        const program = createProgram();
+        gl.useProgram(program);
+        gl.enable(gl.DEPTH_TEST);
+        gl.depthFunc(gl.LEQUAL);
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        resources = {
+          program,
+          plane: createPlane(),
+          foregroundMesh: createDepthMesh(imagePixels(depth)),
+          photoTexture: makeTexture(photo),
+          backgroundTexture: makeTexture(backgroundPlate),
+          maskTexture: makeTexture(mask),
+          locations: {
+            position: gl.getAttribLocation(program, 'position'),
+            texCoord: gl.getAttribLocation(program, 'texCoord'),
+            viewProjection: gl.getUniformLocation(program, 'viewProjection'),
+            relief: gl.getUniformLocation(program, 'relief'),
+            layerZ: gl.getUniformLocation(program, 'layerZ'),
+            layerScale: gl.getUniformLocation(program, 'layerScale'),
+            colorTexture: gl.getUniformLocation(program, 'colorTexture'),
+            alphaTexture: gl.getUniformLocation(program, 'alphaTexture'),
+            useMask: gl.getUniformLocation(program, 'useMask'),
+            brightness: gl.getUniformLocation(program, 'brightness')
+          }
+        };
+        gl.uniform1i(resources.locations.colorTexture, 0);
+        gl.uniform1i(resources.locations.alphaTexture, 1);
+        if (previewPose === 'left') point.x = -1;
+        if (previewPose === 'right') point.x = 1;
+        if (previewPose === 'up') point.y = -1;
+        if (previewPose === 'down') point.y = 1;
+        draw();
+      } catch (error) {
+        console.error(error);
+        status.textContent = '공간 장면 생성 실패 · 원본 이미지를 확인해 주세요';
+      }
+    }
+
+    stage.addEventListener('pointermove', event => {
+      const rect = stage.getBoundingClientRect();
+      setPoint((event.clientX - rect.left) / rect.width * 2 - 1, (event.clientY - rect.top) / rect.height * 2 - 1);
+    });
+    stage.addEventListener('pointerleave', () => setPoint(0, 0));
+    window.addEventListener('resize', draw);
+    document.querySelector('#toggle').addEventListener('click', () => {
+      compare2d = !compare2d;
+      document.querySelector('#toggle').textContent = compare2d ? '공간 장면 보기' : '2D 원본 비교';
+      draw();
+    });
+    document.querySelectorAll('[data-strength]').forEach(button => button.addEventListener('click', () => {
+      strengthName = button.dataset.strength;
+      document.querySelectorAll('[data-strength]').forEach(item => item.setAttribute('aria-pressed', String(item === button)));
+      compare2d = false;
+      document.querySelector('#toggle').textContent = '2D 원본 비교';
+      draw();
+    }));
+    document.querySelector('#sensor').addEventListener('click', async () => {
+      try {
+        if (typeof DeviceOrientationEvent?.requestPermission === 'function' && await DeviceOrientationEvent.requestPermission() !== 'granted') throw Error();
+        window.addEventListener('deviceorientation', event => setPoint((event.gamma || 0) / 28, ((event.beta || 0) - 30) / 28));
+        status.textContent = '기울기 센서 활성';
+      } catch {
+        status.textContent = '센서 권한 거부 · 터치로 확인하세요';
+      }
+    });
+
+    initialize();
+  </script>
+</body>
+</html>

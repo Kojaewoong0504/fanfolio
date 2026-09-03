@@ -757,4 +757,12 @@ body,
 .shop-insufficient p { margin: 0; font-size: 11px; }
 .shop-insufficient button { display: flex; align-items: center; justify-content: space-between; padding: 9px 11px; border: 0; border-radius: 9px; background: #684de4; color: #fff; font-size: 11px; font-weight: 800; cursor: pointer; }
 .shop-insufficient button .inline-icon { width: 16px; height: 16px; flex: 0 0 auto; }
+
+/* Card artwork is still accessible to a determined user, but casual long-press,
+   drag, and context-menu saves should not expose an unmarked image. */
+.protected-card-image { position: relative; display: block; width: 100%; overflow: hidden; }
+.protected-card-image img { display: block; width: 100%; height: 100%; object-fit: cover; -webkit-user-drag: none; }
+[data-card-asset], [data-card-asset] img { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-user-drag: none; }
 @media (max-width: 360px) { .point-charge-package { min-height: 80px; padding-right: 5px; padding-left: 5px; } .point-charge-package strong { font-size: 14px; } }
+.fan-card-collectible.pattern-liquid-chrome .fan-card-surface { background-image: linear-gradient(118deg, transparent 18%, #ffffffb8 28%, #9edcff66 36%, transparent 47%, #ffffff88 59%, transparent 70%); filter: saturate(.8) contrast(1.22); }
+.fan-card-collectible.pattern-glass-flare .fan-card-surface { background-image: linear-gradient(135deg, transparent 42%, #ffffffcc 49%, #a9e7ff66 52%, transparent 60%), radial-gradient(circle at var(--light-x) var(--light-y), #fff9, transparent 26%); }

@@ -1,0 +1,14 @@
+{
+  "source": "frontend/src/assets/card-yuna-lavender.jpg",
+  "portraitPixels": "Original photograph; no generated face or body",
+  "mask": "macOS Vision VNGeneratePersonSegmentationRequest, accurate quality, resized to 768x1152",
+  "depth": "Gaussian-blurred silhouette proxy, NOT monocular inferred depth",
+  "background": "Imagegen edit of source, resized to 768x1152",
+  "backgroundEditIntent": "Remove entire person and reconstruct hidden lavender stage; preserve visible bokeh, beams, framing and upper-right neon ring. No people, text, border or watermark.",
+  "renderer": "Same indexed geometry and camera settings as minho; background guard scale 1.32",
+  "limitations": [
+    "This comparison evaluates segmentation and layer parallax, not face-volume reconstruction.",
+    "Generated background is an approximation, not recovery of actual unseen scene pixels.",
+    "Local development preview only; not integrated into the upload worker."
+  ]
+}

@@ -124,6 +124,37 @@ def test_cloudflare_r2_storage_rejects_missing_bucket() -> None:
         raise AssertionError("R2 must not start without a bucket")
 
 
+def test_production_rejects_local_asset_storage() -> None:
+    settings = Settings(
+        app_env="production",
+        storage_backend="local",
+        data_protection_key="production-data-protection-key-from-test",
+        database_url="postgresql+asyncpg://fanfolio:password@db.example.com/fanfolio",
+        frontend_url="https://app.fanfolio.example",
+        frontend_origins="https://app.fanfolio.example",
+        mail_delivery_mode="smtp",
+        mail_from="Fanfolio <no-reply@fanfolio.example>",
+        smtp_host="smtp.example.com",
+        auto_create_schema=False,
+        rate_limit_backend="redis",
+        download_signing_secret="production-secret-from-environment",
+        asset_scan_mode="clamav",
+        jwt_access_secret="production-access-secret-from-environment",
+        jwt_refresh_secret="production-refresh-secret-from-environment",
+        oauth_frontend_callback_url="https://app.fanfolio.example/oauth/callback",
+        google_redirect_uri="https://api.fanfolio.example/api/auth/oauth/google/callback",
+        kakao_redirect_uri="https://api.fanfolio.example/api/auth/oauth/kakao/callback",
+    )
+
+    try:
+        settings.validate_runtime()
+    except ValueError as error:
+        assert "STORAGE_BACKEND" in str(error)
+        assert "production" in str(error)
+    else:
+        raise AssertionError("Production must not serve assets from local disk")
+
+
 def test_fcm_push_requires_firebase_server_credentials() -> None:
     settings = Settings(
         app_env="test",
@@ -210,6 +241,11 @@ def test_production_settings_require_https_smtp_and_origins() -> None:
 def test_valid_production_settings_pass_runtime_validation() -> None:
     settings = Settings(
         app_env="production",
+        storage_backend="r2",
+        r2_account_id="account-id",
+        r2_bucket="fanfolio-assets",
+        r2_access_key_id="r2-access-key",
+        r2_secret_access_key="r2-secret-key",
         data_protection_key="production-data-protection-key-from-test",
         database_url="postgresql+asyncpg://fanfolio:password@db.example.com/fanfolio",
         frontend_url="https://app.fanfolio.example",

@@ -1,11 +1,15 @@
 import asyncio
+from io import BytesIO
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from app.db.session import SessionLocal
-from app.models import Artist, Asset, Card, Member
+from app.models import Artist, Asset, Card, Member, Role, Session, User
+from app.routers import artist as artist_router
+from app.spatial_scene import PhotoAnalysisBundle, SpatialSceneBundle
 from app.storage import configured_asset_storage
 from tests.conftest import assert_error, assert_success
 
@@ -87,6 +91,49 @@ def _delete_asset_storage_object(asset_id: str) -> None:
             configured_asset_storage().delete(path)
 
     asyncio.run(delete_object())
+
+
+def _png_bytes(mode: str, size: tuple[int, int], color: int | tuple[int, ...]) -> bytes:
+    image = Image.new(mode, size, color)
+    image.save(buffer := BytesIO(), format="PNG")
+    return buffer.getvalue()
+
+
+def _set_asset_transform(asset_id: str, transform: dict[str, Any]) -> None:
+    async def update_asset() -> None:
+        async with SessionLocal() as session:
+            asset = await session.get(Asset, asset_id)
+            assert asset is not None
+            asset.transform = transform
+            await session.commit()
+
+    asyncio.run(update_asset())
+
+
+def _other_artist_client(app_client: TestClient) -> TestClient:
+    async def create_artist() -> None:
+        async with SessionLocal() as session:
+            if await session.get(User, "artist_other_owner") is None:
+                session.add(
+                    User(
+                        id="artist_other_owner",
+                        email="artist-other-owner@example.test",
+                        role=Role.ARTIST,
+                    )
+                )
+            if await session.get(Session, "test-session-artist-other-owner") is None:
+                session.add(
+                    Session(
+                        token="test-session-artist-other-owner",
+                        user_id="artist_other_owner",
+                    )
+                )
+            await session.commit()
+
+    asyncio.run(create_artist())
+    client = TestClient(app_client.app)
+    client.cookies.set("fanfolio_session", "test-session-artist-other-owner")
+    return client
 
 
 def _create_artist_draft(
@@ -958,3 +1005,426 @@ def test_fan_cannot_read_artist_card_preview(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:
     assert_error(actors["fan"].get("/api/artist/cards/card_unknown"), 403, "FORBIDDEN")
+
+
+def test_artist_spatial_scene_persists_private_aligned_bundle(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    image = Image.new("RGB", (16, 24), (30, 40, 80))
+    image.save(buffer := BytesIO(), format="PNG")
+    uploaded = _upload_artist_asset(
+        actors["artist"],
+        file_name="spatial-source.png",
+        content_type="image/png",
+        purpose="card",
+        content=buffer.getvalue(),
+    )
+    asset_id = uploaded["assetId"]
+
+    scene = assert_success(actors["artist"].post(f"/api/artist/assets/{asset_id}/spatial-scene"))
+
+    assert scene["version"] == 2
+    assert scene["provider"] == "local_fallback"
+    assert scene["depthAssetId"] == f"{asset_id}-spatial-depth"
+    assert scene["maskAssetId"] == f"{asset_id}-spatial-mask"
+    assert scene["backgroundAssetId"] == f"{asset_id}-spatial-background"
+    assert not any(key.endswith("StoragePath") for key in scene)
+    for derivative in ("spatial-depth", "spatial-mask", "spatial-background"):
+        response = actors["artist"].get(f"/api/artist/assets/{asset_id}/{derivative}")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("image/png")
+        assert response.content.startswith(b"\x89PNG\r\n\x1a\n")
+        assert actors["fan"].get(f"/api/artist/assets/{asset_id}/{derivative}").status_code == 403
+
+
+def test_artist_photo_analysis_reuses_revision_matched_spatial_mask(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    uploaded = _upload_artist_asset(
+        actors["artist"],
+        file_name="photo-analysis-source.png",
+        content_type="image/png",
+        purpose="card",
+        content=_png_bytes("RGB", (16, 24), (30, 40, 80)),
+    )
+    asset_id = uploaded["assetId"]
+    storage = configured_asset_storage()
+    mask_bytes = _png_bytes("L", (16, 24), 180)
+    mask_path = storage.save_derived_bytes(
+        asset_id, "-existing-spatial-mask.png", mask_bytes, content_type="image/png"
+    )
+
+    async def read_revision() -> str:
+        async with SessionLocal() as session:
+            asset = await session.get(Asset, asset_id)
+            assert asset is not None
+            assert asset.upload_completed_at is not None
+            return f"{asset.id}:{asset.upload_completed_at.isoformat()}"
+
+    source_revision = asyncio.run(read_revision())
+    _set_asset_transform(
+        asset_id,
+        {
+            "spatialScene": {
+                "status": "completed",
+                "sourceAssetId": asset_id,
+                "sourceRevision": source_revision,
+                "provider": "isnet+depth",
+                "modelVersion": "shared-v1",
+                "confidence": 0.77,
+                "maskStoragePath": mask_path,
+            }
+        },
+    )
+
+    analysis = assert_success(
+        actors["artist"].post(f"/api/artist/assets/{asset_id}/photo-analysis")
+    )
+
+    assert analysis == {
+        "version": 1,
+        "status": "completed",
+        "sourceAssetId": asset_id,
+        "sourceRevision": source_revision,
+        "provider": "isnet+depth",
+        "modelVersion": "shared-v1",
+        "confidence": 0.77,
+        "maskUrl": f"/api/artist/assets/{asset_id}/photo-analysis-mask",
+        "capabilities": {"subjectMask": True, "faceProtection": False},
+    }
+    response = actors["artist"].get(f"/api/artist/assets/{asset_id}/photo-analysis-mask")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/png")
+    assert response.content == mask_bytes
+    assert (
+        actors["fan"].get(f"/api/artist/assets/{asset_id}/photo-analysis-mask").status_code == 403
+    )
+
+
+def test_artist_photo_analysis_post_persists_provider_mask_and_reuses_cache(
+    actors: dict[str, TestClient], seeded: dict[str, Any], monkeypatch: Any
+) -> None:
+    uploaded = _upload_artist_asset(
+        actors["artist"],
+        file_name="provider-photo-analysis-source.png",
+        content_type="image/png",
+        purpose="card",
+        content=_png_bytes("RGB", (16, 24), (30, 40, 80)),
+    )
+    asset_id = uploaded["assetId"]
+    mask_bytes = _png_bytes("L", (16, 24), 180)
+    provider_calls: list[bytes] = []
+
+    class FakePhotoAnalysisProvider:
+        async def analyze(self, content: bytes) -> PhotoAnalysisBundle:
+            provider_calls.append(content)
+            return PhotoAnalysisBundle(
+                mask=mask_bytes,
+                provider="isnet",
+                model_version="isnet-general-use",
+                confidence=0.86,
+            )
+
+    monkeypatch.setattr(
+        artist_router,
+        "configured_photo_analysis_provider",
+        lambda settings: FakePhotoAnalysisProvider(),
+    )
+    other_artist = _other_artist_client(actors["artist"])
+
+    created = assert_success(actors["artist"].post(f"/api/artist/assets/{asset_id}/photo-analysis"))
+    mask = actors["artist"].get(created["maskUrl"])
+    repeated = assert_success(
+        actors["artist"].post(f"/api/artist/assets/{asset_id}/photo-analysis")
+    )
+    cached = assert_success(actors["artist"].get(f"/api/artist/assets/{asset_id}/photo-analysis"))
+
+    assert len(provider_calls) == 1
+    assert created == repeated == cached
+    assert created["sourceAssetId"] == asset_id
+    assert created["provider"] == "isnet"
+    assert created["modelVersion"] == "isnet-general-use"
+    assert created["confidence"] == 0.86
+    assert created["maskUrl"] == f"/api/artist/assets/{asset_id}/photo-analysis-mask"
+    assert created["capabilities"] == {"subjectMask": True, "faceProtection": False}
+    assert "maskStoragePath" not in created
+    assert mask.status_code == 200
+    assert mask.headers["content-type"].startswith("image/png")
+    assert mask.content == mask_bytes
+    assert_error(
+        other_artist.get(f"/api/artist/assets/{asset_id}/photo-analysis"),
+        404,
+        "ASSET_NOT_FOUND",
+    )
+    assert_error(
+        other_artist.get(f"/api/artist/assets/{asset_id}/photo-analysis-mask"),
+        404,
+        "ASSET_NOT_FOUND",
+    )
+    assert len(provider_calls) == 1
+
+
+def test_artist_can_read_cached_photo_analysis_without_inference(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    uploaded = _upload_artist_asset(
+        actors["artist"],
+        file_name="cached-photo-analysis-source.png",
+        content_type="image/png",
+        purpose="card",
+        content=_png_bytes("RGB", (16, 24), (30, 40, 80)),
+    )
+    asset_id = uploaded["assetId"]
+    storage = configured_asset_storage()
+    mask_path = storage.save_derived_bytes(
+        asset_id,
+        "-photo-analysis-mask.png",
+        _png_bytes("L", (16, 24), 180),
+        content_type="image/png",
+    )
+
+    async def read_revision() -> str:
+        async with SessionLocal() as session:
+            asset = await session.get(Asset, asset_id)
+            assert asset is not None
+            assert asset.upload_completed_at is not None
+            return f"{asset.id}:{asset.upload_completed_at.isoformat()}"
+
+    source_revision = asyncio.run(read_revision())
+    _set_asset_transform(
+        asset_id,
+        {
+            "photoAnalysis": {
+                "version": 1,
+                "status": "completed",
+                "sourceAssetId": asset_id,
+                "sourceRevision": source_revision,
+                "provider": "isnet",
+                "modelVersion": "isnet-general-use",
+                "confidence": 0.81,
+                "maskUrl": f"/api/artist/assets/{asset_id}/photo-analysis-mask",
+                "capabilities": {"subjectMask": True, "faceProtection": False},
+                "maskStoragePath": mask_path,
+            }
+        },
+    )
+
+    analysis = assert_success(actors["artist"].get(f"/api/artist/assets/{asset_id}/photo-analysis"))
+
+    assert analysis["sourceAssetId"] == asset_id
+    assert analysis["sourceRevision"] == source_revision
+    assert analysis["capabilities"] == {"subjectMask": True, "faceProtection": False}
+    assert "maskStoragePath" not in analysis
+
+
+def test_artist_photo_analysis_get_404_for_missing_or_stale_cache(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    uploaded = _upload_artist_asset(
+        actors["artist"],
+        file_name="stale-photo-analysis-source.png",
+        content_type="image/png",
+        purpose="card",
+        content=_png_bytes("RGB", (16, 24), (30, 40, 80)),
+    )
+    asset_id = uploaded["assetId"]
+
+    missing = actors["artist"].get(f"/api/artist/assets/{asset_id}/photo-analysis")
+    assert_error(missing, 404, "PHOTO_ANALYSIS_NOT_FOUND")
+
+    _set_asset_transform(
+        asset_id,
+        {
+            "photoAnalysis": {
+                "version": 1,
+                "status": "completed",
+                "sourceAssetId": asset_id,
+                "sourceRevision": "stale-revision",
+                "provider": "isnet",
+                "modelVersion": "isnet-general-use",
+                "confidence": 0.81,
+                "maskUrl": f"/api/artist/assets/{asset_id}/photo-analysis-mask",
+                "capabilities": {"subjectMask": True, "faceProtection": False},
+                "maskStoragePath": "s3://private/stale-mask.png",
+            },
+            "spatialScene": {
+                "status": "completed",
+                "sourceAssetId": asset_id,
+                "sourceRevision": "stale-revision",
+                "provider": "isnet+depth",
+                "modelVersion": "shared-v1",
+                "confidence": 0.77,
+                "maskStoragePath": "s3://private/stale-spatial-mask.png",
+            },
+        },
+    )
+
+    stale = actors["artist"].get(f"/api/artist/assets/{asset_id}/photo-analysis")
+    mask = actors["artist"].get(f"/api/artist/assets/{asset_id}/photo-analysis-mask")
+
+    assert_error(stale, 404, "PHOTO_ANALYSIS_NOT_FOUND")
+    assert_error(mask, 404, "PHOTO_ANALYSIS_MASK_NOT_FOUND")
+
+
+def test_artist_photo_analysis_rejects_local_fallback_spatial_mask(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    uploaded = _upload_artist_asset(
+        actors["artist"],
+        file_name="photo-analysis-fallback-source.png",
+        content_type="image/png",
+        purpose="card",
+        content=_png_bytes("RGB", (16, 24), (30, 40, 80)),
+    )
+    asset_id = uploaded["assetId"]
+    storage = configured_asset_storage()
+    mask_path = storage.save_derived_bytes(
+        asset_id,
+        "-fallback-spatial-mask.png",
+        _png_bytes("L", (16, 24), 255),
+        content_type="image/png",
+    )
+
+    async def read_revision() -> str:
+        async with SessionLocal() as session:
+            asset = await session.get(Asset, asset_id)
+            assert asset is not None
+            assert asset.upload_completed_at is not None
+            return f"{asset.id}:{asset.upload_completed_at.isoformat()}"
+
+    source_revision = asyncio.run(read_revision())
+    _set_asset_transform(
+        asset_id,
+        {
+            "spatialScene": {
+                "status": "completed",
+                "sourceAssetId": asset_id,
+                "sourceRevision": source_revision,
+                "provider": "local_fallback",
+                "modelVersion": "luminance-v1",
+                "confidence": 0.0,
+                "maskStoragePath": mask_path,
+            }
+        },
+    )
+
+    response = actors["artist"].post(f"/api/artist/assets/{asset_id}/photo-analysis")
+
+    assert_error(response, 502, "PHOTO_ANALYSIS_FAILED")
+
+
+def test_artist_spatial_scene_reuses_cached_photo_analysis_mask(
+    actors: dict[str, TestClient], seeded: dict[str, Any], monkeypatch: Any
+) -> None:
+    uploaded = _upload_artist_asset(
+        actors["artist"],
+        file_name="spatial-reuse-source.png",
+        content_type="image/png",
+        purpose="card",
+        content=_png_bytes("RGB", (16, 24), (30, 40, 80)),
+    )
+    asset_id = uploaded["assetId"]
+    storage = configured_asset_storage()
+    mask_bytes = _png_bytes("L", (16, 24), 180)
+    mask_path = storage.save_derived_bytes(
+        asset_id,
+        "-photo-analysis-mask.png",
+        mask_bytes,
+        content_type="image/png",
+    )
+
+    async def read_revision() -> str:
+        async with SessionLocal() as session:
+            asset = await session.get(Asset, asset_id)
+            assert asset is not None
+            assert asset.upload_completed_at is not None
+            return f"{asset.id}:{asset.upload_completed_at.isoformat()}"
+
+    source_revision = asyncio.run(read_revision())
+    _set_asset_transform(
+        asset_id,
+        {
+            "photoAnalysis": {
+                "version": 1,
+                "status": "completed",
+                "sourceAssetId": asset_id,
+                "sourceRevision": source_revision,
+                "provider": "isnet",
+                "modelVersion": "isnet-general-use",
+                "confidence": 0.81,
+                "maskUrl": f"/api/artist/assets/{asset_id}/photo-analysis-mask",
+                "capabilities": {"subjectMask": True, "faceProtection": False},
+                "maskStoragePath": mask_path,
+            }
+        },
+    )
+    seen_masks: list[bytes | None] = []
+
+    class FakeProvider:
+        async def generate(
+            self, content: bytes, *, mask: bytes | None = None
+        ) -> SpatialSceneBundle:
+            seen_masks.append(mask)
+            return SpatialSceneBundle(
+                depth=_png_bytes("L", (16, 24), 100),
+                mask=mask or _png_bytes("L", (16, 24), 90),
+                background=_png_bytes("RGB", (16, 24), (1, 2, 3)),
+                provider="depth-anything-v2+cached-mask+telea",
+                model_version="test-v1",
+                confidence=0.8,
+            )
+
+    monkeypatch.setattr(
+        artist_router,
+        "configured_spatial_scene_provider",
+        lambda settings: FakeProvider(),
+    )
+
+    scene = assert_success(actors["artist"].post(f"/api/artist/assets/{asset_id}/spatial-scene"))
+
+    assert seen_masks == [mask_bytes]
+    assert scene["provider"] == "depth-anything-v2+cached-mask+telea"
+
+
+def test_artist_spatial_scene_job_is_idempotent_and_persists_asset_manifest(
+    actors: dict[str, TestClient], seeded: dict[str, Any]
+) -> None:
+    image = Image.new("RGB", (16, 24), (30, 40, 80))
+    image.save(buffer := BytesIO(), format="PNG")
+    uploaded = _upload_artist_asset(
+        actors["artist"],
+        file_name="spatial-job-source.png",
+        content_type="image/png",
+        purpose="card",
+        content=buffer.getvalue(),
+    )
+    asset_id = uploaded["assetId"]
+    headers = {"Idempotency-Key": "spatial-test-retry-1"}
+
+    first = actors["artist"].post(
+        f"/api/artist/assets/{asset_id}/spatial-scene-jobs",
+        headers=headers,
+        json={"motionPreset": "portrait-parallax", "pipelineVersion": "v1"},
+    )
+    assert first.status_code == 202, first.text
+    assert first.json()["ok"] is True
+    first_data = first.json()["data"]
+    assert first_data["reused"] is False
+
+    replay = actors["artist"].post(
+        f"/api/artist/assets/{asset_id}/spatial-scene-jobs",
+        headers=headers,
+        json={"motionPreset": "portrait-parallax", "pipelineVersion": "v1"},
+    )
+    assert replay.status_code == 202, replay.text
+    assert replay.json()["ok"] is True
+    replay_data = replay.json()["data"]
+    assert replay_data["reused"] is True
+    assert replay_data["jobId"] == first_data["jobId"]
+
+    status = assert_success(
+        actors["artist"].get(f"/api/artist/spatial-scene-jobs/{first_data['jobId']}")
+    )
+    assert status["status"] == "ready"
+    assert status["scene"]["provider"] == "local_fallback"
+    assert actors["artist"].get(f"/api/artist/assets/{asset_id}/spatial-depth").status_code == 200
