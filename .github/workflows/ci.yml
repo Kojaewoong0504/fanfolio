@@ -58,6 +58,11 @@ jobs:
           OAUTH_FRONTEND_CALLBACK_URL: https://app.fanfolio.example/oauth/callback
           GOOGLE_REDIRECT_URI: https://app.fanfolio.example/oauth/google/callback
           KAKAO_REDIRECT_URI: https://app.fanfolio.example/oauth/kakao/callback
+          STORAGE_BACKEND: s3
+          S3_BUCKET: ci-only-production-bucket
+          S3_ENDPOINT_URL: https://s3.fanfolio.example
+          S3_ACCESS_KEY_ID: ci-only-access-key
+          S3_SECRET_ACCESS_KEY: ci-only-secret-key
         run: ../scripts/production-preflight.sh
 
   frontend:
