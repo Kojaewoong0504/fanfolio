@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Fanfolio 효과 12종 리뷰</title>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;background:#f5f6fb;color:#171937;font:14px system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    button,input{font:inherit}
+    button{cursor:pointer}
+    header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;max-width:1440px;margin:0 auto;padding:22px 24px 12px}
+    header p{margin:0;color:#666c83;font-size:12px;font-weight:750;letter-spacing:.08em;text-transform:uppercase}
+    h1{margin:5px 0 8px;font-size:24px;line-height:1.15}
+    header small{display:block;color:#666c83;font-size:12px;line-height:1.5}
+    a{color:#6250d9;font-size:13px;font-weight:800;text-decoration:none}
+    main{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:22px;max-width:1440px;margin:0 auto;padding:10px 24px 28px}
+    .workspace{display:grid;gap:18px;min-width:0}
+    .hero-review{display:grid;grid-template-columns:minmax(240px,360px) minmax(0,1fr);gap:22px;align-items:center;padding:18px;background:#fff;border:1px solid #e3e5ef;border-radius:18px}
+    .portrait-shell{display:grid;justify-items:center;gap:10px;min-width:0}
+    .review-card{position:relative;isolation:isolate;overflow:hidden;width:min(100%,340px);aspect-ratio:2/3;border-radius:24px;background:#a8a8b5;box-shadow:0 18px 38px #1f245022;transform:perspective(900px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));transition:transform .16s ease;touch-action:pan-y}
+    .review-card img,.review-card canvas{position:absolute;inset:0;width:100%;height:100%}
+    .review-card img{object-fit:cover}
+    .review-card canvas{pointer-events:none;mix-blend-mode:screen}
+    .review-card.effect-liquid-silver canvas{mix-blend-mode:normal}
+    .effect-off .review-card canvas{opacity:0}
+    .caption{margin:0;color:#686e83;font-size:12px;text-align:center}
+    .review-meta{display:grid;gap:14px}
+    .selected-number{width:max-content;padding:5px 8px;border:1px solid #d7d9ec;border-radius:7px;color:#6250d9;background:#f6f3ff;font-size:12px;font-weight:900}
+    .review-meta h2{margin:0;font-size:32px;line-height:1.05}
+    .review-meta p{max-width:560px;margin:0;color:#555c73;line-height:1.65}
+    .status-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+    .status-row span{padding:6px 9px;border:1px solid #e0e2ec;border-radius:8px;background:#fafbff;color:#565d73;font-size:11px;font-weight:800}
+    .status-row [data-renderer-state="ready"]{border-color:#cfe8d6;color:#277342;background:#f2fbf4}
+    .status-row [data-renderer-state="failed"]{border-color:#f2b7b7;color:#a73535;background:#fff4f4}
+    .sheet-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .sheet-head h2{margin:0;font-size:17px}
+    .segmented{display:flex;gap:6px;padding:4px;border:1px solid #dde0ec;border-radius:10px;background:#fff}
+    .segmented button{border:0;border-radius:7px;background:transparent;padding:7px 9px;color:#60677d;font-size:12px;font-weight:800}
+    .segmented button.active{background:#6250d9;color:#fff}
+    .contact-layout{display:grid;gap:18px;width:100%;max-width:980px}
+    .contact-layout.with-reference{position:fixed;inset:18px;z-index:20;width:auto;max-width:none;overflow:auto;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;padding:18px;background:#f5f6fbee;backdrop-filter:blur(8px)}
+    .board{display:grid;gap:10px;min-width:0;padding:14px;border:1px solid #e2e5ef;border-radius:16px;background:#fff}
+    .board h3{margin:0;font-size:14px}
+    .board-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .comparison-close{display:none;border:1px solid #e2e5ef;border-radius:9px;background:#fff;color:#363b52;padding:7px 9px;font-size:12px;font-weight:850}
+    .with-reference .comparison-close{display:block}
+    .contact-sheet{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:12px}
+    .with-reference .contact-sheet{grid-template-columns:repeat(4,minmax(0,1fr))}
+    .effect-card{min-width:0;margin:0;padding:9px;border:1px solid #e2e5ef;border-radius:14px;background:#fff}
+    .effect-card.active{border-color:#6250d9;box-shadow:0 0 0 2px #6250d91a}
+    .effect-card canvas{display:block;width:100%;aspect-ratio:2/3;border-radius:10px;background:#a8a8b5}
+    .effect-card button{display:block;width:100%;padding:0;border:0;background:transparent}
+    .effect-card figcaption{display:grid;grid-template-columns:auto 1fr;gap:7px;align-items:center;margin-top:8px;color:#252943;font-size:11px;font-weight:850}
+    .effect-card em{font-style:normal;color:#6250d9;font-variant-numeric:tabular-nums}
+    .reference-board{display:none}
+    .with-reference .reference-board{display:grid}
+    .reference-board img{display:block;width:100%;min-height:520px;object-fit:contain;border-radius:10px;background:#f0f1f6}
+    .reference-board p{margin:0;color:#666c83;font-size:12px;line-height:1.55}
+    aside{align-self:start;display:grid;gap:15px;padding:18px;border:1px solid #e0e3ee;border-radius:18px;background:#fff;position:sticky;top:14px}
+    aside h2{margin:0;font-size:16px}
+    .effect-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;max-height:360px;overflow:auto;padding-right:2px}
+    .effect-grid button{min-width:0;border:1px solid #e2e5ef;border-radius:10px;background:#fff;padding:8px;text-align:left;color:#2d3146}
+    .effect-grid button.active{border-color:#6250d9;background:#f4f1ff;color:#5843d6}
+    .effect-grid em{display:block;margin-bottom:3px;color:#6b7280;font-style:normal;font-size:10px;font-weight:900}
+    .effect-grid strong{display:block;font-size:12px;line-height:1.25}
+    .field{display:grid;gap:7px;color:#34394f;font-size:12px;font-weight:800}
+    .field span{display:flex;justify-content:space-between;gap:10px}
+    output{color:#6250d9;font-variant-numeric:tabular-nums}
+    input[type=range]{width:100%;accent-color:#6250d9}
+    .angle-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+    .angle-grid button,.utility-button{border:1px solid #e2e5ef;border-radius:9px;background:#fff;color:#363b52;padding:9px;font-size:12px;font-weight:850}
+    .angle-grid button.active,.utility-button.active{border-color:#6250d9;color:#5843d6;background:#f4f1ff}
+    .toggle-row{display:flex;align-items:center;justify-content:space-between;gap:12px;color:#34394f;font-size:12px;font-weight:850}
+    .upload-button{position:relative;display:grid;gap:3px;padding:11px;border:1px dashed #c7cce1;border-radius:11px;background:#fafbff;color:#34394f;font-size:12px;font-weight:850}
+    .upload-button small{color:#73798d;font-size:11px;font-weight:650}
+    .upload-button input{position:absolute;inset:0;opacity:0;cursor:pointer}
+    @media(max-width:1040px){main{grid-template-columns:1fr}.hero-review{grid-template-columns:1fr}aside{position:static}.contact-layout{max-width:none}.contact-layout.with-reference{grid-template-columns:1fr}.reference-board img{min-height:0}}
+    @media(max-width:720px){header{padding:18px}main{padding:8px 14px 22px}.contact-sheet{grid-template-columns:repeat(2,minmax(150px,1fr))}.review-meta h2{font-size:26px}}
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <p>Fanfolio Effect Review</p>
+      <h1>효과 12종 런타임 리뷰</h1>
+      <small>동일한 2:3 인물 카드 위에서 실제 WebGL2 효과를 각도 고정으로 비교합니다.</small>
+    </div>
+    <a href="/" aria-label="Fanfolio 스튜디오로 돌아가기">스튜디오로 돌아가기</a>
+  </header>
+  <main>
+    <section class="workspace" aria-label="아틀리에 효과 리뷰">
+      <div class="hero-review">
+        <div class="portrait-shell">
+          <div class="review-card" data-review-card>
+            <img id="hero-photo" src="./assets/card-stardust-backstage.jpg" alt="효과 검증용 기존 샘플 인물 사진">
+            <canvas id="hero-effect" aria-hidden="true"></canvas>
+          </div>
+          <p class="caption" id="image-caption">기본 샘플: card-stardust-backstage.jpg</p>
+        </div>
+        <div class="review-meta">
+          <span class="selected-number" id="selected-number">01</span>
+          <h2 id="selected-name">크리스털 포일</h2>
+          <p id="selected-description">렌더러 준비 중입니다.</p>
+          <div class="status-row" aria-live="polite">
+            <span id="ready-status" data-renderer-state="loading">Renderer loading</span>
+            <span id="draw-status">Draw pending</span>
+          </div>
+        </div>
+      </div>
+      <div class="sheet-head">
+        <h2>12종 컨택트 시트</h2>
+        <div class="segmented" role="group" aria-label="비교 보기">
+          <button type="button" id="sheet-toggle" class="active" aria-pressed="true">Runtime</button>
+          <button type="button" id="reference-toggle" aria-pressed="false">Reference 비교</button>
+        </div>
+      </div>
+      <div class="contact-layout" id="contact-layout">
+        <section class="board runtime-board" aria-label="런타임 12종 효과 보드">
+          <div class="board-head"><h3>Runtime</h3><button type="button" class="comparison-close" id="comparison-close">비교 닫기</button></div>
+          <div class="contact-sheet" id="contact-sheet" aria-label="동일 이미지 12개 효과 비교"></div>
+        </section>
+        <section class="board reference-board" aria-label="원본 승인 시안 비교">
+          <h3>Reference</h3>
+          <img src="./assets/effects-reference-12.png" alt="승인된 12개 효과 원본 컨택트 시트">
+          <p>참조 이미지는 비교용입니다. 런타임 효과로 사용하거나 합성하지 않습니다.</p>
+        </section>
+      </div>
+    </section>
+    <aside aria-label="효과 컨트롤">
+      <h2>컨트롤</h2>
+      <div class="effect-grid" id="patterns" aria-label="효과 선택"></div>
+      <label class="field"><span>광택 <output id="intensity-value">72%</output></span><input id="intensity" type="range" min="0" max="1" step=".01" value=".72"></label>
+      <label class="field"><span>빛 범위 <output id="spread-value">64%</output></span><input id="spread" type="range" min=".3" max=".9" step=".01" value=".64"></label>
+      <label class="field"><span>디테일 <output id="grain-value">50%</output></span><input id="grain" type="range" min="0" max="1" step=".01" value=".5"></label>
+      <div class="angle-grid" id="angles" aria-label="카드 각도 선택">
+        <button type="button" data-angle="left" aria-label="왼쪽 각도">Left</button>
+        <button type="button" data-angle="up" aria-label="위쪽 각도">Up</button>
+        <button type="button" data-angle="right" aria-label="오른쪽 각도">Right</button>
+        <button type="button" data-angle="front" class="active" aria-label="정면 각도">Front</button>
+        <button type="button" data-angle="down" aria-label="아래쪽 각도">Down</button>
+      </div>
+      <label class="toggle-row"><span>Effect on/off</span><input id="enabled" type="checkbox" checked aria-label="효과 켜기"></label>
+      <label class="upload-button">사진 업로드<input id="photo-upload" type="file" accept="image/png,image/jpeg,image/webp"><small>로컬 미리보기만 사용합니다.</small></label>
+    </aside>
+  </main>
+  <script type="module" src="./foil-review.js"></script>
+</body>
+</html>

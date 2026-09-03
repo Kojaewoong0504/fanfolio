@@ -3,8 +3,11 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 
 import {
+  ALL_FOIL_PATTERN_IDS,
+  EFFECT_CATALOG,
   buildCardPayload,
   buildDesignConfig,
+  buildSpatialSceneJobRequest,
   cardDraftErrors,
   cardEditorStage,
   normalizeCatalogSelection,
@@ -13,8 +16,70 @@ import {
   normalizeCreativeLayer,
   responsiveStudioMode,
   reviewReadiness,
+  spatialSceneLabel,
+  spatialSceneMediaRoles,
   studioDashboard,
 } from '../studio-core.js'
+
+const ATELIER_12_EFFECTS = [
+  ['aurora-wave', '크리스털 포일', 1],
+  ['satin-pearl', '새틴 펄', 2],
+  ['gold-signature', '골드 시그니처', 3],
+  ['spectrum-edge', '스펙트럼 엣지', 4],
+  ['constellation', '별자리 글리터', 5],
+  ['glass-caustics', '유리빛 굴절', 6],
+  ['liquid-silver', '리퀴드 실버', 7],
+  ['laser-engraving', '레이저 인그레이빙', 8],
+  ['cinema-flare', '시네마 플레어', 9],
+  ['blossom-depth', '블로썸 뎁스', 10],
+  ['light-signature', '라이트 시그니처', 11],
+  ['diamond-cut', '다이아몬드 컷', 12],
+]
+
+const LEGACY_PATTERN_IDS = [
+  'aurora-wave',
+  'prism',
+  'cracked-ice',
+  'micro-star',
+  'liquid-chrome',
+  'glass-flare',
+]
+
+test('exports the canonical atelier 12 effect catalog separately from legacy pattern ids', () => {
+  assert.deepEqual(
+    EFFECT_CATALOG.map(({ id, name, number }) => [id, name, number]),
+    ATELIER_12_EFFECTS,
+  )
+  assert.ok(
+    EFFECT_CATALOG.every((effect) => typeof effect.description === 'string' && effect.description),
+  )
+  assert.deepEqual(ALL_FOIL_PATTERN_IDS.slice(0, 12), ATELIER_12_EFFECTS.map(([id]) => id))
+  assert.deepEqual(ALL_FOIL_PATTERN_IDS.slice(12), LEGACY_PATTERN_IDS.filter((id) => id !== 'aurora-wave'))
+})
+
+test('normalizes all atelier 12 and legacy foil pattern ids without remapping them', () => {
+  for (const patternId of ALL_FOIL_PATTERN_IDS) {
+    assert.equal(
+      normalizeCardEffects({ version: 3, front: { foilPattern: patternId } }).front.foilPattern,
+      patternId,
+    )
+  }
+})
+
+test('uses a plain-language label and explicit generated media roles for spatial cards', () => {
+  assert.equal(spatialSceneLabel('completed'), 'AI 입체 카드 준비 완료')
+  assert.deepEqual(spatialSceneMediaRoles(), ['background', 'mask', 'depth'])
+})
+
+test('renders the generated luminance mask as a subject silhouette', async () => {
+  const css = await readFile(new URL('../styles.css', import.meta.url), 'utf8')
+  assert.match(css, /\.spatial-subject-layer[\s\S]*mask-mode:\s*luminance/)
+})
+
+test('overscans spatial layers enough to cover their maximum parallax shift', async () => {
+  const css = await readFile(new URL('../styles.css', import.meta.url), 'utf8')
+  assert.match(css, /\.spatial-card-media img[\s\S]*inset:\s*0[;\s][\s\S]*width:\s*100%[\s\S]*height:\s*100%[\s\S]*scale\(1\.18\)/)
+})
 
 test('uses the visual-editor image asset without asking for the same file again', () => {
   const payload = buildCardPayload({
@@ -29,6 +94,17 @@ test('uses the visual-editor image asset without asking for the same file again'
   })
 
   assert.equal(payload.imageAssetId, 'asset_card')
+})
+
+test('builds a stable async spatial-scene request for studio retries', () => {
+  assert.deepEqual(
+    buildSpatialSceneJobRequest('asset_card', { motionPreset: 'portrait-parallax' }),
+    {
+      path: '/artist/assets/asset_card/spatial-scene-jobs',
+      headers: { 'Idempotency-Key': 'spatial-scene:asset_card:portrait-parallax:v1' },
+      body: { motionPreset: 'portrait-parallax', pipelineVersion: 'v1' },
+    },
+  )
 })
 
 test('emits a backend-supported effect preset for hologram recipes', () => {
@@ -372,6 +448,26 @@ test('serializes premium hologram tuning so fan previews can match the studio', 
     effectFinish: 'silk',
     effectMotion: true,
   })
+})
+
+test('serializes spatial scene metadata into the front card contract', () => {
+  const spatialScene = {
+    version: 2,
+    sourceAssetId: 'asset_card',
+    provider: 'depth-anything-v2+sam2+lama',
+    modelVersion: '2026-09',
+    confidence: 0.94,
+    status: 'completed',
+    depthAssetId: 'asset_card-spatial-depth',
+    maskAssetId: 'asset_card-spatial-mask',
+    backgroundAssetId: 'asset_card-spatial-background',
+    runtime: 'webgl-layered',
+    maxYawDeg: 4,
+    maxPitchDeg: 3,
+  }
+  const config = buildDesignConfig({ editor: { spatialScene } })
+
+  assert.deepEqual(config.front.spatialScene, spatialScene)
 })
 
 test('keeps lenticular assets scoped to the front effect contract', () => {

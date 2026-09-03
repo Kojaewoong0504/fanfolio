@@ -1,5 +1,10 @@
+import { initFoilCards } from './foil-renderer.js?v=atelier12-1'
+import { EFFECT_CATALOG } from './effect-catalog.js?v=atelier12-1'
+import { photoAnalysisReady, canUsePhotoMask, resetPhotoAnalysis, capturePhoto, isCurrentPhoto } from './photo-analysis.js'
+import { createEffectPreparation, spatialEffectReady, spatialEffectActive } from './effect-preparation.js'
 import {
   buildCardPayload,
+  buildSpatialSceneJobRequest,
   cardDraftErrors,
   cardEditorStage,
   navigationState,
@@ -8,8 +13,9 @@ import {
   normalizeCreativeLayer,
   responsiveStudioMode,
   reviewReadiness,
+  spatialSceneMediaRoles,
   studioDashboard,
-} from './studio-core.js?v=effects-contract-20260826'
+} from './studio-core.js?v=studio-effects-upload-20260903d'
 
 const isLocalHost = ['localhost', '127.0.0.1'].includes(window.location.hostname)
 const localApiQuery = isLocalHost
@@ -32,6 +38,7 @@ let mediaRecorder = null
 let mediaStream = null
 let recordedChunks = []
 let deviceMotionListenerAttached = false
+const photoAnalysisTasks = new Map()
 
 const sampleAssets = {
   aurora: './assets/card-aurora-portrait.jpg',
@@ -68,24 +75,11 @@ const materialOptions = [
   ['chrome', '크롬', '선명한 금속 반사'],
 ]
 
-const foilPatternOptions = [
-  ['aurora-wave', '오로라 웨이브'],
-  ['prism', '프리즘'],
-  ['cracked-ice', '크랙드 아이스'],
-  ['micro-star', '마이크로 스타'],
-]
-
 const foilCoverageOptions = [
   ['full', '전체'],
   ['background', '배경'],
   ['frame', '프레임'],
   ['signature', '로고·사인'],
-]
-
-const interactionOptions = [
-  ['static', '정적'],
-  ['tilt', '기울임'],
-  ['lenticular', '렌티큘러'],
 ]
 
 const backMaterialOptions = [
@@ -130,7 +124,7 @@ const recipes = [
     id: 'hologram',
     eyebrow: 'PRISM EDITION',
     name: '홀로그램 리미티드',
-    description: '빛의 각도와 강도를 조절해 한정판 광택을 완성해요.',
+    description: '두 장의 사진을 각도에 따라 번갈아 보여주는 카드를 만들어요.',
     image: sampleAssets.stardust,
     icon: 'auto_awesome',
     accent: 'pink',
@@ -173,7 +167,7 @@ function initialEditor() {
     imageName: '',
     imageFile: null,
     imageAssetId: null,
-    material: 'pearl',
+    material: 'matte',
     foilPattern: 'aurora-wave',
     foilCoverage: 'full',
     interaction: 'tilt',
@@ -203,10 +197,10 @@ function initialEditor() {
     layers: [],
     selectedLayerId: null,
     inspectorOpen: false,
-    drawingColor: '#6b58ef',
+    drawingColor: '#ffffff',
     drawingSize: 7,
     drawingDraftSrc: '',
-    effect: 'holographic',
+    effect: 'none',
     effectPreset: 'aurora',
     effectIntensity: 0.58,
     effectAngle: 135,
@@ -222,6 +216,18 @@ function initialEditor() {
     background: '#0b1033',
     backTemplateId: 'agency_back_v1',
     previewOpened: false,
+    photoAnalysis: null,
+    photoAnalysisMaskSrc: '',
+    photoAnalysisStatus: 'idle',
+    photoAnalysisError: '',
+    showAnalysisMask: false,
+    spatialEnabled: false,
+    spatialSceneError: '',
+    selectedEffect: 'holographic',
+    spatialScene: null,
+    spatialSceneMedia: { background: '', mask: '', depth: '' },
+    spatialSceneStatus: 'idle',
+    spatialSceneJobId: null,
   }
 }
 
@@ -258,6 +264,7 @@ const state = {
   effectVersionId: null,
   editingCardId: null,
   selectedRecipe: 'voice',
+  recipeStarted: false,
   form: initialForm(),
   editor: initialEditor(),
   viewportMode: initialViewportMode,
@@ -310,6 +317,7 @@ function persistDraft() {
   const editor = Object.fromEntries(
     Object.entries(state.editor).filter(
       ([key, value]) =>
+        key !== 'spatialSceneMedia' &&
         !key.endsWith('File') &&
         !(key.endsWith('Src') && typeof value === 'string' && value.startsWith('blob:')),
     ),
@@ -341,6 +349,7 @@ function clearDraft(userId = state.profile?.id) {
 }
 
 function restoreDraftForUser(userId, cards = []) {
+  if (state.recipeStarted) return
   const draft = readDraft(userId)
   localStorage.removeItem(DRAFT_KEY)
   if (!draft) return
@@ -419,6 +428,96 @@ async function fetchProtectedBlob(path) {
   const apiPath = path.replace(/^\/api/, '')
   const response = await authorizedFetch(apiPath)
   return URL.createObjectURL(await response.blob())
+}
+
+async function loadSpatialSceneMedia(assetId, captured = capturePhoto(state.editor)) {
+  if (!assetId) throw new Error('AI 입체 카드 결과의 원본 에셋을 찾을 수 없습니다.')
+  const base = `/artist/assets/${encodeURIComponent(assetId)}/spatial-`
+  const [background, mask, depth] = await Promise.all(
+    spatialSceneMediaRoles().map(async (role) => [role, await fetchProtectedBlob(`${base}${role}`)]),
+  )
+  const media = Object.fromEntries([background, mask, depth])
+  if (!isCurrentPhoto(state.editor, captured)) {
+    Object.values(media).forEach((url) => URL.revokeObjectURL(url))
+    return
+  }
+  Object.values(state.editor.spatialSceneMedia || {}).forEach((url) => {
+    if (url?.startsWith('blob:')) URL.revokeObjectURL(url)
+  })
+  state.editor.spatialSceneMedia = media
+}
+
+async function loadPhotoAnalysis(assetId, captured = capturePhoto(state.editor)) {
+  const result = await api(`/artist/assets/${encodeURIComponent(assetId)}/photo-analysis`)
+  if (!isCurrentPhoto(state.editor, captured)) return
+  await applyPhotoAnalysis(result.data, captured)
+}
+
+async function applyPhotoAnalysis(analysis, captured) {
+  if (!isCurrentPhoto(state.editor, captured) || analysis.sourceAssetId !== state.editor.imageAssetId) return
+  if (analysis.provider === 'local_fallback' || analysis.capabilities?.subjectMask !== true) throw new Error('유효한 인물 분석 결과가 없습니다.')
+  // Build the private route ourselves; never fetch a URL supplied by draft metadata.
+  const mask = await fetchProtectedBlob(`/artist/assets/${encodeURIComponent(analysis.sourceAssetId)}/photo-analysis-mask`)
+  if (!isCurrentPhoto(state.editor, captured)) { URL.revokeObjectURL(mask); return }
+  if (state.editor.photoAnalysisMaskSrc?.startsWith('blob:')) URL.revokeObjectURL(state.editor.photoAnalysisMaskSrc)
+  state.editor.photoAnalysis = analysis
+  state.editor.photoAnalysisMaskSrc = mask
+  state.editor.photoAnalysisStatus = 'completed'
+  state.editor.photoAnalysisError = ''
+}
+
+async function analyzePhoto() {
+  if (state.editor.photoAnalysisStatus === 'processing') return
+  const captured = capturePhoto(state.editor)
+  const task = Symbol('photo-analysis')
+  photoAnalysisTasks.set(task, state.editor.imageName || state.form.name || '사진')
+  state.editor.photoAnalysisStatus = 'processing'
+  state.editor.photoAnalysisError = ''
+  render()
+  try {
+    const assetId = await ensureAsset('image')
+    if (!assetId) throw new Error('먼저 사진을 올려 주세요.')
+    if (!isCurrentPhoto(state.editor, captured)) return
+    const result = await api(`/artist/assets/${encodeURIComponent(assetId)}/photo-analysis`, {method:'POST'})
+    await applyPhotoAnalysis(result.data, captured)
+    if (isCurrentPhoto(state.editor, captured)) { markDirty(); notify('사진 분석 완료 · 배경 전용 효과에 사용할 수 있어요.', 'success') }
+  } catch (error) {
+    if (isCurrentPhoto(state.editor, captured)) {
+      state.editor.photoAnalysisStatus = 'error'
+      state.editor.photoAnalysisError = error.message || '사진 분석에 실패했습니다.'
+      notify(state.editor.photoAnalysisError, 'error')
+    }
+  } finally {
+    photoAnalysisTasks.delete(task)
+    persistDraft()
+    render()
+  }
+}
+
+const prepareEffects = createEffectPreparation({
+  current: () => state.editor,
+  analyzed: photoAnalysisReady,
+  spatialReady: spatialEffectReady,
+  analyze: analyzePhoto,
+  spatial: generateSpatialScene,
+})
+
+function photoAnalysisPanel() {
+  const editor = state.editor
+  const ready = photoAnalysisReady(editor)
+  const processing = editor.photoAnalysisStatus === 'processing'
+  const coverageNote = editor.foilCoverage !== 'background' ? '' : !ready
+    ? '분석이 준비되기 전에는 배경 효과를 표시하지 않습니다.'
+    : !canUsePhotoMask(editor)
+      ? '배경 전용 표면 효과는 현재 정지 사진에서만 지원합니다. 입체·홀로그램·영상과 함께 사용할 때는 전체 또는 프레임 범위를 선택해 주세요.' : ''
+  return `<section class="photo-analysis-panel" aria-label="공통 사진 분석">
+    <div class="photo-analysis-heading"><span>${icon('person_search')}<strong>사진 분석</strong></span><span class="photo-analysis-status">${processing ? '분석 중' : ready ? '준비 완료' : '분석 필요'}</span></div>
+    <p>${ready ? '인물·배경 분석 완료. 표면 효과를 선택할 수 있어요.' : '인물과 배경을 자동으로 분석합니다. 다른 편집을 계속해도 괜찮아요.'}</p>
+    ${processing ? '<progress aria-label="사진 분석 중"></progress>' : editor.photoAnalysisStatus === 'error' ? '<button type="button" class="secondary-button full" data-action="retry-effects">사진 분석 다시 시도</button>' : ''}
+    ${ready ? `<button type="button" class="text-button" data-action="toggle-analysis-mask" aria-pressed="${Boolean(editor.showAnalysisMask)}">${editor.showAnalysisMask ? '원본 보기' : '인물 영역 확인'}</button><small>흰색은 인물, 검정은 배경입니다. 얼굴 별도 인식·영역 수동 보정은 아직 지원하지 않습니다.</small>` : ''}
+    ${editor.photoAnalysisError ? `<p role="alert">${esc(editor.photoAnalysisError)}</p>` : ''}
+    ${coverageNote ? `<small>${coverageNote}</small>` : ''}
+  </section>`
 }
 
 function notify(message, tone = 'default') {
@@ -584,7 +683,13 @@ function shell(content, title, activeView = state.view) {
       </header>
       <div class="studio-content">${content}</div>
     </main>
+    ${globalTaskProgress()}
   </div>`
+}
+
+function globalTaskProgress() {
+  if (state.editor.spatialSceneStatus !== 'processing') return ''
+  return `<div class="global-task-progress" role="status" aria-live="polite"><span class="loading-line" aria-hidden="true"></span><div><strong>AI 입체 카드 생성 중</strong><small>원본 사진을 분석하고 깊이·인물·배경 레이어를 준비하고 있어요. 다른 카드 정보는 계속 편집할 수 있습니다.</small></div></div>`
 }
 
 function metricCard(iconName, label, value, tone) {
@@ -596,7 +701,7 @@ function homeView() {
   const actionable = dashboard.actionable.slice(0, 3)
   return `<section class="dashboard-view">
     <div class="dashboard-hero">
-      <div class="dashboard-hero-copy"><span class="hero-kicker">SPECIAL CARD LAB</span><h2>이번 컴백의 순간을<br />특별 카드로 남겨보세요.</h2><p>보이스, 모션, 홀로그램을 조합하고 팬 화면까지 바로 미리볼 수 있어요.</p><div class="hero-actions"><button type="button" class="hero-button" data-nav="create">새 카드 만들기 ${icon('arrow_forward')}</button><button type="button" class="hero-link" data-nav="cards">초안 이어서 작업</button></div></div>
+      <div class="dashboard-hero-copy"><span class="hero-kicker">SPECIAL CARD LAB</span><h2>이번 컴백의 순간을<br />특별 카드로 남겨보세요.</h2><p>보이스, 모션, 홀로그램을 조합하고 팬 화면까지 바로 미리볼 수 있어요.</p><div class="hero-actions"><button type="button" class="hero-button" data-nav="create">새 카드 만들기 ${icon('arrow_forward')}</button><button type="button" class="hero-link" data-action="resume-local-draft">초안 이어서 작업</button></div></div>
       <div class="hero-art" aria-hidden="true"><img src="${sampleAssets.aurora}" alt="" /><img src="./assets/hologram-aurora-texture.jpg" alt="" /></div>
     </div>
     <div class="metric-grid">
@@ -641,7 +746,7 @@ function homeView() {
 
 function createView() {
   return `<section class="create-view">
-    <div class="create-intro"><span class="page-kicker">CHOOSE A RECIPE</span><h2>어떤 특별함부터 담아볼까요?</h2><p>기능별 레시피를 선택하면 필요한 도구만 먼저 열어드려요. 편집 중 언제든 다른 기능을 더할 수 있습니다.</p></div>
+    <div class="create-intro"><span class="page-kicker">CHOOSE A RECIPE</span><h2>어떤 특별함부터 담아볼까요?</h2><p>레시피의 이미지는 예시입니다. 실제 카드에 샘플 이미지가 들어가지 않게 하려면 아래 빈 카드에서 시작하세요.</p></div>
     <div class="recipe-grid">
       ${recipes
         .map(
@@ -652,7 +757,7 @@ function createView() {
         )
         .join('')}
     </div>
-    <button type="button" class="blank-start" data-recipe="blank">${icon('add')}<span><strong>빈 카드에서 자유롭게 시작</strong><small>사진부터 선택하고 필요한 특별 기능을 직접 조합해요.</small></span>${icon('arrow_forward')}</button>
+    <button type="button" class="blank-start" data-recipe="blank">${icon('add')}<span><strong>샘플 없는 빈 카드에서 시작</strong><small>사진·특수효과·홀로그램을 직접 선택해요.</small></span>${icon('arrow_forward')}</button>
   </section>`
 }
 
@@ -727,7 +832,8 @@ function creativeLayerMarkup(layer) {
   const content = layer.type === 'sticker'
     ? `<img src="${esc(layer.src)}" alt="" draggable="false" />`
     : '<span class="creative-layer-mask" aria-hidden="true"></span>'
-  return `<button type="button" class="creative-layer layer-${esc(layer.type)} ${selected ? 'selected' : ''}" data-layer-id="${esc(layer.id)}" style="${style}" aria-label="${creativeLayerLabel(layer)} 레이어${selected ? ' 선택됨' : ''}">${content}<span class="layer-selection" aria-hidden="true"></span><span class="layer-handle layer-resize-handle" data-layer-handle="resize" aria-hidden="true"></span><span class="layer-handle layer-rotate-handle" data-layer-handle="rotate" aria-hidden="true">${icon('rotate_right')}</span></button>`
+  const goldSource = layer.side === 'front' && state.editor.foilPattern === 'gold-signature' && ['handwriting', 'drawing'].includes(layer.type)
+  return `<button type="button" class="creative-layer layer-${esc(layer.type)} ${goldSource ? 'foil-gold-source' : ''} ${selected ? 'selected' : ''}" data-layer-id="${esc(layer.id)}" style="${style}" aria-label="${creativeLayerLabel(layer)} 레이어${selected ? ' 선택됨' : ''}">${content}<span class="layer-selection" aria-hidden="true"></span><span class="layer-handle layer-resize-handle" data-layer-handle="resize" aria-hidden="true"></span><span class="layer-handle layer-rotate-handle" data-layer-handle="rotate" aria-hidden="true">${icon('rotate_right')}</span></button>`
 }
 
 function creativeLayersMarkup(side) {
@@ -752,13 +858,17 @@ function cardVisual({ fan = false } = {}) {
   const editor = state.editor
   const isBack = editor.side === 'back' && !fan
   const isLenticular = editor.interaction === 'lenticular' && editor.lenticularSrc
-  const effectMotion = editor.interaction !== 'static'
+  const idleEffectMotion = ['blossom-depth', 'constellation'].includes(editor.foilPattern)
+  const effectMotion = editor.interaction !== 'static' || Boolean(editor.spatialScene?.status === 'completed' && editor.spatialSceneMedia?.background && editor.spatialSceneMedia?.mask)
+  const spatialReady = spatialEffectActive(editor)
   const photoMedia = editor.imageSrc
-    ? `<img class="card-photo" src="${esc(editor.imageSrc)}" alt="${esc(state.form.name)} 카드 이미지" />`
-    : `<div class="card-photo card-photo-empty" aria-label="카드 사진 없음">${icon('add_photo_alternate')}<span>사진 업로드</span></div>`
+    ? spatialReady
+      ? `<div class="spatial-card-media" data-spatial-card aria-label="AI 입체 카드 미리보기"><img class="spatial-background-layer" src="${esc(editor.spatialSceneMedia.background)}" alt="" aria-hidden="true" /><img class="spatial-subject-layer" src="${esc(editor.imageSrc)}" style="--subject-mask:url('${esc(editor.spatialSceneMedia.mask)}')" alt="${esc(state.form.name)} 카드 이미지" /><span class="spatial-depth-hint" aria-hidden="true"></span></div>`
+      : `<img class="card-photo" src="${esc(editor.imageSrc)}" alt="${esc(state.form.name)} 카드 이미지" />`
+    : `<label class="card-photo card-photo-empty" aria-label="카드 사진 없음 · 사진 업로드"><input type="file" data-upload="image" accept="image/png,image/jpeg,image/webp" />${icon('add_photo_alternate')}<span>사진 업로드</span></label>`
   const media = editor.videoEnabled && editor.videoSrc
     ? `<video src="${esc(editor.videoSrc)}" muted loop playsinline preload="metadata" ${fan ? 'controls' : 'autoplay'}></video>`
-    : `${photoMedia}${isLenticular ? `<img class="lenticular-photo" src="${esc(editor.lenticularSrc)}" alt="" />` : ''}`
+    : `${photoMedia}${isLenticular ? `<img class="lenticular-photo" src="${esc(editor.lenticularSrc)}" alt="" /><canvas class="lenticular-canvas" aria-label="렌티큘러 스트립 미리보기"></canvas>` : ''}`
   const effectOpacity = Number(editor.effectIntensity || 0)
   const tiltStyle = '--tilt-x:0deg;--tilt-y:0deg;--light-x:50%;--light-y:42%;--lenticular-reveal:0%'
   const reducedMotionControls =
@@ -771,9 +881,11 @@ function cardVisual({ fan = false } = {}) {
     const hiddenMessage = String(editor.backHiddenMessage || '')
     return `<div class="editor-card back-card material-${esc(editor.backMaterial)} edge-foil-${esc(editor.backEdgeFoil)} spot-uv-${esc(editor.backSpotUv)} effect-motion" data-hologram-card style="${tiltStyle};--back-color:${esc(editor.background || '#0b1033')}"><img src="./agency-back-template-v1.png" alt="Fanfolio 공식 카드 뒷면" /><div class="back-surface" aria-hidden="true"></div><div class="back-spot-uv" aria-hidden="true"></div>${creativeLayersMarkup('back')}${creativeLayerToolbar('back')}<div class="back-authenticity"><span>FANFOLIO OFFICIAL</span><strong>No. ${issueNumber} / ${issueLimit}</strong></div>${hiddenMessage ? `<p class="back-hidden-message">${esc(hiddenMessage)}</p>` : ''}</div>`
   }
-  return `<div class="editor-card material-${esc(editor.material)} pattern-${esc(editor.foilPattern)} coverage-${esc(editor.foilCoverage)} ${effectMotion ? 'effect-motion' : ''} ${isLenticular ? 'interaction-lenticular' : ''}" data-hologram-card style="${tiltStyle};--effect-opacity:${effectOpacity};--effect-angle:${Number(editor.effectAngle || 135)}deg;--effect-spread:${Math.round(Number(editor.effectSpread ?? 0.64) * 100)}%;--effect-grain:${Number(editor.effectGrain ?? 0.38)}">
+  return `<div class="editor-card material-${esc(editor.material)} pattern-${esc(editor.foilPattern)} coverage-${esc(editor.foilCoverage)} ${effectMotion ? 'effect-motion' : ''} ${idleEffectMotion ? 'idle-effect-motion' : ''} ${isLenticular ? 'interaction-lenticular' : ''}" data-hologram-card style="${tiltStyle};--effect-opacity:${effectOpacity};--effect-angle:${Number(editor.effectAngle || 135)}deg;--effect-spread:${Math.round(Number(editor.effectSpread ?? 0.64) * 100)}%;--effect-grain:${Number(editor.effectGrain ?? 0.38)}">
     ${media}
     ${editor.effect !== 'none' ? `<div class="card-material material-${esc(editor.material)}" aria-hidden="true"></div><div class="hologram-layer pattern-${esc(editor.foilPattern)} coverage-${esc(editor.foilCoverage)} material-${esc(editor.material)}" aria-hidden="true"></div>` : ''}
+    ${editor.effect !== 'none' ? `<canvas class="webgl-effect-canvas" data-webgl-effect data-subject-mask="${canUsePhotoMask(editor) ? esc(editor.photoAnalysisMaskSrc) : ''}" aria-hidden="true"></canvas>` : ''}
+    ${editor.effect !== 'none' && editor.showAnalysisMask && photoAnalysisReady(editor) ? `<img class="photo-analysis-mask-preview" src="${esc(editor.photoAnalysisMaskSrc)}" alt="분석된 인물 영역: 흰색 인물, 검정 배경" />` : ''}
     <div class="card-vignette" aria-hidden="true"></div>
     ${creativeLayersMarkup('front')}
     ${fan ? '' : creativeLayerToolbar('front')}
@@ -789,7 +901,8 @@ const editorTools = [
   ['sticker', 'interests', '스티커'],
   ['voice', 'graphic_eq', '보이스'],
   ['motion', 'movie', '모션'],
-  ['hologram', 'auto_awesome', '홀로그램'],
+  ['effects', 'auto_awesome', '특수효과'],
+  ['hologram', 'view_carousel', '홀로그램'],
   ['back', 'flip', '뒷면'],
 ]
 
@@ -822,10 +935,24 @@ function photoInspector() {
   <div class="info-card">${icon('crop_portrait')}<span><strong>카드 안전 영역</strong><small>얼굴과 핵심 요소는 중앙 80% 안에 배치해 주세요.</small></span></div>`
 }
 
+function openPhotoUpload() {
+  const uploader = document.querySelector('[data-canvas-photo-upload]')
+  if (uploader) {
+    // Keep this call inside the original click handler; browsers reject a delayed file-dialog request.
+    uploader.click()
+    return
+  }
+  state.editor.tool = 'photo'
+  state.editor.side = 'front'
+  state.editor.inspectorOpen = true
+  render()
+  window.requestAnimationFrame(() => document.querySelector('[data-upload="image"]')?.click())
+}
+
 function handwritingInspector() {
   const hasWriting = Boolean(state.editor.handwritingSrc)
   return `<div class="feature-toggle"><span>${icon('draw')}<span><strong>손글씨 레이어</strong><small>직접 쓰거나 이미지를 올릴 수 있어요.</small></span></span><button type="button" class="switch ${state.editor.handwritingEnabled ? 'on' : ''}" data-action="toggle-handwriting" aria-pressed="${state.editor.handwritingEnabled}" aria-label="손글씨 레이어 켜기"></button></div>
-  <div class="inspector-section"><span class="inspector-label">직접 쓰기</span><canvas id="handwriting-pad" width="560" height="250" aria-label="손글씨 입력 영역"></canvas><div class="inline-actions"><button type="button" class="secondary-button compact" data-action="clear-handwriting">${icon('ink_eraser')} 지우기</button><span>마우스나 펜으로 작성</span></div></div>
+  <div class="inspector-section"><span class="inspector-label">직접 쓰기</span><div class="handwriting-options"><label>글씨 색상<input type="color" value="${esc(state.editor.drawingColor)}" data-editor="drawingColor" /></label></div><canvas id="handwriting-pad" width="560" height="250" aria-label="손글씨 입력 영역"></canvas><div class="inline-actions"><button type="button" class="secondary-button compact" data-action="clear-handwriting">${icon('ink_eraser')} 지우기</button><button type="button" class="primary-button compact" data-action="apply-handwriting">카드에 적용</button><span>마우스나 펜으로 작성</span></div></div>
   <div class="inspector-divider"><span>또는</span></div>
   ${uploadBox('handwriting', 'image/png,image/jpeg,image/webp', '손글씨 이미지 업로드', '투명 PNG는 바로 사용, 사진은 배경 제거')}
   ${hasWriting && state.editor.handwritingNeedsRemoval ? `<button type="button" class="secondary-button full" data-action="remove-background">${icon('background_replace')} 배경 제거 요청</button>` : ''}
@@ -876,18 +1003,35 @@ function motionInspector() {
   <div class="info-card">${icon('motion_photos_on')}<span><strong>안전한 재생 방식</strong><small>음성은 자동 재생하지 않고 모든 미디어에 제어 버튼을 제공합니다.</small></span></div>`
 }
 
+function effectsInspector() {
+  const editor = state.editor
+  const enabled = editor.effect !== 'none'
+  const header = `<div class="effects-lab-header"><div><span class="eyebrow">PHOTO EFFECTS</span><h4>특수효과</h4><p>켜면 사진을 분석해 효과와 입체감을 준비해요.</p></div><button type="button" class="switch ${enabled ? 'on' : ''}" data-action="toggle-effects" aria-pressed="${enabled}" aria-label="특수효과 켜기"></button></div>`
+  if (!enabled) return `${header}<div class="media-empty tall">${icon('auto_awesome')}<span>특수효과를 켜고 사진에 어울리는 표현을 골라보세요.<small>분석 결과와 선택한 설정은 꺼도 보관됩니다.</small></span></div>`
+  if (!editor.imageSrc) return `${header}<button type="button" class="upload-box" data-action="open-photo-upload">${icon('add_photo_alternate')}<strong>먼저 사진을 올려 주세요</strong><small>업로드하면 분석이 자동으로 시작됩니다.</small></button>`
+  const analysis = photoAnalysisPanel()
+  if (!photoAnalysisReady(editor)) return `${header}${analysis}`
+  const depthReady = spatialEffectReady(editor)
+  const depthError = editor.spatialSceneStatus === 'error' || editor.spatialScene?.provider === 'local_fallback'
+  const spatialPanel = `<section class="photo-analysis-panel" aria-label="입체감 설정"><div class="feature-toggle"><span>${icon('3d_rotation')}<span><strong>입체감</strong><small>${depthReady ? '준비 완료 · 켜면 기울임에 깊이를 더해요' : depthError ? '입체감 준비 실패 · 표면 효과는 사용 가능해요' : '깊이와 가려진 배경을 준비하고 있어요'}</small></span></span><button type="button" class="switch ${editor.spatialEnabled ? 'on' : ''}" data-action="toggle-spatial" aria-label="입체감 켜기" aria-pressed="${Boolean(editor.spatialEnabled)}" ${depthReady ? '' : 'disabled'}></button></div>${!depthReady && !depthError ? '<progress aria-label="입체감 준비 중"></progress>' : ''}${depthError ? `<p role="alert">${esc(editor.spatialSceneError || 'AI 분석 결과를 준비하지 못했습니다.')}</p><button type="button" class="secondary-button" data-action="retry-effects">입체감 준비 다시 시도</button>` : ''}</section>`
+  return `${header}${analysis}${spatialPanel}
+  <div class="effects-lab-tabs" role="tablist" aria-label="특수효과 종류"><span class="active" role="tab" aria-selected="true">표면 효과</span><button type="button" role="tab" data-tool="hologram">홀로그램</button></div>
+  <div class="effect-section-heading"><span>${icon('auto_awesome')}<strong>표면 효과</strong></span><small>사진의 선명도는 유지하고, 빛과 재질만 얹습니다. WebGL2 효과에 즉시 반영됩니다.</small></div>
+  <div class="effect-tile-grid">${EFFECT_CATALOG.map(({ id: value, name, description, number }) => `<button type="button" class="effect-tile effect-tile-${value} ${state.editor.foilPattern === value ? 'active' : ''}" data-foil-pattern="${value}" aria-pressed="${state.editor.foilPattern === value}"><span class="effect-tile-swatch" data-foil-swatch="${value}" aria-hidden="true"></span><span class="effect-tile-copy"><em>${String(number).padStart(2, '0')}</em><strong>${name}</strong><small>${description}</small></span>${state.editor.foilPattern === value ? icon('check_circle') : ''}</button>`).join('')}</div>
+  <div class="inspector-section effect-material-section"><span class="inspector-label">표면 재질</span><div class="material-chip-row">${materialOptions.map(([value, label, description]) => `<button type="button" data-effect-material="${value}" class="${state.editor.material === value ? 'active' : ''}" aria-pressed="${state.editor.material === value}" title="${description}">${label}</button>`).join('')}</div></div>
+  <div class="inspector-section effect-coverage-section"><span class="inspector-label">효과 적용 범위</span><div class="coverage-chip-row">${foilCoverageOptions.map(([value, label]) => `<button type="button" data-foil-coverage="${value}" class="${state.editor.foilCoverage === value ? 'active' : ''}" aria-pressed="${state.editor.foilCoverage === value}">${label}</button>`).join('')}</div></div>
+  <details class="effect-adjustments" open><summary><span>${icon('tune')}<strong>세부 조정</strong></span><small>과하지 않게 효과를 다듬어요</small></summary><div class="effect-adjustments-body">
+    <div class="range-group"><label>광택 <output>${Math.round(Number(state.editor.effectIntensity) * 100)}%</output></label><input type="range" min="0" max="1" step="0.01" value="${Number(state.editor.effectIntensity)}" data-editor="effectIntensity" /></div>
+    <div class="range-group"><label>빛 범위 <output>${Math.round(Number(state.editor.effectSpread ?? 0.64) * 100)}%</output></label><input type="range" min="0.3" max="0.9" step="0.01" value="${Number(state.editor.effectSpread ?? 0.64)}" data-editor="effectSpread" /></div>
+    <div class="range-group"><label>디테일 <output>${Math.round(Number(state.editor.effectGrain ?? 0.38) * 100)}%</output></label><input type="range" min="0" max="1" step="0.01" value="${Number(state.editor.effectGrain ?? 0.38)}" data-editor="effectGrain" /></div>
+  </div></details>`
+}
+
 function hologramInspector() {
   const needsSecondScene = state.editor.interaction === 'lenticular' && !state.editor.lenticularSrc
-  return `<div class="feature-toggle"><span>${icon('auto_awesome')}<span><strong>홀로그램 포일</strong><small>소재, 패턴, 적용 범위와 팬의 상호작용을 따로 조정해요.</small></span></span><button type="button" class="switch ${state.editor.effect !== 'none' ? 'on' : ''}" data-action="toggle-hologram" aria-pressed="${state.editor.effect !== 'none'}" aria-label="홀로그램 켜기"></button></div>
-  <div class="inspector-section"><span class="inspector-label">전면 소재</span><div class="preset-grid premium surface-grid">${materialOptions.map(([value, label, description]) => `<button type="button" data-effect-material="${value}" class="${state.editor.material === value ? 'active' : ''}" aria-pressed="${state.editor.material === value}"><span><strong>${label}</strong><small>${description}</small></span>${icon('check_circle')}</button>`).join('')}</div></div>
-  <div class="inspector-section"><span class="inspector-label">포일 패턴</span><div class="finish-selector option-row">${foilPatternOptions.map(([value, label]) => `<button type="button" data-foil-pattern="${value}" class="${state.editor.foilPattern === value ? 'active' : ''}" aria-pressed="${state.editor.foilPattern === value}"><span><strong>${label}</strong></span>${icon('check_circle')}</button>`).join('')}</div></div>
-  <div class="inspector-section"><span class="inspector-label">적용 범위</span><div class="finish-selector option-row">${foilCoverageOptions.map(([value, label]) => `<button type="button" data-foil-coverage="${value}" class="${state.editor.foilCoverage === value ? 'active' : ''}" aria-pressed="${state.editor.foilCoverage === value}"><span><strong>${label}</strong></span>${icon('check_circle')}</button>`).join('')}</div></div>
-  <div class="inspector-section"><span class="inspector-label">상호작용</span><div class="finish-selector option-row">${interactionOptions.map(([value, label]) => `<button type="button" data-effect-interaction="${value}" class="${state.editor.interaction === value ? 'active' : ''}" aria-pressed="${state.editor.interaction === value}"><span><strong>${label}</strong></span>${icon('check_circle')}</button>`).join('')}</div></div>
-  ${state.editor.interaction === 'lenticular' ? `<div class="inspector-section"><label class="upload-box"><input type="file" data-upload="lenticular" accept="image/png,image/jpeg,image/webp" /><span class="upload-icon">${icon('upload_file')}</span><strong>두 번째 장면 추가</strong><small>기울일 때 전환될 사진</small></label>${state.editor.lenticularSrc ? `<div class="lenticular-source"><img src="${esc(state.editor.lenticularSrc)}" alt="" /><div><strong>두 번째 장면</strong><button type="button" class="text-button danger" data-action="remove-lenticular">삭제</button></div></div>` : `<div class="media-empty">${icon('compare')}<span>${needsSecondScene ? '검수를 위해 전환될 두 번째 장면이 필요해요.' : '렌티큘러 장면을 추가할 수 있어요.'}</span></div>`}</div>` : ''}
-  <div class="range-group"><label>광택 강도 <output>${Math.round(Number(state.editor.effectIntensity) * 100)}%</output></label><input type="range" min="0" max="1" step="0.01" value="${Number(state.editor.effectIntensity)}" data-editor="effectIntensity" /></div>
-  <div class="range-group"><label>빛 번짐 <output>${Math.round(Number(state.editor.effectSpread ?? 0.64) * 100)}%</output></label><input type="range" min="0.3" max="0.9" step="0.01" value="${Number(state.editor.effectSpread ?? 0.64)}" data-editor="effectSpread" /></div>
-  <div class="range-group"><label>입자 디테일 <output>${Math.round(Number(state.editor.effectGrain ?? 0.38) * 100)}%</output></label><input type="range" min="0" max="1" step="0.01" value="${Number(state.editor.effectGrain ?? 0.38)}" data-editor="effectGrain" /></div>
-  <div class="range-group"><label>빛의 각도 <output>${Number(state.editor.effectAngle)}°</output></label><input type="range" min="0" max="360" step="5" value="${Number(state.editor.effectAngle)}" data-editor="effectAngle" /></div>`
+  return `<div class="feature-toggle"><span>${icon('view_carousel')}<span><strong>2장 홀로그램</strong><small>앞면 사진과 두 번째 사진을 기울임 각도에 따라 번갈아 보여줘요.</small></span></span><button type="button" class="switch ${state.editor.interaction === 'lenticular' ? 'on' : ''}" data-action="toggle-hologram" aria-pressed="${state.editor.interaction === 'lenticular'}" aria-label="홀로그램 켜기"></button></div>
+  <div class="info-card">${icon('compare')}<span><strong>두 장의 이미지를 준비해 주세요</strong><small>현재 사진이 첫 번째 장면이 되고, 아래에 올린 사진이 반대 각도에서 보이는 두 번째 장면이 됩니다.</small></span></div>
+  ${state.editor.interaction === 'lenticular' ? `<div class="inspector-section"><label class="upload-box"><input type="file" data-upload="lenticular" accept="image/png,image/jpeg,image/webp" /><span class="upload-icon">${icon('upload_file')}</span><strong>두 번째 장면 추가</strong><small>기울일 때 전환될 사진</small></label>${state.editor.lenticularSrc ? `<div class="lenticular-source"><img src="${esc(state.editor.lenticularSrc)}" alt="" /><div><strong>두 번째 장면</strong><button type="button" class="text-button danger" data-action="remove-lenticular">삭제</button></div></div>` : `<div class="media-empty">${icon('compare')}<span>${needsSecondScene ? '검수를 위해 전환될 두 번째 장면이 필요해요.' : '두 번째 장면을 추가하면 홀로그램이 활성화돼요.'}</span></div>`}</div>` : `<div class="media-empty">${icon('compare')}<span>홀로그램을 켜면 두 번째 장면 업로드가 열립니다.</span></div>`}`
 }
 
 function backInspector() {
@@ -913,6 +1057,7 @@ function editorInspector() {
     sticker: stickerInspector,
     voice: voiceInspector,
     motion: motionInspector,
+    effects: effectsInspector,
     hologram: hologramInspector,
     back: backInspector,
   }[state.editor.tool]?.() || photoInspector()
@@ -931,15 +1076,29 @@ function editorProgress() {
   return `<nav class="editor-progress" aria-label="카드 제작 단계">${stages.map(([value, number, label], index) => `<button type="button" data-editor-stage="${value}" class="${index === current ? 'active' : index < current ? 'complete' : ''}" ${value === 'design' && designLocked ? 'disabled aria-disabled="true"' : ''}><span>${index < current ? icon('check') : number}</span><strong>${label}</strong></button>${index < stages.length - 1 ? '<i></i>' : ''}`).join('')}</nav>`
 }
 
+function recipeGuide() {
+  const recipe = recipes.find(({ id }) => id === state.selectedRecipe)
+  if (!recipe) return ''
+  const steps = {
+    voice: ['사진 업로드', '보이스 탭에서 음성 추가', '카드 정보 입력'],
+    motion: ['사진 업로드', '모션 탭에서 영상 추가', '재생 방식 확인'],
+    hologram: ['첫 번째 사진 업로드', '홀로그램 탭에서 두 번째 사진 추가', '각도별 전환 확인'],
+    signature: ['사진 업로드', '손글씨 또는 사인 추가', '카드 정보 입력'],
+  }[recipe.id] || ['사진 업로드', '필요한 기능 선택', '카드 정보 입력']
+  return `<div class="recipe-guide" role="status"><div class="recipe-guide-heading">${icon('assistant')}<span><strong>${esc(recipe.name)} 시작 가이드</strong><small>예시 이미지는 참고용이며 실제 카드는 빈 상태에서 시작합니다.</small></span></div><ol>${steps.map((step, index) => `<li><b>${index + 1}</b><span>${esc(step)}</span></li>`).join('')}</ol></div>`
+}
+
 function designStage() {
   const inspectorOpen = Boolean(state.editor.inspectorOpen)
   return `<section class="editor-workbench editor-design ${inspectorOpen ? 'inspector-open' : ''}">
     <aside class="tool-rail" aria-label="카드 편집 도구">${editorTools.map(([tool, symbol, label]) => `<button type="button" data-tool="${tool}" class="${state.editor.tool === tool ? 'active' : ''}" aria-pressed="${state.editor.tool === tool}" title="${label}">${icon(symbol)}<span>${label}</span></button>`).join('')}</aside>
     <div class="editor-canvas-area">
+      ${recipeGuide()}
+      <input class="canvas-photo-upload" type="file" data-canvas-photo-upload data-upload="image" accept="image/png,image/jpeg,image/webp" aria-label="카드 사진 업로드" />
       <div class="editor-canvas-shell">
         <div class="canvas-toolbar"><div class="side-switch"><button type="button" data-side="front" class="${state.editor.side === 'front' ? 'active' : ''}">앞면</button><button type="button" data-side="back" class="${state.editor.side === 'back' ? 'active' : ''}">뒷면</button></div><span>${icon('zoom_in')} 100% · 카드 캔버스</span></div>
         <div class="editor-stage">${cardVisual()}<span class="stage-shadow" aria-hidden="true"></span></div>
-        <div class="canvas-caption"><span>${icon('touch_app')} 카드를 기울이거나 레이어를 직접 움직여 보세요.</span><div><button type="button" class="text-button mobile-tool-settings" data-action="open-inspector">${icon('tune')} 도구 설정</button><button type="button" class="text-button" data-action="open-fan-preview">전체 화면 미리보기 ${icon('open_in_full')}</button></div></div>
+        <div class="canvas-caption"><span>${icon('touch_app')} ${state.editor.interaction === 'static' ? '특수효과에서 기울임을 선택하거나 레이어를 직접 움직여 보세요.' : '카드를 기울이거나 레이어를 직접 움직여 보세요.'}</span><div><button type="button" class="text-button mobile-tool-settings" data-action="open-inspector">${icon('tune')} 도구 설정</button><button type="button" class="text-button" data-action="open-fan-preview">전체 화면 미리보기 ${icon('open_in_full')}</button></div></div>
       </div>
       <div class="editor-actions-strip"><button type="button" class="secondary-button" data-action="save-draft" ${state.busy ? 'disabled' : ''}>${icon('save')} ${state.busy ? '저장 중' : '초안 저장'}</button><button type="button" class="primary-button" data-action="go-details">다음 단계 ${icon('arrow_forward')}</button></div>
     </div>
@@ -1017,7 +1176,7 @@ const readinessLabels = {
   handwriting: '손글씨 레이어',
   voice: '보이스 파일',
   video: '모션 영상',
-  lenticular: '렌티큘러 이미지',
+  lenticular: '홀로그램 두 번째 이미지',
   issueLimit: '발행 수량',
   preview: '팬 화면 미리보기',
 }
@@ -1059,7 +1218,7 @@ function reviewStage() {
     handwriting: 'handwriting',
     voice: 'voice',
     video: 'motion',
-    lenticular: 'lenticular',
+    lenticular: 'hologram',
   }
   return `<section class="review-stage">
     <div class="review-card-preview"><span class="page-kicker">FINAL CHECK</span><h2>운영팀에 보내기 전 마지막 확인</h2><p>필수 항목이 모두 준비되면 검수 요청을 보낼 수 있어요.</p>${cardVisual()}<div class="review-summary"><strong>${esc(state.form.name)}</strong><span>${esc(state.form.seasonName)} · ${esc(state.form.rarity)} · ${Number(state.form.issueLimit).toLocaleString('ko-KR')}장</span></div></div>
@@ -1117,6 +1276,7 @@ function settingsView() {
 
 function render() {
   syncDeviceMotionLifecycle()
+  const inspectorScrollTop = document.querySelector('.inspector-body')?.scrollTop ?? 0
   if (state.loading) {
     app.innerHTML = loadingView()
     return
@@ -1138,11 +1298,13 @@ function render() {
   } else {
     app.innerHTML = shell(homeView(), '스튜디오 홈', 'home')
   }
-  window.requestAnimationFrame(afterRender)
+  window.requestAnimationFrame(() => afterRender(inspectorScrollTop))
+  if (photoAnalysisTasks.size) app.insertAdjacentHTML('beforeend', `<aside class="photo-analysis-progress" role="status"><span>사진 분석 중</span><small>다른 편집을 계속할 수 있어요</small><progress aria-label="사진 효과 준비 중"></progress></aside>`)
 }
 
-function afterRender() {
+function afterRender(inspectorScrollTop = 0) {
   hydrateCardImages()
+  initWebGL2EffectCards()
   if (state.view === 'editor' && state.stage === 'design' && state.editor.tool === 'handwriting') {
     initHandwritingPad()
   }
@@ -1152,6 +1314,8 @@ function afterRender() {
   if (state.view === 'editor' && ['design', 'preview'].includes(state.stage)) {
     initInteractiveCards()
     if (state.stage === 'design') initCreativeLayerInteractions()
+    const inspector = document.querySelector('.inspector-body')
+    if (inspector) inspector.scrollTop = inspectorScrollTop
   }
 }
 
@@ -1175,6 +1339,7 @@ function cancelAutosave() {
 }
 
 function setRecipe(recipeId) {
+  state.recipeStarted = true
   const form = initialForm()
   const editor = initialEditor()
   if (recipeId === 'voice') {
@@ -1182,32 +1347,30 @@ function setRecipe(recipeId) {
     form.hasVoice = true
     editor.voiceEnabled = true
     editor.tool = 'voice'
-    editor.imageSrc = sampleAssets.aurora
   } else if (recipeId === 'motion') {
     form.name = '네온 모션 스테이지'
     form.rarity = 'UR'
     editor.videoEnabled = true
     editor.tool = 'motion'
     editor.effectIntensity = 0.42
-    editor.imageSrc = sampleAssets.motion
   } else if (recipeId === 'hologram') {
     form.name = '스타더스트 홀로그램'
     form.rarity = 'UR'
     editor.tool = 'hologram'
+    editor.effect = 'none'
+    editor.interaction = 'lenticular'
     editor.effectPreset = 'stardust'
     editor.foilPattern = 'micro-star'
     editor.effectIntensity = 0.72
-    editor.imageSrc = sampleAssets.stardust
   } else if (recipeId === 'signature') {
     form.name = '손글씨 시그니처 카드'
     editor.handwritingEnabled = true
     editor.tool = 'handwriting'
-    editor.imageSrc = sampleAssets.stardust
   } else {
     form.name = '새 특별 카드'
     editor.effect = 'none'
-    editor.effectMotion = false
-    editor.interaction = 'static'
+    editor.effectMotion = true
+    editor.interaction = 'tilt'
   }
   const firstArtist = state.catalog.artists?.[0]
   const firstMember = state.catalog.members?.find((member) => member.artistId === firstArtist?.id)
@@ -1311,10 +1474,37 @@ async function loadStudioData() {
   state.profile = profile.data
   state.insights = insights.data
   restoreDraftForUser(state.profile.id, state.cards)
+  if (state.editor.photoAnalysisStatus === 'processing') state.editor.photoAnalysisStatus = 'idle'
   state.authenticated = true
+  void restoreEffectPreparation()
   const selection = normalizeCatalogSelection(state.form, state.catalog)
   state.form.artistId = selection.artistId
   state.form.memberId = selection.memberId
+}
+
+async function restoreEffectPreparation() {
+  const editor = state.editor
+  const assetId = editor.imageAssetId
+  if (!assetId) return
+  try {
+    if (!editor.imageSrc) {
+      const image = await fetchProtectedBlob(`/assets/${encodeURIComponent(assetId)}/content`)
+      if (state.editor !== editor || editor.imageAssetId !== assetId) { URL.revokeObjectURL(image); return }
+      editor.imageSrc = image
+    }
+    const captured = capturePhoto(editor)
+    await loadPhotoAnalysis(assetId, captured).catch(() => {})
+    if (!isCurrentPhoto(state.editor, captured)) return
+    if (editor.spatialSceneJobId) await resumeSpatialSceneJob(editor.spatialSceneJobId)
+    else if (editor.spatialScene?.status === 'completed') await loadSpatialSceneMedia(assetId, captured).catch(() => {})
+    if (!isCurrentPhoto(state.editor, captured)) return
+    if (editor.spatialSceneStatus === 'processing') editor.spatialSceneStatus = 'idle'
+    render()
+    // Failed tasks wait for an explicit retry, not an infinite reload loop.
+    if (editor.photoAnalysisStatus !== 'error' && editor.spatialSceneStatus !== 'error') void prepareEffects()
+  } catch (error) {
+    if (state.editor === editor) notify('사진 복원 실패: ' + error.message, 'error')
+  }
 }
 
 async function loadInsights() {
@@ -1374,6 +1564,7 @@ function fileToDataUrl(file) {
 }
 
 async function ensureAsset(kind) {
+  const captured = capturePhoto(state.editor)
   const idKey = `${kind}AssetId`
   const fileKey = `${kind}File`
   const srcKey = `${kind}Src`
@@ -1390,6 +1581,7 @@ async function ensureAsset(kind) {
   if (!file) return null
   const purpose = kind === 'image' || kind === 'lenticular' ? 'card' : kind
   const assetId = await uploadAsset(file, purpose)
+  if (kind === 'image' && !isCurrentPhoto(state.editor, captured)) throw new Error('사진이 변경되어 이전 업로드 결과를 적용하지 않았습니다.')
   state.editor[idKey] = assetId
   if (kind !== 'lenticular') state.form[idKey] = assetId
   return assetId
@@ -1463,6 +1655,82 @@ async function saveDraft({ quiet = false, nextStage = null } = {}) {
   }
 }
 
+async function generateSpatialScene() {
+  if (state.editor.spatialSceneStatus === 'processing') return
+  const captured = capturePhoto(state.editor)
+  state.editor.spatialSceneStatus = 'processing'
+  state.editor.spatialSceneError = ''
+  render()
+  try {
+    const assetId = await ensureAsset('image')
+    if (!isCurrentPhoto(state.editor, captured)) return
+    if (!assetId) throw new Error('먼저 카드 사진을 업로드해 주세요.')
+    const request = buildSpatialSceneJobRequest(assetId)
+    const queued = await api(request.path, {
+      method: 'POST',
+      headers: request.headers,
+      body: JSON.stringify(request.body),
+    })
+    if (!isCurrentPhoto(state.editor, captured)) return
+    state.editor.spatialSceneJobId = queued.data.jobId
+    persistDraft()
+    const result = await pollSpatialSceneJob(queued.data.jobId)
+    if (!isCurrentPhoto(state.editor, captured)) return
+    state.editor.spatialScene = result.data.scene || result.data
+    await loadSpatialSceneMedia(assetId, captured)
+    if (!isCurrentPhoto(state.editor, captured)) return
+    state.editor.spatialSceneStatus = 'completed'
+    state.editor.spatialSceneJobId = null
+    await loadPhotoAnalysis(assetId, captured).catch(() => {})
+    if (!isCurrentPhoto(state.editor, captured)) return
+    markDirty()
+    notify(state.editor.spatialScene.provider === 'local_fallback'
+      ? '개발용 폴백 입체 카드입니다. 실제 AI 생성 결과가 아니며 운영 워커 설정이 필요합니다.'
+      : '원본 사진에서 인물·깊이·복원 배경을 생성해 AI 입체 카드로 준비했습니다.', state.editor.spatialScene.provider === 'local_fallback' ? 'info' : 'success')
+  } catch (error) {
+    if (!isCurrentPhoto(state.editor, captured)) return
+    state.editor.spatialSceneStatus = 'error'
+    state.editor.spatialSceneError = error.message || '입체감 준비에 실패했습니다.'
+    notify(error.message || 'AI 입체 카드를 생성하지 못했습니다.', 'error')
+  }
+  render()
+}
+
+async function pollSpatialSceneJob(jobId) {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const result = await api(`/artist/spatial-scene-jobs/${encodeURIComponent(jobId)}`)
+    const status = result.data.status
+    if (status === 'ready') return result
+    if (status === 'failed' || status === 'cancelled') {
+      throw new Error(result.data.errorCode || 'AI 입체 카드 생성에 실패했습니다.')
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 1000))
+  }
+  throw new Error('AI 입체 카드 생성이 지연되고 있어요. 잠시 후 다시 확인해 주세요.')
+}
+
+async function resumeSpatialSceneJob(jobId) {
+  const captured = capturePhoto(state.editor)
+  try {
+    const result = await pollSpatialSceneJob(jobId)
+    if (!isCurrentPhoto(state.editor, captured)) return
+    state.editor.spatialScene = result.data.scene || result.data
+    await loadSpatialSceneMedia(state.editor.imageAssetId, captured)
+    if (!isCurrentPhoto(state.editor, captured)) return
+    state.editor.spatialSceneStatus = 'completed'
+    state.editor.spatialSceneJobId = null
+    persistDraft()
+    render()
+  } catch (error) {
+    if (!isCurrentPhoto(state.editor, captured)) return
+    state.editor.spatialSceneStatus = 'error'
+    state.editor.spatialSceneJobId = null
+    persistDraft()
+    notify(error.message || 'AI 입체 카드 생성을 다시 확인하지 못했습니다.', 'error')
+    render()
+  }
+}
+
 async function openCard(cardId) {
   const card = state.cards.find((item) => item.id === cardId)
   if (!card) return
@@ -1513,6 +1781,14 @@ async function openCard(cardId) {
     inspectorOpen: false,
     background: card.designConfig?.back?.background || '#0b1033',
     backTemplateId: card.designConfig?.back?.templateId || 'agency_back_v1',
+    photoAnalysis: card.designConfig?.front?.photoAnalysis || null,
+    photoAnalysisStatus: 'idle',
+    photoAnalysisMaskSrc: '',
+    spatialEnabled: card.designConfig?.front?.spatialEnabled ?? Boolean(card.designConfig?.front?.spatialScene),
+    selectedEffect: card.designConfig?.front?.selectedEffect || 'holographic',
+    spatialScene: card.designConfig?.front?.spatialScene || null,
+    spatialSceneMedia: { background: '', mask: '', depth: '' },
+    spatialSceneStatus: card.designConfig?.front?.spatialScene?.status || 'idle',
   }
   state.cardId = card.id
   state.editingCardId = card.id
@@ -1573,9 +1849,18 @@ async function openCard(cardId) {
       })
     }
   }
+  if (state.editor.spatialScene?.status === 'completed' && state.editor.imageAssetId) {
+    try {
+      await loadSpatialSceneMedia(state.editor.imageAssetId)
+    } catch {
+      state.editor.spatialSceneStatus = 'error'
+    }
+  }
+  if (state.editor.imageAssetId) await loadPhotoAnalysis(state.editor.imageAssetId).catch(() => {})
   if (state.stage === 'design') persistDraft()
   else clearDraft()
   render()
+  if (state.stage === 'design') void prepareEffects()
 }
 
 async function hydrateCardImages() {
@@ -1641,7 +1926,10 @@ async function handleUpload(kind, file) {
   state.editor[fileKey] = file
   state.editor[idKey] = null
   if (kind !== 'lenticular') state.form[idKey] = null
-  if (kind === 'image') state.editor.imageName = file.name
+  if (kind === 'image') {
+    resetPhotoAnalysis(state.editor)
+    state.editor.imageName = file.name
+  }
   if (kind === 'lenticular') {
     state.editor.interaction = 'lenticular'
     state.editor.effectMotion = true
@@ -1670,6 +1958,7 @@ async function handleUpload(kind, file) {
   }
   markDirty()
   render()
+  if (kind === 'image') void prepareEffects()
 }
 
 async function startRecording() {
@@ -1711,10 +2000,37 @@ function stopRecording() {
   if (mediaRecorder?.state === 'recording') mediaRecorder.stop()
 }
 
+function commitHandwritingPad() {
+  const canvas = document.querySelector('#handwriting-pad')
+  if (!canvas) return false
+  if (canvas.dataset.hasStroke !== 'true') {
+    notify('먼저 손글씨를 작성해 주세요.', 'error')
+    return false
+  }
+  state.editor.handwritingSrc = canvas.toDataURL('image/png')
+  state.editor.handwritingFile = null
+  state.editor.handwritingAssetId = null
+  state.editor.handwritingEnabled = true
+  state.editor.handwritingNeedsRemoval = false
+  const layer = upsertCreativeLayer('handwriting', {
+    src: state.editor.handwritingSrc,
+    file: null,
+    assetId: null,
+    color: state.editor.drawingColor || '#171a3a',
+    width: 46,
+  })
+  layer.side = state.editor.side
+  markDirty()
+  render()
+  return true
+}
+
 function initHandwritingPad() {
   const canvas = document.querySelector('#handwriting-pad')
   if (!canvas) return
   const context = canvas.getContext('2d')
+  // Keep the authoring preview readable on the white pad. The selected color
+  // is applied to the card layer when it is committed.
   context.strokeStyle = '#171a3a'
   context.lineWidth = 7
   context.lineCap = 'round'
@@ -1728,6 +2044,8 @@ function initHandwritingPad() {
     }
   }
   canvas.addEventListener('pointerdown', (event) => {
+    event.preventDefault()
+    canvas.dataset.hasStroke = 'true'
     drawing = true
     canvas.setPointerCapture?.(event.pointerId)
     const current = point(event)
@@ -1743,24 +2061,11 @@ function initHandwritingPad() {
   const finish = () => {
     if (!drawing) return
     drawing = false
-    state.editor.handwritingSrc = canvas.toDataURL('image/png')
-    state.editor.handwritingFile = null
-    state.editor.handwritingAssetId = null
-    state.editor.handwritingEnabled = true
-    state.editor.handwritingNeedsRemoval = false
-    const layer = upsertCreativeLayer('handwriting', {
-      src: state.editor.handwritingSrc,
-      file: null,
-      assetId: null,
-      color: '#171a3a',
-      width: 46,
-    })
-    layer.side = state.editor.side
-    markDirty()
-    render()
+    commitHandwritingPad()
   }
   canvas.addEventListener('pointerup', finish)
   canvas.addEventListener('pointercancel', finish)
+  canvas.addEventListener('lostpointercapture', finish)
 }
 
 function initDrawingPad() {
@@ -1814,6 +2119,8 @@ function resetInteractiveCard(card) {
   card.style.setProperty('--tilt-y', '0deg')
   card.style.setProperty('--light-x', '50%')
   card.style.setProperty('--light-y', '42%')
+  card.style.setProperty('--parallax-x', '0px')
+  card.style.setProperty('--parallax-y', '0px')
   card.classList.remove('is-tilting')
 }
 
@@ -1821,11 +2128,7 @@ function prefersReducedEffects() {
   const reducedMotion =
     typeof window !== 'undefined' &&
     window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true
-  const deviceMemory =
-    typeof navigator !== 'undefined' && Number.isFinite(Number(navigator.deviceMemory))
-      ? Number(navigator.deviceMemory)
-      : null
-  return reducedMotion || (deviceMemory !== null && deviceMemory <= 2)
+  return reducedMotion
 }
 
 function clampTilt(value) {
@@ -1853,6 +2156,8 @@ function applyDeviceOrientation(event) {
   card.style.setProperty('--light-x', `${lightX}%`)
   card.style.setProperty('--light-y', `${lightY}%`)
   card.style.setProperty('--lenticular-reveal', `${lightX}%`)
+  card.style.setProperty('--parallax-x', `${(gamma * 1.2).toFixed(1)}px`)
+  card.style.setProperty('--parallax-y', `${(beta * 0.9).toFixed(1)}px`)
   card.classList.add('is-tilting')
 }
 
@@ -1918,7 +2223,7 @@ function initInteractiveCards() {
   document.querySelectorAll('[data-hologram-card]').forEach((card) => {
     if (reduceMotion || !card.classList.contains('effect-motion')) return
     const move = (event) => {
-      if (event.target.closest?.('.creative-layer, .layer-context-toolbar')) return
+      if (event.target.closest?.('.creative-layer, .layer-context-toolbar, .card-photo-empty, [data-upload]')) return
       if (event.pointerType === 'touch' && !card.hasPointerCapture?.(event.pointerId)) return
       const box = card.getBoundingClientRect()
       const x = Math.max(0, Math.min(1, (event.clientX - box.left) / box.width))
@@ -1927,11 +2232,15 @@ function initInteractiveCards() {
       card.style.setProperty('--tilt-y', `${((x - 0.5) * 14).toFixed(2)}deg`)
       card.style.setProperty('--light-x', `${Math.round(x * 100)}%`)
       card.style.setProperty('--light-y', `${Math.round(y * 100)}%`)
-      card.style.setProperty('--lenticular-reveal', `${Math.round(x * 100)}%`)
+      card.style.setProperty('--parallax-x', `${((x - 0.5) * 18).toFixed(1)}px`)
+      card.style.setProperty('--parallax-y', `${((y - 0.5) * 14).toFixed(1)}px`)
+      const lenticularReveal = Math.max(0, Math.min(100, Math.round((x + (0.5 - y) * 0.08) * 100)))
+      card.style.setProperty('--lenticular-reveal', `${lenticularReveal}%`)
+      drawLenticularCanvas(card)
       card.classList.add('is-tilting')
     }
     card.addEventListener('pointerdown', (event) => {
-      if (event.target.closest?.('.creative-layer, .layer-context-toolbar')) return
+      if (event.target.closest?.('.creative-layer, .layer-context-toolbar, .card-photo-empty, [data-upload]')) return
       card.setPointerCapture?.(event.pointerId)
       move(event)
     })
@@ -1943,6 +2252,48 @@ function initInteractiveCards() {
       if (event.pointerType !== 'mouse') resetInteractiveCard(card)
     })
   })
+  document.querySelectorAll('[data-hologram-card].interaction-lenticular').forEach((card) => drawLenticularCanvas(card))
+}
+
+function drawLenticularCanvas(card) {
+  const canvas = card.querySelector('.lenticular-canvas')
+  const first = card.querySelector('.card-photo')
+  const second = card.querySelector('.lenticular-photo')
+  if (!canvas || !first || !second || !first.complete || !second.complete) {
+    if (first && !first.complete) first.addEventListener('load', () => drawLenticularCanvas(card), { once: true })
+    if (second && !second.complete) second.addEventListener('load', () => drawLenticularCanvas(card), { once: true })
+    return
+  }
+  const width = Math.max(1, Math.round(card.clientWidth * window.devicePixelRatio))
+  const height = Math.max(1, Math.round(card.clientHeight * window.devicePixelRatio))
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width
+    canvas.height = height
+  }
+  const context = canvas.getContext('2d')
+  if (!context) return
+  const reveal = Number.parseFloat(card.style.getPropertyValue('--lenticular-reveal')) || 0
+  const angle = (reveal / 100) * 2 - 1
+  context.clearRect(0, 0, width, height)
+  context.drawImage(first, 0, 0, width, height)
+  const stripWidth = Math.max(2, Math.round(width / 96))
+  const lensPitch = stripWidth * 3
+  for (let x = 0; x < width; x += stripWidth) {
+    const phase = ((x / lensPitch) + angle * 1.8) % 1
+    const stripMix = Math.max(0, Math.min(1, 0.5 + angle * 0.5 + (phase - 0.5) * 0.38))
+    if (stripMix <= 0.02) continue
+    context.save()
+    context.globalAlpha = stripMix
+    context.beginPath()
+    context.rect(x, 0, stripWidth, height)
+    context.clip()
+    context.drawImage(second, 0, 0, width, height)
+    context.restore()
+  }
+}
+
+function initWebGL2EffectCards() {
+  initFoilCards()
 }
 
 function initCreativeLayerInteractions() {
@@ -2242,9 +2593,17 @@ function applyEditorLivePreview(field, input) {
   if (field === 'effectAngle') card?.style.setProperty('--effect-angle', `${value}deg`)
   if (field === 'effectSpread') card?.style.setProperty('--effect-spread', `${Math.round(value * 100)}%`)
   if (field === 'effectGrain') card?.style.setProperty('--effect-grain', value)
+  if (['effectIntensity', 'effectAngle', 'effectSpread', 'effectGrain'].includes(field)) {
+    document.querySelectorAll('[data-webgl-effect]').forEach((canvas) => canvas.dispatchEvent(new Event('webgl-refresh')))
+  }
   if (field === 'drawingColor') {
     const context = document.querySelector('#drawing-pad')?.getContext('2d')
     if (context) context.strokeStyle = value
+    const selected = selectedCreativeLayer()
+    if (selected && ['handwriting', 'drawing'].includes(selected.type)) {
+      selected.color = value
+      document.querySelector(`[data-layer-id="${CSS.escape(selected.id)}"]`)?.style.setProperty('--layer-color', value)
+    }
   }
   if (field === 'drawingSize') {
     const context = document.querySelector('#drawing-pad')?.getContext('2d')
@@ -2263,6 +2622,18 @@ app.addEventListener('submit', (event) => {
 })
 
 app.addEventListener('click', async (event) => {
+  const applyHandwriting = event.target.closest('[data-action="apply-handwriting"]')
+  if (applyHandwriting) {
+    event.preventDefault()
+    commitHandwritingPad()
+    return
+  }
+  const photoUploadAction = event.target.closest('[data-action="open-photo-upload"]')
+  if (photoUploadAction) {
+    state.editor.selectedLayerId = null
+    openPhotoUpload()
+    return
+  }
   const nav = event.target.closest('[data-nav]')
   if (nav) {
     navigate(nav.dataset.nav)
@@ -2282,7 +2653,7 @@ app.addEventListener('click', async (event) => {
         handwriting: 'handwriting',
         voice: 'voice',
         video: 'motion',
-        lenticular: 'lenticular',
+        lenticular: 'hologram',
       }[key] || 'photo'
       state.editor.side = 'front'
       state.editor.inspectorOpen = true
@@ -2297,6 +2668,7 @@ app.addEventListener('click', async (event) => {
   }
   const tool = event.target.closest('[data-tool]')
   if (tool) {
+    state.editor.selectedLayerId = null
     state.editor.tool = tool.dataset.tool
     if (tool.dataset.tool === 'back') state.editor.side = 'back'
     state.editor.inspectorOpen = true
@@ -2321,6 +2693,17 @@ app.addEventListener('click', async (event) => {
       state.editor.side = layer.side
       state.editor.tool = layer.type
       state.editor.inspectorOpen = true
+      render()
+    }
+    return
+  }
+  const canvasStage = event.target.closest('.editor-stage')
+  if (
+    canvasStage &&
+    !event.target.closest('.layer-context-toolbar, [data-action], [data-upload], input, select, textarea')
+  ) {
+    if (state.editor.selectedLayerId !== null) {
+      state.editor.selectedLayerId = null
       render()
     }
     return
@@ -2372,7 +2755,11 @@ app.addEventListener('click', async (event) => {
   }
   const foilPattern = event.target.closest('[data-foil-pattern]')
   if (foilPattern) {
+    state.editor.selectedLayerId = null
     state.editor.foilPattern = foilPattern.dataset.foilPattern
+    // A newly selected surface effect must be visible on the portrait too.
+    // Background-only treatment remains an explicit follow-up choice.
+    state.editor.foilCoverage = 'full'
     state.editor.effect = 'holographic'
     markDirty()
     render()
@@ -2381,15 +2768,6 @@ app.addEventListener('click', async (event) => {
   const foilCoverage = event.target.closest('[data-foil-coverage]')
   if (foilCoverage) {
     state.editor.foilCoverage = foilCoverage.dataset.foilCoverage
-    state.editor.effect = 'holographic'
-    markDirty()
-    render()
-    return
-  }
-  const interaction = event.target.closest('[data-effect-interaction]')
-  if (interaction) {
-    state.editor.interaction = interaction.dataset.effectInteraction
-    state.editor.effectMotion = state.editor.interaction !== 'static'
     state.editor.effect = 'holographic'
     markDirty()
     render()
@@ -2452,6 +2830,13 @@ app.addEventListener('click', async (event) => {
   if (action === 'logout') logoutArtist()
   if (action === 'help') notify('사진 → 특별 기능 → 카드 정보 → 팬 미리보기 → 검수 순서로 진행해 주세요.')
   if (action === 'exit-editor') navigate('cards')
+  if (action === 'resume-local-draft') {
+    if (readDraft(state.profile?.id)) {
+      state.view = 'editor'
+      state.stage = 'design'
+      render()
+    } else navigate('cards')
+  }
   if (action === 'save-draft') saveDraft()
   if (action === 'go-details') {
     state.stage = 'details'
@@ -2474,6 +2859,7 @@ app.addEventListener('click', async (event) => {
     render()
   }
   if (action === 'remove-photo') {
+    resetPhotoAnalysis(state.editor)
     if (state.editor.imageSrc?.startsWith('blob:')) URL.revokeObjectURL(state.editor.imageSrc)
     state.editor.imageSrc = ''
     state.editor.imageName = ''
@@ -2488,6 +2874,16 @@ app.addEventListener('click', async (event) => {
     render()
   }
   if (action === 'submit-review') submitReview()
+  if (action === 'retry-effects') void prepareEffects()
+  if (action === 'toggle-spatial' && spatialEffectReady(state.editor)) {
+    state.editor.spatialEnabled = !state.editor.spatialEnabled
+    markDirty()
+    render()
+  }
+  if (action === 'toggle-analysis-mask') {
+    state.editor.showAnalysisMask = !state.editor.showAnalysisMask
+    render()
+  }
   if (action === 'toggle-voice') {
     state.editor.voiceEnabled = !state.editor.voiceEnabled
     state.form.hasVoice = state.editor.voiceEnabled
@@ -2505,9 +2901,17 @@ app.addEventListener('click', async (event) => {
     render()
   }
   if (action === 'toggle-hologram') {
-    state.editor.effect = state.editor.effect === 'none' ? 'holographic' : 'none'
+    state.editor.interaction = state.editor.interaction === 'lenticular' ? 'tilt' : 'lenticular'
+    state.editor.effectMotion = true
     markDirty()
     render()
+  }
+  if (action === 'toggle-effects') {
+    if (state.editor.effect === 'none') state.editor.effect = state.editor.selectedEffect || 'holographic'
+    else { state.editor.selectedEffect = state.editor.effect; state.editor.effect = 'none' }
+    markDirty()
+    render()
+    void prepareEffects()
   }
   if (action === 'start-recording') startRecording()
   if (action === 'stop-recording') stopRecording()
@@ -2543,6 +2947,7 @@ app.addEventListener('click', async (event) => {
     markDirty()
     render()
   }
+  if (action === 'apply-handwriting') commitHandwritingPad()
   if (action === 'clear-drawing') {
     const canvas = document.querySelector('#drawing-pad')
     canvas?.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height)

@@ -1,3 +1,7 @@
+import { ALL_FOIL_PATTERN_IDS } from './effect-catalog.js'
+
+export { ALL_FOIL_PATTERN_IDS, EFFECT_CATALOG, LEGACY_FOIL_PATTERN_IDS } from './effect-catalog.js'
+
 const STATUS_KEYS = {
   draft: 'draft',
   pending_review: 'pendingReview',
@@ -20,7 +24,7 @@ function normalizedIntensity(value, fallback = 0.78) {
 }
 
 const MATERIALS = new Set(['matte', 'pearl', 'chrome'])
-const FOIL_PATTERNS = new Set(['aurora-wave', 'prism', 'cracked-ice', 'micro-star'])
+const FOIL_PATTERNS = new Set(ALL_FOIL_PATTERN_IDS)
 const FOIL_COVERAGES = new Set(['full', 'background', 'frame', 'signature'])
 const INTERACTIONS = new Set(['static', 'tilt', 'lenticular'])
 const EDGE_FOILS = new Set(['none', 'silver', 'gold'])
@@ -53,6 +57,17 @@ export function responsiveStudioMode(width) {
   if (viewport <= 720) return 'phone'
   if (viewport <= 1024) return 'tablet'
   return 'desktop'
+}
+
+export function spatialSceneLabel(status = 'idle') {
+  if (status === 'processing') return 'AI 입체 카드 생성 중'
+  if (status === 'completed' || status === 'ready') return 'AI 입체 카드 준비 완료'
+  if (status === 'error' || status === 'failed') return 'AI 입체 카드 생성 실패'
+  return 'AI 입체 카드 미생성'
+}
+
+export function spatialSceneMediaRoles() {
+  return ['background', 'mask', 'depth']
 }
 
 export function normalizeCreativeLayer(layer = {}, index = 0) {
@@ -181,6 +196,10 @@ export function buildDesignConfig({ form = {}, editor = {} } = {}) {
         ? normalizedIntensity(editor.effectGrain ?? existingFront.effectGrain, 0.38)
         : undefined,
     effectFinish: editor.effectFinish ?? existingFront.effectFinish,
+    spatialScene: Object.hasOwn(editor, 'spatialScene') ? editor.spatialScene : existingFront.spatialScene,
+    spatialEnabled: editor.spatialEnabled ?? existingFront.spatialEnabled,
+    selectedEffect: editor.selectedEffect ?? existingFront.selectedEffect,
+    photoAnalysis: Object.hasOwn(editor, 'photoAnalysis') ? editor.photoAnalysis : existingFront.photoAnalysis,
     image:
       existingFront.image || imageAssetId
         ? compactObject({
@@ -262,6 +281,19 @@ export function buildCardPayload({ form = {}, editor = {} } = {}) {
     hasVoice: Boolean(form.hasVoice || designConfig.voice.enabled),
     issueLimit: numeric(form.issueLimit, 0),
   })
+}
+
+export function buildSpatialSceneJobRequest(assetId, options = {}) {
+  const normalizedAssetId = encodeURIComponent(String(assetId || ''))
+  const motionPreset = options.motionPreset || 'portrait-parallax'
+  const pipelineVersion = options.pipelineVersion || 'v1'
+  return {
+    path: `/artist/assets/${normalizedAssetId}/spatial-scene-jobs`,
+    headers: {
+      'Idempotency-Key': `spatial-scene:${String(assetId)}:${motionPreset}:${pipelineVersion}`,
+    },
+    body: { motionPreset, pipelineVersion },
+  }
 }
 
 export function cardDraftErrors({ form = {}, editor = {} } = {}) {
