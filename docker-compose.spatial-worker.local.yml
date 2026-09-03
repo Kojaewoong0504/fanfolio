@@ -1,0 +1,15 @@
+services:
+  spatial-worker:
+    build:
+      context: .
+      dockerfile: spatial_worker/Dockerfile
+    restart: unless-stopped
+    environment:
+      SPATIAL_SCENE_WORKER_TOKEN: local-spatial-worker-token
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
