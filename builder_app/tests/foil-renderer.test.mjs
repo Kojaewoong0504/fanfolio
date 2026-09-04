@@ -2,10 +2,20 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { EFFECT_CATALOG } from '../effect-catalog.js'
-import { FOIL_PATTERNS, computeCoverCrop, normalizeFoilSettings } from '../foil-renderer.js'
+import { FOIL_PATTERNS, IDLE_FOIL_PATTERNS, computeCoverCrop, normalizeFoilSettings } from '../foil-renderer.js'
 
 test('renderer exposes the twelve approved materials in catalog order', () => {
   assert.deepEqual(FOIL_PATTERNS, EFFECT_CATALOG.map(e => e.id))
+})
+test('WebGL keeps every idle-motion surface effect animated without tilt', () => {
+  assert.deepEqual(IDLE_FOIL_PATTERNS, ['blossom-depth', 'constellation'])
+  const source=readFileSync(new URL('../foil-renderer.js',import.meta.url),'utf8')
+  const shader=readFileSync(new URL('../atelier-shader.js',import.meta.url),'utf8')
+  assert.match(source,/IDLE_FOIL_PATTERNS\.includes\(cardPattern\(\)\)/)
+  assert.match(source,/time:isIdlePattern\(\)\?performance\.now\(\)\/1000:0/)
+  assert.match(source,/if\(isIdlePattern\(\)\)idleFrame=requestAnimationFrame\(idleTick\)/)
+  const constellationBranch=shader.match(/\/\/ constellation([\s\S]*?)\/\/ glass-caustics/)?.[1] || ''
+  assert.match(constellationBranch,/time/)
 })
 test('invalid input cannot poison GPU uniforms and legacy effects still resolve', () => {
   const settings = normalizeFoilSettings({x: Infinity,y:-5,intensity:NaN,spread:8,grain:-1,pattern:'liquid-chrome'})

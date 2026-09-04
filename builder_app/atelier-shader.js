@@ -76,7 +76,7 @@ vec4 atelierEffect(vec2 p,vec2 l){
   // constellation
   else if(atelier<4.5){
     vec3 c=texture(constellationTexture,p).rgb;
-    float twinkle=.65+.35*pow(.5+.5*sin(p.x*23.+p.y*32.+l.x*10.+l.y*6.),2.);
+    float twinkle=.65+.35*pow(.5+.5*sin(p.x*23.+p.y*32.+l.x*10.+l.y*6.+time*.8),2.);
     rgb=c*(.65+grain*.5)*twinkle*(.8+spread*.3)*2.15;
   }
   // glass-caustics
