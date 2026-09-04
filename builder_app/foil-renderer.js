@@ -266,8 +266,14 @@ export function initFoilCards(root=document){
         const css=card.style
         renderer.draw({x,y,time:isIdlePattern()?performance.now()/1000:0,pattern:cardPattern(),material:card.className.match(/material-([\w-]+)/)?.[1],coverage:card.className.match(/coverage-([\w-]+)/)?.[1],intensity:Number(css.getPropertyValue('--effect-opacity')||.72),spread:parseFloat(css.getPropertyValue('--effect-spread')||64)/100,grain:Number(css.getPropertyValue('--effect-grain')||.38)})
       }
-      const idleTick=()=>{if(cleaned||!isIdlePattern())return;draw();idleFrame=requestAnimationFrame(idleTick)}
       const schedule=()=>{if(!frame)frame=requestAnimationFrame(draw)}
+      const idleTick=()=>{idleFrame=0;if(cleaned||!isIdlePattern())return;draw();idleFrame=requestAnimationFrame(idleTick)}
+      const startIdleAnimation=()=>{if(!cleaned&&!idleFrame&&isIdlePattern())idleFrame=requestAnimationFrame(idleTick)}
+      const syncIdleAnimation=()=>{
+        schedule()
+        if(isIdlePattern())startIdleAnimation()
+        else if(idleFrame){cancelAnimationFrame(idleFrame);idleFrame=0}
+      }
       const syncSubjectMask=()=>{
         const nextUrl=canvas.dataset.subjectMask||''
         if(nextUrl===subjectMaskUrl)return
@@ -294,10 +300,12 @@ export function initFoilCards(root=document){
         schedule()
       })
       motionObserver.observe(card,{attributes:true,attributeFilter:['style']})
+      const patternObserver=new MutationObserver(syncIdleAnimation)
+      patternObserver.observe(card,{attributes:true,attributeFilter:['class']})
       const maskObserver=new MutationObserver(syncSubjectMask)
       maskObserver.observe(canvas,{attributes:true,attributeFilter:['data-subject-mask']})
-      active.set(canvas,()=>{cleaned=true;++subjectMaskLoadId;cancelAnimationFrame(frame);cancelAnimationFrame(idleFrame);observer.disconnect();motionObserver.disconnect();maskObserver.disconnect();card.removeEventListener('pointermove',move);card.removeEventListener('pointerleave',reset);card.removeEventListener('pointercancel',reset);canvas.removeEventListener('webgl-refresh',schedule);renderer.dispose()})
-      canvas.style.visibility='hidden';canvas.dataset.webglReady='loading';syncSubjectMask();draw();if(isIdlePattern())idleFrame=requestAnimationFrame(idleTick)
+      active.set(canvas,()=>{cleaned=true;++subjectMaskLoadId;cancelAnimationFrame(frame);cancelAnimationFrame(idleFrame);observer.disconnect();motionObserver.disconnect();patternObserver.disconnect();maskObserver.disconnect();card.removeEventListener('pointermove',move);card.removeEventListener('pointerleave',reset);card.removeEventListener('pointercancel',reset);canvas.removeEventListener('webgl-refresh',schedule);renderer.dispose()})
+      canvas.style.visibility='hidden';canvas.dataset.webglReady='loading';syncSubjectMask();draw();syncIdleAnimation()
       renderer.ready.then(()=>{
         if(canvas.isConnected){canvas.dataset.webglReady='true';canvas.style.visibility='visible';card.classList.add('webgl2-ready');schedule()}
       }).catch(error=>{

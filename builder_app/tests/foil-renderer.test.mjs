@@ -13,9 +13,16 @@ test('WebGL keeps every idle-motion surface effect animated without tilt', () =>
   const shader=readFileSync(new URL('../atelier-shader.js',import.meta.url),'utf8')
   assert.match(source,/IDLE_FOIL_PATTERNS\.includes\(cardPattern\(\)\)/)
   assert.match(source,/time:isIdlePattern\(\)\?performance\.now\(\)\/1000:0/)
-  assert.match(source,/if\(isIdlePattern\(\)\)idleFrame=requestAnimationFrame\(idleTick\)/)
+  assert.match(source,/const startIdleAnimation=.*requestAnimationFrame\(idleTick\)/)
   const constellationBranch=shader.match(/\/\/ constellation([\s\S]*?)\/\/ glass-caustics/)?.[1] || ''
   assert.match(constellationBranch,/time/)
+})
+test('selecting an idle-motion effect after canvas initialization starts its loop', () => {
+  const source=readFileSync(new URL('../foil-renderer.js',import.meta.url),'utf8')
+  assert.match(source,/const syncIdleAnimation=/)
+  assert.match(source,/attributeFilter:\['class'\]/)
+  assert.match(source,/patternObserver\.observe\(card/)
+  assert.match(source,/if\(isIdlePattern\(\)\)startIdleAnimation\(\)/)
 })
 test('invalid input cannot poison GPU uniforms and legacy effects still resolve', () => {
   const settings = normalizeFoilSettings({x: Infinity,y:-5,intensity:NaN,spread:8,grain:-1,pattern:'liquid-chrome'})
