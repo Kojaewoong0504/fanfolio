@@ -24,6 +24,15 @@ test('selecting an idle-motion effect after canvas initialization starts its loo
   assert.match(source,/patternObserver\.observe\(card/)
   assert.match(source,/if\(isIdlePattern\(\)\)startIdleAnimation\(\)/)
 })
+test('blossom depth visibly separates near and far petals over time', () => {
+  const shader=readFileSync(new URL('../atelier-shader.js',import.meta.url),'utf8')
+  const branch=shader.match(/\/\/ blossom-depth([\s\S]*?)\/\/ light-signature/)?.[1] || ''
+  assert.match(branch,/vec2 farDrift=.*time/)
+  assert.match(branch,/vec2 nearDrift=.*time/)
+  assert.match(branch,/texture\(petalsMap,clamp\(farUv/)
+  assert.match(branch,/texture\(petalsMap,clamp\(nearUv/)
+  assert.match(branch,/mix\(farPetals,nearPetals/)
+})
 test('invalid input cannot poison GPU uniforms and legacy effects still resolve', () => {
   const settings = normalizeFoilSettings({x: Infinity,y:-5,intensity:NaN,spread:8,grain:-1,pattern:'liquid-chrome'})
   assert.equal(settings.x,.5)
