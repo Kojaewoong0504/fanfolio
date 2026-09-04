@@ -85,6 +85,31 @@ def test_http_provider_decodes_validated_ai_bundle_without_leaking_token() -> No
     assert "secret-worker-token" not in repr(bundle)
 
 
+def test_http_spatial_provider_derives_generate_url_from_worker_base_url() -> None:
+    payload = {
+        "provider": "depth-anything-v2+sam2+lama",
+        "modelVersion": "2026-09",
+        "confidence": 0.93,
+        "depthBase64": base64.b64encode(image_bytes("L", (8, 10), 120)).decode(),
+        "maskBase64": base64.b64encode(image_bytes("L", (8, 10), 255)).decode(),
+        "backgroundBase64": base64.b64encode(image_bytes("RGB", (8, 10), (10, 20, 30))).decode(),
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert str(request.url) == "https://worker.internal/generate"
+        return httpx.Response(200, json=payload)
+
+    provider = HttpSpatialSceneProvider(
+        url="https://worker.internal",
+        token="secret-worker-token",
+        transport=httpx.MockTransport(handler),
+    )
+
+    bundle = asyncio.run(provider.generate(image_bytes("RGB", (8, 10), (1, 2, 3))))
+
+    assert bundle.provider == "depth-anything-v2+sam2+lama"
+
+
 def test_http_spatial_provider_reuses_supplied_analysis_mask() -> None:
     mask = image_bytes("L", (8, 10), 120)
     payload = {
@@ -220,6 +245,20 @@ def test_configured_provider_requires_http_worker_url() -> None:
 
     with pytest.raises(SpatialSceneProviderError, match="URL is not configured"):
         configured_spatial_scene_provider(settings)
+
+
+def test_configured_provider_accepts_modal_endpoint() -> None:
+    settings = Settings(
+        _env_file=None,
+        spatial_scene_provider="modal",
+        spatial_scene_ai_url="https://fanfolio--spatial-worker.modal.run",
+        spatial_scene_ai_token="server-only-token",
+    )
+
+    provider = configured_spatial_scene_provider(settings)
+
+    assert isinstance(provider, HttpSpatialSceneProvider)
+    assert provider.url == "https://fanfolio--spatial-worker.modal.run/generate"
 
 
 def test_configured_provider_uses_local_fallback_only_when_explicit() -> None:

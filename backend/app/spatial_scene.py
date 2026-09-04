@@ -211,10 +211,17 @@ class HttpSpatialSceneProvider:
         timeout_seconds: float = 90.0,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
-        self.url = url
+        self.url = self._generate_url(url)
         self._token = token
         self.timeout_seconds = timeout_seconds
         self._transport = transport
+
+    @staticmethod
+    def _generate_url(url: str) -> str:
+        base_url = url.rstrip("/")
+        if base_url.endswith("/generate"):
+            return base_url
+        return f"{base_url}/generate"
 
     async def generate(self, content: bytes, *, mask: bytes | None = None) -> SpatialSceneBundle:
         expected_size = image_size(content)
@@ -333,7 +340,7 @@ def configured_spatial_scene_provider(
 ) -> HttpSpatialSceneProvider | LocalSpatialSceneProvider:
     if settings.spatial_scene_provider == "local_fallback":
         return LocalSpatialSceneProvider()
-    if settings.spatial_scene_provider == "http":
+    if settings.spatial_scene_provider in {"http", "modal"}:
         if not settings.spatial_scene_ai_url:
             raise SpatialSceneProviderError("AI spatial scene worker URL is not configured")
         return HttpSpatialSceneProvider(
@@ -348,7 +355,10 @@ def configured_spatial_scene_provider(
 def configured_photo_analysis_provider(
     settings: Any, *, transport: httpx.AsyncBaseTransport | None = None
 ) -> HttpPhotoAnalysisProvider:
-    if settings.spatial_scene_provider != "http" or not settings.spatial_scene_ai_url:
+    if (
+        settings.spatial_scene_provider not in {"http", "modal"}
+        or not settings.spatial_scene_ai_url
+    ):
         raise SpatialSceneProviderError("AI photo analysis worker URL is not configured")
     return HttpPhotoAnalysisProvider(
         generate_url=settings.spatial_scene_ai_url,
