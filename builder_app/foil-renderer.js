@@ -2,6 +2,7 @@
 import { EFFECT_CATALOG, ALL_FOIL_PATTERN_IDS, LEGACY_FOIL_PATTERN_IDS } from './effect-catalog.js'
 import { atelierUniforms, atelierFunctions } from './atelier-shader.js?v=atelier12-3'
 export const FOIL_PATTERNS = EFFECT_CATALOG.map(effect => effect.id)
+export const IDLE_FOIL_PATTERNS = ['blossom-depth', 'constellation']
 export function normalizeFoilSettings(settings={}) {
   const clamp=(value,fallback)=>Number.isFinite(value)?Math.max(0,Math.min(1,value)):fallback
   return {...settings,x:clamp(settings.x,.5),y:clamp(settings.y,.5),intensity:clamp(settings.intensity,.72),spread:clamp(settings.spread,.64),grain:clamp(settings.grain,.5),pattern:ALL_FOIL_PATTERN_IDS.includes(settings.pattern)?settings.pattern:'aurora-wave'}
@@ -258,11 +259,12 @@ export function initFoilCards(root=document){
     try{
       const renderer=createFoilRenderer(canvas)
       let x=.5,y=.5,frame=0,idleFrame=0,subjectMaskUrl,subjectMaskLoadId=0,cleaned=false
-      const isIdlePattern=()=>card.classList.contains('pattern-blossom-depth')
+      const cardPattern=()=>card.className.match(/pattern-([\w-]+)/)?.[1]
+      const isIdlePattern=()=>IDLE_FOIL_PATTERNS.includes(cardPattern())
       const draw=()=>{
         frame=0
         const css=card.style
-        renderer.draw({x,y,time:isIdlePattern()?performance.now()/1000:0,pattern:card.className.match(/pattern-([\w-]+)/)?.[1],material:card.className.match(/material-([\w-]+)/)?.[1],coverage:card.className.match(/coverage-([\w-]+)/)?.[1],intensity:Number(css.getPropertyValue('--effect-opacity')||.72),spread:parseFloat(css.getPropertyValue('--effect-spread')||64)/100,grain:Number(css.getPropertyValue('--effect-grain')||.38)})
+        renderer.draw({x,y,time:isIdlePattern()?performance.now()/1000:0,pattern:cardPattern(),material:card.className.match(/material-([\w-]+)/)?.[1],coverage:card.className.match(/coverage-([\w-]+)/)?.[1],intensity:Number(css.getPropertyValue('--effect-opacity')||.72),spread:parseFloat(css.getPropertyValue('--effect-spread')||64)/100,grain:Number(css.getPropertyValue('--effect-grain')||.38)})
       }
       const idleTick=()=>{if(cleaned||!isIdlePattern())return;draw();idleFrame=requestAnimationFrame(idleTick)}
       const schedule=()=>{if(!frame)frame=requestAnimationFrame(draw)}

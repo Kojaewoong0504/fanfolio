@@ -507,12 +507,13 @@ test('handwriting pad commits a real layer and restores the color control', asyn
   assert.match(css, /\.handwriting-options input\[type='color'\]/)
 })
 
-test('blossom depth has an idle shader animation loop', async () => {
+test('ambient surface effects have an idle shader animation loop', async () => {
   const shader = await readFile(new URL('../atelier-shader.js', import.meta.url), 'utf8')
   const renderer = await readFile(new URL('../foil-renderer.js', import.meta.url), 'utf8')
   assert.match(shader, /uniform float time/)
   assert.match(shader, /drift=vec2\(sin\(time\*\.75/)
-  assert.match(renderer, /isIdlePattern=\(\)=>card\.classList\.contains\('pattern-blossom-depth'\)/)
+  assert.match(renderer, /IDLE_FOIL_PATTERNS = \['blossom-depth', 'constellation'\]/)
+  assert.match(renderer, /isIdlePattern=\(\)=>IDLE_FOIL_PATTERNS\.includes\(cardPattern\(\)\)/)
   assert.match(renderer, /requestAnimationFrame\(idleTick\)/)
 })
 
