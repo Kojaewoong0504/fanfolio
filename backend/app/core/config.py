@@ -250,10 +250,10 @@ class Settings(BaseSettings):
             raise ValueError("UPLOAD_CLEANUP_INTERVAL_SECONDS must be positive")
         if self.push_delivery_mode not in {"console", "fcm"}:
             raise ValueError("PUSH_DELIVERY_MODE must be console or fcm")
-        if self.spatial_scene_provider not in {"local_fallback", "http"}:
-            raise ValueError("SPATIAL_SCENE_PROVIDER must be local_fallback or http")
-        if self.spatial_scene_provider == "http" and not self.spatial_scene_ai_url:
-            raise ValueError("SPATIAL_SCENE_AI_URL is required for the http provider")
+        if self.spatial_scene_provider not in {"local_fallback", "http", "modal"}:
+            raise ValueError("SPATIAL_SCENE_PROVIDER must be local_fallback, http, or modal")
+        if self.spatial_scene_provider in {"http", "modal"} and not self.spatial_scene_ai_url:
+            raise ValueError("SPATIAL_SCENE_AI_URL is required for the remote provider")
         if self.spatial_scene_ai_timeout_seconds <= 0:
             raise ValueError("SPATIAL_SCENE_AI_TIMEOUT_SECONDS must be positive")
         if self.push_delivery_mode == "fcm":

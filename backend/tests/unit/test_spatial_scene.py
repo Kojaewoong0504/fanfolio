@@ -222,6 +222,20 @@ def test_configured_provider_requires_http_worker_url() -> None:
         configured_spatial_scene_provider(settings)
 
 
+def test_configured_provider_accepts_modal_endpoint() -> None:
+    settings = Settings(
+        _env_file=None,
+        spatial_scene_provider="modal",
+        spatial_scene_ai_url="https://fanfolio--spatial-worker.modal.run",
+        spatial_scene_ai_token="server-only-token",
+    )
+
+    provider = configured_spatial_scene_provider(settings)
+
+    assert isinstance(provider, HttpSpatialSceneProvider)
+    assert provider.url == "https://fanfolio--spatial-worker.modal.run"
+
+
 def test_configured_provider_uses_local_fallback_only_when_explicit() -> None:
     settings = Settings(_env_file=None, spatial_scene_provider="local_fallback")
 

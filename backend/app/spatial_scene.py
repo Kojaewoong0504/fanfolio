@@ -333,7 +333,7 @@ def configured_spatial_scene_provider(
 ) -> HttpSpatialSceneProvider | LocalSpatialSceneProvider:
     if settings.spatial_scene_provider == "local_fallback":
         return LocalSpatialSceneProvider()
-    if settings.spatial_scene_provider == "http":
+    if settings.spatial_scene_provider in {"http", "modal"}:
         if not settings.spatial_scene_ai_url:
             raise SpatialSceneProviderError("AI spatial scene worker URL is not configured")
         return HttpSpatialSceneProvider(
@@ -348,7 +348,7 @@ def configured_spatial_scene_provider(
 def configured_photo_analysis_provider(
     settings: Any, *, transport: httpx.AsyncBaseTransport | None = None
 ) -> HttpPhotoAnalysisProvider:
-    if settings.spatial_scene_provider != "http" or not settings.spatial_scene_ai_url:
+    if settings.spatial_scene_provider not in {"http", "modal"} or not settings.spatial_scene_ai_url:
         raise SpatialSceneProviderError("AI photo analysis worker URL is not configured")
     return HttpPhotoAnalysisProvider(
         generate_url=settings.spatial_scene_ai_url,
