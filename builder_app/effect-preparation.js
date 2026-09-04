@@ -21,9 +21,9 @@ export function createEffectPreparation({current, analyzed, spatialReady, analyz
     const valid = () => current() === editor && editor.imageSrc === src && editor.imageFile === file && editor.effect !== 'none'
     const flight = {src, file}
     flight.promise = (async () => {
-      if (!analyzed(editor)) await analyze()
-      if (!valid() || !analyzed(editor)) return
       if (!spatialReady(editor)) await spatial()
+      if (!valid()) return
+      if (!analyzed(editor)) await analyze()
     })().finally(() => { if (flights.get(editor) === flight) flights.delete(editor) })
     flights.set(editor, flight)
     return flight.promise

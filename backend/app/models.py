@@ -1975,6 +1975,7 @@ class Asset(Base):
     )
     storage_path: Mapped[str | None] = mapped_column(String, nullable=True)
     processed_storage_path: Mapped[str | None] = mapped_column(String, nullable=True)
+    content_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     transform: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 

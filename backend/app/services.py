@@ -90,6 +90,7 @@ from app.spatial_scene import (
     SpatialSceneProviderError,
     configured_spatial_scene_provider,
     image_size,
+    photo_analysis_metadata,
     source_revision,
     spatial_scene_metadata,
     validate_photo_analysis_bundle,
@@ -3868,8 +3869,20 @@ async def process_spatial_scene(job_id: str) -> None:
                 mask_storage_path=paths["maskStoragePath"],
                 background_storage_path=paths["backgroundStoragePath"],
             )
+            analysis_metadata = photo_analysis_metadata(
+                asset.id,
+                source_revision=source_revision(asset.id, asset.upload_completed_at),
+                provider=bundle.provider,
+                model_version=bundle.model_version,
+                confidence=bundle.confidence,
+                mask_storage_path=paths["maskStoragePath"],
+            )
             job.result_metadata = metadata
-            asset.transform = {**(asset.transform or {}), "spatialScene": metadata}
+            asset.transform = {
+                **(asset.transform or {}),
+                "spatialScene": metadata,
+                "photoAnalysis": analysis_metadata,
+            }
             job.status, job.phase = "ready", "complete"
             await session.commit()
         except Exception:

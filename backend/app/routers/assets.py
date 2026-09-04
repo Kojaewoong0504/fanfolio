@@ -1,5 +1,6 @@
 import logging
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
 from uuid import uuid4
 
 from fastapi import APIRouter, Request, Response, status
@@ -145,6 +146,7 @@ async def upload_asset_content(
         content,
         content_type=asset.content_type,
     )
+    asset.content_sha256 = sha256(content).hexdigest()
     if asset.purpose == "event_banner":
         await prepare_event_banner_variant(asset, storage)
     invalidate_source_photo_derivatives(asset)
@@ -205,6 +207,7 @@ async def complete_asset_upload(asset_id: str, user: CurrentUser, session: DbSes
             ensure_event_hero_derivative, storage, asset.id, canonical_path, content, force=True
         )
     asset.storage_path = canonical_path
+    asset.content_sha256 = sha256(content).hexdigest()
     invalidate_source_photo_derivatives(asset)
     asset.upload_completed_at = datetime.now(UTC)
     await session.commit()
