@@ -287,10 +287,11 @@ export function buildSpatialSceneJobRequest(assetId, options = {}) {
   const normalizedAssetId = encodeURIComponent(String(assetId || ''))
   const motionPreset = options.motionPreset || 'portrait-parallax'
   const pipelineVersion = options.pipelineVersion || 'v1'
+  const retrySuffix = options.retryNonce ? `:retry-${options.retryNonce}` : ''
   return {
     path: `/artist/assets/${normalizedAssetId}/spatial-scene-jobs`,
     headers: {
-      'Idempotency-Key': `spatial-scene:${String(assetId)}:${motionPreset}:${pipelineVersion}`,
+      'Idempotency-Key': `spatial-scene:${String(assetId)}:${motionPreset}:${pipelineVersion}${retrySuffix}`,
     },
     body: { motionPreset, pipelineVersion },
   }
