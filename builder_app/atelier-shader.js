@@ -126,12 +126,18 @@ vec4 atelierEffect(vec2 p,vec2 l){
   }
   // blossom-depth
   else if(atelier<9.5){
-    // Near petals move farther than the small upper petals; original photo is untouched.
+    // Separate depth bands so the petals keep floating even while the card is still.
     float depth=.25+.75*smoothstep(.60,.95,p.y);
-    vec2 drift=vec2(sin(time*.75+p.y*8.),cos(time*.62+p.x*7.))*vec2(.008,.006);
-    vec2 t=(p-.5)*.97+.5-l*vec2(.035,.026)*depth*(.4+spread)+drift*depth;
-    vec3 a=texture(petalsMap,clamp(t,.001,.999)).rgb;
-    rgb=a*(.8+grain*.25);
+    vec2 farDrift=vec2(sin(time*.72+p.y*7.),cos(time*.58+p.x*6.))*vec2(.014,.011);
+    vec2 nearDrift=vec2(cos(time*.93+p.y*5.),sin(time*.81+p.x*8.))*vec2(.034,.027);
+    vec2 parallax=l*vec2(.035,.026)*depth*(.4+spread);
+    vec2 farUv=(p-.5)*.97+.5-parallax*.45+farDrift;
+    vec2 nearUv=(p-.5)*.97+.5-parallax+nearDrift;
+    vec3 farPetals=texture(petalsMap,clamp(farUv,.001,.999)).rgb;
+    vec3 nearPetals=texture(petalsMap,clamp(nearUv,.001,.999)).rgb;
+    float depthBlend=smoothstep(.48,.82,p.y);
+    float breathe=.92+.08*sin(time*1.15+p.x*4.);
+    rgb=mix(farPetals,nearPetals,depthBlend)*(.8+grain*.25)*breathe;
   }
   // light-signature
   else if(atelier<10.5){
