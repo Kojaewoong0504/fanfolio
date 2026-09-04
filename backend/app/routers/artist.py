@@ -364,6 +364,27 @@ async def reusable_spatial_mask_metadata(asset: Asset) -> dict[str, object] | No
     return metadata
 
 
+async def reusable_photo_analysis_by_digest(
+    asset: Asset, session: DbSession
+) -> dict[str, object] | None:
+    if not asset.content_sha256:
+        return None
+    candidates = await session.scalars(
+        select(Asset)
+        .where(
+            Asset.owner_id == asset.owner_id,
+            Asset.content_sha256 == asset.content_sha256,
+            Asset.id != asset.id,
+        )
+        .order_by(Asset.upload_completed_at.desc())
+    )
+    for candidate in candidates:
+        metadata = await valid_photo_analysis_metadata(candidate)
+        if metadata:
+            return metadata
+    return None
+
+
 def ensure_lenticular_image_asset(asset: Asset) -> None:
     if asset.purpose != "card" or asset.content_type not in LENTICULAR_IMAGE_CONTENT_TYPES:
         raise AppError(
@@ -937,6 +958,19 @@ async def analyze_photo(asset_id: str, user: ArtistUser, session: DbSession) -> 
     cached = await valid_photo_analysis_metadata(asset)
     if cached:
         return {"ok": True, "data": public_photo_analysis_metadata(cached)}
+    matching = await reusable_photo_analysis_by_digest(asset, session)
+    if matching:
+        metadata = photo_analysis_metadata(
+            asset.id,
+            source_revision=revision,
+            provider=str(matching["provider"]),
+            model_version=str(matching["modelVersion"]),
+            confidence=float(matching["confidence"]),
+            mask_storage_path=str(matching["maskStoragePath"]),
+        )
+        asset.transform = {**(asset.transform or {}), "photoAnalysis": metadata}
+        await session.commit()
+        return {"ok": True, "data": public_photo_analysis_metadata(metadata)}
     spatial = await reusable_spatial_mask_metadata(asset)
     storage = configured_asset_storage()
     if spatial:
@@ -1051,7 +1085,19 @@ async def generate_spatial_scene(asset_id: str, user: ArtistUser, session: DbSes
         mask_storage_path=mask_path,
         background_storage_path=background_path,
     )
-    asset.transform = {**(asset.transform or {}), "spatialScene": metadata}
+    analysis_metadata = photo_analysis_metadata(
+        asset.id,
+        source_revision=current_source_revision(asset),
+        provider=bundle.provider,
+        model_version=bundle.model_version,
+        confidence=bundle.confidence,
+        mask_storage_path=mask_path,
+    )
+    asset.transform = {
+        **(asset.transform or {}),
+        "spatialScene": metadata,
+        "photoAnalysis": analysis_metadata,
+    }
     await session.commit()
     return {"ok": True, "data": public_spatial_scene_metadata(metadata)}
 
@@ -1090,17 +1136,69 @@ async def enqueue_spatial_scene_job(
             "ok": True,
             "data": {"jobId": existing.id, "status": existing.status, "reused": True},
         }
+    requested_generation_key = generation_key(
+        source_revision=asset.content_sha256 or source_revision,
+        crop_rect=crop_rect,
+        motion_preset=motion_preset,
+        pipeline_version=pipeline_version,
+    )
+    reusable = await session.scalar(
+        select(SpatialSceneJob)
+        .where(
+            SpatialSceneJob.owner_id == user.id,
+            SpatialSceneJob.generation_key == requested_generation_key,
+            SpatialSceneJob.status == "ready",
+            SpatialSceneJob.result_metadata.is_not(None),
+        )
+        .order_by(SpatialSceneJob.updated_at.desc())
+    )
+    if reusable and reusable.result_metadata:
+        previous = reusable.result_metadata
+        metadata = spatial_scene_metadata(
+            asset.id,
+            provider=str(previous["provider"]),
+            model_version=str(previous["modelVersion"]),
+            confidence=float(previous["confidence"]),
+            source_revision=source_revision,
+            depth_storage_path=str(previous["depthStoragePath"]),
+            mask_storage_path=str(previous["maskStoragePath"]),
+            background_storage_path=str(previous["backgroundStoragePath"]),
+        )
+        analysis_metadata = photo_analysis_metadata(
+            asset.id,
+            source_revision=source_revision,
+            provider=str(previous["provider"]),
+            model_version=str(previous["modelVersion"]),
+            confidence=float(previous["confidence"]),
+            mask_storage_path=str(previous["maskStoragePath"]),
+        )
+        job = SpatialSceneJob(
+            id=f"scene_job_{uuid4().hex[:10]}",
+            owner_id=user.id,
+            asset_id=asset.id,
+            idempotency_key=idempotency_key.strip(),
+            generation_key=requested_generation_key,
+            status="ready",
+            phase="complete",
+            result_metadata=metadata,
+        )
+        asset.transform = {
+            **(asset.transform or {}),
+            "spatialScene": metadata,
+            "photoAnalysis": analysis_metadata,
+        }
+        session.add(job)
+        await session.commit()
+        return {
+            "ok": True,
+            "data": {"jobId": job.id, "status": job.status, "reused": True},
+        }
     job = SpatialSceneJob(
         id=f"scene_job_{uuid4().hex[:10]}",
         owner_id=user.id,
         asset_id=asset.id,
         idempotency_key=idempotency_key.strip(),
-        generation_key=generation_key(
-            source_revision=source_revision,
-            crop_rect=crop_rect,
-            motion_preset=motion_preset,
-            pipeline_version=pipeline_version,
-        ),
+        generation_key=requested_generation_key,
     )
     session.add(job)
     await session.commit()

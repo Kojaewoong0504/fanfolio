@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
+from app import services
 from app.db.session import SessionLocal
 from app.models import Artist, Asset, Card, Member, Role, Session, User
 from app.routers import artist as artist_router
@@ -1164,6 +1165,56 @@ def test_artist_photo_analysis_post_persists_provider_mask_and_reuses_cache(
     assert len(provider_calls) == 1
 
 
+def test_artist_photo_analysis_reuses_same_image_across_owned_assets(
+    actors: dict[str, TestClient], seeded: dict[str, Any], monkeypatch: Any
+) -> None:
+    content = _png_bytes("RGB", (16, 24), (30, 40, 80))
+    first = _upload_artist_asset(
+        actors["artist"],
+        file_name="same-image-first.png",
+        content_type="image/png",
+        purpose="card",
+        content=content,
+    )
+    second = _upload_artist_asset(
+        actors["artist"],
+        file_name="same-image-second.png",
+        content_type="image/png",
+        purpose="card",
+        content=content,
+    )
+    mask_bytes = _png_bytes("L", (16, 24), 180)
+    provider_calls: list[bytes] = []
+
+    class FakePhotoAnalysisProvider:
+        async def analyze(self, source: bytes) -> PhotoAnalysisBundle:
+            provider_calls.append(source)
+            return PhotoAnalysisBundle(
+                mask=mask_bytes,
+                provider="isnet",
+                model_version="isnet-general-use",
+                confidence=0.86,
+            )
+
+    monkeypatch.setattr(
+        artist_router,
+        "configured_photo_analysis_provider",
+        lambda settings: FakePhotoAnalysisProvider(),
+    )
+
+    created = assert_success(
+        actors["artist"].post(f"/api/artist/assets/{first['assetId']}/photo-analysis")
+    )
+    reused = assert_success(
+        actors["artist"].post(f"/api/artist/assets/{second['assetId']}/photo-analysis")
+    )
+
+    assert len(provider_calls) == 1
+    assert reused["sourceAssetId"] == second["assetId"]
+    assert reused["sourceRevision"] != created["sourceRevision"]
+    assert actors["artist"].get(reused["maskUrl"]).content == mask_bytes
+
+
 def test_artist_can_read_cached_photo_analysis_without_inference(
     actors: dict[str, TestClient], seeded: dict[str, Any]
 ) -> None:
@@ -1428,3 +1479,74 @@ def test_artist_spatial_scene_job_is_idempotent_and_persists_asset_manifest(
     assert status["status"] == "ready"
     assert status["scene"]["provider"] == "local_fallback"
     assert actors["artist"].get(f"/api/artist/assets/{asset_id}/spatial-depth").status_code == 200
+
+
+def test_artist_spatial_scene_job_reuses_same_image_for_owned_asset(
+    actors: dict[str, TestClient], seeded: dict[str, Any], monkeypatch: Any
+) -> None:
+    content = _png_bytes("RGB", (16, 24), (30, 40, 80))
+    first = _upload_artist_asset(
+        actors["artist"],
+        file_name="same-spatial-first.png",
+        content_type="image/png",
+        purpose="card",
+        content=content,
+    )
+    second = _upload_artist_asset(
+        actors["artist"],
+        file_name="same-spatial-second.png",
+        content_type="image/png",
+        purpose="card",
+        content=content,
+    )
+    provider_calls: list[bytes] = []
+
+    class FakeProvider:
+        async def generate(self, source: bytes, *, mask: bytes | None = None) -> SpatialSceneBundle:
+            provider_calls.append(source)
+            return SpatialSceneBundle(
+                depth=_png_bytes("L", (16, 24), 100),
+                mask=_png_bytes("L", (16, 24), 90),
+                background=_png_bytes("RGB", (16, 24), (1, 2, 3)),
+                provider="modal-test",
+                model_version="test-v1",
+                confidence=0.8,
+            )
+
+    monkeypatch.setattr(
+        services, "configured_spatial_scene_provider", lambda settings: FakeProvider()
+    )
+    payload = {"motionPreset": "portrait-parallax", "pipelineVersion": "v1"}
+    first_job = assert_success(
+        actors["artist"].post(
+            f"/api/artist/assets/{first['assetId']}/spatial-scene-jobs",
+            headers={"Idempotency-Key": "same-spatial-first"},
+            json=payload,
+        ),
+        202,
+    )
+    second_job = assert_success(
+        actors["artist"].post(
+            f"/api/artist/assets/{second['assetId']}/spatial-scene-jobs",
+            headers={"Idempotency-Key": "same-spatial-second"},
+            json=payload,
+        ),
+        202,
+    )
+
+    assert len(provider_calls) == 1
+    assert first_job["reused"] is False
+    assert second_job["reused"] is True
+    assert second_job["status"] == "ready"
+    status = assert_success(
+        actors["artist"].get(f"/api/artist/spatial-scene-jobs/{second_job['jobId']}")
+    )
+    assert status["scene"]["sourceAssetId"] == second["assetId"]
+    assert (
+        actors["artist"].get(f"/api/artist/assets/{second['assetId']}/spatial-depth").status_code
+        == 200
+    )
+    analysis = assert_success(
+        actors["artist"].get(f"/api/artist/assets/{second['assetId']}/photo-analysis")
+    )
+    assert analysis["sourceAssetId"] == second["assetId"]
