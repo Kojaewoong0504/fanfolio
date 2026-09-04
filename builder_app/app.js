@@ -228,6 +228,7 @@ function initialEditor() {
     spatialSceneMedia: { background: '', mask: '', depth: '' },
     spatialSceneStatus: 'idle',
     spatialSceneJobId: null,
+    spatialSceneRetryNonce: 0,
   }
 }
 
@@ -1665,7 +1666,9 @@ async function generateSpatialScene() {
     const assetId = await ensureAsset('image')
     if (!isCurrentPhoto(state.editor, captured)) return
     if (!assetId) throw new Error('먼저 카드 사진을 업로드해 주세요.')
-    const request = buildSpatialSceneJobRequest(assetId)
+    const request = buildSpatialSceneJobRequest(assetId, {
+      retryNonce: state.editor.spatialSceneRetryNonce,
+    })
     const queued = await api(request.path, {
       method: 'POST',
       headers: request.headers,
@@ -1789,6 +1792,7 @@ async function openCard(cardId) {
     spatialScene: card.designConfig?.front?.spatialScene || null,
     spatialSceneMedia: { background: '', mask: '', depth: '' },
     spatialSceneStatus: card.designConfig?.front?.spatialScene?.status || 'idle',
+    spatialSceneRetryNonce: 0,
   }
   state.cardId = card.id
   state.editingCardId = card.id
@@ -2874,7 +2878,10 @@ app.addEventListener('click', async (event) => {
     render()
   }
   if (action === 'submit-review') submitReview()
-  if (action === 'retry-effects') void prepareEffects()
+  if (action === 'retry-effects') {
+    state.editor.spatialSceneRetryNonce = Date.now()
+    void prepareEffects()
+  }
   if (action === 'toggle-spatial' && spatialEffectReady(state.editor)) {
     state.editor.spatialEnabled = !state.editor.spatialEnabled
     markDirty()

@@ -107,6 +107,15 @@ test('builds a stable async spatial-scene request for studio retries', () => {
   )
 })
 
+test('uses a fresh idempotency key when retrying a failed spatial-scene job', () => {
+  const request = buildSpatialSceneJobRequest('asset_card', { retryNonce: 123 })
+
+  assert.equal(
+    request.headers['Idempotency-Key'],
+    'spatial-scene:asset_card:portrait-parallax:v1:retry-123',
+  )
+})
+
 test('emits a backend-supported effect preset for hologram recipes', () => {
   const payload = buildCardPayload({
     form: { name: '홀로그램 카드' },
